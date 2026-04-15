@@ -1,0 +1,11 @@
+.tmp-codex-app-schema/
+node_modules/
+dist/
+coverage/
+.next/
+.turbo/
+.DS_Store
+Thumbs.db
+.env
+.env.local
+.env.*.local
