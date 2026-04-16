@@ -123,20 +123,7 @@
 
 记忆记录是存储模块里的最小管理单位。
 
-首版至少包含下面这些字段：
-
-- `id`
-- `memory_type`
-- `scope`
-- `summary`
-- `details`
-- `source`
-- `importance`
-- `confidence`
-- `created_at`
-- `updated_at`
-- `status`
-- `dedupe_key`
+字段完整定义见 `memory-module-contract.md` 第 4.1 节。首版至少包含：`id`、`memory_type`、`scope`、`summary`、`details`、`source`、`importance`、`confidence`、`created_at`、`updated_at`、`status`、`dedupe_key`。
 
 约束如下：
 
@@ -277,7 +264,7 @@
 
 ### 11.3 异步写入
 
-写回候选通过消息队列（首版建议 Redis Stream 或 PostgreSQL LISTEN/NOTIFY）异步投递到存储模块。
+写回候选通过 `PostgreSQL job table + polling worker`（数据库任务表与轮询 worker）异步投递到存储模块。
 
 - 存储模块收到候选后，先快速确认接收，再在后台完成标准化、去重、合并和索引更新。
 - 这条异步链路保证写入处理不会阻塞查询快路径。
@@ -318,7 +305,7 @@
 - 为检索快路径准备结构化数据
 - 向第三部分输出结构化观测数据
 - PostgreSQL + pgvector 存储
-- 异步写入链路（消息队列）
+- 异步写入链路（`PostgreSQL job table + polling worker`）
 
 首版先不做这些：
 

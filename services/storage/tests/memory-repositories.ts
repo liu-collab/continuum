@@ -1,0 +1,381 @@
+import { randomUUID } from "node:crypto";
+
+import type {
+  MemoryConflict,
+  MemoryRecord,
+  MemoryRecordVersion,
+  MemoryWriteJob,
+  ReadModelEntry,
+  ReadModelRefreshJob,
+  ResolveConflictInput,
+  StorageMetrics,
+  WriteBackCandidate,
+} from "../src/contracts.js";
+import type {
+  ConflictRepository,
+  GovernanceRepository,
+  JobCreateInput,
+  MetricsRepository,
+  ReadModelRepository,
+  RecordRepository,
+  StorageRepositories,
+  WriteJobRepository,
+} from "../src/db/repositories.js";
+import { NotFoundError } from "../src/errors.js";
+
+export function createMemoryRepositories(
+  seed?: Partial<{
+    jobs: MemoryWriteJob[];
+    records: MemoryRecord[];
+    versions: MemoryRecordVersion[];
+    conflicts: MemoryConflict[];
+    readModel: ReadModelEntry[];
+    refreshJobs: ReadModelRefreshJob[];
+  }>,
+): StorageRepositories {
+  const state = {
+    jobs: [...(seed?.jobs ?? [])],
+    records: [...(seed?.records ?? [])],
+    versions: [...(seed?.versions ?? [])],
+    conflicts: [...(seed?.conflicts ?? [])],
+    governanceActions: [] as Array<Record<string, unknown>>,
+    readModel: [...(seed?.readModel ?? [])],
+    refreshJobs: [...(seed?.refreshJobs ?? [])],
+  };
+
+  const jobs: WriteJobRepository = {
+    async enqueue(input: JobCreateInput) {
+      const existing = state.jobs.find((job) => job.idempotency_key === input.idempotency_key);
+      if (existing) {
+        return existing;
+      }
+
+      const now = new Date().toISOString();
+      const created: MemoryWriteJob = {
+        id: randomUUID(),
+        idempotency_key: input.idempotency_key,
+        workspace_id: input.candidate.workspace_id,
+        user_id: input.candidate.user_id ?? null,
+        candidate_json: input.candidate,
+        candidate_hash: input.candidate_hash,
+        source_service: input.source_service,
+        job_status: "queued",
+        result_record_id: null,
+        result_status: null,
+        error_code: null,
+        error_message: null,
+        retry_count: 0,
+        received_at: now,
+        started_at: null,
+        finished_at: null,
+      };
+
+      state.jobs.push(created);
+      return created;
+    },
+    async findById(id) {
+      return state.jobs.find((job) => job.id === id) ?? null;
+    },
+    async findByIdempotencyKey(idempotencyKey) {
+      return state.jobs.find((job) => job.idempotency_key === idempotencyKey) ?? null;
+    },
+    async claimQueuedJobs(limit) {
+      const claimed = state.jobs
+        .filter((job) => job.job_status === "queued" || job.job_status === "failed")
+        .slice(0, limit);
+
+      for (const job of claimed) {
+        job.job_status = "processing";
+        job.started_at = new Date().toISOString();
+        job.error_code = null;
+        job.error_message = null;
+      }
+
+      return claimed;
+    },
+    async markSucceeded(jobId, payload) {
+      const job = state.jobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("job not found", { jobId });
+      job.job_status = "succeeded";
+      job.result_record_id = payload.result_record_id;
+      job.result_status = payload.result_status;
+      job.finished_at = new Date().toISOString();
+    },
+    async markDeadLetter(jobId, payload) {
+      const job = state.jobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("job not found", { jobId });
+      job.job_status = "dead_letter";
+      job.error_code = payload.error_code;
+      job.error_message = payload.error_message;
+      job.retry_count += 1;
+      job.finished_at = new Date().toISOString();
+    },
+    async requeue(jobId, errorMessage) {
+      const job = state.jobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("job not found", { jobId });
+      job.job_status = "failed";
+      job.error_message = errorMessage;
+      job.retry_count += 1;
+      job.finished_at = new Date().toISOString();
+    },
+    async listRecent(limit) {
+      return [...state.jobs]
+        .sort((left, right) => right.received_at.localeCompare(left.received_at))
+        .slice(0, limit);
+    },
+  };
+
+  const records: RecordRepository = {
+    async findById(recordId) {
+      return state.records.find((record) => record.id === recordId) ?? null;
+    },
+    async findByDedupeScope(input) {
+      return state.records
+        .filter(
+          (record) =>
+            record.workspace_id === input.workspace_id &&
+            record.scope === input.scope &&
+            record.dedupe_key === input.dedupe_key &&
+            (record.user_id ?? null) === input.user_id,
+        )
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    },
+    async insertRecord(record) {
+      const now = new Date().toISOString();
+      const created: MemoryRecord = {
+        ...record,
+        created_at: now,
+        updated_at: now,
+        version: 1,
+      };
+      state.records.push(created);
+      return created;
+    },
+    async updateRecord(recordId, patch) {
+      const record = state.records.find((item) => item.id === recordId);
+      if (!record) throw new NotFoundError("memory record not found", { recordId });
+
+      Object.assign(record, patch);
+      record.updated_at = new Date().toISOString();
+      record.version += 1;
+      return record;
+    },
+    async appendVersion(input) {
+      const version: MemoryRecordVersion = {
+        id: randomUUID(),
+        ...input,
+        changed_at: new Date().toISOString(),
+      };
+      state.versions.push(version);
+      return version;
+    },
+    async listRecords(filters) {
+      return state.records
+        .filter((record) => {
+          if (filters.workspace_id && record.workspace_id !== filters.workspace_id) return false;
+          if (filters.user_id && record.user_id !== filters.user_id) return false;
+          if (filters.task_id && record.task_id !== filters.task_id) return false;
+          if (filters.memory_type && record.memory_type !== filters.memory_type) return false;
+          if (filters.scope && record.scope !== filters.scope) return false;
+          if (filters.status && record.status !== filters.status) return false;
+          return true;
+        })
+        .slice(0, filters.limit);
+    },
+    async getVersion(recordId, versionNo) {
+      return (
+        state.versions.find(
+          (version) => version.record_id === recordId && version.version_no === versionNo,
+        ) ?? null
+      );
+    },
+  };
+
+  const conflicts: ConflictRepository = {
+    async openConflict(input) {
+      const created: MemoryConflict = {
+        id: randomUUID(),
+        workspace_id: input.workspace_id,
+        user_id: input.user_id,
+        record_id: input.record_id,
+        conflict_with_record_id: input.conflict_with_record_id,
+        conflict_type: input.conflict_type,
+        conflict_summary: input.conflict_summary,
+        status: "open",
+        resolution_type: null,
+        resolved_by: null,
+        created_at: new Date().toISOString(),
+        resolved_at: null,
+      };
+      state.conflicts.push(created);
+      return created;
+    },
+    async listConflicts(status) {
+      return status
+        ? state.conflicts.filter((conflict) => conflict.status === status)
+        : [...state.conflicts];
+    },
+    async findById(conflictId) {
+      return state.conflicts.find((conflict) => conflict.id === conflictId) ?? null;
+    },
+    async resolveConflict(conflictId, payload: ResolveConflictInput) {
+      const conflict = state.conflicts.find((item) => item.id === conflictId);
+      if (!conflict) throw new NotFoundError("memory conflict not found", { conflictId });
+      conflict.status = "resolved";
+      conflict.resolution_type = payload.resolution_type;
+      conflict.resolved_by = payload.resolved_by;
+      conflict.resolved_at = new Date().toISOString();
+      return conflict;
+    },
+  };
+
+  const governance: GovernanceRepository = {
+    async appendAction(input) {
+      state.governanceActions.push(input);
+    },
+  };
+
+  const readModel: ReadModelRepository = {
+    async upsert(entry) {
+      const index = state.readModel.findIndex((item) => item.id === entry.id);
+      if (index >= 0) {
+        state.readModel[index] = entry;
+      } else {
+        state.readModel.push(entry);
+      }
+    },
+    async delete(recordId) {
+      const index = state.readModel.findIndex((item) => item.id === recordId);
+      if (index >= 0) {
+        state.readModel.splice(index, 1);
+      }
+    },
+    async findById(recordId) {
+      return state.readModel.find((item) => item.id === recordId) ?? null;
+    },
+    async enqueueRefresh(input) {
+      const job: ReadModelRefreshJob = {
+        id: randomUUID(),
+        source_record_id: input.source_record_id,
+        refresh_type: input.refresh_type,
+        job_status: "queued",
+        retry_count: 0,
+        error_message: null,
+        created_at: new Date().toISOString(),
+        started_at: null,
+        finished_at: null,
+      };
+      state.refreshJobs.push(job);
+      return job;
+    },
+    async claimRefreshJobs(limit) {
+      const jobs = state.refreshJobs
+        .filter((job) => job.job_status === "queued" || job.job_status === "failed")
+        .slice(0, limit);
+
+      for (const job of jobs) {
+        job.job_status = "processing";
+        job.started_at = new Date().toISOString();
+        job.error_message = null;
+      }
+
+      return jobs;
+    },
+    async markRefreshSucceeded(jobId, payload) {
+      const job = state.refreshJobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("refresh job not found", { jobId });
+      job.job_status = "succeeded";
+      job.error_message = payload?.degradation_reason ?? null;
+      job.finished_at = new Date().toISOString();
+    },
+    async markRefreshFailed(jobId, errorMessage) {
+      const job = state.refreshJobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("refresh job not found", { jobId });
+      job.job_status = "failed";
+      job.retry_count += 1;
+      job.error_message = errorMessage;
+      job.finished_at = new Date().toISOString();
+    },
+    async markRefreshDeadLetter(jobId, errorMessage) {
+      const job = state.refreshJobs.find((item) => item.id === jobId);
+      if (!job) throw new NotFoundError("refresh job not found", { jobId });
+      job.job_status = "dead_letter";
+      job.retry_count += 1;
+      job.error_message = errorMessage;
+      job.finished_at = new Date().toISOString();
+    },
+  };
+
+  const metrics: MetricsRepository = {
+    async collect(): Promise<StorageMetrics> {
+      return {
+        write_jobs_total: state.jobs.length,
+        queued_jobs: state.jobs.filter((job) => job.job_status === "queued").length,
+        processing_jobs: state.jobs.filter((job) => job.job_status === "processing").length,
+        succeeded_jobs: state.jobs.filter((job) => job.job_status === "succeeded").length,
+        failed_jobs: state.jobs.filter((job) => job.job_status === "failed").length,
+        dead_letter_jobs: state.jobs.filter((job) => job.job_status === "dead_letter").length,
+        active_records: state.records.filter((record) => record.status === "active").length,
+        pending_confirmation_records: state.records.filter(
+          (record) => record.status === "pending_confirmation",
+        ).length,
+        archived_records: state.records.filter((record) => record.status === "archived").length,
+        conflicts_open: state.conflicts.filter((conflict) => conflict.status === "open").length,
+        duplicate_ignored_jobs: state.jobs.filter(
+          (job) => job.result_status === "ignore_duplicate",
+        ).length,
+        merged_jobs: state.jobs.filter((job) => job.result_status === "merge_existing").length,
+        updated_jobs: state.jobs.filter((job) => job.result_status === "update_existing").length,
+        inserted_jobs: state.jobs.filter((job) => job.result_status === "insert_new").length,
+        projector_failed_jobs: state.refreshJobs.filter((job) => job.job_status === "failed")
+          .length,
+        projector_dead_letter_jobs: state.refreshJobs.filter(
+          (job) => job.job_status === "dead_letter",
+        ).length,
+        projector_embedding_degraded_jobs: state.refreshJobs.filter(
+          (job) => job.job_status === "succeeded" && job.error_message === "embedding_unavailable",
+        ).length,
+      };
+    },
+  };
+
+  const repositories: StorageRepositories = {
+    jobs,
+    records,
+    conflicts,
+    governance,
+    readModel,
+    metrics,
+    async transaction<T>(callback: (repositories: StorageRepositories) => Promise<T>) {
+      return callback(repositories);
+    },
+  };
+
+  return repositories;
+}
+
+export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBackCandidate {
+  return {
+    workspace_id: "11111111-1111-4111-8111-111111111111",
+    user_id: "22222222-2222-4222-8222-222222222222",
+    task_id: null,
+    session_id: null,
+    candidate_type: "fact_preference",
+    scope: "user",
+    summary: "User prefers concise answers",
+    details: {
+      subject: "user",
+      predicate: "prefers concise answers",
+    },
+    importance: 5,
+    confidence: 0.9,
+    write_reason: "stable preference confirmed",
+    source: {
+      source_type: "user_input",
+      source_ref: "turn-1",
+      service_name: "retrieval-runtime",
+      confirmed_by_user: true,
+    },
+    ...overrides,
+  };
+}
