@@ -6,6 +6,7 @@ coverage/
 .turbo/
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
 .env
 .env.local
 .env.*.local

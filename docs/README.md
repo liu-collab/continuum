@@ -6,12 +6,14 @@
 - `retrieval`：记忆检索与运行时召回相关文档
 - `visualization`：可视化与观测平台相关文档
 
-另外，`docs` 根目录保留两类公共文档：
+另外，`docs` 根目录保留六篇公共文档：
 
 - `product-baseline.md`：整体产品基线
 - `memory-module-contract.md`：跨模块契约
 - `product-readiness.md`：产品补全层，覆盖场景边界、治理闭环、验收机制
 - `architecture-independence.md`：架构独立性约束，要求三部分可独立拆出、独立治理、独立运行
+- `api-contract.md`：统一 API 契约，三个服务所有对外接口的正式定义
+- `deployment-guide.md`：部署与运维指南，含依赖清单、环境变量汇总、本地开发步骤
 当前整体架构口径是：
 
 - 三部分是独立服务
@@ -37,6 +39,8 @@
 - `storage/storage-service-design.md`
 - `storage/storage-implementation-spec.md`
 - `storage/storage-development-agent-prompt.md`
+- `storage/storage-remediation-agent-prompt.md`
+- `storage/storage-substantive-gap-agent-prompt.md`
 
 ### 2. retrieval
 
@@ -56,6 +60,8 @@
 - `retrieval/host-integration-implementation-plan.md`
 - `retrieval/retrieval-runtime-implementation-spec.md`
 - `retrieval/retrieval-development-agent-prompt.md`
+- `retrieval/retrieval-runtime-remediation-agent-prompt.md`
+- `retrieval/retrieval-runtime-substantive-gap-agent-prompt.md`
 
 说明：
 
@@ -76,3 +82,5 @@
 - `visualization/visualization-service-design.md`
 - `visualization/visualization-implementation-spec.md`
 - `visualization/visualization-development-agent-prompt.md`
+- `visualization/visualization-remediation-agent-prompt.md`
+- `visualization/visualization-substantive-gap-agent-prompt.md`

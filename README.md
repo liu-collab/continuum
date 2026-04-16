@@ -154,6 +154,98 @@ flowchart LR
 - `Next.js + React` 负责把结果、轨迹和指标做成真正可看的平台
 - 宿主接入层负责把 `Claude Code`、`Codex` 这类 agent 宿主和 `retrieval-runtime` 连起来
 
+## 怎么使用
+
+这一部分分成两层来看：
+
+- 当前仓库里的服务怎么启动
+- 产品接到 `Claude Code` 和 `Codex` 之后，用户最终怎么启动宿主
+
+### 1. 当前仓库里的服务怎么启动
+
+当前仓库还在设计和骨架初始化阶段，所以三层服务不是都已经完成了正式实现。
+
+目前已经有较完整服务骨架的是 `services/retrieval-runtime`，启动方式是：
+
+```bash
+cd services/retrieval-runtime
+npm install
+npm run dev
+```
+
+默认服务地址：
+
+- `http://127.0.0.1:3002`
+
+如果只想做基础验证，也可以在这个目录下执行：
+
+```bash
+npm run check
+npm run build
+npm test
+```
+
+`storage` 和 `visualization` 当前仓库里已经有目录骨架和设计文档，但还没有完全进入正式可运行阶段，所以这两层现在更适合作为后续开发入口来使用。
+
+### 2. Claude Code 怎么启动
+
+按当前已经定下来的接入方案，`Claude Code` 这边会做成官方 `plugin`（插件）形态。
+
+最终用户启动方式固定为：
+
+```bash
+claude --plugin-dir ./memory-claude-plugin
+```
+
+这里的 `memory-claude-plugin` 会包含：
+
+- `plugin.json`
+- `hooks/hooks.json`
+- `.mcp.json`
+- `memory-bridge`
+- `memory-runtime-bootstrap`
+
+启动后流程是：
+
+1. `Claude Code` 加载插件
+2. 插件拉起或确认本地 `retrieval-runtime`
+3. `SessionStart`、`UserPromptSubmit`、`Stop` 这些 hook 在关键时刻调用运行时接口
+4. 记忆恢复和写回检查自动进入当前会话
+
+如果是正式安装形态，用户安装一次插件后，后面就按正常方式启动 `Claude Code` 即可。
+
+### 3. Codex 怎么启动
+
+按当前已经定下来的接入方案，`Codex` 这边不是只靠普通插件，而是通过启动适配器接到 `codex app-server` 前面。
+
+最终用户启动方式固定为：
+
+```bash
+memory-codex
+```
+
+这个启动入口会负责：
+
+- 拉起或确认本地 `retrieval-runtime`
+- 拉起或确认 `memory-mcp-server`
+- 拉起或确认后端 `codex app-server`
+- 让前置 proxy 在 `turn/start` 前注入记忆，在 `turn/completed` 后提交写回
+
+也就是说，用户侧看到的是一个已经接好上下文恢复能力的 `Codex` 启动命令，而不是手动一轮一轮去调记忆工具。
+
+### 4. 这部分当前是什么状态
+
+这里需要说明清楚：
+
+- `Claude Code` 和 `Codex` 的启动方式已经在文档层定下来了
+- `retrieval-runtime` 的服务主链路已经有实现
+- 但宿主正式接入产物还在继续补齐中，还没有全部交付到仓库里
+
+如果你要看这部分的完整设计口径，直接看：
+
+- `docs/retrieval/host-integration-implementation-plan.md`
+- `docs/retrieval/agent-host-integration-research.md`
+
 ## 设计原则
 
 这套项目当前按下面几条原则推进：

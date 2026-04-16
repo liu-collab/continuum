@@ -161,6 +161,20 @@
 - 所有跨服务调用都必须有超时上限，不能无限等待。
 - 所有跨服务失败都必须返回显式错误类型，不能伪装成成功。
 
+### 4.1 外部共享依赖约定
+
+三部分服务之外，还存在一些共享的外部依赖。首版最主要的共享外部依赖是 **向量 embedding 服务**。
+
+embedding 服务的职责归属约定如下：
+
+- embedding 服务是三部分之外的独立外部依赖，不归属于任何一个服务。
+- `storage` 在写入链路中使用 embedding 服务为 `summary` 生成 `summary_embedding`，写入共享读模型。
+- `retrieval-runtime` 在查询链路中使用 embedding 服务为当前用户输入生成查询向量，用于语义排序和语义兜底触发。
+- 两个服务各自独立配置 embedding 服务连接，不通过对方中转。
+- embedding 服务不可用时，`storage` 侧正式记录仍然入库，但 `summary_embedding` 字段暂时为空，后续补刷。
+- embedding 服务不可用时，`retrieval-runtime` 侧退回纯结构化过滤，不做语义排序，返回显式降级标记。
+- `visualization` 不直接调用 embedding 服务。
+
 ## 5. 降级与容错
 
 为了保证“独立运行”不是一句空话，首版先明确下面几条：

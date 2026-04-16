@@ -236,7 +236,7 @@
 - 任务开始时，默认检查该任务下的 `任务状态` 和最近相关 `情节记忆`。
 - 任务切换时，先回收旧任务上下文，再召回新任务相关记忆。
 - 规划前，优先召回约束、历史决策和未完成事项。
-- 用户显式提到“上次说过”“之前定过”“我偏好”这类内容时，强制触发相关检索。
+- 用户显式提到”上次说过””之前定过””我偏好”这类内容时，强制触发相关检索。首版同时覆盖中文和英文关键词（如 `last time`、`previously`、`I prefer` 等），完整列表见 `retrieval-runtime-implementation-spec.md`。
 - 每轮响应结束后，不一定写回，但一定执行一次写回检查。
 
 ## 7. 写回规则
@@ -315,6 +315,29 @@
 - 某条候选为什么被合并或拒绝
 
 首版不要求复杂监控，但这些基础日志必须保留。
+
+### 11.1 可视化与观测平台的数据消费契约
+
+第三部分 `visualization` 作为独立服务，它与前两部分的数据协作关系也属于正式契约的一部分。
+
+`visualization` 允许消费的数据源：
+
+- `storage` 发布的共享只读读模型（`memory_read_model_v1`）
+- `storage` 的观测接口（`GET /v1/storage/observe/metrics`、`GET /v1/storage/observe/write-jobs`）
+- `retrieval-runtime` 的观测接口（`GET /v1/runtime/observe/runs`、`GET /v1/runtime/observe/metrics`）
+
+`visualization` 不允许做的事：
+
+- 不允许读取 `storage_private` 的写表、版本表或冲突表
+- 不允许读取 `runtime_private` 的运行时过程表
+- 不允许直接改写记忆内容
+- 不允许调用 `retrieval-runtime` 的主链路接口（`prepare-context`、`finalize-turn`）
+
+`visualization` 的独立性约束：
+
+- `storage` 或 `retrieval-runtime` 未启动时，`visualization` 仍然正常启动
+- 对应数据区域显示"数据源不可用"，不因为上游不可达而导致自身不可运行
+- 数据格式必须和上游在契约层约定好，不依赖对方内部实现细节
 
 ## 12. 第一版默认决策
 
