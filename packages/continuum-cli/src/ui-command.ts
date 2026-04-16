@@ -1,0 +1,82 @@
+import path from "node:path";
+import process from "node:process";
+import { spawn } from "node:child_process";
+
+import {
+  DEFAULT_RUNTIME_URL,
+  DEFAULT_STORAGE_URL,
+  DEFAULT_UI_URL,
+  openBrowser,
+  packageRootFromImportMeta,
+  pathExists,
+  vendorPath,
+} from "./utils.js";
+
+export async function runUiCommand(
+  options: Record<string, string | boolean>,
+  importMetaUrl: string,
+) {
+  const explicitUrl = typeof options.url === "string" ? options.url : undefined;
+  if (explicitUrl) {
+    process.stdout.write(`visualization url ${explicitUrl}\n`);
+    if (options.open === true || options.open === "true") {
+      await openBrowser(explicitUrl);
+    }
+    return;
+  }
+
+  const packageRoot = packageRootFromImportMeta(importMetaUrl);
+  const standaloneDir = vendorPath(packageRoot, "visualization", "standalone");
+  const serverEntry = path.join(standaloneDir, "server.js");
+
+  if (!(await pathExists(serverEntry))) {
+    throw new Error(
+      `visualization bundle not found: ${serverEntry}. Run package build with vendor preparation first.`,
+    );
+  }
+
+  const port = typeof options.port === "string" ? options.port : "3003";
+  const host = typeof options.host === "string" ? options.host : "127.0.0.1";
+  const open = options.open === true || options.open === "true";
+  const runtimeUrl =
+    typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
+  const storageUrl =
+    typeof options["storage-url"] === "string" ? options["storage-url"] : DEFAULT_STORAGE_URL;
+  const readModelDsn =
+    typeof options["database-url"] === "string"
+      ? options["database-url"]
+      : process.env.STORAGE_READ_MODEL_DSN ?? process.env.DATABASE_URL ?? "";
+
+  const child = spawn(process.execPath, [serverEntry], {
+    cwd: standaloneDir,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      PORT: port,
+      HOSTNAME: host,
+      NODE_ENV: "production",
+      STORAGE_API_BASE_URL: storageUrl,
+      RUNTIME_API_BASE_URL: runtimeUrl,
+      STORAGE_READ_MODEL_DSN: readModelDsn,
+    },
+  });
+
+  const uiUrl =
+    typeof options["ui-url"] === "string"
+      ? options["ui-url"]
+      : `${DEFAULT_UI_URL.replace("3003", port)}`;
+  process.stdout.write(`visualization starting at ${uiUrl}\n`);
+
+  if (open) {
+    await openBrowser(uiUrl);
+  }
+
+  child.on("exit", (code) => {
+    process.exit(code ?? 0);
+  });
+
+  child.on("error", (error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

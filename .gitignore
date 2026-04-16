@@ -7,6 +7,7 @@ coverage/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+packages/continuum-cli/vendor/
 .env
 .env.local
 .env.*.local
