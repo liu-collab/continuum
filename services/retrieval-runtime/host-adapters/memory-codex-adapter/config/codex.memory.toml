@@ -1,0 +1,10 @@
+[mcp_servers.memory]
+command = "node"
+args = ["./mcp/memory-mcp-server.mjs"]
+
+[runtime]
+base_url = "http://127.0.0.1:3002"
+
+[proxy]
+listen = "ws://127.0.0.1:3788"
+upstream = "ws://127.0.0.1:3777"

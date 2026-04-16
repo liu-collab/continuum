@@ -1,0 +1,546 @@
+import type {
+  DependencyStatus,
+  DependencyStatusSnapshot,
+  InjectionRunRecord,
+  ObserveMetricsResponse,
+  ObserveRunsFilters,
+  ObserveRunsResponse,
+  RecallRunRecord,
+  RuntimeTurnRecord,
+  TriggerRunRecord,
+  WritebackSubmissionRecord,
+} from "../shared/types.js";
+import { percentile } from "../shared/utils.js";
+import { createPgPool, quoteIdentifier, type PgPoolLike } from "../db/postgres-utils.js";
+import type { AppConfig } from "../config.js";
+import type { RuntimeRepository } from "./runtime-repository.js";
+
+interface RuntimeRowBase {
+  trace_id: string;
+  created_at: Date | string;
+}
+
+interface RuntimeTurnRow extends RuntimeRowBase {
+  host: string;
+  workspace_id: string;
+  user_id: string;
+  session_id: string;
+  phase: string;
+  task_id: string | null;
+  thread_id: string | null;
+  turn_id: string | null;
+  current_input: string;
+  assistant_output: string | null;
+}
+
+interface TriggerRunRow extends RuntimeRowBase {
+  trigger_hit: boolean;
+  trigger_type: TriggerRunRecord["trigger_type"];
+  trigger_reason: string;
+  requested_memory_types: unknown;
+  scope_limit: unknown;
+  importance_threshold: number;
+  cooldown_applied: boolean;
+  semantic_score: number | null;
+  degraded: boolean | null;
+  degradation_reason: string | null;
+  duration_ms: number;
+}
+
+interface RecallRunRow extends RuntimeRowBase {
+  trigger_hit: boolean;
+  trigger_type: RecallRunRecord["trigger_type"];
+  trigger_reason: string;
+  query_scope: string;
+  requested_memory_types: unknown;
+  candidate_count: number;
+  selected_count: number;
+  result_state: RecallRunRecord["result_state"];
+  degraded: boolean;
+  degradation_reason: string | null;
+  duration_ms: number;
+}
+
+interface InjectionRunRow extends RuntimeRowBase {
+  injected: boolean;
+  injected_count: number;
+  token_estimate: number;
+  trimmed_record_ids: unknown;
+  trim_reasons: unknown;
+  result_state: InjectionRunRecord["result_state"];
+  duration_ms: number;
+}
+
+interface WritebackRunRow extends RuntimeRowBase {
+  candidate_count: number;
+  submitted_count: number;
+  filtered_count: number;
+  filtered_reasons: unknown;
+  result_state: WritebackSubmissionRecord["result_state"];
+  degraded: boolean;
+  degradation_reason: string | null;
+  duration_ms: number;
+}
+
+interface DependencyStatusRow {
+  name: DependencyStatus["name"];
+  status: DependencyStatus["status"];
+  detail: string;
+  last_checked_at: Date | string;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => String(item));
+}
+
+function toIso(value: Date | string): string {
+  return new Date(value).toISOString();
+}
+
+export class PostgresRuntimeRepository implements RuntimeRepository {
+  private readonly pool: PgPoolLike;
+  private readonly runtimeSchema: string;
+
+  constructor(config: AppConfig, pool?: PgPoolLike) {
+    this.runtimeSchema = config.RUNTIME_SCHEMA;
+    this.pool = pool ?? createPgPool(config.DATABASE_URL);
+  }
+
+  async initialize(): Promise<void> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+
+    await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_turns (
+        trace_id TEXT PRIMARY KEY,
+        host TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        task_id TEXT NULL,
+        thread_id TEXT NULL,
+        turn_id TEXT NULL,
+        current_input TEXT NOT NULL,
+        assistant_output TEXT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_trigger_runs (
+        trace_id TEXT PRIMARY KEY,
+        trigger_hit BOOLEAN NOT NULL,
+        trigger_type TEXT NOT NULL,
+        trigger_reason TEXT NOT NULL,
+        requested_memory_types JSONB NOT NULL,
+        scope_limit JSONB NOT NULL,
+        importance_threshold INTEGER NOT NULL,
+        cooldown_applied BOOLEAN NOT NULL,
+        semantic_score DOUBLE PRECISION NULL,
+        degraded BOOLEAN NULL,
+        degradation_reason TEXT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_recall_runs (
+        trace_id TEXT PRIMARY KEY,
+        trigger_hit BOOLEAN NOT NULL,
+        trigger_type TEXT NOT NULL,
+        trigger_reason TEXT NOT NULL,
+        query_scope TEXT NOT NULL,
+        requested_memory_types JSONB NOT NULL,
+        candidate_count INTEGER NOT NULL,
+        selected_count INTEGER NOT NULL,
+        result_state TEXT NOT NULL,
+        degraded BOOLEAN NOT NULL,
+        degradation_reason TEXT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_injection_runs (
+        trace_id TEXT PRIMARY KEY,
+        injected BOOLEAN NOT NULL,
+        injected_count INTEGER NOT NULL,
+        token_estimate INTEGER NOT NULL,
+        trimmed_record_ids JSONB NOT NULL,
+        trim_reasons JSONB NOT NULL,
+        result_state TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_writeback_submissions (
+        trace_id TEXT PRIMARY KEY,
+        candidate_count INTEGER NOT NULL,
+        submitted_count INTEGER NOT NULL,
+        filtered_count INTEGER NOT NULL,
+        filtered_reasons JSONB NOT NULL,
+        result_state TEXT NOT NULL,
+        degraded BOOLEAN NOT NULL,
+        degradation_reason TEXT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_dependency_status (
+        name TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        detail TEXT NOT NULL,
+        last_checked_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+  }
+
+  async recordTurn(turn: RuntimeTurnRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_turns (
+        trace_id, host, workspace_id, user_id, session_id, phase, task_id, thread_id, turn_id, current_input, assistant_output, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `,
+      [
+        turn.trace_id,
+        turn.host,
+        turn.workspace_id,
+        turn.user_id,
+        turn.session_id,
+        turn.phase,
+        turn.task_id ?? null,
+        turn.thread_id ?? null,
+        turn.turn_id ?? null,
+        turn.current_input,
+        turn.assistant_output ?? null,
+        turn.created_at,
+      ],
+    );
+  }
+
+  async recordTriggerRun(run: TriggerRunRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs (
+        trace_id, trigger_hit, trigger_type, trigger_reason, requested_memory_types, scope_limit,
+        importance_threshold, cooldown_applied, semantic_score, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
+      `,
+      [
+        run.trace_id,
+        run.trigger_hit,
+        run.trigger_type,
+        run.trigger_reason,
+        JSON.stringify(run.requested_memory_types),
+        JSON.stringify(run.scope_limit),
+        run.importance_threshold,
+        run.cooldown_applied,
+        run.semantic_score ?? null,
+        run.degraded ?? null,
+        run.degradation_reason ?? null,
+        run.duration_ms,
+        run.created_at,
+      ],
+    );
+  }
+
+  async recordRecallRun(run: RecallRunRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs (
+        trace_id, trigger_hit, trigger_type, trigger_reason, query_scope, requested_memory_types,
+        candidate_count, selected_count, result_state, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
+      `,
+      [
+        run.trace_id,
+        run.trigger_hit,
+        run.trigger_type,
+        run.trigger_reason,
+        run.query_scope,
+        JSON.stringify(run.requested_memory_types),
+        run.candidate_count,
+        run.selected_count,
+        run.result_state,
+        run.degraded,
+        run.degradation_reason ?? null,
+        run.duration_ms,
+        run.created_at,
+      ],
+    );
+  }
+
+  async recordInjectionRun(run: InjectionRunRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs (
+        trace_id, injected, injected_count, token_estimate, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9)
+      `,
+      [
+        run.trace_id,
+        run.injected,
+        run.injected_count,
+        run.token_estimate,
+        JSON.stringify(run.trimmed_record_ids),
+        JSON.stringify(run.trim_reasons),
+        run.result_state,
+        run.duration_ms,
+        run.created_at,
+      ],
+    );
+  }
+
+  async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions (
+        trace_id, candidate_count, submitted_count, filtered_count, filtered_reasons, result_state, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10)
+      `,
+      [
+        run.trace_id,
+        run.candidate_count,
+        run.submitted_count,
+        run.filtered_count,
+        JSON.stringify(run.filtered_reasons),
+        run.result_state,
+        run.degraded,
+        run.degradation_reason ?? null,
+        run.duration_ms,
+        run.created_at,
+      ],
+    );
+  }
+
+  async updateDependencyStatus(status: DependencyStatus): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_dependency_status (name, status, detail, last_checked_at)
+      VALUES ($1,$2,$3,$4)
+      ON CONFLICT (name) DO UPDATE
+      SET status = EXCLUDED.status,
+          detail = EXCLUDED.detail,
+          last_checked_at = EXCLUDED.last_checked_at
+      `,
+      [status.name, status.status, status.detail, status.last_checked_at],
+    );
+  }
+
+  async getDependencyStatus(): Promise<DependencyStatusSnapshot> {
+    const result = await this.pool.query<DependencyStatusRow>(
+      `SELECT name, status, detail, last_checked_at FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_dependency_status`,
+    );
+
+    const byName = new Map(result.rows.map((row) => [row.name, row]));
+    const fallback = (name: DependencyStatus["name"]): DependencyStatus => ({
+      name,
+      status: byName.get(name)?.status ?? "unknown",
+      detail: byName.get(name)?.detail ?? "dependency has not been checked yet",
+      last_checked_at: byName.get(name) ? toIso(byName.get(name)!.last_checked_at) : new Date(0).toISOString(),
+    });
+
+    return {
+      read_model: fallback("read_model"),
+      embeddings: fallback("embeddings"),
+      storage_writeback: fallback("storage_writeback"),
+    };
+  }
+
+  async getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse> {
+    const whereClauses: string[] = [];
+    const values: unknown[] = [];
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 20;
+    const offset = (page - 1) * pageSize;
+
+    if (filters?.session_id) {
+      values.push(filters.session_id);
+      whereClauses.push(`session_id = $${values.length}`);
+    }
+    if (filters?.turn_id) {
+      values.push(filters.turn_id);
+      whereClauses.push(`turn_id = $${values.length}`);
+    }
+    if (filters?.trace_id) {
+      values.push(filters.trace_id);
+      whereClauses.push(`trace_id = $${values.length}`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const countResult = await this.pool.query<{ total: string }>(
+      `
+      SELECT COUNT(*)::text AS total
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
+      ${whereSql}
+      `,
+      values,
+    );
+    const total = Number(countResult.rows[0]?.total ?? 0);
+
+    const pagedValues = [...values, pageSize, offset];
+    const turnQuery = `
+      SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT $${pagedValues.length - 1} OFFSET $${pagedValues.length}
+    `;
+    const turnResult = await this.pool.query<RuntimeTurnRow>(turnQuery, pagedValues);
+    const traceIds = turnResult.rows.map((row) => row.trace_id);
+
+    if (traceIds.length === 0) {
+      return {
+        turns: [],
+        trigger_runs: [],
+        recall_runs: [],
+        injection_runs: [],
+        writeback_submissions: [],
+        total,
+        page,
+        page_size: pageSize,
+        dependency_status: await this.getDependencyStatus(),
+      };
+    }
+
+    const [triggerRows, recallRows, injectionRows, writebackRows] = await Promise.all([
+      this.pool.query<TriggerRunRow>(
+        `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
+        [traceIds],
+      ),
+      this.pool.query<RecallRunRow>(
+        `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
+        [traceIds],
+      ),
+      this.pool.query<InjectionRunRow>(
+        `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
+        [traceIds],
+      ),
+      this.pool.query<WritebackRunRow>(
+        `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
+        [traceIds],
+      ),
+    ]);
+
+    return {
+      turns: turnResult.rows.map((row) => ({
+        trace_id: row.trace_id,
+        host: row.host as RuntimeTurnRecord["host"],
+        workspace_id: row.workspace_id,
+        user_id: row.user_id,
+        session_id: row.session_id,
+        phase: row.phase as RuntimeTurnRecord["phase"],
+        task_id: row.task_id ?? undefined,
+        thread_id: row.thread_id ?? undefined,
+        turn_id: row.turn_id ?? undefined,
+        current_input: row.current_input,
+        assistant_output: row.assistant_output ?? undefined,
+        created_at: toIso(row.created_at),
+      })),
+      trigger_runs: triggerRows.rows.map((row) => ({
+        trace_id: row.trace_id,
+        trigger_hit: row.trigger_hit,
+        trigger_type: row.trigger_type,
+        trigger_reason: row.trigger_reason,
+        requested_memory_types: asStringArray(row.requested_memory_types) as TriggerRunRecord["requested_memory_types"],
+        scope_limit: asStringArray(row.scope_limit) as TriggerRunRecord["scope_limit"],
+        importance_threshold: Number(row.importance_threshold),
+        cooldown_applied: row.cooldown_applied,
+        semantic_score: row.semantic_score ?? undefined,
+        degraded: row.degraded ?? undefined,
+        degradation_reason: row.degradation_reason ?? undefined,
+        duration_ms: Number(row.duration_ms),
+        created_at: toIso(row.created_at),
+      })),
+      recall_runs: recallRows.rows.map((row) => ({
+        trace_id: row.trace_id,
+        trigger_hit: row.trigger_hit,
+        trigger_type: row.trigger_type,
+        trigger_reason: row.trigger_reason,
+        query_scope: row.query_scope,
+        requested_memory_types: asStringArray(row.requested_memory_types) as RecallRunRecord["requested_memory_types"],
+        candidate_count: Number(row.candidate_count),
+        selected_count: Number(row.selected_count),
+        result_state: row.result_state,
+        degraded: row.degraded,
+        degradation_reason: row.degradation_reason ?? undefined,
+        duration_ms: Number(row.duration_ms),
+        created_at: toIso(row.created_at),
+      })),
+      injection_runs: injectionRows.rows.map((row) => ({
+        trace_id: row.trace_id,
+        injected: row.injected,
+        injected_count: Number(row.injected_count),
+        token_estimate: Number(row.token_estimate),
+        trimmed_record_ids: asStringArray(row.trimmed_record_ids),
+        trim_reasons: asStringArray(row.trim_reasons),
+        result_state: row.result_state,
+        duration_ms: Number(row.duration_ms),
+        created_at: toIso(row.created_at),
+      })),
+      writeback_submissions: writebackRows.rows.map((row) => ({
+        trace_id: row.trace_id,
+        candidate_count: Number(row.candidate_count),
+        submitted_count: Number(row.submitted_count),
+        filtered_count: Number(row.filtered_count),
+        filtered_reasons: asStringArray(row.filtered_reasons),
+        result_state: row.result_state,
+        degraded: row.degraded,
+        degradation_reason: row.degradation_reason ?? undefined,
+        duration_ms: Number(row.duration_ms),
+        created_at: toIso(row.created_at),
+      })),
+      total,
+      page,
+      page_size: pageSize,
+      dependency_status: await this.getDependencyStatus(),
+    };
+  }
+
+  async getMetrics(): Promise<ObserveMetricsResponse> {
+    const [triggerRows, recallRows, injectionRows, writebackRows] = await Promise.all([
+      this.pool.query<Pick<TriggerRunRow, "trigger_hit">>(`SELECT trigger_hit FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs`),
+      this.pool.query<Pick<RecallRunRow, "trigger_hit" | "selected_count" | "duration_ms">>(
+        `SELECT trigger_hit, selected_count, duration_ms FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs`,
+      ),
+      this.pool.query<Pick<InjectionRunRow, "injected" | "trimmed_record_ids" | "duration_ms">>(
+        `SELECT injected, trimmed_record_ids, duration_ms FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs`,
+      ),
+      this.pool.query<Pick<WritebackRunRow, "submitted_count">>(
+        `SELECT submitted_count FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions`,
+      ),
+    ]);
+
+    const triggerCount = triggerRows.rows.length;
+    const recallCount = recallRows.rows.length;
+    const injectionCount = injectionRows.rows.length;
+    const writebackCount = writebackRows.rows.length;
+
+    return {
+      trigger_rate:
+        triggerCount === 0 ? 0 : triggerRows.rows.filter((row) => row.trigger_hit).length / triggerCount,
+      recall_hit_rate:
+        recallCount === 0 ? 0 : recallRows.rows.filter((row) => Number(row.selected_count) > 0).length / recallCount,
+      empty_recall_rate:
+        recallCount === 0
+          ? 0
+          : recallRows.rows.filter((row) => row.trigger_hit && Number(row.selected_count) === 0).length / recallCount,
+      injection_rate:
+        injectionCount === 0 ? 0 : injectionRows.rows.filter((row) => row.injected).length / injectionCount,
+      injection_trim_rate:
+        injectionCount === 0
+          ? 0
+          : injectionRows.rows.filter((row) => asStringArray(row.trimmed_record_ids).length > 0).length / injectionCount,
+      writeback_submission_rate:
+        writebackCount === 0 ? 0 : writebackRows.rows.filter((row) => Number(row.submitted_count) > 0).length / writebackCount,
+      query_p95_ms: percentile(recallRows.rows.map((row) => Number(row.duration_ms)), 0.95),
+      injection_p95_ms: percentile(injectionRows.rows.map((row) => Number(row.duration_ms)), 0.95),
+    };
+  }
+}

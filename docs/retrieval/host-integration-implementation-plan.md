@@ -1,5 +1,23 @@
 # 宿主接入实施方案：Claude Code 与 Codex
 
+## 当前验收状态（2026-04-16）
+
+### 已完成
+
+- `Claude Code` 与 `Codex` 的宿主接入方向已经落地，启动适配器和桥接脚本已经补齐。
+- 宿主生命周期接线已经可用，当前轮前的上下文准备和当前轮后的写回提交都能进入运行时服务。
+- `memory_dependency_status` 和 `memory_trace_turn` 已经可用，可以用于依赖状态查看和运行轨迹排查。
+
+### 未完成
+
+- 文档约定的 `memory-mcp-server` 固定工具集还没有全部完成，当前缺少 `memory_explain_hit`。
+- `memory_search` 还没有接成正式的直连搜索实现，当前返回的仍是桥接说明。
+
+### 当前结论
+
+- 宿主生命周期接入已完成。
+- 宿主工具面只完成了一部分，`Codex` 侧还不能按完整工具方案验收通过。
+
 ## 1. 这份文档解决什么问题
 
 这份文档不再讨论“要不要这样做”。
@@ -87,7 +105,7 @@
 
 ### 4.1 会话启动恢复
 
-`POST /runtime/session-start-context`
+`POST /v1/runtime/session-start-context`
 
 输入：
 
@@ -106,7 +124,7 @@
 
 ### 4.2 当前轮注入
 
-`POST /runtime/prepare-context`
+`POST /v1/runtime/prepare-context`
 
 输入：
 
@@ -127,7 +145,7 @@
 
 ### 4.3 当前轮结束写回
 
-`POST /runtime/finalize-turn`
+`POST /v1/runtime/finalize-turn`
 
 输入：
 
@@ -233,7 +251,7 @@ memory-claude-plugin/
 2. 插件执行 `memory-runtime-bootstrap`
 3. 本地 `retrieval-runtime` 和 `memory-mcp-server` 被拉起或确认已在线
 4. `SessionStart` hook 触发
-5. `memory-bridge` 调 `POST /runtime/session-start-context`
+5. `memory-bridge` 调 `POST /v1/runtime/session-start-context`
 6. 返回的 `additional_context` 被放入当前 session
 
 到这里，会话启动级接入就已经完成了。
@@ -244,7 +262,7 @@ memory-claude-plugin/
 
 1. `UserPromptSubmit` hook 触发
 2. `memory-bridge` 读取本轮 `prompt`
-3. 调 `POST /runtime/prepare-context`
+3. 调 `POST /v1/runtime/prepare-context`
 4. `retrieval-runtime` 返回 `injection_block`
 5. `memory-bridge` 把 `injection_block` 填到 `additionalContext`
 6. Claude Code 再继续本轮推理
@@ -259,7 +277,7 @@ Claude 回复完成后：
 
 1. `Stop` hook 触发
 2. `memory-bridge` 读取本轮最终输出
-3. 调 `POST /runtime/finalize-turn`
+3. 调 `POST /v1/runtime/finalize-turn`
 4. `retrieval-runtime` 做写回判断
 5. 异步提交给 `storage`
 
@@ -407,7 +425,7 @@ memory-codex-adapter/
    - `threadId`
    - `input[]`
 4. 从 `input[]` 里提取当前用户输入
-5. 调 `POST /runtime/prepare-context`
+5. 调 `POST /v1/runtime/prepare-context`
 6. 收到 `injection_block`
 7. 把 `injection_block` 作为额外输入项插入 `turn/start.params.input`
 8. 再把改写后的 `turn/start` 转发给后端 `codex app-server`
@@ -425,7 +443,7 @@ memory-codex-adapter/
    - 当前轮最终输出
    - 工具执行摘要
    - turn 元信息
-3. 调 `POST /runtime/finalize-turn`
+3. 调 `POST /v1/runtime/finalize-turn`
 4. `retrieval-runtime` 做写回判断
 5. 异步提交给 `storage`
 6. 原始 `turn/completed` 继续返回给 Codex 客户端

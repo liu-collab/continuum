@@ -1,0 +1,9 @@
+{
+  "runtimeBaseUrl": "http://127.0.0.1:3002",
+  "bootstrapCommand": "node ./bin/memory-runtime-bootstrap.mjs",
+  "_identityEnv": {
+    "MEMORY_WORKSPACE_ID": "可选。hook 事件里没有 workspace_id 时使用。",
+    "MEMORY_USER_ID": "可选。hook 事件里没有 user_id 时使用。",
+    "MEMORY_SESSION_ID": "可选。hook 事件里没有 session_id 时使用。"
+  }
+}

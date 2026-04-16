@@ -1,0 +1,9 @@
+{
+  "name": "agent-memory",
+  "version": "0.1.0",
+  "description": "Attach retrieval-runtime to Claude Code session start, prompt submit and stop hooks.",
+  "author": "agent-memory",
+  "hooks": "./hooks/hooks.json",
+  "mcp": "./.mcp.json",
+  "settings": "./settings.json"
+}

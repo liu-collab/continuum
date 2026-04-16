@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": {
+      "command": "node ./bin/memory-bridge.mjs session-start"
+    },
+    "UserPromptSubmit": {
+      "command": "node ./bin/memory-bridge.mjs prepare-context"
+    },
+    "Stop": {
+      "command": "node ./bin/memory-bridge.mjs finalize-turn"
+    }
+  }
+}

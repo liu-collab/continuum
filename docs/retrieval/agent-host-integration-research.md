@@ -227,9 +227,11 @@
 
 ### retrieval-runtime
 
-- `POST /runtime/session-start-context`
-- `POST /runtime/prompt-context`
-- `POST /runtime/turn-writeback`
+- `POST /v1/runtime/session-start-context`
+- `POST /v1/runtime/prepare-context`
+- `POST /v1/runtime/finalize-turn`
+
+说明：调研阶段使用的 `prompt-context` 和 `turn-writeback` 已在正式服务设计中统一为 `prepare-context` 和 `finalize-turn`，以下以正式命名为准。
 
 ### mcp-server
 
@@ -240,7 +242,7 @@
 ### 可选
 
 - `GET /healthz`
-- `GET /runtime/dependency-status`
+- `GET /v1/runtime/dependency-status`
 
 ## 4.6 Claude Code 侧最终落地形态
 
@@ -424,10 +426,10 @@
 
 建议至少提供：
 
-- `POST /runtime/prepare-context`
-- `POST /runtime/finalize-turn`
+- `POST /v1/runtime/prepare-context`
+- `POST /v1/runtime/finalize-turn`
 - `GET /healthz`
-- `GET /runtime/dependency-status`
+- `GET /v1/runtime/dependency-status`
 
 ## 5.8 Codex 侧最终落地形态
 
