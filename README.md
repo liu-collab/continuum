@@ -1,306 +1,172 @@
 # Continuum
 
-Continuum 是一个面向 agent 的上下文连续性系统。
+Continuum 是一个给 `Claude Code`、`Codex` 这类 agent 宿主接入长期上下文能力的产品。
 
-它要解决的不是“把历史内容存起来”这么简单的问题，而是让过去已经形成的事实、偏好、任务状态和关键事件，能在正确的时刻被重新恢复到当前这一轮里。
+它主要解决三件事：
 
-换句话说，这个项目做的不是一个被动的记忆库，而是一套围绕 `存储`、`运行时恢复`、`可视化观测` 组织起来的完整机制。
+- 把用户已经说过、之后还会反复用到的信息，整理成结构化记忆
+- 在关键时刻主动恢复上下文，而不是等模型自己想起来再查
+- 把记忆目录、运行轨迹和关键指标做成可查看、可排查的页面
 
-## 这个项目在做什么
+这不是一个单纯“存聊天记录”的仓库。它更强调 `上下文连续性`，也就是让 agent 在跨轮次、跨任务、重启之后，仍然能接着之前的状态继续工作。
 
-这个仓库当前聚焦三件事：
+## 它能带来什么能力
 
-- 把可沉淀的信息结构化保存下来，而不是直接堆原始对话
-- 在会话开始、任务切换、规划前、用户提到历史内容等关键时刻，主动恢复上下文
-- 把召回、注入、写回、指标和数据源状态清楚展示出来，便于排查和治理
+接入 Continuum 之后，agent 侧重点会落在下面几类能力上：
 
-这套设计的核心判断是：
+- 记住用户偏好、长期事实、任务状态和关键事件
+- 在会话开始、任务切换、规划前、回复前这些时刻主动恢复上下文
+- 在本轮结束后，把值得沉淀的信息写回记忆系统
+- 让使用者能看到当前有哪些记忆、这轮为什么触发、写回了什么、哪里降级了
 
-仅有 `storage + retrieval`（存储 + 检索）还不够。
+如果直接说用户感受，重点一般是这几件事：
 
-真正决定效果的，是系统能不能在关键时刻稳定地把正确的信息放回当前上下文，而不是等模型“想起来再调用工具”。
+- 少重复解释
+- 少丢上下文
+- 多轮任务更连续
+- 问题更容易排查
 
-## 仓库里现在有哪些部分
+## 适合什么场景
 
-当前仓库按三层独立服务来设计：
+Continuum 适合接到下面这类 agent 使用场景里：
 
-### 1. `storage`
+- 长对话、多轮协作
+- 有任务状态延续的编码助手
+- 需要记住偏好、约束和工作方式的个人 agent
+- 需要查看召回效果、写回结果和运行指标的产品化系统
 
-这一层负责：
+## 仓库里有什么
 
-- 写回候选接收
-- 标准化
-- 去重与合并
-- 冲突处理
-- 生命周期治理
-- 共享只读读模型发布
+这个仓库当前包含三块能力：
 
-它的目标是把“可查、可治理、可复用”的结构化结果稳定沉淀出来。
+- `storage`
+  负责结构化记忆写入、治理和共享读模型发布
+- `retrieval-runtime`
+  负责运行时检索、记忆注入和回合结束后的写回检查
+- `visualization`
+  负责把记忆目录、运行轨迹和关键指标展示出来
 
-### 2. `retrieval-runtime`
+对用户来说，可以先这样理解：
 
-这一层负责：
+- `storage` 负责把记忆存对
+- `retrieval-runtime` 负责把记忆用对
+- `visualization` 负责把结果看清楚
 
-- 宿主接入
-- 召回触发判断
-- 查询与重排
-- 注入块生成
-- 一轮结束后的写回检查
+## 推荐交付方式
 
-它的目标是把过去的信息变成“当前这轮真正可用的上下文”。
+对最终用户来说，Continuum 更适合按两种形态交付：
 
-### 3. `visualization`
+- 用户入口发成 `npm package`（npm 安装包），用户安装后直接使用统一命令
+- `Claude Code` 侧发成 `plugin`（插件）版本，用户按插件方式安装
 
-这一层负责：
+这样用户看到的是两个清晰入口：
 
-- 结构化记忆目录
-- 单轮运行轨迹
-- 指标看板
-- 数据源健康状态
+- 一个是安装后即可使用的统一 `CLI`
+- 一个是可以直接挂到 `Claude Code` 上的插件
 
-它的目标是把这套系统变得可见、可查、可解释，而不是只能翻日志或查表。
+## 怎么接入 Claude Code
 
-## 各层对应技术
+如果你要把 Continuum 接到 `Claude Code`，面向用户的使用方式是：
 
-当前三层的技术选型先统一成下面这样：
+对最终用户来说，更合适的使用方式是：
 
-### `storage`
-
-- 语言：`TypeScript`
-- 运行时：`Node.js 22 LTS`
-- Web 框架：`Fastify`
-- 数据库：`PostgreSQL 16 + pgvector`
-- 队列：`Redis + BullMQ`
-- 数据访问：`Drizzle ORM + 原生 SQL`
-- 日志：`Pino`
-- 测试：`Vitest`
-
-这一层偏数据落库、规则处理和异步写入，所以重点是结构化存储、一致性和读模型发布。
-
-### `retrieval-runtime`
-
-- 语言：`TypeScript`
-- 运行时：`Node.js 22 LTS`
-- Web 框架：`Fastify`
-- 数据访问：`pg`
-- 校验：`Zod`
-- 向量能力：外部 `OpenAI-compatible embeddings API`
-- 日志：`Pino`
-- 测试：`Vitest`
-
-这一层偏运行时编排，所以重点是触发、查询、重排、注入和写回判断。
-
-### `visualization`
-
-- 语言：`TypeScript`
-- 框架：`Next.js`
-- UI：`React + Tailwind CSS + shadcn/ui`
-- 数据请求：`TanStack Query`
-- 表格：`TanStack Table`
-- 图表：`ECharts`
-- 校验：`Zod`
-
-这一层偏展示和排查，所以重点是聚合数据、页面交互和指标解释。
-
-## 服务之间怎么连接
-
-这套系统不是三层代码放在一起跑，而是三层独立服务通过正式契约连接。
-
-连接关系可以先收成这几条：
-
-- `storage` 负责正式写入、治理和共享只读读模型发布
-- `retrieval-runtime` 读取 `storage` 发布的共享读模型，并在一轮结束后把结构化写回候选再提交回 `storage`
-- `visualization` 不参与主链路决策，只读取 `storage` 和 `retrieval-runtime` 暴露出来的正式接口与观测数据
-- 宿主接入层放在 `retrieval-runtime` 前面，当前重点是 `Claude Code plugin`（Claude Code 插件）和 `Codex app-server adapter`（Codex 应用服务适配器）
-
-再具体一点，主链路是这样流动的：
-
-1. 宿主在关键时刻把当前轮上下文发给 `retrieval-runtime`
-2. `retrieval-runtime` 判断要不要召回，并读取 `storage` 的共享读模型
-3. `retrieval-runtime` 生成本轮注入块，再交还给宿主
-4. 当前轮结束后，`retrieval-runtime` 提取写回候选并提交给 `storage`
-5. `storage` 完成标准化、去重、合并、冲突处理，再刷新共享读模型
-6. `visualization` 读取正式结果和运行轨迹，用来展示和排查
-
-## 架构图谱
-
-```mermaid
-flowchart LR
-    A[Claude Code Plugin<br/>Codex App-Server Adapter<br/>其他宿主接入层]
-    B[retrieval-runtime<br/>触发 判断<br/>查询 重排<br/>注入 生成<br/>写回 检查]
-    C[storage<br/>写回接收<br/>标准化 去重 合并<br/>冲突治理<br/>读模型发布]
-    D[(PostgreSQL 16<br/>正式写模型)]
-    E[(memory_read_model_v1<br/>共享只读读模型)]
-    F[(Redis + BullMQ<br/>异步写任务)]
-    G[visualization<br/>记忆目录<br/>运行轨迹<br/>指标看板]
-    H[Embeddings API]
-
-    A -->|会话开始 / 当前轮开始 / 当前轮结束| B
-    B -->|查询共享读模型| E
-    B -->|语义查询向量化| H
-    B -->|结构化写回候选| C
-    C -->|正式写入| D
-    C -->|异步任务| F
-    C -->|读模型投影| E
-    G -->|读正式观测接口| B
-    G -->|读共享读模型 / 观测接口| C
-```
-
-## 技术关系一句话理解
-
-- `PostgreSQL + pgvector` 负责把“可存、可查、可排序”的数据基础打稳
-- `Fastify` 负责把 `storage` 和 `retrieval-runtime` 做成清晰的独立服务
-- `Redis + BullMQ` 负责把写入主链路和后台处理拆开
-- `Next.js + React` 负责把结果、轨迹和指标做成真正可看的平台
-- 宿主接入层负责把 `Claude Code`、`Codex` 这类 agent 宿主和 `retrieval-runtime` 连起来
-
-## 怎么使用
-
-这一部分分成两层来看：
-
-- 当前仓库里的服务怎么启动
-- 产品接到 `Claude Code` 和 `Codex` 之后，用户最终怎么启动宿主
-
-### 1. 当前仓库里的服务怎么启动
-
-当前仓库还在设计和骨架初始化阶段，所以三层服务不是都已经完成了正式实现。
-
-目前已经有较完整服务骨架的是 `services/retrieval-runtime`，启动方式是：
+### 1. 安装 `continuum-cli`
 
 ```bash
-cd services/retrieval-runtime
-npm install
-npm run dev
+npm install -g continuum-cli
 ```
 
-默认服务地址：
-
-- `http://127.0.0.1:3002`
-
-如果只想做基础验证，也可以在这个目录下执行：
+### 2. 安装 Continuum 的 Claude 插件版本
 
 ```bash
-npm run check
-npm run build
-npm test
+continuum claude install
 ```
 
-`storage` 和 `visualization` 当前仓库里已经有目录骨架和设计文档，但还没有完全进入正式可运行阶段，所以这两层现在更适合作为后续开发入口来使用。
+用户安装的是已经打包好的 `Claude Code plugin`（Claude Code 插件），而不是手动去跑仓库里的桥接脚本。
 
-### 2. Claude Code 怎么启动
+### 3. 按插件方式启动 Claude Code
 
-按当前已经定下来的接入方案，`Claude Code` 这边会做成官方 `plugin`（插件）形态。
+安装完成后，就按正常插件接入方式使用 `Claude Code`。
 
-最终用户启动方式固定为：
+用户视角下，接入完成后会得到的效果是：
+
+- 开始会话时可以恢复已有上下文
+- 交互过程中能在关键时刻补充记忆
+- 回合结束后能自动做写回检查
+
+这里不需要用户手动一轮轮去调用记忆工具，正常使用 `Claude Code` 就可以。
+
+## 怎么接入 Codex
+
+如果你要把 Continuum 接到 `Codex`，更适合对外发成统一 `CLI` 安装包。
+
+对最终用户来说，更合适的使用方式是：
+
+### 1. 安装 `continuum-cli`
+
+用户安装的是已经发布好的统一 `CLI` 包，而不是手动进入仓库运行脚本。
 
 ```bash
-claude --plugin-dir ./memory-claude-plugin
+npm install -g continuum-cli
 ```
 
-这里的 `memory-claude-plugin` 会包含：
+### 2. 直接启动接好 Continuum 的 Codex
 
-- `plugin.json`
-- `hooks/hooks.json`
-- `.mcp.json`
-- `memory-bridge`
-- `memory-runtime-bootstrap`
+安装完成后，用户直接使用这个包提供的启动命令即可，不需要再关心仓库里的适配器目录。
 
-启动后流程是：
-
-1. `Claude Code` 加载插件
-2. 插件拉起或确认本地 `retrieval-runtime`
-3. `SessionStart`、`UserPromptSubmit`、`Stop` 这些 hook 在关键时刻调用运行时接口
-4. 记忆恢复和写回检查自动进入当前会话
-
-如果是正式安装形态，用户安装一次插件后，后面就按正常方式启动 `Claude Code` 即可。
-
-### 3. Codex 怎么启动
-
-按当前已经定下来的接入方案，`Codex` 这边不是只靠普通插件，而是通过启动适配器接到 `codex app-server` 前面。
-
-最终用户启动方式固定为：
+例如：
 
 ```bash
-memory-codex
+continuum codex
 ```
 
-这个启动入口会负责：
+如果只想看状态、启动页面、安装 Claude 插件，也都用这一个命令：
 
-- 拉起或确认本地 `retrieval-runtime`
-- 拉起或确认 `memory-mcp-server`
-- 拉起或确认后端 `codex app-server`
-- 让前置 proxy 在 `turn/start` 前注入记忆，在 `turn/completed` 后提交写回
-
-也就是说，用户侧看到的是一个已经接好上下文恢复能力的 `Codex` 启动命令，而不是手动一轮一轮去调记忆工具。
-
-### 4. 这部分当前是什么状态
-
-这里需要说明清楚：
-
-- `Claude Code` 和 `Codex` 的启动方式已经在文档层定下来了
-- `retrieval-runtime` 的服务主链路已经有实现
-- 但宿主正式接入产物还在继续补齐中，还没有全部交付到仓库里
-
-如果你要看这部分的完整设计口径，直接看：
-
-- `docs/retrieval/host-integration-implementation-plan.md`
-- `docs/retrieval/agent-host-integration-research.md`
-
-## 设计原则
-
-这套项目当前按下面几条原则推进：
-
-- 三层独立开发、独立部署、独立运行
-- 任意一个服务没启动，不影响其他服务自身运行
-- 允许共享由 `storage` 发布的只读读模型
-- 不共享写模型，不直接引用对方内部实现
-- 记忆不是原始对话归档，而是结构化、可复用的信息
-- 召回不完全依赖模型自己决定，关键时刻由系统触发
-- 注入尽量少，但必须够用
-- 写回有选择，不把每轮对话都变成记忆
-
-## 这个仓库目前的状态
-
-当前仓库还处在“设计和骨架初始化”阶段。
-
-已经完成的内容主要是：
-
-- 产品基线
-- 三层模块边界
-- 宿主接入方案调研
-- 实施级设计文档
-- 三层独立代码目录骨架
-- 面向三个独立开发 agent 的开发提示词
-
-还没有开始进入真正的服务实现、数据库迁移、接口落地和页面开发阶段。
-
-## 仓库结构
-
-```text
-.
-├── docs/
-│   ├── storage/
-│   ├── retrieval/
-│   └── visualization/
-├── services/
-│   ├── storage/
-│   ├── retrieval-runtime/
-│   └── visualization/
-└── README.md
+```bash
+continuum status
+continuum ui
+continuum claude install
 ```
 
-## 从哪里开始看
+统一入口就是 `continuum`。
 
-如果你是第一次进入这个仓库，建议按这个顺序阅读：
+用户视角下，它提供的效果也是：
+
+- 开始使用时自动接入上下文恢复能力
+- 关键时刻自动补充记忆
+- 回合结束后自动做写回检查
+
+## 这个仓库现在更适合怎么用
+
+当前仓库更适合下面两类用途：
+
+- 作为 Continuum 的主开发仓库，继续补全三层服务
+- 作为对外发布 `continuum-cli` 和 `Claude Code 插件` 的源码仓库
+
+如果你是第一次看这个仓库，更建议把它理解成：
+
+- 一个正在落地的产品仓库
+- 而不是一篇架构设计说明
+
+## 当前重点能力
+
+这版最值得关注的重点，不是“我们做了几个服务”，而是下面三件事：
+
+- 结构化记忆，不是原始聊天堆积
+- 主动上下文恢复，不依赖模型临时起意
+- 可观测性，能看到记忆、轨迹和指标
+
+## 文档入口
+
+如果要继续看详细文档，建议从这里开始：
 
 1. `docs/product-baseline.md`
 2. `docs/architecture-independence.md`
 3. `docs/memory-module-contract.md`
 4. `docs/README.md`
-5. 各子目录下的实施规格和开发提示词
 
-## 仓库名称为什么叫 Continuum
+如果要看具体模块：
 
-`Continuum` 这个名字强调的是“连续性”。
-
-这个项目真正想解决的，是 agent 在多轮、多任务、多次重开之后，仍然能把上下文连续起来，而不是把“记忆”理解成一个静态仓库。
+- `docs/retrieval`
+- `docs/storage`
+- `docs/visualization`

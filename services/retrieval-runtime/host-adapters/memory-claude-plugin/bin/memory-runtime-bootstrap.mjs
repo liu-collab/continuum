@@ -4,9 +4,13 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
-const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "npm run dev";
-const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "memory-mcp-server";
+const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "continuum-runtime";
+const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "continuum-mcp-server";
 const mode = process.argv.includes("--mode") ? process.argv[process.argv.indexOf("--mode") + 1] : "runtime";
+
+function shouldRun(command) {
+  return Boolean(command) && command !== "off" && command !== "false";
+}
 
 async function isHealthy() {
   try {
@@ -27,11 +31,11 @@ function startDetached(command) {
 }
 
 async function main() {
-  if (!(await isHealthy()) && mode !== "mcp") {
+  if (!(await isHealthy()) && mode !== "mcp" && shouldRun(runtimeStartCommand)) {
     startDetached(runtimeStartCommand);
   }
 
-  if (mode === "mcp") {
+  if (mode === "mcp" && shouldRun(mcpCommand)) {
     startDetached(mcpCommand);
   }
 }

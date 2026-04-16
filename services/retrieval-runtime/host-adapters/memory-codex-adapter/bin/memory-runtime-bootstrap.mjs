@@ -3,9 +3,13 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 
-const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "npm run dev";
-const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "memory-mcp-server";
+const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "continuum-runtime";
+const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "continuum-mcp-server";
 const codexServerCommand = process.env.CODEX_APP_SERVER_COMMAND ?? "codex app-server";
+
+function shouldRun(command) {
+  return Boolean(command) && command !== "off" && command !== "false";
+}
 
 function startDetached(command) {
   const child = spawn(command, {
@@ -16,6 +20,14 @@ function startDetached(command) {
   child.unref();
 }
 
-startDetached(runtimeStartCommand);
-startDetached(mcpCommand);
-startDetached(codexServerCommand);
+if (shouldRun(runtimeStartCommand)) {
+  startDetached(runtimeStartCommand);
+}
+
+if (shouldRun(mcpCommand)) {
+  startDetached(mcpCommand);
+}
+
+if (shouldRun(codexServerCommand)) {
+  startDetached(codexServerCommand);
+}

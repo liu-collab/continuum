@@ -5,5 +5,9 @@
     "MEMORY_WORKSPACE_ID": "可选。hook 事件里没有 workspace_id 时使用。",
     "MEMORY_USER_ID": "可选。hook 事件里没有 user_id 时使用。",
     "MEMORY_SESSION_ID": "可选。hook 事件里没有 session_id 时使用。"
+  },
+  "_runtimeCommands": {
+    "MEMORY_RUNTIME_START_COMMAND": "默认使用 continuum-runtime",
+    "MEMORY_MCP_COMMAND": "默认使用 continuum-mcp-server"
   }
 }

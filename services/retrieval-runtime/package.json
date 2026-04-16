@@ -1,8 +1,22 @@
 {
-  "name": "@agent-memory/retrieval-runtime",
+  "name": "@continuum/retrieval-runtime",
   "version": "0.1.0",
   "private": true,
+  "description": "Continuum retrieval runtime service and host adapters.",
   "type": "module",
+  "bin": {
+    "continuum-runtime": "./bin/continuum-runtime.mjs",
+    "continuum-mcp-server": "./bin/continuum-mcp-server.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/src/",
+    "host-adapters/",
+    "migrations/",
+    ".env.example",
+    "README.md",
+    "RELEASE.md"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -11,7 +25,7 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "migrate": "tsx src/db/migrate.ts",
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
