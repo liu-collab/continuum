@@ -37,14 +37,9 @@
 
 ## 4. 服务边界
 
-`visualization` 不负责：
+`visualization` 的职责边界和不负责事项见 `memory-observability-product.md` 第 5 节。
 
-- 改写记忆
-- 控制召回逻辑
-- 控制 agent 推理
-- 直接依赖其他服务私有实现
-
-它是独立服务。
+概括来说：它是独立服务，只消费前两部分正式输出的数据。不负责改写记忆、控制召回逻辑、控制 agent 推理、直接依赖其他服务私有实现。
 
 ## 5. 内部模块设计
 
@@ -216,6 +211,8 @@
 - `GET /v1/runtime/observe/metrics`
 
 ## 8. 自己要暴露什么接口
+
+接口完整定义见 `docs/api-contract.md` 第 3 节。以下仅列出接口清单和用途。
 
 如果 `visualization` 采用前后端分离，建议它自己的后端提供下面这些接口给前端页面用。
 

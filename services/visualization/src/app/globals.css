@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f5f2e8;
+  --foreground: #1f2937;
+  --muted: #e7e1d0;
+  --muted-foreground: #6b7280;
+  --card: rgba(255, 251, 242, 0.9);
+  --card-foreground: #111827;
+  --border: rgba(15, 23, 42, 0.12);
+  --accent: #0f766e;
+  --accent-foreground: #f8fafc;
+  --success: #15803d;
+  --warning: #b45309;
+  --danger: #b91c1c;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 242, 0.72) 0%, rgba(245, 242, 232, 0.96) 100%),
+    var(--background-image);
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(15, 118, 110, 0.18), transparent 26%),
+    radial-gradient(circle at 88% 10%, rgba(217, 119, 6, 0.12), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply text-balance;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border bg-card text-card-foreground shadow-soft backdrop-blur;
+  }
+
+  .panel-header {
+    @apply flex flex-col gap-2 border-b px-6 py-5 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .panel-body {
+    @apply px-6 py-5;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground;
+  }
+}
