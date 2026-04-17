@@ -34,7 +34,7 @@ packages/continuum-cli
 
 也就是说：
 
-- 面向用户的 npm 包：`continuum-cli`
+- 面向用户的 npm 包：`@jiankarlin/continuum`
 - 这一层：内部服务包与宿主适配源产物
 
 ## 3. Claude 插件打包在哪里做

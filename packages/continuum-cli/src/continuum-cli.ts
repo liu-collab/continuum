@@ -6,8 +6,10 @@ import { runCodexCommand } from "./codex-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runRuntimeCommand } from "./runtime-command.js";
+import { runStartCommand } from "./start-command.js";
 import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
+import { runLocalEmbeddingsServiceCommand } from "./local-embedding-service.js";
 
 export async function runCli(argv: string[], importMetaUrl: string) {
   const parsed = parseArgs(argv);
@@ -24,6 +26,11 @@ export async function runCli(argv: string[], importMetaUrl: string) {
 
   if (primary === "ui") {
     await runUiCommand(parsed.options, importMetaUrl);
+    return 0;
+  }
+
+  if (primary === "start") {
+    await runStartCommand(parsed.options, importMetaUrl);
     return 0;
   }
 
@@ -44,6 +51,11 @@ export async function runCli(argv: string[], importMetaUrl: string) {
 
   if (primary === "mcp-server") {
     await runMcpCommand(importMetaUrl);
+    return 0;
+  }
+
+  if (primary === "embeddings") {
+    await runLocalEmbeddingsServiceCommand(parsed.options);
     return 0;
   }
 

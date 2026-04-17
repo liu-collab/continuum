@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_npm:
-        description: "Publish continuum-cli to npm"
+        description: "Publish @jiankarlin/continuum to npm"
         required: false
         default: "false"
       create_plugin_bundle:
@@ -13,7 +13,7 @@ on:
         default: "true"
   push:
     tags:
-      - "continuum-cli-v*"
+      - "continuum-v*"
 
 jobs:
   release:

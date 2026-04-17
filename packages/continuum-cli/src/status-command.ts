@@ -7,6 +7,7 @@ import {
   DEFAULT_UI_URL,
   fetchJson,
 } from "./utils.js";
+import { buildManagedDatabaseUrl, readManagedState } from "./managed-state.js";
 
 type StatusCheckResult = {
   name: string;
@@ -36,7 +37,10 @@ async function checkRuntime(runtimeUrl: string, timeoutMs: number): Promise<Stat
   return {
     name: "retrieval-runtime",
     status:
-      body?.liveness === "healthy" && body?.readiness === "healthy" ? "healthy" : "degraded",
+      (body?.liveness === "healthy" || body?.liveness === "alive") &&
+      (body?.readiness === "healthy" || body?.readiness === "ready")
+        ? "healthy"
+        : "degraded",
     detail: `liveness=${body?.liveness ?? "unknown"} readiness=${body?.readiness ?? "unknown"}`,
   };
 }
@@ -64,7 +68,11 @@ async function checkStorage(storageUrl: string, timeoutMs: number): Promise<Stat
 
   return {
     name: "storage",
-    status: liveness === "healthy" && readiness === "healthy" ? "healthy" : "degraded",
+    status:
+      (liveness === "healthy" || liveness === "alive") &&
+      (readiness === "healthy" || readiness === "ready")
+        ? "healthy"
+        : "degraded",
     detail: `liveness=${liveness} readiness=${readiness}${envelope?.data?.reason ? ` reason=${envelope.data.reason}` : ""}`,
   };
 }
@@ -86,7 +94,7 @@ async function checkUi(uiUrl: string, timeoutMs: number): Promise<StatusCheckRes
 
   return {
     name: "visualization",
-    status: body?.status === "healthy" ? "healthy" : "degraded",
+    status: body?.status === "healthy" || body?.status === "ready" ? "healthy" : "degraded",
     detail: body?.summary ?? `status=${body?.status ?? "unknown"}`,
   };
 }
@@ -133,10 +141,14 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   const storageUrl =
     typeof options["storage-url"] === "string" ? options["storage-url"] : DEFAULT_STORAGE_URL;
   const uiUrl = typeof options["ui-url"] === "string" ? options["ui-url"] : DEFAULT_UI_URL;
+  const managedState = await readManagedState();
+  const managedDatabaseUrl = managedState.postgres
+    ? buildManagedDatabaseUrl(managedState.postgres.port)
+    : undefined;
   const databaseUrl =
     typeof options["database-url"] === "string"
       ? options["database-url"]
-      : process.env.DATABASE_URL;
+      : process.env.DATABASE_URL ?? managedDatabaseUrl;
   const timeoutMs =
     typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
   const strict = options.strict === true || options.strict === "true";

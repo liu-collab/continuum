@@ -70,10 +70,10 @@ Continuum 适合接到下面这类 agent 使用场景里：
 
 对最终用户来说，更合适的使用方式是：
 
-### 1. 安装 `continuum-cli`
+### 1. 安装 `@jiankarlin/continuum`
 
 ```bash
-npm install -g continuum-cli
+npm install -g @jiankarlin/continuum
 ```
 
 ### 2. 安装 Continuum 的 Claude 插件版本
@@ -102,12 +102,12 @@ continuum claude install
 
 对最终用户来说，更合适的使用方式是：
 
-### 1. 安装 `continuum-cli`
+### 1. 安装 `@jiankarlin/continuum`
 
 用户安装的是已经发布好的统一 `CLI` 包，而不是手动进入仓库运行脚本。
 
 ```bash
-npm install -g continuum-cli
+npm install -g @jiankarlin/continuum
 ```
 
 ### 2. 直接启动接好 Continuum 的 Codex
@@ -123,12 +123,42 @@ continuum codex
 如果只想看状态、启动页面、安装 Claude 插件，也都用这一个命令：
 
 ```bash
+continuum start
 continuum status
 continuum ui
 continuum claude install
 ```
 
 统一入口就是 `continuum`。
+
+如果希望在用户机器上直接拉起 Continuum 自己管理的一套本地依赖，可以直接执行：
+
+```bash
+continuum start
+```
+
+这条命令当前会做这些事情：
+
+- 启动或拉起 Continuum 自己的单一 Docker 容器
+- 容器内部统一运行 `PostgreSQL + pgvector`、embedding、`storage`、`storage worker`、`retrieval-runtime`、`visualization`
+- 容器内部会自己安装并构建各个服务，不依赖用户机器上的本地构建产物
+- 使用 Continuum 自己的固定容器名和独立端口，不占用用户现有数据库实例
+- 容器启动时自动执行 `storage` 和 `retrieval-runtime` 的数据库迁移
+
+默认约定：
+
+- PostgreSQL 端口：`54329`
+- storage：`3001`
+- retrieval-runtime：`3002`
+- visualization：`3003`
+
+如果只是想打开页面：
+
+```bash
+continuum ui
+```
+
+这条命令会优先连接已经由 `continuum start` 拉起的可视化页面。
 
 用户视角下，它提供的效果也是：
 
@@ -141,7 +171,7 @@ continuum claude install
 当前仓库更适合下面两类用途：
 
 - 作为 Continuum 的主开发仓库，继续补全三层服务
-- 作为对外发布 `continuum-cli` 和 `Claude Code 插件` 的源码仓库
+- 作为对外发布 `@jiankarlin/continuum` 和 `Claude Code 插件` 的源码仓库
 
 如果你是第一次看这个仓库，更建议把它理解成：
 

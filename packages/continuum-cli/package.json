@@ -1,5 +1,5 @@
 {
-  "name": "continuum-cli",
+  "name": "@jiankarlin/continuum",
   "version": "0.1.0",
   "description": "Continuum delivery CLI for status, UI, Claude plugin install, and Codex launch.",
   "type": "module",

@@ -1,8 +1,8 @@
-# continuum-cli 发布说明
+# @jiankarlin/continuum 发布说明
 
 对外给用户安装的主包是：
 
-- `continuum-cli`
+- `@jiankarlin/continuum`
 
 这个包负责：
 
@@ -23,6 +23,7 @@ npm run release:verify
 这一步会完成：
 
 - 准备 vendor 产物
+- 准备 `continuum start` 所需的 Docker stack 源码上下文
 - 检查类型
 - 构建 CLI
 - 跑测试
@@ -36,7 +37,7 @@ npm publish --access public
 发布完成后，用户入口就是：
 
 ```bash
-npm install -g continuum-cli
+npm install -g @jiankarlin/continuum
 continuum status
 continuum ui
 continuum claude install
@@ -69,4 +70,4 @@ continuum-claude-plugin-v<version>.zip
 .github/workflows/release-continuum.yml
 ```
 
-现在以 `continuum-cli` 作为 npm 发布主入口。
+现在以 `@jiankarlin/continuum` 作为 npm 发布主入口。

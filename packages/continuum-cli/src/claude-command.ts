@@ -20,7 +20,7 @@ export async function runClaudeInstallCommand(
       : defaultClaudePluginInstallDir();
   const force = options.force === true || options.force === "true";
   const packageSpecifier =
-    typeof options.package === "string" ? options.package : "continuum-cli@latest";
+    typeof options.package === "string" ? options.package : "@jiankarlin/continuum@latest";
 
   await installClaudePlugin({
     sourceDir,

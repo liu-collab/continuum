@@ -6,6 +6,8 @@ import {
   DEFAULT_RUNTIME_URL,
   DEFAULT_STORAGE_URL,
   DEFAULT_UI_URL,
+  DEFAULT_TIMEOUT_MS,
+  fetchJson,
   openBrowser,
   packageRootFromImportMeta,
   pathExists,
@@ -21,6 +23,15 @@ export async function runUiCommand(
     process.stdout.write(`visualization url ${explicitUrl}\n`);
     if (options.open === true || options.open === "true") {
       await openBrowser(explicitUrl);
+    }
+    return;
+  }
+
+  const defaultUiHealth = await fetchJson(`${DEFAULT_UI_URL}/api/health/readiness`, DEFAULT_TIMEOUT_MS);
+  if (defaultUiHealth.ok) {
+    process.stdout.write(`visualization url ${DEFAULT_UI_URL}\n`);
+    if (options.open === true || options.open === "true") {
+      await openBrowser(DEFAULT_UI_URL);
     }
     return;
   }
