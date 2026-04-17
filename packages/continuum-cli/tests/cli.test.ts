@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { parseArgs } from "../src/args.js";
+import {
+  buildEmbeddingsEndpoint,
+  resolveThirdPartyEmbeddingConfig,
+} from "../src/embedding-config.js";
 import { renderHelp } from "../src/help.js";
 import { runStatusCommand } from "../src/status-command.js";
 
@@ -21,14 +25,21 @@ describe("continuum cli", () => {
       "54329",
       "--bind-host",
       "0.0.0.0",
+      "--embedding-base-url",
+      "https://api.openai.com/v1",
+      "--embedding-model",
+      "text-embedding-3-small",
     ]);
 
     expect(parsed.command).toEqual(["start"]);
     expect(parsed.options.open).toBe(true);
     expect(parsed.options["postgres-port"]).toBe("54329");
     expect(parsed.options["bind-host"]).toBe("0.0.0.0");
+    expect(parsed.options["embedding-base-url"]).toBe("https://api.openai.com/v1");
+    expect(parsed.options["embedding-model"]).toBe("text-embedding-3-small");
     expect(renderHelp()).toContain("continuum start");
     expect(renderHelp()).toContain("--bind-host HOST");
+    expect(renderHelp()).toContain("--embedding-base-url URL");
   });
 
   it("parses the stop command and exposes it in help", () => {
@@ -49,5 +60,24 @@ describe("continuum cli", () => {
     });
 
     expect(exitCode).toBe(1);
+  });
+
+  it("requires third-party embedding config for managed start", () => {
+    expect(() => resolveThirdPartyEmbeddingConfig({}, {})).toThrow(
+      "continuum start 需要第三方 embedding 配置",
+    );
+  });
+
+  it("accepts third-party embedding config from options and preserves v1 path", () => {
+    const config = resolveThirdPartyEmbeddingConfig(
+      {
+        "embedding-base-url": "https://api.openai.com/v1",
+        "embedding-model": "text-embedding-3-small",
+      },
+      {},
+    );
+
+    expect(config.baseUrl).toBe("https://api.openai.com/v1");
+    expect(buildEmbeddingsEndpoint(config.baseUrl)).toBe("https://api.openai.com/v1/embeddings");
   });
 });

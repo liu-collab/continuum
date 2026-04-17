@@ -18,13 +18,16 @@ import {
   DEFAULT_MANAGED_DATABASE_NAME,
   DEFAULT_MANAGED_DATABASE_PASSWORD,
   DEFAULT_MANAGED_DATABASE_USER,
-  DEFAULT_MANAGED_EMBEDDINGS_URL,
   DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_POSTGRES_PORT,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
   writeManagedState,
 } from "./managed-state.js";
+import {
+  buildEmbeddingsEndpoint,
+  resolveThirdPartyEmbeddingConfig,
+} from "./embedding-config.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -190,10 +193,6 @@ async function prepareStackContext(packageRoot: string) {
   });
   await cp(vendorPath(packageRoot, "stack", "Dockerfile"), path.join(stageDir, "Dockerfile"));
   await cp(vendorPath(packageRoot, "stack", "entrypoint.mjs"), path.join(stageDir, "entrypoint.mjs"));
-  await cp(
-    vendorPath(packageRoot, "stack", "shared-embedding.mjs"),
-    path.join(stageDir, "shared-embedding.mjs"),
-  );
 
   return stageDir;
 }
@@ -202,11 +201,19 @@ async function buildStackImage(stageDir: string) {
   await runForeground("docker", ["build", "-t", DEFAULT_MANAGED_STACK_IMAGE, stageDir]);
 }
 
-async function startStackContainer(port: number, bindHost: string) {
+async function startStackContainer(
+  port: number,
+  bindHost: string,
+  embeddingConfig: {
+    baseUrl: string;
+    model: string;
+    apiKey?: string;
+  },
+) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
 
   // Container-internal loopback: all services run in same container
-  await runForeground("docker", [
+  const dockerArgs = [
     "run",
     "-d",
     "--name",
@@ -219,8 +226,6 @@ async function startStackContainer(port: number, bindHost: string) {
     `${bindHost}:3002:3002`,
     "-p",
     `${bindHost}:3003:3003`,
-    "-p",
-    `${bindHost}:31434:31434`,
     "-e",
     `POSTGRES_DB=${DEFAULT_MANAGED_DATABASE_NAME}`,
     "-e",
@@ -242,9 +247,9 @@ async function startStackContainer(port: number, bindHost: string) {
     "-e",
     `STORAGE_WRITEBACK_URL=${DEFAULT_STORAGE_URL}`,
     "-e",
-    `EMBEDDING_BASE_URL=${DEFAULT_MANAGED_EMBEDDINGS_URL}`,
+    `EMBEDDING_BASE_URL=${embeddingConfig.baseUrl}`,
     "-e",
-    "EMBEDDING_MODEL=continuum-local-embed",
+    `EMBEDDING_MODEL=${embeddingConfig.model}`,
     "-e",
     `STORAGE_READ_MODEL_DSN=${internalDatabaseUrl}`,
     "-e",
@@ -255,8 +260,15 @@ async function startStackContainer(port: number, bindHost: string) {
     `STORAGE_API_BASE_URL=${DEFAULT_STORAGE_URL}`,
     "-e",
     `RUNTIME_API_BASE_URL=${DEFAULT_RUNTIME_URL}`,
-    DEFAULT_MANAGED_STACK_IMAGE,
-  ]);
+  ];
+
+  if (embeddingConfig.apiKey) {
+    dockerArgs.push("-e", `EMBEDDING_API_KEY=${embeddingConfig.apiKey}`);
+  }
+
+  dockerArgs.push(DEFAULT_MANAGED_STACK_IMAGE);
+
+  await runForeground("docker", dockerArgs);
 }
 
 export async function runStartCommand(
@@ -271,10 +283,11 @@ export async function runStartCommand(
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
   const open = options.open === true || options.open === "true";
+  const embeddingConfig = resolveThirdPartyEmbeddingConfig(options);
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
-  const embeddingsUrl = `http://${accessibleHost}:31434`;
+  const embeddingsUrl = buildEmbeddingsEndpoint(embeddingConfig.baseUrl);
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();
@@ -290,9 +303,8 @@ export async function runStartCommand(
     () => undefined,
   );
 
-  await startStackContainer(postgresPort, bindHost);
+  await startStackContainer(postgresPort, bindHost, embeddingConfig);
 
-  await waitForHealthy(`${embeddingsUrl}/health`, 60_000);
   await waitForHealthy(`${storageUrl}/health`, 120_000);
   await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
   await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
@@ -315,7 +327,7 @@ export async function runStartCommand(
   process.stdout.write(`storage: ${storageUrl}\n`);
   process.stdout.write(`runtime: ${runtimeUrl}\n`);
   process.stdout.write(`visualization: ${uiUrl}\n`);
-  process.stdout.write(`embeddings: ${embeddingsUrl}\n`);
+  process.stdout.write(`third-party embeddings: ${embeddingsUrl}\n`);
 
   if (open) {
     await openBrowser(uiUrl);

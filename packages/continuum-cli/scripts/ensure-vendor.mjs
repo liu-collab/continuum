@@ -19,7 +19,6 @@ const requiredPaths = [
   path.join(packageDir, "vendor", "visualization", "standalone", "server.js"),
   path.join(packageDir, "vendor", "stack", "Dockerfile"),
   path.join(packageDir, "vendor", "stack", "entrypoint.mjs"),
-  path.join(packageDir, "vendor", "stack", "shared-embedding.mjs"),
   path.join(packageDir, "vendor", "stack", "storage-src", "package.json"),
   path.join(packageDir, "vendor", "stack", "runtime-src", "package.json"),
   path.join(packageDir, "vendor", "stack", "visualization-src", "package.json"),

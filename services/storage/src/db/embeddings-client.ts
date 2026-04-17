@@ -30,10 +30,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
       requestInit.signal = signal;
     }
 
-    const response = await fetch(
-      new URL("/embeddings", this.config.embedding_base_url),
-      requestInit,
-    );
+    const response = await fetch(this.buildEmbeddingsUrl(), requestInit);
 
     if (!response.ok) {
       throw new Error(`embeddings request failed with ${response.status}`);
@@ -47,5 +44,9 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
     }
 
     return embedding.map((item) => Number(item));
+  }
+
+  private buildEmbeddingsUrl() {
+    return new URL("./embeddings", `${this.config.embedding_base_url!.replace(/\/+$/, "")}/`);
   }
 }

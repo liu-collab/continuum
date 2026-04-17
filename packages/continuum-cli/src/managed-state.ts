@@ -28,7 +28,6 @@ export const DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER = "continuum-postgres";
 export const DEFAULT_MANAGED_DATABASE_NAME = "continuum";
 export const DEFAULT_MANAGED_DATABASE_USER = "continuum";
 export const DEFAULT_MANAGED_DATABASE_PASSWORD = "continuum_local_dev";
-export const DEFAULT_MANAGED_EMBEDDINGS_URL = "http://127.0.0.1:31434";
 
 export function continuumHomeDir() {
   return path.join(os.homedir(), ".continuum");

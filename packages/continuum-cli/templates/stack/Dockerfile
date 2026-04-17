@@ -53,8 +53,7 @@ COPY --from=builder /opt/continuum/runtime/package.json /opt/continuum/runtime/p
 COPY --from=builder /opt/continuum/visualization-standalone /opt/continuum/visualization-standalone
 
 COPY entrypoint.mjs /opt/continuum/entrypoint.mjs
-COPY shared-embedding.mjs /opt/continuum/shared-embedding.mjs
 
-EXPOSE 3001 3002 3003 31434 5432
+EXPOSE 3001 3002 3003 5432
 
 ENTRYPOINT ["node", "/opt/continuum/entrypoint.mjs"]

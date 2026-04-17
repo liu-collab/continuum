@@ -1,9 +1,6 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import process from "node:process";
-
-import { buildDeterministicEmbedding, DEFAULT_EMBEDDING_DIMENSIONS } from "./shared-embedding.mjs";
 
 const children = [];
 const sharedEnv = {
@@ -31,91 +28,6 @@ function stopAll() {
 
 process.on("SIGINT", stopAll);
 process.on("SIGTERM", stopAll);
-
-async function readJsonBody(request) {
-  const chunks = [];
-
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  const raw = Buffer.concat(chunks).toString("utf8");
-  return raw ? JSON.parse(raw) : {};
-}
-
-async function runEmbeddingsServer() {
-  const host = "0.0.0.0";
-  const port = 31434;
-
-  const server = createServer(async (request, response) => {
-    try {
-      if (request.method === "GET" && (request.url === "/health" || request.url === "/healthz")) {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ status: "healthy" }));
-        return;
-      }
-
-      if (request.method === "POST" && request.url === "/embeddings") {
-        const body = await readJsonBody(request);
-        const inputValue = body.input;
-        const model =
-          typeof body.model === "string" && body.model.trim().length > 0
-            ? body.model
-            : "continuum-local-embed";
-        const input =
-          typeof inputValue === "string"
-            ? inputValue
-            : Array.isArray(inputValue)
-              ? inputValue.join("\n")
-              : "";
-
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify({
-            object: "list",
-            data: [
-              {
-                object: "embedding",
-                index: 0,
-                embedding: buildDeterministicEmbedding(input),
-              },
-            ],
-            model,
-            usage: {
-              prompt_tokens: 0,
-              total_tokens: 0,
-            },
-          }),
-        );
-        return;
-      }
-
-      response.writeHead(404, { "content-type": "application/json" });
-      response.end(JSON.stringify({ error: "not_found" }));
-    } catch (error) {
-      response.writeHead(500, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify({
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
-  });
-
-  const closeServer = () => {
-    server.close(() => {
-      process.exit(0);
-    });
-  };
-
-  process.on("SIGINT", closeServer);
-  process.on("SIGTERM", closeServer);
-
-  await new Promise((resolve, reject) => {
-    server.listen(port, host, () => resolve(undefined));
-    server.on("error", reject);
-  });
-}
 
 async function waitForPostgresReady() {
   const deadline = Date.now() + 120_000;
@@ -178,9 +90,6 @@ async function main() {
   await waitForExit(runtimeMigrate, "runtime migration");
   children.pop(); // Remove completed migration from children array
 
-  const embeddings = startProcess(process.execPath, ["/opt/continuum/entrypoint.mjs", "run-embeddings"], {
-    cwd: "/opt/continuum",
-  });
   const storage = startProcess(process.execPath, ["/opt/continuum/storage/dist/src/server.js"], {
     cwd: "/opt/continuum/storage",
     env: {
@@ -209,7 +118,7 @@ async function main() {
     },
   });
 
-  for (const child of [embeddings, storage, worker, runtime, visualization]) {
+  for (const child of [storage, worker, runtime, visualization]) {
     child.on("exit", () => {
       stopAll();
       postgres.kill("SIGTERM");
@@ -217,12 +126,8 @@ async function main() {
   }
 }
 
-if (process.argv[2] === "run-embeddings") {
-  await runEmbeddingsServer();
-} else {
-  void main().catch((error) => {
-    console.error(error);
-    stopAll();
-    process.exit(1);
-  });
-}
+void main().catch((error) => {
+  console.error(error);
+  stopAll();
+  process.exit(1);
+});

@@ -8,7 +8,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
   constructor(private readonly config: AppConfig) {}
 
   async embedText(text: string, signal?: AbortSignal): Promise<number[]> {
-    const response = await fetch(new URL("/embeddings", this.config.EMBEDDING_BASE_URL), {
+    const response = await fetch(this.buildEmbeddingsUrl(), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -33,5 +33,9 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
     }
 
     return embedding;
+  }
+
+  private buildEmbeddingsUrl() {
+    return new URL("./embeddings", `${this.config.EMBEDDING_BASE_URL.replace(/\/+$/, "")}/`);
   }
 }

@@ -10,7 +10,6 @@ import { runStartCommand } from "./start-command.js";
 import { runStopCommand } from "./stop-command.js";
 import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
-import { runLocalEmbeddingsServiceCommand } from "./local-embedding-service.js";
 
 export async function runCli(argv: string[], importMetaUrl: string) {
   const parsed = parseArgs(argv);
@@ -57,11 +56,6 @@ export async function runCli(argv: string[], importMetaUrl: string) {
 
   if (primary === "mcp-server") {
     await runMcpCommand(importMetaUrl);
-    return 0;
-  }
-
-  if (primary === "embeddings") {
-    await runLocalEmbeddingsServiceCommand(parsed.options);
     return 0;
   }
 
