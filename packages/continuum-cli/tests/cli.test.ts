@@ -14,12 +14,28 @@ describe("continuum cli", () => {
   });
 
   it("parses the start command and exposes it in help", () => {
-    const parsed = parseArgs(["start", "--open", "--postgres-port", "54329"]);
+    const parsed = parseArgs([
+      "start",
+      "--open",
+      "--postgres-port",
+      "54329",
+      "--bind-host",
+      "0.0.0.0",
+    ]);
 
     expect(parsed.command).toEqual(["start"]);
     expect(parsed.options.open).toBe(true);
     expect(parsed.options["postgres-port"]).toBe("54329");
+    expect(parsed.options["bind-host"]).toBe("0.0.0.0");
     expect(renderHelp()).toContain("continuum start");
+    expect(renderHelp()).toContain("--bind-host HOST");
+  });
+
+  it("parses the stop command and exposes it in help", () => {
+    const parsed = parseArgs(["stop"]);
+
+    expect(parsed.command).toEqual(["stop"]);
+    expect(renderHelp()).toContain("continuum stop");
   });
 
   it("returns non-zero when strict status checks fail", async () => {

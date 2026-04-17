@@ -124,12 +124,23 @@ continuum codex
 
 ```bash
 continuum start
+continuum stop
 continuum status
 continuum ui
 continuum claude install
 ```
 
 统一入口就是 `continuum`。
+
+## 平台支持
+
+**注意：`continuum start` 当前仅支持 Windows 平台**，依赖 `winget` 和 PowerShell 进行 Docker 安装和进程管理。
+
+其他平台用户请：
+- 手动运行各服务（storage、retrieval-runtime、visualization）
+- 或使用 Docker Compose 自行编排
+
+## 一键启动
 
 如果希望在用户机器上直接拉起 Continuum 自己管理的一套本地依赖，可以直接执行：
 
@@ -143,14 +154,28 @@ continuum start
 - 容器内部统一运行 `PostgreSQL + pgvector`、embedding、`storage`、`storage worker`、`retrieval-runtime`、`visualization`
 - 容器内部会自己安装并构建各个服务，不依赖用户机器上的本地构建产物
 - 使用 Continuum 自己的固定容器名和独立端口，不占用用户现有数据库实例
+- 所有服务端口绑定到 `127.0.0.1`，仅本机可访问，避免局域网暴露
 - 容器启动时自动执行 `storage` 和 `retrieval-runtime` 的数据库迁移
 
 默认约定：
 
-- PostgreSQL 端口：`54329`
-- storage：`3001`
-- retrieval-runtime：`3002`
-- visualization：`3003`
+- PostgreSQL 端口：`54329`（默认绑定 127.0.0.1）
+- storage：`3001`（默认绑定 127.0.0.1）
+- retrieval-runtime：`3002`（默认绑定 127.0.0.1）
+- visualization：`3003`（默认绑定 127.0.0.1）
+- embeddings：`31434`（默认绑定 127.0.0.1）
+
+如需局域网访问（如手机测试），可使用：
+
+```bash
+continuum start --bind-host 0.0.0.0
+```
+
+停止服务：
+
+```bash
+continuum stop
+```
 
 如果只是想打开页面：
 

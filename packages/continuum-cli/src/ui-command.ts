@@ -27,8 +27,23 @@ export async function runUiCommand(
     return;
   }
 
-  const defaultUiHealth = await fetchJson(`${DEFAULT_UI_URL}/api/health/readiness`, DEFAULT_TIMEOUT_MS);
-  if (defaultUiHealth.ok) {
+  // Check if managed UI is already running (with retry)
+  let defaultUiHealthy = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const defaultUiHealth = await fetchJson(
+      `${DEFAULT_UI_URL}/api/health/readiness`,
+      DEFAULT_TIMEOUT_MS,
+    );
+    if (defaultUiHealth.ok) {
+      defaultUiHealthy = true;
+      break;
+    }
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (defaultUiHealthy) {
     process.stdout.write(`visualization url ${DEFAULT_UI_URL}\n`);
     if (options.open === true || options.open === "true") {
       await openBrowser(DEFAULT_UI_URL);

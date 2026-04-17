@@ -7,6 +7,7 @@ import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runRuntimeCommand } from "./runtime-command.js";
 import { runStartCommand } from "./start-command.js";
+import { runStopCommand } from "./stop-command.js";
 import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
 import { runLocalEmbeddingsServiceCommand } from "./local-embedding-service.js";
@@ -31,6 +32,11 @@ export async function runCli(argv: string[], importMetaUrl: string) {
 
   if (primary === "start") {
     await runStartCommand(parsed.options, importMetaUrl);
+    return 0;
+  }
+
+  if (primary === "stop") {
+    await runStopCommand();
     return 0;
   }
 

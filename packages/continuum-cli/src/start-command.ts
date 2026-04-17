@@ -27,6 +27,8 @@ import {
 } from "./managed-state.js";
 
 const STAGE_DIR_NAME = "stack-stage";
+const LOOPBACK_BIND_HOST = "127.0.0.1";
+const WILDCARD_BIND_HOST = "0.0.0.0";
 
 async function runForeground(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
@@ -91,6 +93,12 @@ async function waitForHealthy(url: string, timeoutMs: number) {
 }
 
 async function ensureDockerInstalled() {
+  if (process.platform !== "win32") {
+    throw new Error(
+      "continuum start 当前仅支持 Windows 平台。其他平台请手动运行各服务或使用 Docker Compose。",
+    );
+  }
+
   try {
     await runForegroundQuiet("docker", ["--version"]);
   } catch {
@@ -104,6 +112,22 @@ async function ensureDockerInstalled() {
       "--accept-source-agreements",
     ]);
   }
+}
+
+function normalizeBindHost(rawValue: string | boolean | undefined) {
+  const bindHost = typeof rawValue === "string" ? rawValue : LOOPBACK_BIND_HOST;
+
+  if (bindHost !== LOOPBACK_BIND_HOST && bindHost !== WILDCARD_BIND_HOST) {
+    throw new Error(
+      `不支持的 --bind-host: ${bindHost}。当前仅支持 ${LOOPBACK_BIND_HOST} 或 ${WILDCARD_BIND_HOST}。`,
+    );
+  }
+
+  return bindHost;
+}
+
+function resolveAccessibleHost(bindHost: string) {
+  return bindHost === WILDCARD_BIND_HOST ? LOOPBACK_BIND_HOST : bindHost;
 }
 
 async function ensureDockerDaemonReady() {
@@ -166,6 +190,10 @@ async function prepareStackContext(packageRoot: string) {
   });
   await cp(vendorPath(packageRoot, "stack", "Dockerfile"), path.join(stageDir, "Dockerfile"));
   await cp(vendorPath(packageRoot, "stack", "entrypoint.mjs"), path.join(stageDir, "entrypoint.mjs"));
+  await cp(
+    vendorPath(packageRoot, "stack", "shared-embedding.mjs"),
+    path.join(stageDir, "shared-embedding.mjs"),
+  );
 
   return stageDir;
 }
@@ -174,28 +202,25 @@ async function buildStackImage(stageDir: string) {
   await runForeground("docker", ["build", "-t", DEFAULT_MANAGED_STACK_IMAGE, stageDir]);
 }
 
-async function startStackContainer(port: number) {
+async function startStackContainer(port: number, bindHost: string) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
 
-  await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]).catch(
-    () => undefined,
-  );
-
+  // Container-internal loopback: all services run in same container
   await runForeground("docker", [
     "run",
     "-d",
     "--name",
     DEFAULT_MANAGED_STACK_CONTAINER,
     "-p",
-    `${port}:5432`,
+    `${bindHost}:${port}:5432`,
     "-p",
-    "3001:3001",
+    `${bindHost}:3001:3001`,
     "-p",
-    "3002:3002",
+    `${bindHost}:3002:3002`,
     "-p",
-    "3003:3003",
+    `${bindHost}:3003:3003`,
     "-p",
-    "31434:31434",
+    `${bindHost}:31434:31434`,
     "-e",
     `POSTGRES_DB=${DEFAULT_MANAGED_DATABASE_NAME}`,
     "-e",
@@ -243,7 +268,13 @@ export async function runStartCommand(
     typeof options["postgres-port"] === "string"
       ? Number(options["postgres-port"])
       : DEFAULT_MANAGED_POSTGRES_PORT;
+  const bindHost = normalizeBindHost(options["bind-host"]);
+  const accessibleHost = resolveAccessibleHost(bindHost);
   const open = options.open === true || options.open === "true";
+  const storageUrl = `http://${accessibleHost}:3001`;
+  const runtimeUrl = `http://${accessibleHost}:3002`;
+  const uiUrl = `http://${accessibleHost}:3003`;
+  const embeddingsUrl = `http://${accessibleHost}:31434`;
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();
@@ -253,12 +284,18 @@ export async function runStartCommand(
 
   const stageDir = await prepareStackContext(packageRoot);
   await buildStackImage(stageDir);
-  await startStackContainer(postgresPort);
 
-  await waitForHealthy(`${DEFAULT_MANAGED_EMBEDDINGS_URL}/health`, 60_000);
-  await waitForHealthy(`${DEFAULT_STORAGE_URL}/health`, 120_000);
-  await waitForHealthy(`${DEFAULT_RUNTIME_URL}/healthz`, 120_000);
-  await waitForHealthy(`${DEFAULT_UI_URL}/api/health/readiness`, 120_000);
+  // Remove old container only after successful build
+  await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]).catch(
+    () => undefined,
+  );
+
+  await startStackContainer(postgresPort, bindHost);
+
+  await waitForHealthy(`${embeddingsUrl}/health`, 60_000);
+  await waitForHealthy(`${storageUrl}/health`, 120_000);
+  await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
+  await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
 
   await writeManagedState({
     version: 1,
@@ -273,13 +310,14 @@ export async function runStartCommand(
 
   process.stdout.write("Continuum 已启动。\n");
   process.stdout.write(`container: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
-  process.stdout.write(`postgres: 127.0.0.1:${postgresPort}\n`);
-  process.stdout.write(`storage: ${DEFAULT_STORAGE_URL}\n`);
-  process.stdout.write(`runtime: ${DEFAULT_RUNTIME_URL}\n`);
-  process.stdout.write(`visualization: ${DEFAULT_UI_URL}\n`);
-  process.stdout.write(`embeddings: ${DEFAULT_MANAGED_EMBEDDINGS_URL}\n`);
+  process.stdout.write(`bind-host: ${bindHost}\n`);
+  process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
+  process.stdout.write(`storage: ${storageUrl}\n`);
+  process.stdout.write(`runtime: ${runtimeUrl}\n`);
+  process.stdout.write(`visualization: ${uiUrl}\n`);
+  process.stdout.write(`embeddings: ${embeddingsUrl}\n`);
 
   if (open) {
-    await openBrowser(DEFAULT_UI_URL);
+    await openBrowser(uiUrl);
   }
 }
