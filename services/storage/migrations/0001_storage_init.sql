@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS __PRIVATE_SCHEMA_IDENT__.memory_conflicts (
   user_id UUID NULL,
   record_id UUID NOT NULL REFERENCES __PRIVATE_SCHEMA_IDENT__.memory_records(id) ON DELETE CASCADE,
   conflict_with_record_id UUID NOT NULL REFERENCES __PRIVATE_SCHEMA_IDENT__.memory_records(id) ON DELETE CASCADE,
+  pending_record_id UUID NULL REFERENCES __PRIVATE_SCHEMA_IDENT__.memory_records(id) ON DELETE CASCADE,
+  existing_record_id UUID NULL REFERENCES __PRIVATE_SCHEMA_IDENT__.memory_records(id) ON DELETE CASCADE,
   conflict_type TEXT NOT NULL CHECK (conflict_type IN ('fact_conflict', 'preference_conflict', 'scope_conflict')),
   conflict_summary TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('open', 'resolved', 'ignored')),
@@ -100,11 +102,13 @@ CREATE INDEX IF NOT EXISTS memory_conflicts_record_idx
   ON __PRIVATE_SCHEMA_IDENT__.memory_conflicts (record_id);
 CREATE INDEX IF NOT EXISTS memory_conflicts_with_record_idx
   ON __PRIVATE_SCHEMA_IDENT__.memory_conflicts (conflict_with_record_id);
+CREATE INDEX IF NOT EXISTS memory_conflicts_pending_record_idx
+  ON __PRIVATE_SCHEMA_IDENT__.memory_conflicts (pending_record_id);
 
 CREATE TABLE IF NOT EXISTS __PRIVATE_SCHEMA_IDENT__.memory_governance_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   record_id UUID NOT NULL REFERENCES __PRIVATE_SCHEMA_IDENT__.memory_records(id) ON DELETE CASCADE,
-  action_type TEXT NOT NULL CHECK (action_type IN ('edit', 'archive', 'delete', 'confirm', 'restore_version')),
+  action_type TEXT NOT NULL CHECK (action_type IN ('edit', 'archive', 'delete', 'confirm', 'invalidate', 'restore_version')),
   action_payload JSONB NOT NULL,
   actor_type TEXT NOT NULL CHECK (actor_type IN ('system', 'user', 'operator')),
   actor_id TEXT NOT NULL,
@@ -132,6 +136,7 @@ CREATE TABLE IF NOT EXISTS __SHARED_SCHEMA_IDENT__.memory_read_model_v1 (
   source JSONB NULL,
   last_confirmed_at TIMESTAMPTZ NULL,
   last_used_at TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL,
   summary_embedding VECTOR(1536) NULL
 );

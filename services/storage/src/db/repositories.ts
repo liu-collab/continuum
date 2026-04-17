@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  AcceptedWriteBackJob,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
   MemoryStatus,
   MemoryWriteJob,
+  RecordListPage,
   ReadModelEntry,
   ReadModelRefreshJob,
   ResolveConflictInput,
@@ -46,6 +48,8 @@ export interface RecordRepository {
   findByDedupeScope(input: {
     workspace_id: string;
     user_id: string | null;
+    task_id?: string | null;
+    session_id?: string | null;
     scope: string;
     dedupe_key: string;
   }): Promise<MemoryRecord[]>;
@@ -69,14 +73,15 @@ export interface RecordRepository {
   ): Promise<MemoryRecord>;
   appendVersion(input: Omit<MemoryRecordVersion, "id" | "changed_at">): Promise<MemoryRecordVersion>;
   listRecords(filters: {
-    workspace_id?: string | undefined;
+    workspace_id: string;
     user_id?: string | undefined;
     task_id?: string | undefined;
     memory_type?: string | undefined;
     scope?: string | undefined;
     status?: string | undefined;
-    limit: number;
-  }): Promise<MemoryRecord[]>;
+    page: number;
+    page_size: number;
+  }): Promise<RecordListPage>;
   getVersion(recordId: string, versionNo: number): Promise<MemoryRecordVersion | null>;
 }
 
@@ -288,16 +293,8 @@ function createRecordRepository(session: DbSession): RecordRepository {
 
     async findByDedupeScope(input) {
       const result = await session.query(
-        `
-          select *
-          from ${table}
-          where workspace_id = $1
-            and scope = $2
-            and dedupe_key = $3
-            and coalesce(user_id::text, '') = coalesce($4::text, '')
-          order by updated_at desc
-        `,
-        [input.workspace_id, input.scope, input.dedupe_key, input.user_id],
+        buildFindByDedupeScopeQuery(table, input),
+        buildFindByDedupeScopeParams(input),
       );
 
       return result.rows.map(mapMemoryRecord);
@@ -417,26 +414,53 @@ function createRecordRepository(session: DbSession): RecordRepository {
         conditions.push(`${column} = $${values.length}`);
       };
 
-      if (filters.workspace_id) addCondition("workspace_id", filters.workspace_id);
       if (filters.user_id) addCondition("user_id", filters.user_id);
       if (filters.task_id) addCondition("task_id", filters.task_id);
       if (filters.memory_type) addCondition("memory_type", filters.memory_type);
       if (filters.scope) addCondition("scope", filters.scope);
       if (filters.status) addCondition("status", filters.status);
-      values.push(filters.limit);
 
-      const result = await session.query(
+      if (filters.scope && filters.scope !== "user") {
+        addCondition("workspace_id", filters.workspace_id);
+      } else if (!filters.scope) {
+        values.push(filters.workspace_id);
+        conditions.push(
+          `(scope = 'user' or (scope <> 'user' and workspace_id = $${values.length}))`,
+        );
+      }
+
+      const countValues = [...values];
+      countValues.push(filters.page_size);
+      countValues.push((filters.page - 1) * filters.page_size);
+
+      const [result, countResult] = await Promise.all([
+        session.query(
         `
           select *
           from ${table}
           ${conditions.length ? `where ${conditions.join(" and ")}` : ""}
           order by updated_at desc
-          limit $${values.length}
+          limit $${countValues.length - 1}
+          offset $${countValues.length}
         `,
-        values,
-      );
+          countValues,
+        ),
+        session.query<{ total: string }>(
+          `
+            select count(*)::int as total
+            from ${table}
+            ${conditions.length ? `where ${conditions.join(" and ")}` : ""}
+          `,
+          values,
+        ),
+      ]);
 
-      return result.rows.map(mapMemoryRecord);
+      return {
+        items: result.rows.map(mapMemoryRecord),
+        total: Number(countResult.rows[0]?.total ?? 0),
+        page: filters.page,
+        page_size: filters.page_size,
+      };
     },
 
     async getVersion(recordId, versionNo) {
@@ -462,9 +486,19 @@ function createConflictRepository(session: DbSession): ConflictRepository {
       const result = await session.query(
         `
           insert into ${table}
-            (workspace_id, user_id, record_id, conflict_with_record_id, conflict_type, conflict_summary, status)
+            (
+              workspace_id,
+              user_id,
+              record_id,
+              conflict_with_record_id,
+              pending_record_id,
+              existing_record_id,
+              conflict_type,
+              conflict_summary,
+              status
+            )
           values
-            ($1, $2, $3, $4, $5, $6, 'open')
+            ($1, $2, $3, $4, $5, $6, $7, $8, 'open')
           returning *
         `,
         [
@@ -472,6 +506,8 @@ function createConflictRepository(session: DbSession): ConflictRepository {
           input.user_id,
           input.record_id,
           input.conflict_with_record_id,
+          input.pending_record_id,
+          input.existing_record_id,
           input.conflict_type,
           input.conflict_summary,
         ],
@@ -558,13 +594,13 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
             (
               id, workspace_id, user_id, task_id, session_id, memory_type, scope, status,
               summary, details, importance, confidence, source,
-              last_confirmed_at, last_used_at, updated_at, summary_embedding
+              last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding
             )
           values
             (
               $1, $2, $3, $4, $5, $6, $7, $8,
               $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-              $15, $16, $17::vector
+              $15, $16, $17, $18::vector
             )
           on conflict (id) do update
           set workspace_id = excluded.workspace_id,
@@ -581,6 +617,7 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
               source = excluded.source,
               last_confirmed_at = excluded.last_confirmed_at,
               last_used_at = excluded.last_used_at,
+              created_at = excluded.created_at,
               updated_at = excluded.updated_at,
               summary_embedding = excluded.summary_embedding
         `,
@@ -600,6 +637,7 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
           JSON.stringify(entry.source),
           entry.last_confirmed_at,
           entry.last_used_at,
+          entry.created_at,
           entry.updated_at,
           entry.summary_embedding ? `[${entry.summary_embedding.join(",")}]` : null,
         ],
@@ -834,6 +872,8 @@ function mapConflict(row: Record<string, unknown>): MemoryConflict {
     user_id: nullableString(row.user_id),
     record_id: String(row.record_id),
     conflict_with_record_id: String(row.conflict_with_record_id),
+    pending_record_id: nullableString(row.pending_record_id),
+    existing_record_id: nullableString(row.existing_record_id),
     conflict_type: row.conflict_type as MemoryConflict["conflict_type"],
     conflict_summary: String(row.conflict_summary),
     status: row.status as MemoryConflict["status"],
@@ -861,6 +901,7 @@ function mapReadModel(row: Record<string, unknown>): ReadModelEntry {
     source: (row.source as Record<string, unknown> | null) ?? null,
     last_confirmed_at: nullableIsoString(row.last_confirmed_at),
     last_used_at: nullableIsoString(row.last_used_at),
+    created_at: toIsoString(row.created_at),
     updated_at: toIsoString(row.updated_at),
     summary_embedding: parseVector(row.summary_embedding),
   };
@@ -984,4 +1025,71 @@ function parseVector(value: unknown): number[] | null {
   }
 
   return null;
+}
+
+function buildFindByDedupeScopeQuery(
+  table: string,
+  input: {
+    workspace_id: string;
+    user_id: string | null;
+    task_id?: string | null;
+    session_id?: string | null;
+    scope: string;
+    dedupe_key: string;
+  },
+) {
+  const conditions = [
+    "scope = $1",
+    "dedupe_key = $2",
+  ];
+
+  switch (input.scope) {
+    case "user":
+      conditions.push("coalesce(user_id::text, '') = coalesce($3::text, '')");
+      break;
+    case "workspace":
+      conditions.push("workspace_id = $3");
+      break;
+    case "task":
+      conditions.push("workspace_id = $3");
+      conditions.push("coalesce(task_id::text, '') = coalesce($4::text, '')");
+      break;
+    case "session":
+      conditions.push("workspace_id = $3");
+      conditions.push("coalesce(session_id::text, '') = coalesce($4::text, '')");
+      break;
+    default:
+      conditions.push("workspace_id = $3");
+      conditions.push("coalesce(user_id::text, '') = coalesce($4::text, '')");
+      break;
+  }
+
+  return `
+    select *
+    from ${table}
+    where ${conditions.join(" and ")}
+    order by updated_at desc
+  `;
+}
+
+function buildFindByDedupeScopeParams(input: {
+  workspace_id: string;
+  user_id: string | null;
+  task_id?: string | null;
+  session_id?: string | null;
+  scope: string;
+  dedupe_key: string;
+}) {
+  switch (input.scope) {
+    case "user":
+      return [input.scope, input.dedupe_key, input.user_id];
+    case "workspace":
+      return [input.scope, input.dedupe_key, input.workspace_id];
+    case "task":
+      return [input.scope, input.dedupe_key, input.workspace_id, input.task_id ?? null];
+    case "session":
+      return [input.scope, input.dedupe_key, input.workspace_id, input.session_id ?? null];
+    default:
+      return [input.scope, input.dedupe_key, input.workspace_id, input.user_id];
+  }
 }

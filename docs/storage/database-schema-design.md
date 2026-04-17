@@ -19,6 +19,18 @@
 - `retrieval-runtime` 负责运行时过程数据
 - `visualization` 首版尽量做无状态服务，只消费前两部分的正式输出
 
+## 2.1 当前实现说明
+
+这份文档要和当前代码保持一致。
+
+当前已经确认的实现口径：
+
+- 共享读模型正式字段是 `details` 和 `source`，不再拆成旧的 `details_preview_json / source_type / source_ref`
+- `origin_workspace_id` 当前收在 `source` JSON 里，不是单独列
+- 共享读模型已经补齐 `created_at`
+- 治理动作已经包含 `invalidate`
+- 读模型刷新任务已经有 `retry_count` 和 `embedding_updated_at`
+
 ## 3. 数据库边界
 
 首版建议使用同一个 `PostgreSQL`（关系型数据库）集群，但按逻辑边界拆成三层：
@@ -89,7 +101,8 @@
 
 建议索引：
 
-- `(workspace_id, user_id, scope, memory_type, status)`
+- `(user_id, scope, memory_type, status)`
+- `(workspace_id, scope, memory_type, status)`
 - `(task_id, status)`
 - `(dedupe_key)`
 - `(updated_at DESC)`
@@ -160,6 +173,8 @@
 | `user_id` | `UUID` | 用户标识 |
 | `record_id` | `UUID` | 当前记录 |
 | `conflict_with_record_id` | `UUID` | 冲突记录 |
+| `pending_record_id` | `UUID` | 待人工确认的新候选记录，可为空 |
+| `existing_record_id` | `UUID` | 已存在的旧记录，可为空 |
 | `conflict_type` | `TEXT` | `fact_conflict` / `preference_conflict` / `scope_conflict` |
 | `conflict_summary` | `TEXT` | 冲突摘要 |
 | `status` | `TEXT` | `open` / `resolved` / `ignored` |
@@ -173,6 +188,8 @@
 - `(status, created_at DESC)`
 - `(record_id)`
 - `(conflict_with_record_id)`
+- `(pending_record_id)`
+- `(existing_record_id)`
 
 ### 4.5 `memory_governance_actions`
 
@@ -184,7 +201,7 @@
 |------|------|------|
 | `id` | `UUID` | 主键 |
 | `record_id` | `UUID` | 被治理记录 |
-| `action_type` | `TEXT` | `edit` / `archive` / `delete` / `confirm` / `restore_version` |
+| `action_type` | `TEXT` | `edit` / `archive` / `delete` / `confirm` / `invalidate` / `restore_version` |
 | `action_payload` | `JSONB` | 动作详情 |
 | `actor_type` | `TEXT` | `system` / `user` / `operator` |
 | `actor_id` | `TEXT` | 动作发起人 |
@@ -208,7 +225,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | `UUID` | 记忆 id |
-| `workspace_id` | `UUID` | 工作区标识 |
+| `workspace_id` | `UUID` | 工作区标识；当 `scope=user` 时表示来源工作区 |
 | `user_id` | `UUID` | 用户标识 |
 | `task_id` | `UUID` | 任务标识 |
 | `session_id` | `UUID` | 会话标识 |
@@ -216,19 +233,20 @@
 | `scope` | `TEXT` | 作用范围 |
 | `status` | `TEXT` | 当前状态，首版主要读 `active` |
 | `summary` | `TEXT` | 摘要 |
-| `details_preview_json` | `JSONB` | 只读预览详情，可为空 |
+| `details` | `JSONB` | 对外发布的结构化详情，可为空 |
 | `importance` | `SMALLINT` | 重要度 |
 | `confidence` | `NUMERIC(3,2)` | 可信度 |
-| `source_type` | `TEXT` | 来源类型 |
-| `source_ref` | `TEXT` | 来源引用 |
+| `source` | `JSONB` | 来源解释对象，包含 `source_type`、`source_ref`、`service_name`、`origin_workspace_id`、`confirmed_by_user` |
 | `last_confirmed_at` | `TIMESTAMPTZ` | 最近确认时间 |
 | `last_used_at` | `TIMESTAMPTZ` | 最近被召回时间 |
+| `created_at` | `TIMESTAMPTZ` | 创建时间 |
 | `updated_at` | `TIMESTAMPTZ` | 更新时间 |
-| `summary_embedding` | `VECTOR` | 向量排序用 embedding |
+| `summary_embedding` | `VECTOR` | 向量排序用 embedding，可为空，降级时允许缺失 |
 
 建议索引：
 
-- `(workspace_id, user_id, scope, memory_type, status)`
+- `(user_id, scope, memory_type, status)`
+- `(workspace_id, scope, memory_type, status)`
 - `(task_id, status)`
 - `(updated_at DESC)`
 - `summary_embedding` 的向量索引
@@ -244,9 +262,12 @@
 | `id` | `UUID` | 主键 |
 | `source_record_id` | `UUID` | 来源记录 |
 | `refresh_type` | `TEXT` | `insert` / `update` / `delete` |
-| `job_status` | `TEXT` | `queued` / `processing` / `succeeded` / `failed` |
+| `job_status` | `TEXT` | `queued` / `processing` / `succeeded` / `failed` / `dead_letter` |
+| `retry_count` | `INT` | 当前重试次数 |
 | `error_message` | `TEXT` | 错误信息 |
+| `embedding_updated_at` | `TIMESTAMPTZ` | 最近一次 embedding 刷新时间 |
 | `created_at` | `TIMESTAMPTZ` | 创建时间 |
+| `started_at` | `TIMESTAMPTZ` | 开始处理时间 |
 | `finished_at` | `TIMESTAMPTZ` | 完成时间 |
 
 ## 6. retrieval-runtime 私有表

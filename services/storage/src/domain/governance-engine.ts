@@ -1,5 +1,8 @@
 import type {
   ArchiveRecordInput,
+  ConfirmRecordInput,
+  DeleteRecordInput,
+  InvalidateRecordInput,
   MemoryConflict,
   MemoryRecord,
   RecordPatchInput,
@@ -100,6 +103,134 @@ export class GovernanceEngine {
     });
   }
 
+  async confirmRecord(recordId: string, input: ConfirmRecordInput) {
+    return this.repositories.transaction(async (tx) => {
+      const existing = await tx.records.findById(recordId);
+
+      if (!existing) {
+        throw new NotFoundError("memory record not found", { recordId });
+      }
+
+      const confirmedAt = new Date().toISOString();
+      const confirmed = await tx.records.updateRecord(recordId, {
+        status: "active",
+        archived_at: null,
+        last_confirmed_at: confirmedAt,
+      });
+
+      await tx.records.appendVersion({
+        record_id: confirmed.id,
+        version_no: confirmed.version,
+        snapshot_json: snapshotRecord(confirmed),
+        change_type: "update",
+        change_reason: input.reason,
+        changed_by_type: input.actor.actor_type,
+        changed_by_id: input.actor.actor_id,
+      });
+
+      await tx.governance.appendAction({
+        record_id: confirmed.id,
+        action_type: "confirm",
+        action_payload: {
+          reason: input.reason,
+          last_confirmed_at: confirmedAt,
+        },
+        actor_type: input.actor.actor_type,
+        actor_id: input.actor.actor_id,
+      });
+
+      await tx.readModel.enqueueRefresh({
+        source_record_id: confirmed.id,
+        refresh_type: "update",
+      });
+      return confirmed;
+    });
+  }
+
+  async invalidateRecord(recordId: string, input: InvalidateRecordInput) {
+    return this.repositories.transaction(async (tx) => {
+      const existing = await tx.records.findById(recordId);
+
+      if (!existing) {
+        throw new NotFoundError("memory record not found", { recordId });
+      }
+
+      const invalidated = await tx.records.updateRecord(recordId, {
+        status: "archived",
+        archived_at: new Date().toISOString(),
+      });
+
+      await tx.records.appendVersion({
+        record_id: invalidated.id,
+        version_no: invalidated.version,
+        snapshot_json: snapshotRecord(invalidated),
+        change_type: "archive",
+        change_reason: input.reason,
+        changed_by_type: input.actor.actor_type,
+        changed_by_id: input.actor.actor_id,
+      });
+
+      await tx.governance.appendAction({
+        record_id: invalidated.id,
+        action_type: "invalidate",
+        action_payload: {
+          reason: input.reason,
+          resulting_status: "archived",
+        },
+        actor_type: input.actor.actor_type,
+        actor_id: input.actor.actor_id,
+      });
+
+      await tx.readModel.enqueueRefresh({
+        source_record_id: invalidated.id,
+        refresh_type: "update",
+      });
+      return invalidated;
+    });
+  }
+
+  async deleteRecord(recordId: string, input: DeleteRecordInput) {
+    return this.repositories.transaction(async (tx) => {
+      const existing = await tx.records.findById(recordId);
+
+      if (!existing) {
+        throw new NotFoundError("memory record not found", { recordId });
+      }
+
+      const deleted = await tx.records.updateRecord(recordId, {
+        status: "deleted",
+        deleted_at: new Date().toISOString(),
+      });
+
+      await tx.records.appendVersion({
+        record_id: deleted.id,
+        version_no: deleted.version,
+        snapshot_json: snapshotRecord(deleted),
+        change_type: "delete",
+        change_reason: input.reason,
+        changed_by_type: input.actor.actor_type,
+        changed_by_id: input.actor.actor_id,
+      });
+
+      await tx.governance.appendAction({
+        record_id: deleted.id,
+        action_type: "delete",
+        action_payload: {
+          reason: input.reason,
+          deleted_at: deleted.deleted_at,
+        },
+        actor_type: input.actor.actor_type,
+        actor_id: input.actor.actor_id,
+      });
+
+      await tx.readModel.enqueueRefresh({
+        source_record_id: deleted.id,
+        refresh_type: "delete",
+      });
+      return deleted;
+    });
+  }
+
   async restoreVersion(recordId: string, input: RestoreVersionInput) {
     return this.repositories.transaction(async (tx) => {
       const version = await tx.records.getVersion(recordId, input.version_no);
@@ -192,6 +323,37 @@ export class GovernanceEngine {
           source_record_id: activated.id,
           refresh_type: "update",
         });
+
+        const losingRecordId =
+          conflict.pending_record_id === activated.id
+            ? conflict.existing_record_id
+            : conflict.pending_record_id;
+
+        if (losingRecordId) {
+          const losingRecord = await tx.records.findById(losingRecordId);
+
+          if (losingRecord && losingRecord.status !== "deleted") {
+            const archivedLoser = await tx.records.updateRecord(losingRecord.id, {
+              status: "archived",
+              archived_at: new Date().toISOString(),
+            });
+
+            await tx.records.appendVersion({
+              record_id: archivedLoser.id,
+              version_no: archivedLoser.version,
+              snapshot_json: snapshotRecord(archivedLoser),
+              change_type: "archive",
+              change_reason: input.resolution_note,
+              changed_by_type: "operator",
+              changed_by_id: input.resolved_by,
+            });
+
+            await tx.readModel.enqueueRefresh({
+              source_record_id: archivedLoser.id,
+              refresh_type: "update",
+            });
+          }
+        }
       }
 
       const resolved = await tx.conflicts.resolveConflict(conflictId, input);

@@ -14,6 +14,21 @@
 - `database-schema-design.md`：讲有哪些表
 - 这份文档：讲这些表和模块怎么一起工作
 
+## 1.1 当前验收状态
+
+基于当前仓库实现和现有测试，这一层已经不是“待落地设计”，而是“主链路已完成，少数闭环仍待补齐”的状态。
+
+当前已经确认的结果：
+
+- 写回接收、异步 worker、标准化、去重、合并、读模型投影主链路：`已完成`
+- `confirm / invalidate / delete / edit / archive / restore_version` 治理基础链路：`已完成`
+- `scope=user` 的跨工作区去重语义、`scope=workspace` 的工作区内边界：`已完成`
+- 共享读模型补齐 `created_at` 和 `source.origin_workspace_id`：`已完成`
+- embedding 失败不阻塞正式记录可见：`已完成`
+- `GET /v1/storage/records` 的正式分页契约：`已完成`
+- `POST /v1/storage/write-back-candidates` 的正式返回口径与兼容返回：`已完成`
+- 冲突治理双边闭环：`已完成`
+
 ## 2. 这一层真正要解决的问题
 
 `storage` 这一层首版要解决 6 类问题。
@@ -250,8 +265,15 @@
 具体做法：
 
 - 查询 `memory_records`
-- 按 `workspace_id + user_id + scope + dedupe_key` 找候选
+- 按 scope 分支找候选
 - 根据类型做决策
+
+当前阶段固定成下面这组规则：
+
+- `scope=user`：按 `user_id + scope + dedupe_key` 查候选，忽略工作区边界
+- `scope=workspace`：按 `workspace_id + scope + dedupe_key` 查候选
+- `scope=task`：按 `workspace_id + task_id + dedupe_key` 查候选
+- `scope=session`：按 `workspace_id + session_id + dedupe_key` 查候选
 
 规则固定如下：
 
@@ -278,6 +300,14 @@
 - 生成 `memory_conflicts`
 - 对涉及记录加冲突状态
 - 返回 `open_conflict`
+
+当前实现边界：
+
+- 可以识别冲突并把现有记录转成 `pending_confirmation` 或 `superseded`
+- 可以打开冲突单并进入治理流程
+- 在“不能自动解决”的分支里，新的冲突候选会落成 `pending_confirmation` 正式记录
+- `memory_conflicts` 会同时记录 `pending_record_id` 和 `existing_record_id`
+- 解决冲突时可以显式激活其中一边，并把另一边归档后刷新读模型
 
 自动解决边界：
 
@@ -510,6 +540,12 @@
 - `status=accepted_async`
 - `received_at`
 
+当前实现说明：
+
+- 单条写回和批量写回都已经可用
+- 正式返回口径已经统一成 `jobs`
+- 当前仍保留 `submitted_jobs` 兼容字段，避免影响尚未切换的调用方
+
 ### 11.2 记录列表接口
 
 `GET /v1/storage/records`
@@ -526,6 +562,13 @@
 - `scope`
 - `status`
 - `task_id`
+
+当前实现说明：
+
+- 当前代码已经支持治理侧按这些条件查记录
+- `workspace_id` 已经改成必填
+- 当前实现已经使用正式分页参数 `page / page_size`
+- 返回结构已经是 `items / total / page / page_size`
 
 ### 11.3 冲突列表接口
 
@@ -616,17 +659,31 @@
 - 只影响写回成功率
 - 不影响其他服务自身启动
 
-## 13. 开发时先按这个顺序落地
+## 13. 当前阶段状态
 
-1. `writeback-api`
-2. `memory_write_jobs`
-3. `job-worker`
-4. `normalizer`
-5. `merge-engine`
-6. `record-repository`
-7. `read-model-projector`
-8. `governance-engine`
-9. 观测接口
+已完成：
+
+- `writeback-api`
+- `memory_write_jobs`
+- `job-worker`
+- `normalizer`
+- `merge-engine`
+- `record-repository`
+- `read-model-projector`
+- `governance-engine`
+- 观测接口基础能力
+
+当前阶段闭环状态：
+
+- records 列表接口的正式分页契约：已完成
+- write-back-candidates 返回体的正式契约一致性：已完成
+- 冲突新候选与旧记录的双边对比治理闭环：已完成
+
+测试状态：
+
+- `npm run check`：通过
+- `npm run build`：通过
+- `npm test`：通过（`32 passed, 5 skipped`）
 
 ## 14. 最后一句话
 

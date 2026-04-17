@@ -45,6 +45,7 @@ export const governanceActionTypeSchema = z.enum([
   "archive",
   "delete",
   "confirm",
+  "invalidate",
   "restore_version",
 ]);
 
@@ -52,7 +53,18 @@ const sourceSchema = z.object({
   source_type: z.string().trim().min(1),
   source_ref: z.string().trim().min(1),
   service_name: z.string().trim().min(1).default("retrieval-runtime"),
+  origin_workspace_id: z.uuid().optional(),
   confirmed_by_user: z.boolean().optional(),
+});
+
+const governanceActorSchema = z.object({
+  actor_type: z.enum(["system", "user", "operator"]),
+  actor_id: z.string().trim().min(1),
+});
+
+const governanceActionRequestSchema = z.object({
+  actor: governanceActorSchema,
+  reason: z.string().trim().min(3).max(240),
 });
 
 const structuredDetailsSchema = z
@@ -116,7 +128,11 @@ export const writeBackBatchRequestSchema = z.object({
   candidates: z.array(writeBackCandidateSchema).min(1).max(50),
 });
 
-export const runtimeWriteBackCandidateSchema = z.object({
+export const runtimeWriteBackCandidateSchema = writeBackCandidateSchema;
+
+export const runtimeWriteBackBatchRequestSchema = writeBackBatchRequestSchema;
+
+export const runtimeCompatibleWriteBackCandidateSchema = z.object({
   candidate_type: z.enum([
     "fact_preference",
     "task_state",
@@ -140,23 +156,24 @@ export const runtimeWriteBackCandidateSchema = z.object({
   dedupe_key: z.string().trim().min(3).max(256),
 });
 
-export const runtimeWriteBackBatchRequestSchema = z.object({
+export const runtimeCompatibleWriteBackBatchRequestSchema = z.object({
   workspace_id: z.uuid(),
   user_id: z.uuid(),
   session_id: z.uuid(),
   task_id: z.uuid().optional(),
   source_service: z.string().trim().min(1).default("retrieval-runtime"),
-  candidates: z.array(runtimeWriteBackCandidateSchema).min(1).max(50),
+  candidates: z.array(runtimeCompatibleWriteBackCandidateSchema).min(1).max(50),
 });
 
 export const recordQuerySchema = z.object({
-  workspace_id: z.uuid().optional(),
+  workspace_id: z.uuid(),
   user_id: z.uuid().optional(),
   task_id: z.uuid().optional(),
   memory_type: memoryTypeSchema.optional(),
   scope: scopeSchema.optional(),
   status: memoryStatusSchema.optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const recordPatchSchema = z
@@ -189,20 +206,14 @@ export const recordPatchSchema = z
     },
   );
 
-export const archiveRecordSchema = z.object({
-  actor: z.object({
-    actor_type: z.enum(["system", "user", "operator"]),
-    actor_id: z.string().trim().min(1),
-  }),
-  reason: z.string().trim().min(3).max(240),
-});
+export const archiveRecordSchema = governanceActionRequestSchema;
+export const confirmRecordSchema = governanceActionRequestSchema;
+export const invalidateRecordSchema = governanceActionRequestSchema;
+export const deleteRecordSchema = governanceActionRequestSchema;
 
 export const restoreVersionSchema = z.object({
   version_no: z.number().int().min(1),
-  actor: z.object({
-    actor_type: z.enum(["system", "user", "operator"]),
-    actor_id: z.string().trim().min(1),
-  }),
+  actor: governanceActorSchema,
   reason: z.string().trim().min(3).max(240),
 });
 
@@ -226,9 +237,18 @@ export type WriteJobEnvelope = z.infer<typeof writeJobEnvelopeSchema>;
 export type WriteBackBatchRequest = z.infer<typeof writeBackBatchRequestSchema>;
 export type RuntimeWriteBackCandidate = z.infer<typeof runtimeWriteBackCandidateSchema>;
 export type RuntimeWriteBackBatchRequest = z.infer<typeof runtimeWriteBackBatchRequestSchema>;
+export type RuntimeCompatibleWriteBackCandidate = z.infer<
+  typeof runtimeCompatibleWriteBackCandidateSchema
+>;
+export type RuntimeCompatibleWriteBackBatchRequest = z.infer<
+  typeof runtimeCompatibleWriteBackBatchRequestSchema
+>;
 export type RecordQuery = z.infer<typeof recordQuerySchema>;
 export type RecordPatchInput = z.infer<typeof recordPatchSchema>;
 export type ArchiveRecordInput = z.infer<typeof archiveRecordSchema>;
+export type ConfirmRecordInput = z.infer<typeof confirmRecordSchema>;
+export type InvalidateRecordInput = z.infer<typeof invalidateRecordSchema>;
+export type DeleteRecordInput = z.infer<typeof deleteRecordSchema>;
 export type RestoreVersionInput = z.infer<typeof restoreVersionSchema>;
 export type ResolveConflictInput = z.infer<typeof resolveConflictSchema>;
 
@@ -299,6 +319,8 @@ export interface MemoryConflict {
   user_id: string | null;
   record_id: string;
   conflict_with_record_id: string;
+  pending_record_id: string | null;
+  existing_record_id: string | null;
   conflict_type: ConflictType;
   conflict_summary: string;
   status: ConflictStatus;
@@ -336,6 +358,7 @@ export interface ReadModelEntry {
   source: Record<string, unknown> | null;
   last_confirmed_at: string | null;
   last_used_at: string | null;
+  created_at: string;
   updated_at: string;
   summary_embedding: number[] | null;
 }
@@ -377,6 +400,20 @@ export interface SubmittedWriteBackJob {
   job_id: string;
   status: "accepted_async" | "accepted";
   reason?: string;
+}
+
+export interface AcceptedWriteBackJob {
+  job_id: string;
+  status: "accepted_async";
+  received_at: string;
+  candidate_summary?: string;
+}
+
+export interface RecordListPage {
+  items: MemoryRecord[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 function containsTranscriptLikeContent(value: Record<string, unknown>): boolean {

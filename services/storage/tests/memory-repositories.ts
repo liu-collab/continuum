@@ -131,13 +131,29 @@ export function createMemoryRepositories(
     },
     async findByDedupeScope(input) {
       return state.records
-        .filter(
-          (record) =>
-            record.workspace_id === input.workspace_id &&
-            record.scope === input.scope &&
-            record.dedupe_key === input.dedupe_key &&
-            (record.user_id ?? null) === input.user_id,
-        )
+        .filter((record) => {
+          if (record.scope !== input.scope || record.dedupe_key !== input.dedupe_key) {
+            return false;
+          }
+
+          if (input.scope === "user") {
+            return (record.user_id ?? null) === input.user_id;
+          }
+
+          if (record.workspace_id !== input.workspace_id) {
+            return false;
+          }
+
+          if (input.scope === "task") {
+            return (record.task_id ?? null) === (input.task_id ?? null);
+          }
+
+          if (input.scope === "session") {
+            return (record.session_id ?? null) === (input.session_id ?? null);
+          }
+
+          return true;
+        })
         .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
     },
     async insertRecord(record) {
@@ -170,17 +186,39 @@ export function createMemoryRepositories(
       return version;
     },
     async listRecords(filters) {
-      return state.records
+      const filtered = state.records
         .filter((record) => {
-          if (filters.workspace_id && record.workspace_id !== filters.workspace_id) return false;
+          if (
+            filters.scope !== "user" &&
+            record.scope !== "user" &&
+            record.workspace_id !== filters.workspace_id
+          ) {
+            return false;
+          }
+          if (
+            filters.workspace_id &&
+            !filters.scope &&
+            record.scope !== "user" &&
+            record.workspace_id !== filters.workspace_id
+          ) {
+            return false;
+          }
           if (filters.user_id && record.user_id !== filters.user_id) return false;
           if (filters.task_id && record.task_id !== filters.task_id) return false;
           if (filters.memory_type && record.memory_type !== filters.memory_type) return false;
           if (filters.scope && record.scope !== filters.scope) return false;
           if (filters.status && record.status !== filters.status) return false;
           return true;
-        })
-        .slice(0, filters.limit);
+        });
+
+      const offset = (filters.page - 1) * filters.page_size;
+
+      return {
+        items: filtered.slice(offset, offset + filters.page_size),
+        total: filtered.length,
+        page: filters.page,
+        page_size: filters.page_size,
+      };
     },
     async getVersion(recordId, versionNo) {
       return (
@@ -199,6 +237,8 @@ export function createMemoryRepositories(
         user_id: input.user_id,
         record_id: input.record_id,
         conflict_with_record_id: input.conflict_with_record_id,
+        pending_record_id: input.pending_record_id,
+        existing_record_id: input.existing_record_id,
         conflict_type: input.conflict_type,
         conflict_summary: input.conflict_summary,
         status: "open",
@@ -355,8 +395,16 @@ export function createMemoryRepositories(
 }
 
 export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBackCandidate {
+  const workspaceId = overrides?.workspace_id ?? "11111111-1111-4111-8111-111111111111";
+  const baseSource = {
+    source_type: "user_input",
+    source_ref: "turn-1",
+    service_name: "retrieval-runtime",
+    origin_workspace_id: workspaceId,
+    confirmed_by_user: true,
+  } satisfies WriteBackCandidate["source"];
+
   return {
-    workspace_id: "11111111-1111-4111-8111-111111111111",
     user_id: "22222222-2222-4222-8222-222222222222",
     task_id: null,
     session_id: null,
@@ -370,12 +418,11 @@ export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBa
     importance: 5,
     confidence: 0.9,
     write_reason: "stable preference confirmed",
-    source: {
-      source_type: "user_input",
-      source_ref: "turn-1",
-      service_name: "retrieval-runtime",
-      confirmed_by_user: true,
-    },
     ...overrides,
+    workspace_id: workspaceId,
+    source: {
+      ...baseSource,
+      ...overrides?.source,
+    },
   };
 }

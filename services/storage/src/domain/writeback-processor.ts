@@ -17,6 +17,8 @@ export class WritebackProcessor {
     const matches = await this.repositories.records.findByDedupeScope({
       workspace_id: normalized.workspace_id,
       user_id: normalized.user_id ?? null,
+      task_id: normalized.task_id ?? null,
+      session_id: normalized.session_id ?? null,
       scope: normalized.scope,
       dedupe_key: normalized.dedupe_key,
     });
@@ -98,11 +100,30 @@ export class WritebackProcessor {
           return inserted;
         }
 
+        const pendingRecord = await tx.records.insertRecord(
+          buildRecordFromNormalized({
+            normalized,
+            status: "pending_confirmation",
+          }),
+        );
+
+        await tx.records.appendVersion({
+          record_id: pendingRecord.id,
+          version_no: pendingRecord.version,
+          snapshot_json: snapshotRecord(pendingRecord),
+          change_type: "create",
+          change_reason: normalized.write_reason,
+          changed_by_type: "system",
+          changed_by_id: normalized.source_service,
+        });
+
         await tx.conflicts.openConflict({
           workspace_id: existing.workspace_id,
           user_id: existing.user_id,
           record_id: existing.id,
-          conflict_with_record_id: existing.id,
+          conflict_with_record_id: pendingRecord.id,
+          pending_record_id: pendingRecord.id,
+          existing_record_id: existing.id,
           conflict_type: conflict.conflict_type,
           conflict_summary: conflict.summary,
         });
@@ -111,7 +132,11 @@ export class WritebackProcessor {
           source_record_id: updatedExisting.id,
           refresh_type: "update",
         });
-        return updatedExisting;
+        await tx.readModel.enqueueRefresh({
+          source_record_id: pendingRecord.id,
+          refresh_type: "insert",
+        });
+        return pendingRecord;
       });
 
       return { record_id: resolvedRecord.id, result_status: decision.decision };

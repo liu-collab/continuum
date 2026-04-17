@@ -1,10 +1,16 @@
 import { createHash } from "node:crypto";
 
 import type {
+  AcceptedWriteBackJob,
   ArchiveRecordInput,
+  ConfirmRecordInput,
+  DeleteRecordInput,
+  InvalidateRecordInput,
+  RecordListPage,
   RecordPatchInput,
   ResolveConflictInput,
   RestoreVersionInput,
+  RuntimeCompatibleWriteBackBatchRequest,
   RuntimeWriteBackBatchRequest,
   SubmittedWriteBackJob,
   WriteBackCandidate,
@@ -38,13 +44,14 @@ export interface DependenciesReport {
 }
 
 export interface RecordListFilters {
-  workspace_id?: string | undefined;
+  workspace_id: string;
   user_id?: string | undefined;
   task_id?: string | undefined;
   memory_type?: string | undefined;
   scope?: string | undefined;
   status?: string | undefined;
-  limit: number;
+  page: number;
+  page_size: number;
 }
 
 export class StorageService {
@@ -84,6 +91,16 @@ export class StorageService {
     });
   }
 
+  async submitAcceptedWriteBackCandidate(candidate: WriteBackCandidate): Promise<AcceptedWriteBackJob> {
+    const job = await this.submitWriteBackCandidate(candidate);
+    return {
+      job_id: job.id,
+      status: "accepted_async",
+      received_at: job.received_at,
+      candidate_summary: candidate.summary,
+    };
+  }
+
   async submitWriteBackCandidates(candidates: WriteBackCandidate[]) {
     const jobs = await Promise.all(
       candidates.map((candidate) => this.submitWriteBackCandidate(candidate)),
@@ -92,8 +109,33 @@ export class StorageService {
     return jobs;
   }
 
+  async submitAcceptedWriteBackCandidates(
+    candidates: WriteBackCandidate[],
+  ): Promise<AcceptedWriteBackJob[]> {
+    const jobs = await this.submitWriteBackCandidates(candidates);
+
+    return jobs.map((job, index) => ({
+      job_id: job.id,
+      status: "accepted_async",
+      received_at: job.received_at,
+      candidate_summary: candidates[index]!.summary,
+    }));
+  }
+
   async submitRuntimeWriteBackBatch(
     payload: RuntimeWriteBackBatchRequest,
+  ): Promise<SubmittedWriteBackJob[]> {
+    const jobs = await this.submitWriteBackCandidates(payload.candidates);
+
+    return jobs.map((job, index) => ({
+      candidate_summary: payload.candidates[index]!.summary,
+      job_id: job.id,
+      status: "accepted_async",
+    }));
+  }
+
+  async submitRuntimeCompatibleWriteBackBatch(
+    payload: RuntimeCompatibleWriteBackBatchRequest,
   ): Promise<SubmittedWriteBackJob[]> {
     const candidates = payload.candidates.map((candidate, index) =>
       adaptRuntimeCandidateToStorage(payload, candidate, index),
@@ -130,6 +172,18 @@ export class StorageService {
 
   async archiveRecord(recordId: string, input: ArchiveRecordInput) {
     return this.governance.archiveRecord(recordId, input);
+  }
+
+  async confirmRecord(recordId: string, input: ConfirmRecordInput) {
+    return this.governance.confirmRecord(recordId, input);
+  }
+
+  async invalidateRecord(recordId: string, input: InvalidateRecordInput) {
+    return this.governance.invalidateRecord(recordId, input);
+  }
+
+  async deleteRecord(recordId: string, input: DeleteRecordInput) {
+    return this.governance.deleteRecord(recordId, input);
   }
 
   async restoreVersion(recordId: string, input: RestoreVersionInput) {
@@ -288,8 +342,8 @@ export function createStorageService(input: {
 }
 
 function adaptRuntimeCandidateToStorage(
-  payload: RuntimeWriteBackBatchRequest,
-  candidate: RuntimeWriteBackBatchRequest["candidates"][number],
+  payload: RuntimeCompatibleWriteBackBatchRequest,
+  candidate: RuntimeCompatibleWriteBackBatchRequest["candidates"][number],
   index: number,
 ): WriteBackCandidate {
   const candidateType =
@@ -318,6 +372,7 @@ function adaptRuntimeCandidateToStorage(
       source_type: candidate.source.host,
       source_ref: candidate.source.turn_id ?? candidate.source.thread_id ?? `${payload.session_id}:${index}`,
       service_name: payload.source_service,
+      origin_workspace_id: payload.workspace_id,
       confirmed_by_user: candidate.candidate_type === "fact_preference",
     },
     idempotency_key: `${payload.workspace_id}:${payload.user_id}:${candidate.dedupe_key}`,

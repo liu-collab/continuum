@@ -45,8 +45,9 @@ describe("storage api", () => {
 
     expect(response.statusCode).toBe(202);
     const body = response.json();
-    expect(body.status).toBe("accepted_async");
-    expect(body.data.job_id).toBeTruthy();
+    expect(body.jobs).toHaveLength(1);
+    expect(body.jobs[0].job_id).toBeTruthy();
+    expect(body.jobs[0].status).toBe("accepted_async");
   });
 
   it("rejects transcript-like details payloads", async () => {
@@ -135,14 +136,14 @@ describe("storage api", () => {
       method: "POST",
       url: "/v1/storage/write-back-candidates",
       payload: {
-        workspace_id: "11111111-1111-4111-8111-111111111111",
-        user_id: "22222222-2222-4222-8222-222222222222",
-        session_id: "33333333-3333-4333-8333-333333333333",
-        source_service: "retrieval-runtime",
         candidates: [
           {
             candidate_type: "fact_preference",
             scope: "user",
+            workspace_id: "11111111-1111-4111-8111-111111111111",
+            user_id: "22222222-2222-4222-8222-222222222222",
+            task_id: null,
+            session_id: null,
             summary: "User prefers concise answers",
             details: {
               subject: "user",
@@ -152,11 +153,13 @@ describe("storage api", () => {
             confidence: 0.9,
             write_reason: "user stated a stable preference explicitly",
             source: {
-              host: "codex_app_server",
-              session_id: "33333333-3333-4333-8333-333333333333",
-              turn_id: "turn-1",
+              source_type: "user_input",
+              source_ref: "turn-1",
+              service_name: "retrieval-runtime",
+              origin_workspace_id: "11111111-1111-4111-8111-111111111111",
+              confirmed_by_user: true,
             },
-            dedupe_key: "fact_preference:user:user prefers concise answers",
+            idempotency_key: "fact-pref-user-prefers-concise-answers",
           },
         ],
       },
@@ -164,8 +167,70 @@ describe("storage api", () => {
 
     expect(response.statusCode).toBe(202);
     const body = response.json();
+    expect(body.jobs).toHaveLength(1);
     expect(body.submitted_jobs).toHaveLength(1);
     expect(body.submitted_jobs[0].status).toBe("accepted_async");
+  });
+
+  it("accepts runtime compatible batch contract and keeps compatibility mapping", async () => {
+    const service = createStorageService({
+      repositories: createMemoryRepositories(),
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/storage/write-back-candidates",
+      payload: {
+        workspace_id: "11111111-1111-4111-8111-111111111111",
+        user_id: "22222222-2222-4222-8222-222222222222",
+        session_id: "33333333-3333-4333-8333-333333333333",
+        source_service: "retrieval-runtime",
+        candidates: [
+          {
+            candidate_type: "commitment",
+            scope: "task",
+            summary: "Will finish migration cleanup today",
+            details: {
+              promise: "finish migration cleanup",
+            },
+            importance: 4,
+            confidence: 0.9,
+            write_reason: "explicit commitment",
+            source: {
+              host: "codex_app_server",
+              session_id: "33333333-3333-4333-8333-333333333333",
+              turn_id: "turn-9",
+              task_id: "44444444-4444-4444-8444-444444444444",
+            },
+            dedupe_key: "commitment:cleanup",
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().jobs).toHaveLength(1);
+    expect(response.json().submitted_jobs).toHaveLength(1);
   });
 
   it("serves split health endpoints and keeps readiness ready when optional dependencies are unavailable", async () => {
@@ -337,14 +402,14 @@ describe("storage api", () => {
       method: "POST",
       url: "/v1/storage/write-back-candidates",
       payload: {
-        workspace_id: "11111111-1111-4111-8111-111111111111",
-        user_id: "22222222-2222-4222-8222-222222222222",
-        session_id: "not-a-uuid",
-        source_service: "retrieval-runtime",
         candidates: [
           {
             candidate_type: "fact_preference",
             scope: "user",
+            workspace_id: "11111111-1111-4111-8111-111111111111",
+            user_id: "22222222-2222-4222-8222-222222222222",
+            task_id: null,
+            session_id: "not-a-uuid",
             summary: "User prefers concise answers",
             details: {
               subject: "user",
@@ -354,11 +419,11 @@ describe("storage api", () => {
             confidence: 0.9,
             write_reason: "user stated a stable preference explicitly",
             source: {
-              host: "codex_app_server",
-              session_id: "not-a-uuid",
-              turn_id: "turn-1",
+              source_type: "user_input",
+              source_ref: "turn-1",
+              service_name: "retrieval-runtime",
             },
-            dedupe_key: "fact_preference:user:user prefers concise answers",
+            idempotency_key: "fact-pref-invalid-session",
           },
         ],
       },
@@ -366,5 +431,121 @@ describe("storage api", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("validation_failed");
+  });
+
+  it("exposes confirm, invalidate and delete governance routes", async () => {
+    const repositories = createMemoryRepositories();
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+
+    const job = await service.submitWriteBackCandidate(buildCandidate());
+    expect(job.id).toBeTruthy();
+    await service.processWriteJobs();
+    const records = await service.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: undefined,
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+    const [stored] = records.items;
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const body = {
+      actor: {
+        actor_type: "operator",
+        actor_id: "tester",
+      },
+      reason: "manual governance",
+    };
+
+    const confirmResponse = await app.inject({
+      method: "POST",
+      url: `/v1/storage/records/${stored!.id}/confirm`,
+      payload: body,
+    });
+    expect(confirmResponse.statusCode).toBe(200);
+
+    const invalidateResponse = await app.inject({
+      method: "POST",
+      url: `/v1/storage/records/${stored!.id}/invalidate`,
+      payload: body,
+    });
+    expect(invalidateResponse.statusCode).toBe(200);
+
+    const deleteResponse = await app.inject({
+      method: "POST",
+      url: `/v1/storage/records/${stored!.id}/delete`,
+      payload: body,
+    });
+    expect(deleteResponse.statusCode).toBe(200);
+  });
+
+  it("serves records with required workspace context and pagination shape", async () => {
+    const repositories = createMemoryRepositories();
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+    await service.submitWriteBackCandidate(buildCandidate());
+    await service.processWriteJobs();
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const missingWorkspace = await app.inject({
+      method: "GET",
+      url: "/v1/storage/records",
+    });
+    expect(missingWorkspace.statusCode).toBe(400);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/storage/records?workspace_id=11111111-1111-4111-8111-111111111111&page=1&page_size=10",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.items).toHaveLength(1);
+    expect(response.json().data.total).toBe(1);
+    expect(response.json().data.page).toBe(1);
+    expect(response.json().data.page_size).toBe(10);
   });
 });

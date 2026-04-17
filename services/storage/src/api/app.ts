@@ -3,13 +3,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import type { RecordListFilters, StorageService } from "../services.js";
-import { accepted, failed, ok } from "./responses.js";
+import { failed, ok } from "./responses.js";
 import {
   archiveRecordSchema,
+  confirmRecordSchema,
+  deleteRecordSchema,
+  invalidateRecordSchema,
   recordPatchSchema,
   recordQuerySchema,
   resolveConflictSchema,
   restoreVersionSchema,
+  runtimeCompatibleWriteBackBatchRequestSchema,
   runtimeWriteBackBatchRequestSchema,
   writeBackBatchRequestSchema,
   writeBackCandidateSchema,
@@ -63,6 +67,28 @@ export function createApp(service: StorageService): FastifyInstance {
     if (runtimeBatch.success) {
       const submittedJobs = await service.submitRuntimeWriteBackBatch(runtimeBatch.data);
       reply.status(202).send({
+        jobs: submittedJobs.map((job) => ({
+          job_id: job.job_id,
+          status: job.status,
+        })),
+        submitted_jobs: submittedJobs,
+      });
+      return;
+    }
+
+    const runtimeCompatibleBatch = runtimeCompatibleWriteBackBatchRequestSchema.safeParse(
+      request.body,
+    );
+
+    if (runtimeCompatibleBatch.success) {
+      const submittedJobs = await service.submitRuntimeCompatibleWriteBackBatch(
+        runtimeCompatibleBatch.data,
+      );
+      reply.status(202).send({
+        jobs: submittedJobs.map((job) => ({
+          job_id: job.job_id,
+          status: job.status,
+        })),
         submitted_jobs: submittedJobs,
       });
       return;
@@ -71,28 +97,41 @@ export function createApp(service: StorageService): FastifyInstance {
     const batch = writeBackBatchRequestSchema.safeParse(request.body);
 
     if (batch.success) {
-      const jobs = await service.submitWriteBackCandidates(batch.data.candidates);
+      const jobs = await service.submitAcceptedWriteBackCandidates(batch.data.candidates);
       reply.status(202).send({
-        status: "accepted_async",
-        submitted_jobs: jobs.map((job, index) => ({
-          candidate_summary: batch.data.candidates[index]!.summary,
-          job_id: job.id,
-          status: "accepted_async",
+        jobs: jobs.map((job) => ({
+          job_id: job.job_id,
+          status: job.status,
+          received_at: job.received_at,
+        })),
+        submitted_jobs: jobs.map((job) => ({
+          candidate_summary: job.candidate_summary ?? "",
+          job_id: job.job_id,
+          status: job.status,
         })),
       });
       return;
     }
 
     const candidate = writeBackCandidateSchema.parse(request.body);
-    const job = await service.submitWriteBackCandidate(candidate);
+    const job = await service.submitAcceptedWriteBackCandidate(candidate);
 
-    reply.status(202).send(
-      accepted({
-        job_id: job.id,
-        status: job.job_status,
-        received_at: job.received_at,
-      }),
-    );
+    reply.status(202).send({
+      jobs: [
+        {
+          job_id: job.job_id,
+          status: job.status,
+          received_at: job.received_at,
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: job.candidate_summary ?? candidate.summary,
+          job_id: job.job_id,
+          status: job.status,
+        },
+      ],
+    });
   });
 
   app.get("/v1/storage/write-back-candidates/:jobId", async (request) => {
@@ -115,7 +154,8 @@ export function createApp(service: StorageService): FastifyInstance {
       memory_type: query.memory_type,
       scope: query.scope,
       status: query.status,
-      limit: query.limit,
+      page: query.page,
+      page_size: query.page_size,
     };
     const records = await service.listRecords(filters);
     return ok(records);
@@ -132,6 +172,27 @@ export function createApp(service: StorageService): FastifyInstance {
     const params = z.object({ recordId: z.uuid() }).parse(request.params);
     const payload = archiveRecordSchema.parse(request.body);
     const record = await service.archiveRecord(params.recordId, payload);
+    return ok(record);
+  });
+
+  app.post("/v1/storage/records/:recordId/confirm", async (request) => {
+    const params = z.object({ recordId: z.uuid() }).parse(request.params);
+    const payload = confirmRecordSchema.parse(request.body);
+    const record = await service.confirmRecord(params.recordId, payload);
+    return ok(record);
+  });
+
+  app.post("/v1/storage/records/:recordId/invalidate", async (request) => {
+    const params = z.object({ recordId: z.uuid() }).parse(request.params);
+    const payload = invalidateRecordSchema.parse(request.body);
+    const record = await service.invalidateRecord(params.recordId, payload);
+    return ok(record);
+  });
+
+  app.post("/v1/storage/records/:recordId/delete", async (request) => {
+    const params = z.object({ recordId: z.uuid() }).parse(request.params);
+    const payload = deleteRecordSchema.parse(request.body);
+    const record = await service.deleteRecord(params.recordId, payload);
     return ok(record);
   });
 

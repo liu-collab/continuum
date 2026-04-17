@@ -13,6 +13,20 @@
 - 这些能力在哪些地方被使用
 - 它和 `retrieval-runtime`、`visualization` 怎么协作
 
+## 1.1 当前验收状态
+
+当前代码已经把 `storage` 的主服务能力大部分落地，不再停留在设计阶段。
+
+已经落地：
+
+- 写回接收、异步处理、标准化、去重、冲突判断、正式入库、读模型投影
+- `confirm / invalidate / delete / edit / archive / restore_version` 治理动作
+- `scope=user` 的跨工作区共享语义和 `scope=workspace` 的工作区边界
+- 共享读模型的主要对外字段和 embedding 降级处理
+- `GET /v1/storage/records` 已按正式分页契约返回 `items / total / page / page_size`
+- `POST /v1/storage/write-back-candidates` 已统一返回 `jobs`，同时保留 `submitted_jobs` 兼容字段
+- 冲突治理已经收成双边闭环：新候选和旧记录都会落成可治理对象
+
 表结构细节单独见：
 
 - `database-schema-design.md`
@@ -108,7 +122,9 @@
 
 职责：
 
+- 确认
 - 编辑
+- 失效
 - 归档
 - 删除
 - 恢复版本
@@ -220,9 +236,8 @@
 
 返回体关键字段：
 
-- `job_id`
-- `status`
-- `received_at`
+- `jobs`
+- `submitted_jobs`（兼容字段）
 
 ### 8.2 记录查询接口
 
@@ -236,6 +251,7 @@
 
 - 这不是运行时查询接口
 - 运行时查询默认走共享读模型
+- 当前正式分页返回 `items / total / page / page_size`
 
 ### 8.3 记录编辑接口
 
@@ -253,7 +269,31 @@
 
 - 把不再活跃的记录归档
 
-### 8.5 冲突解决接口
+### 8.5 记录确认接口
+
+`POST /v1/storage/records/{recordId}/confirm`
+
+作用：
+
+- 把待确认或已治理记录重新确认为可召回状态
+
+### 8.6 记录失效接口
+
+`POST /v1/storage/records/{recordId}/invalidate`
+
+作用：
+
+- 把错误或过期记录退出默认召回，并保留治理审计
+
+### 8.7 记录删除接口
+
+`POST /v1/storage/records/{recordId}/delete`
+
+作用：
+
+- 把记录转成逻辑删除，并从共享读模型移除
+
+### 8.8 冲突解决接口
 
 `POST /v1/storage/conflicts/{conflictId}/resolve`
 
@@ -261,7 +301,7 @@
 
 - 手动解决冲突记忆
 
-### 8.6 存储指标接口
+### 8.9 存储指标接口
 
 `GET /v1/storage/observe/metrics`
 
@@ -269,7 +309,7 @@
 
 - 输出写入量、接受率、合并率、冲突率、耗时
 
-### 8.7 写入任务接口
+### 8.10 写入任务接口
 
 `GET /v1/storage/observe/write-jobs`
 
@@ -281,6 +321,15 @@
 
 - `POST /v1/storage/write-back-candidates`
   用在 `retrieval-runtime` 回合结束后的写回提交
+
+- `POST /v1/storage/records/{recordId}/confirm`
+  用在治理侧确认记录重新生效
+
+- `POST /v1/storage/records/{recordId}/invalidate`
+  用在治理侧标记错误或失效记录
+
+- `POST /v1/storage/records/{recordId}/delete`
+  用在治理侧做逻辑删除和读模型移除
 
 - `GET /v1/storage/observe/metrics`
   用在 `visualization` 的指标看板
@@ -327,21 +376,19 @@
 - 不影响 `visualization` 进程本身启动
 - 它们只会拿到显式的依赖不可用状态
 
-## 13. 首批落地任务
+## 13. 当前阶段状态
 
-1. 建正式记忆主表
-2. 建版本表
-3. 建写入任务表
-4. 建冲突表
-5. 建治理审计表
-6. 建共享读模型表
-7. 实现写回候选接收接口
-8. 实现异步 worker
-9. 实现标准化与打分
-10. 实现去重和合并
-11. 实现冲突处理
-12. 实现读模型刷新
-13. 实现存储观测接口
+已完成：
+
+1. 正式记忆主表、版本表、写入任务表、冲突表、治理审计表、共享读模型表
+2. 写回候选接收接口、异步 worker、标准化、去重、合并、冲突处理、读模型刷新
+3. 存储观测接口和主要治理接口
+
+当前阶段和实现已对齐：
+
+1. 记录列表接口已经按正式分页契约返回
+2. 写回接收接口已经统一正式返回口径，并保留兼容字段
+3. 冲突治理已经具备“新旧双方都可对比”的完整治理结构
 
 ## 14. 一句话方案
 

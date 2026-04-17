@@ -34,21 +34,24 @@ describe("job worker", () => {
     expect(storedJob?.job_status).toBe("succeeded");
 
     const records = await repositories.records.listRecords({
-      workspace_id: undefined,
+      workspace_id: "11111111-1111-4111-8111-111111111111",
       user_id: undefined,
       task_id: undefined,
       memory_type: undefined,
       scope: undefined,
       status: undefined,
-      limit: 10,
+      page: 1,
+      page_size: 10,
     });
-    expect(records).toHaveLength(1);
-    expect(records[0]?.status).toBe("active");
+    expect(records.items).toHaveLength(1);
+    expect(records.items[0]?.status).toBe("active");
 
-    const projected = await repositories.readModel.findById(records[0]!.id);
+    const projected = await repositories.readModel.findById(records.items[0]!.id);
     expect(projected?.summary).toBe(normalized.summary);
     expect(projected?.details?.subject).toBe("user");
     expect(projected?.source?.source_type).toBe("user_input");
+    expect(projected?.source?.origin_workspace_id).toBe("11111111-1111-4111-8111-111111111111");
+    expect(projected?.created_at).toBeTruthy();
     expect(projected?.summary_embedding).toBeNull();
   });
 
@@ -103,6 +106,20 @@ describe("job worker", () => {
 
     const conflicts = await repositories.conflicts.listConflicts("open");
     expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.pending_record_id).toBeTruthy();
+    expect(conflicts[0]?.existing_record_id).toBe(existing.id);
+
+    const pendingRecords = await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: "user",
+      status: "pending_confirmation",
+      page: 1,
+      page_size: 10,
+    });
+    expect(pendingRecords.items).toHaveLength(2);
 
     const storedJob = await repositories.jobs.findById(job.id);
     expect(storedJob?.result_status).toBe("open_conflict");
@@ -139,15 +156,16 @@ describe("job worker", () => {
     await worker.processAvailableJobs();
 
     const records = await repositories.records.listRecords({
-      workspace_id: undefined,
+      workspace_id: "11111111-1111-4111-8111-111111111111",
       user_id: undefined,
       task_id: undefined,
       memory_type: undefined,
       scope: undefined,
       status: undefined,
-      limit: 10,
+      page: 1,
+      page_size: 10,
     });
-    const projected = await repositories.readModel.findById(records[0]!.id);
+    const projected = await repositories.readModel.findById(records.items[0]!.id);
     expect(projected?.summary_embedding).toEqual([0.1, 0.2, 0.3]);
   });
 
@@ -182,20 +200,147 @@ describe("job worker", () => {
     await worker.processAvailableJobs();
 
     const records = await repositories.records.listRecords({
-      workspace_id: undefined,
+      workspace_id: "11111111-1111-4111-8111-111111111111",
       user_id: undefined,
       task_id: undefined,
       memory_type: undefined,
       scope: undefined,
       status: undefined,
-      limit: 10,
+      page: 1,
+      page_size: 10,
     });
-    const projected = await repositories.readModel.findById(records[0]!.id);
+    const projected = await repositories.readModel.findById(records.items[0]!.id);
     expect(projected?.summary_embedding).toBeNull();
+    expect(projected?.created_at).toBeTruthy();
 
     const metrics = await repositories.metrics.collect();
     expect(metrics.projector_embedding_degraded_jobs).toBe(1);
     expect(metrics.projector_failed_jobs).toBe(0);
+  });
+
+  it("does not duplicate a user memory when written from another workspace", async () => {
+    const repositories = createMemoryRepositories();
+    const logger = createLogger("silent");
+    const first = buildCandidate();
+    const second = buildCandidate({
+      workspace_id: "aaaaaaaa-1111-4111-8111-111111111111",
+      source: {
+        source_type: "user_input",
+        source_ref: "turn-2",
+        service_name: "retrieval-runtime",
+        origin_workspace_id: "aaaaaaaa-1111-4111-8111-111111111111",
+        confirmed_by_user: true,
+      },
+    });
+
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-global-1",
+      candidate_hash: normalizeCandidate(first).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: first,
+    });
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-global-2",
+      candidate_hash: normalizeCandidate(second).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: second,
+    });
+
+    const worker = new JobWorker(repositories, logger, {
+      batch_size: 10,
+      max_retries: 3,
+      read_model_refresh_max_retries: 2,
+    });
+
+    await worker.processAvailableJobs();
+
+    const records = await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: "user",
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+
+    expect(records.items).toHaveLength(1);
+
+    const metrics = await repositories.metrics.collect();
+    expect(metrics.duplicate_ignored_jobs).toBe(1);
+  });
+
+  it("dedupes workspace memory only inside the same workspace", async () => {
+    const repositories = createMemoryRepositories();
+    const logger = createLogger("silent");
+    const workspaceCandidate = buildCandidate({
+      scope: "workspace",
+      summary: "This repo uses pnpm",
+      details: {
+        rule_kind: "toolchain",
+        rule_value: "pnpm",
+        repo_path: "services/storage",
+        evidence: "repo guide",
+      },
+      write_reason: "workspace rule",
+    });
+    const otherWorkspaceCandidate = buildCandidate({
+      ...workspaceCandidate,
+      workspace_id: "bbbbbbbb-1111-4111-8111-111111111111",
+      source: {
+        ...workspaceCandidate.source,
+        source_ref: "turn-2",
+        origin_workspace_id: "bbbbbbbb-1111-4111-8111-111111111111",
+      },
+    });
+
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-workspace-1",
+      candidate_hash: normalizeCandidate(workspaceCandidate).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: workspaceCandidate,
+    });
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-workspace-2",
+      candidate_hash: normalizeCandidate(otherWorkspaceCandidate).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: otherWorkspaceCandidate,
+    });
+
+    const worker = new JobWorker(repositories, logger, {
+      batch_size: 10,
+      max_retries: 3,
+      read_model_refresh_max_retries: 2,
+    });
+
+    await worker.processAvailableJobs();
+
+    const records = await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: undefined,
+      task_id: undefined,
+      memory_type: undefined,
+      scope: "workspace",
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+
+    expect(records.items).toHaveLength(1);
+
+    const otherWorkspaceRecords = await repositories.records.listRecords({
+      workspace_id: "bbbbbbbb-1111-4111-8111-111111111111",
+      user_id: undefined,
+      task_id: undefined,
+      memory_type: undefined,
+      scope: "workspace",
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+
+    expect(otherWorkspaceRecords.items).toHaveLength(1);
   });
 
   it("marks refresh job dead letter after retry limit", async () => {
