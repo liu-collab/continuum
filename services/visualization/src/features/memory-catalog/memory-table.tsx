@@ -16,6 +16,7 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
       <div>
         <div className="font-semibold text-slate-900">{row.original.summary}</div>
         <div className="mt-1 text-xs text-slate-500">{row.original.id}</div>
+        <div className="mt-2 text-xs leading-5 text-slate-500">{row.original.visibilitySummary}</div>
         <Link
           href={`/memories/${encodeURIComponent(row.original.id)}` as Route}
           className="mt-2 inline-flex text-xs font-semibold text-accent hover:underline"
@@ -31,7 +32,14 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
   },
   {
     header: "Scope",
-    cell: ({ row }) => row.original.scopeLabel
+    cell: ({ row }) => (
+      <div className="space-y-2">
+        <StatusBadge tone={row.original.scope === "user" ? "warning" : "neutral"}>
+          {row.original.scopeLabel}
+        </StatusBadge>
+        <div className="max-w-xs text-xs leading-5 text-slate-500">{row.original.scopeExplanation}</div>
+      </div>
+    )
   },
   {
     header: "Status",
@@ -55,14 +63,11 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
     )
   },
   {
-    header: "Source",
+    header: "Origin",
     cell: ({ row }) => (
       <div>
-        <div>{row.original.sourceType ?? "Unknown"}</div>
-        <div className="mt-1 text-xs text-slate-500">{row.original.sourceRef ?? "No source ref"}</div>
-        {row.original.sourceServiceName ? (
-          <div className="mt-1 text-xs text-slate-400">{row.original.sourceServiceName}</div>
-        ) : null}
+        <div>{row.original.originWorkspaceLabel}</div>
+        <div className="mt-1 text-xs text-slate-500">{row.original.sourceSummary}</div>
       </div>
     )
   },

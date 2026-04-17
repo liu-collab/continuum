@@ -8,6 +8,9 @@ type FetchJsonOptions = {
   sourceLabel: string;
   url?: string;
   timeoutMs: number;
+  method?: string;
+  headers?: HeadersInit;
+  body?: string;
 };
 
 export type SourceResult<T> = {
@@ -65,10 +68,13 @@ export async function fetchJsonFromSource<T>(
 
   try {
     const response = await fetch(options.url, {
+      method: options.method ?? "GET",
       signal: controller.signal,
       headers: {
-        Accept: "application/json"
+        Accept: "application/json",
+        ...options.headers
       },
+      body: options.body,
       cache: "no-store"
     });
 

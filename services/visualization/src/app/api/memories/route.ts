@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import { getMemoryCatalog } from "@/features/memory-catalog/service";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
+import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +12,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     if (error instanceof ZodError) {
-      return NextResponse.json(
-        { error: error.issues.map((issue) => issue.message).join("; ") },
-        { status: 400 }
-      );
+      return zodApiError(error);
     }
 
-    return NextResponse.json({ error: "Failed to load memory catalog." }, { status: 500 });
+    return jsonApiError("memory_catalog_failed", "Failed to load memory catalog.", 500);
   }
 }

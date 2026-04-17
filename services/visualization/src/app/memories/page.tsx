@@ -6,6 +6,7 @@ import { SourceHealthPanel } from "@/components/source-health-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { MemoryTable } from "@/features/memory-catalog/memory-table";
 import { describeCatalogEmptyState, getMemoryCatalog } from "@/features/memory-catalog/service";
+import { memoryViewModeLabel } from "@/lib/format";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
 
 export default async function MemoriesPage({
@@ -22,7 +23,7 @@ export default async function MemoriesPage({
     <div className="space-y-6">
       <FilterBar
         title="Memory catalog"
-        description="Use the published storage read model to inspect structured memory by workspace, user, task, type, scope, status, and update window."
+        description="Inspect published storage read-model records by current workspace view. This page now explains whether a record is global memory or workspace memory, and why it appears in the current workspace."
       >
         <SearchForm
           action="/memories"
@@ -30,6 +31,7 @@ export default async function MemoriesPage({
             workspace_id: filters.workspaceId,
             user_id: filters.userId,
             task_id: filters.taskId,
+            memory_view_mode: filters.memoryViewMode,
             memory_type: filters.memoryType,
             scope: filters.scope,
             status: filters.status,
@@ -37,9 +39,18 @@ export default async function MemoriesPage({
             updated_to: filters.updatedTo
           }}
         >
-          <FormField label="Workspace" name="workspace_id" placeholder="workspace uuid" defaultValue={filters.workspaceId} />
-          <FormField label="User" name="user_id" placeholder="user uuid" defaultValue={filters.userId} />
-          <FormField label="Task" name="task_id" placeholder="task uuid" defaultValue={filters.taskId} />
+          <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
+          <FormField label="User" name="user_id" placeholder="user id" defaultValue={filters.userId} />
+          <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
+          <FormField
+            label="View mode"
+            name="memory_view_mode"
+            defaultValue={filters.memoryViewMode}
+            options={[
+              { label: "Workspace + global", value: "workspace_plus_global" },
+              { label: "Workspace only", value: "workspace_only" }
+            ]}
+          />
           <FormField
             label="Memory type"
             name="memory_type"
@@ -57,7 +68,7 @@ export default async function MemoriesPage({
             options={[
               { label: "Session", value: "session" },
               { label: "Task", value: "task" },
-              { label: "User", value: "user" },
+              { label: "Global", value: "user" },
               { label: "Workspace", value: "workspace" }
             ]}
           />
@@ -69,7 +80,8 @@ export default async function MemoriesPage({
               { label: "Active", value: "active" },
               { label: "Pending confirmation", value: "pending_confirmation" },
               { label: "Superseded", value: "superseded" },
-              { label: "Archived", value: "archived" }
+              { label: "Archived", value: "archived" },
+              { label: "Deleted", value: "deleted" }
             ]}
           />
           <FormField label="Updated from" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
@@ -84,14 +96,25 @@ export default async function MemoriesPage({
             <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
               {response.total} records visible
             </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{response.viewSummary}</p>
           </div>
-          <StatusBadge
-            tone={response.sourceStatus.status === "healthy" ? "success" : "danger"}
-          >
-            {response.sourceStatus.label}: {response.sourceStatus.status}
-          </StatusBadge>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={filters.memoryViewMode === "workspace_only" ? "warning" : "neutral"}>
+              {memoryViewModeLabel(filters.memoryViewMode)}
+            </StatusBadge>
+            <StatusBadge
+              tone={response.sourceStatus.status === "healthy" ? "success" : response.sourceStatus.status === "partial" ? "warning" : "danger"}
+            >
+              {response.sourceStatus.label}: {response.sourceStatus.status}
+            </StatusBadge>
+          </div>
         </div>
-        <div className="panel-body">
+        <div className="panel-body space-y-4">
+          {response.viewWarnings.length > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+              {response.viewWarnings.join(" ")}
+            </div>
+          ) : null}
           {response.items.length > 0 ? (
             <MemoryTable items={response.items} />
           ) : (

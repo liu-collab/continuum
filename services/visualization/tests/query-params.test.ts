@@ -19,6 +19,7 @@ describe("query param parsing", () => {
       workspaceId: "ws-1",
       userId: undefined,
       taskId: undefined,
+      memoryViewMode: "workspace_plus_global",
       memoryType: "fact_preference",
       scope: undefined,
       status: undefined,

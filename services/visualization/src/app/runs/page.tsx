@@ -9,15 +9,17 @@ import { SourceHealthPanel } from "@/components/source-health-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
 import { getSourceHealth } from "@/features/source-health/service";
-import { formatTimestamp } from "@/lib/format";
+import { formatTimestamp, memoryViewModeLabel } from "@/lib/format";
 import { parseRunTraceFilters } from "@/lib/query-params";
 
 function sectionStatusTone(value: string) {
-  if (["completed", "submitted", "injected"].includes(value)) {
+  if (["completed", "submitted", "injected", "healthy", "ready"].includes(value)) {
     return "success";
   }
 
-  if (["rejected", "degraded", "empty", "no_candidates", "trimmed_to_zero"].includes(value)) {
+  if (
+    ["rejected", "degraded", "empty", "no_candidates", "trimmed_to_zero", "partial"].includes(value)
+  ) {
     return "warning";
   }
 
@@ -42,27 +44,23 @@ export default async function RunsPage({
     <div className="space-y-6">
       <FilterBar
         title="Run trace"
-        description="Trace one turn across trigger, recall, injection, and write-back. The main entry point is turn id, with session, thread, workspace, and task filters as secondary selectors."
+        description="Trace one turn across turn, trigger, recall, injection, and write-back. Current phase only keeps formal runtime filters: turn id, session id, trace id, and pagination."
       >
         <SearchForm
           action="/runs"
           initialValues={{
             turn_id: filters.turnId,
             session_id: filters.sessionId,
-            thread_id: filters.threadId,
-            workspace_id: filters.workspaceId,
-            task_id: filters.taskId
+            trace_id: filters.traceId
           }}
         >
-          <FormField label="Turn id" name="turn_id" placeholder="turn uuid" defaultValue={filters.turnId} />
-          <FormField label="Session id" name="session_id" placeholder="session uuid" defaultValue={filters.sessionId} />
-          <FormField label="Thread id" name="thread_id" placeholder="thread id" defaultValue={filters.threadId} />
-          <FormField label="Workspace" name="workspace_id" placeholder="workspace uuid" defaultValue={filters.workspaceId} />
-          <FormField label="Task" name="task_id" placeholder="task uuid" defaultValue={filters.taskId} />
+          <FormField label="Turn id" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
+          <FormField label="Session id" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+          <FormField label="Trace id" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
         </SearchForm>
       </FilterBar>
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         <section className="panel">
           <div className="panel-header">
             <div>
@@ -74,13 +72,14 @@ export default async function RunsPage({
             {response.items.length > 0 ? (
               response.items.map((item) => (
                 <Link
-                  key={item.turnId}
+                  key={item.traceId}
                   href={`/runs?turn_id=${encodeURIComponent(item.turnId)}` as Route}
                   className="block rounded-xl border bg-white/80 p-4 transition hover:border-accent"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-slate-900">{item.turnId}</div>
+                      <div className="mt-1 text-xs text-slate-500">Trace {item.traceId}</div>
                       <div className="mt-1 text-xs text-slate-500">{formatTimestamp(item.createdAt)}</div>
                     </div>
                     <StatusBadge tone={item.degraded ? "warning" : "success"}>
@@ -89,6 +88,10 @@ export default async function RunsPage({
                   </div>
                   <div className="mt-3 text-sm text-slate-700">{item.summary}</div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span>{item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "Mode unknown"}</span>
+                    <span>{item.scopeSummary}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                     <span>{item.triggerLabel}</span>
                     <span>{item.recallOutcome}</span>
                     <span>Injected {item.injectedCount}</span>
@@ -114,9 +117,7 @@ export default async function RunsPage({
               </p>
             </div>
             {response.selectedTurn ? (
-              <StatusBadge
-                tone={response.selectedTurn.narrative.incomplete ? "warning" : "success"}
-              >
+              <StatusBadge tone={response.selectedTurn.narrative.incomplete ? "warning" : "success"}>
                 {response.selectedTurn.narrative.outcomeLabel}
               </StatusBadge>
             ) : null}
@@ -140,6 +141,30 @@ export default async function RunsPage({
                       <dd>{response.selectedTurn.turn.phase ?? "Not recorded"}</dd>
                     </div>
                     <div>
+                      <dt className="font-medium text-slate-900">Host</dt>
+                      <dd>{response.selectedTurn.turn.host ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-slate-900">Session id</dt>
+                      <dd>{response.selectedTurn.turn.sessionId ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-slate-900">Workspace id</dt>
+                      <dd>{response.selectedTurn.turn.workspaceId ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-slate-900">User id</dt>
+                      <dd>{response.selectedTurn.turn.userId ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-slate-900">Task id</dt>
+                      <dd>{response.selectedTurn.turn.taskId ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-medium text-slate-900">Thread id</dt>
+                      <dd>{response.selectedTurn.turn.threadId ?? "Not recorded"}</dd>
+                    </div>
+                    <div>
                       <dt className="font-medium text-slate-900">Created</dt>
                       <dd>{formatTimestamp(response.selectedTurn.turn.createdAt)}</dd>
                     </div>
@@ -154,112 +179,23 @@ export default async function RunsPage({
                   </dl>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border bg-white/80 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Trigger</div>
-                    <dl className="mt-3 space-y-2 text-sm text-slate-600">
-                      <div>
-                        <dt className="font-medium text-slate-900">Trigger type</dt>
-                        <dd>{response.selectedTurn.triggerRuns[0]?.triggerType ?? "No trigger record"}</dd>
+                <div className="grid gap-4">
+                  {response.selectedTurn.phaseNarratives.map((phase) => (
+                    <div key={phase.key} className="rounded-xl border bg-white/80 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{phase.title}</div>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">{phase.summary}</p>
+                        </div>
+                        <StatusBadge tone="neutral">{phase.key}</StatusBadge>
                       </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Trigger reason</dt>
-                        <dd>{response.selectedTurn.triggerRuns[0]?.triggerReason ?? "Not recorded"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Requested types</dt>
-                        <dd>{response.selectedTurn.triggerRuns[0]?.requestedTypes.join(", ") || "Not recorded"}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                  <div className="rounded-xl border bg-white/80 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Recall</div>
-                    <dl className="mt-3 space-y-2 text-sm text-slate-600">
-                      <div>
-                        <dt className="font-medium text-slate-900">Query scope</dt>
-                        <dd>{response.selectedTurn.recallRuns[0]?.queryScope || "Not recorded"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Selected records</dt>
-                        <dd>{response.selectedTurn.recallRuns[0]?.selectedCount ?? 0}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Recall result</dt>
-                        <dd>{response.selectedTurn.recallRuns[0]?.resultState ?? "Not recorded"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Latency</dt>
-                        <dd>
-                          {response.selectedTurn.recallRuns[0]?.latencyMs !== null &&
-                          response.selectedTurn.recallRuns[0]?.latencyMs !== undefined
-                            ? `${response.selectedTurn.recallRuns[0]?.latencyMs} ms`
-                            : "Not recorded"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border bg-white/80 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Injection</div>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {response.selectedTurn.injectionRuns[0]
-                        ? `Result: ${response.selectedTurn.injectionRuns[0]?.resultState}`
-                        : "No injection summary captured for this turn."}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <StatusBadge tone="neutral">
-                        Injected {response.selectedTurn.injectionRuns[0]?.injectedCount ?? 0}
-                      </StatusBadge>
-                      <StatusBadge tone="warning">
-                        Dropped {response.selectedTurn.injectionRuns[0]?.droppedRecordIds.length ?? 0}
-                      </StatusBadge>
-                      <StatusBadge tone="neutral">
-                        Token estimate {response.selectedTurn.injectionRuns[0]?.tokenEstimate ?? "N/A"}
-                      </StatusBadge>
+                      <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                        {phase.details.map((detail, index) => (
+                          <li key={`${phase.key}-${index}`}>{detail}</li>
+                        ))}
+                      </ul>
                     </div>
-                    {response.selectedTurn.injectionRuns[0]?.dropReasons.length ? (
-                      <div className="mt-4 text-sm text-slate-600">
-                        Drop reasons: {response.selectedTurn.injectionRuns[0].dropReasons.join(", ")}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="rounded-xl border bg-white/80 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Write-back</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <StatusBadge
-                        tone={sectionStatusTone(response.selectedTurn.writeBackRuns[0]?.resultState ?? "not_recorded")}
-                      >
-                        {response.selectedTurn.writeBackRuns[0]?.resultState ?? "not_recorded"}
-                      </StatusBadge>
-                      <StatusBadge tone="neutral">
-                        Candidates {response.selectedTurn.writeBackRuns[0]?.candidateCount ?? 0}
-                      </StatusBadge>
-                      <StatusBadge tone="neutral">
-                        Submitted {response.selectedTurn.writeBackRuns[0]?.submittedCount ?? 0}
-                      </StatusBadge>
-                    </div>
-                    <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                      <div>
-                        <dt className="font-medium text-slate-900">Filtered reasons</dt>
-                        <dd>{response.selectedTurn.writeBackRuns[0]?.filteredReasons.join(", ") || "None"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Degradation</dt>
-                        <dd>{response.selectedTurn.writeBackRuns[0]?.degradationReason ?? "None"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-900">Latency</dt>
-                        <dd>
-                          {response.selectedTurn.writeBackRuns[0]?.latencyMs !== null &&
-                          response.selectedTurn.writeBackRuns[0]?.latencyMs !== undefined
-                            ? `${response.selectedTurn.writeBackRuns[0]?.latencyMs} ms`
-                            : "Not recorded"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
+                  ))}
                 </div>
 
                 <div className="rounded-xl border bg-white/80 p-4">
@@ -269,7 +205,9 @@ export default async function RunsPage({
                       <div key={dependency.name} className="rounded-xl border bg-slate-50/70 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="text-sm font-medium text-slate-900">{dependency.label}</div>
-                          <StatusBadge tone={sectionStatusTone(dependency.status)}>{dependency.status}</StatusBadge>
+                          <StatusBadge tone={sectionStatusTone(dependency.status)}>
+                            {dependency.status}
+                          </StatusBadge>
                         </div>
                         <div className="mt-2 text-sm leading-6 text-slate-600">{dependency.detail}</div>
                         <div className="mt-2 text-xs text-slate-500">

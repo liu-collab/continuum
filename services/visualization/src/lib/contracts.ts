@@ -6,6 +6,9 @@ export type MemoryType = z.infer<typeof MemoryTypeSchema>;
 export const ScopeSchema = z.enum(["session", "task", "user", "workspace"]);
 export type Scope = z.infer<typeof ScopeSchema>;
 
+export const MemoryViewModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
+export type MemoryViewMode = z.infer<typeof MemoryViewModeSchema>;
+
 export const MemoryStatusSchema = z.enum([
   "active",
   "superseded",
@@ -42,6 +45,7 @@ export const MemoryCatalogFiltersSchema = z.object({
   workspaceId: z.string().trim().optional(),
   userId: z.string().trim().optional(),
   taskId: z.string().trim().optional(),
+  memoryViewMode: MemoryViewModeSchema.default("workspace_plus_global"),
   memoryType: MemoryTypeSchema.optional(),
   scope: ScopeSchema.optional(),
   status: MemoryStatusSchema.optional(),
@@ -62,12 +66,16 @@ export const MemoryCatalogItemSchema = z.object({
   memoryTypeLabel: z.string(),
   scope: ScopeSchema,
   scopeLabel: z.string(),
+  scopeExplanation: z.string(),
   status: MemoryStatusSchema,
   statusLabel: z.string(),
   statusExplanation: z.string(),
   summary: z.string(),
   importance: z.number().nullable(),
   confidence: z.number().nullable(),
+  originWorkspaceId: z.string().nullable(),
+  originWorkspaceLabel: z.string(),
+  visibilitySummary: z.string(),
   sourceType: z.string().nullable(),
   sourceRef: z.string().nullable(),
   sourceServiceName: z.string().nullable(),
@@ -91,6 +99,8 @@ export const MemoryCatalogResponseSchema = z.object({
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),
   appliedFilters: MemoryCatalogFiltersSchema,
+  viewSummary: z.string(),
+  viewWarnings: z.array(z.string()),
   sourceStatus: SourceStatusSchema
 });
 export type MemoryCatalogResponse = z.infer<typeof MemoryCatalogResponseSchema>;
@@ -98,18 +108,26 @@ export type MemoryCatalogResponse = z.infer<typeof MemoryCatalogResponseSchema>;
 export const RunTraceFiltersSchema = z.object({
   turnId: z.string().trim().optional(),
   sessionId: z.string().trim().optional(),
-  threadId: z.string().trim().optional(),
-  workspaceId: z.string().trim().optional(),
-  taskId: z.string().trim().optional(),
+  traceId: z.string().trim().optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(1).max(100).default(20)
 });
 export type RunTraceFilters = z.infer<typeof RunTraceFiltersSchema>;
 
+export const ScopeCountSchema = z.object({
+  scope: ScopeSchema,
+  scopeLabel: z.string(),
+  count: z.number().int().nonnegative()
+});
+export type ScopeCount = z.infer<typeof ScopeCountSchema>;
+
 export const RunTraceListItemSchema = z.object({
   turnId: z.string(),
+  traceId: z.string(),
   phase: z.string().nullable(),
   createdAt: z.string().nullable(),
+  memoryMode: MemoryViewModeSchema.nullable(),
+  scopeSummary: z.string(),
   triggerLabel: z.string(),
   recallOutcome: z.string(),
   injectedCount: z.number().int().nonnegative(),
@@ -127,6 +145,7 @@ export const RunTurnSchema = z.object({
   taskId: z.string().nullable(),
   sessionId: z.string().nullable(),
   threadId: z.string().nullable(),
+  host: z.string().nullable(),
   phase: z.string().nullable(),
   inputSummary: z.string().nullable(),
   assistantOutputSummary: z.string().nullable(),
@@ -141,7 +160,11 @@ export const TriggerRunSchema = z.object({
   triggerHit: z.boolean(),
   triggerType: z.string().nullable(),
   triggerReason: z.string().nullable(),
+  memoryMode: MemoryViewModeSchema.nullable(),
   requestedTypes: z.array(MemoryTypeSchema),
+  requestedScopes: z.array(ScopeSchema),
+  selectedScopes: z.array(ScopeSchema),
+  scopeDecision: z.string(),
   scopeLimit: z.array(z.string()),
   importanceThreshold: z.number().nullable(),
   cooldownApplied: z.boolean(),
@@ -156,11 +179,17 @@ export const RecallRunSchema = z.object({
   triggerType: z.string().nullable(),
   triggerHit: z.boolean(),
   triggerReason: z.string().nullable(),
+  memoryMode: MemoryViewModeSchema.nullable(),
   requestedTypes: z.array(MemoryTypeSchema),
+  requestedScopes: z.array(ScopeSchema),
+  selectedScopes: z.array(ScopeSchema),
+  scopeHitCounts: z.array(ScopeCountSchema),
+  selectedRecordIds: z.array(z.string()),
   queryScope: z.string().nullable(),
   candidateCount: z.number().int().nonnegative(),
   selectedCount: z.number().int().nonnegative(),
   resultState: z.string(),
+  emptyReason: z.string().nullable(),
   latencyMs: z.number().nullable(),
   degraded: z.boolean(),
   degradationReason: z.string().nullable(),
@@ -172,6 +201,12 @@ export const InjectionRunSchema = z.object({
   traceId: z.string(),
   injected: z.boolean(),
   injectedCount: z.number().int().nonnegative(),
+  memoryMode: MemoryViewModeSchema.nullable(),
+  requestedScopes: z.array(ScopeSchema),
+  selectedScopes: z.array(ScopeSchema),
+  keptRecordIds: z.array(z.string()),
+  injectionReason: z.string().nullable(),
+  memorySummary: z.string().nullable(),
   resultState: z.string(),
   dropReasons: z.array(z.string()),
   tokenEstimate: z.number().nullable(),
@@ -181,12 +216,24 @@ export const InjectionRunSchema = z.object({
 });
 export type InjectionRun = z.infer<typeof InjectionRunSchema>;
 
+export const WriteBackScopeDecisionSchema = z.object({
+  scope: ScopeSchema,
+  scopeLabel: z.string(),
+  count: z.number().int().nonnegative(),
+  reason: z.string()
+});
+export type WriteBackScopeDecision = z.infer<typeof WriteBackScopeDecisionSchema>;
+
 export const WriteBackRunSchema = z.object({
   traceId: z.string(),
+  memoryMode: MemoryViewModeSchema.nullable(),
   resultState: z.string(),
   candidateCount: z.number().int().nonnegative(),
   submittedCount: z.number().int().nonnegative(),
   filteredCount: z.number().int().nonnegative(),
+  submittedJobIds: z.array(z.string()),
+  candidateSummaries: z.array(z.string()),
+  scopeDecisions: z.array(WriteBackScopeDecisionSchema),
   filteredReasons: z.array(z.string()),
   degraded: z.boolean(),
   degradationReason: z.string().nullable(),
@@ -202,6 +249,14 @@ export const RunNarrativeSchema = z.object({
   incomplete: z.boolean()
 });
 export type RunNarrative = z.infer<typeof RunNarrativeSchema>;
+
+export const RunTracePhaseNarrativeSchema = z.object({
+  key: z.enum(["turn", "trigger", "recall", "injection", "writeback"]),
+  title: z.string(),
+  summary: z.string(),
+  details: z.array(z.string())
+});
+export type RunTracePhaseNarrative = z.infer<typeof RunTracePhaseNarrativeSchema>;
 
 export const RuntimeDependencySchema = z.object({
   name: z.string(),
@@ -220,6 +275,7 @@ export const RunTraceDetailSchema = z.object({
   injectionRuns: z.array(InjectionRunSchema),
   writeBackRuns: z.array(WriteBackRunSchema),
   dependencyStatus: z.array(RuntimeDependencySchema),
+  phaseNarratives: z.array(RunTracePhaseNarrativeSchema),
   narrative: RunNarrativeSchema
 });
 export type RunTraceDetail = z.infer<typeof RunTraceDetailSchema>;
@@ -252,6 +308,15 @@ export const DashboardDiagnosisSchema = z.object({
 });
 export type DashboardDiagnosis = z.infer<typeof DashboardDiagnosisSchema>;
 
+export const DashboardDiagnosisCardSchema = z.object({
+  key: z.string(),
+  source: z.enum(["runtime", "storage", "cross"]),
+  title: z.string(),
+  summary: z.string(),
+  severity: z.enum(["info", "warning", "danger"])
+});
+export type DashboardDiagnosisCard = z.infer<typeof DashboardDiagnosisCardSchema>;
+
 export const DashboardTrendPointSchema = z.object({
   label: z.string(),
   value: z.number().nullable()
@@ -279,10 +344,57 @@ export const DashboardResponseSchema = z.object({
   storageMetrics: z.array(DashboardMetricSchema),
   trendWindow: z.string(),
   diagnosis: DashboardDiagnosisSchema,
+  diagnosisCards: z.array(DashboardDiagnosisCardSchema),
   trends: z.array(DashboardTrendSchema),
   sourceStatus: z.array(SourceStatusSchema)
 });
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
+
+export const MemoryGovernanceActionSchema = z.enum([
+  "confirm",
+  "edit",
+  "invalidate",
+  "archive",
+  "delete",
+  "restore_version"
+]);
+export type MemoryGovernanceAction = z.infer<typeof MemoryGovernanceActionSchema>;
+
+export const MemoryGovernanceActionRequestSchema = z.object({
+  reason: z.string().trim().min(1).max(500)
+});
+export type MemoryGovernanceActionRequest = z.infer<typeof MemoryGovernanceActionRequestSchema>;
+
+export const MemoryEditRequestSchema = MemoryGovernanceActionRequestSchema.extend({
+  summary: z.string().trim().min(1).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
+  status: MemoryStatusSchema.exclude(["deleted"]).optional(),
+  scope: ScopeSchema.optional()
+});
+export type MemoryEditRequest = z.infer<typeof MemoryEditRequestSchema>;
+
+export const MemoryRestoreVersionRequestSchema = MemoryGovernanceActionRequestSchema.extend({
+  versionId: z.string().trim().regex(/^\d+$/, "Version number must be an integer.")
+});
+export type MemoryRestoreVersionRequest = z.infer<typeof MemoryRestoreVersionRequestSchema>;
+
+export const MemoryGovernanceResponseSchema = z.object({
+  ok: z.boolean(),
+  action: MemoryGovernanceActionSchema,
+  memoryId: z.string(),
+  message: z.string(),
+  upstreamStatus: z.number().int().nullable(),
+  sourceStatus: SourceStatusSchema
+});
+export type MemoryGovernanceResponse = z.infer<typeof MemoryGovernanceResponseSchema>;
+
+export const ApiErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string()
+  })
+});
+export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
 
 export const ServiceHealthResponseSchema = z.object({
   liveness: z.object({

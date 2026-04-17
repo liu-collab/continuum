@@ -1,6 +1,12 @@
 import "server-only";
 
-import { DashboardDiagnosis, DashboardMetric, DashboardResponse, DashboardTrend } from "@/lib/contracts";
+import {
+  DashboardDiagnosis,
+  DashboardDiagnosisCard,
+  DashboardMetric,
+  DashboardResponse,
+  DashboardTrend
+} from "@/lib/contracts";
 import { getCachedValue } from "@/lib/cache";
 import { getAppConfig } from "@/lib/env";
 import { formatMetricValue } from "@/lib/format";
@@ -157,6 +163,8 @@ export function computeRuntimeWindowTrend(
   const previousTrigger = runtimeRuns.triggerRuns.filter(
     (run) => timeOf(run.createdAt) >= previousStart && timeOf(run.createdAt) < currentStart
   );
+  const currentScopeHits = currentRecall.flatMap((run) => run.scopeHitCounts);
+  const previousScopeHits = previousRecall.flatMap((run) => run.scopeHitCounts);
 
   const currentEmptyRate = ratio(
     currentRecall.filter((run) => run.resultState === "empty").length,
@@ -177,6 +185,14 @@ export function computeRuntimeWindowTrend(
         Math.max(Math.ceil(previousRecall.length * 0.95) - 1, 0)
       ]
     : null;
+  const currentScopeTotal = currentScopeHits.reduce((sum, item) => sum + item.count, 0);
+  const previousScopeTotal = previousScopeHits.reduce((sum, item) => sum + item.count, 0);
+  const currentGlobalScope = currentScopeHits
+    .filter((item) => item.scope === "user")
+    .reduce((sum, item) => sum + item.count, 0);
+  const previousGlobalScope = previousScopeHits
+    .filter((item) => item.scope === "user")
+    .reduce((sum, item) => sum + item.count, 0);
 
   return {
     emptyRecall: pointSeries(currentEmptyRate, previousEmptyRate),
@@ -184,6 +200,10 @@ export function computeRuntimeWindowTrend(
     triggerRate: pointSeries(
       ratio(currentTrigger.filter((run) => run.triggerHit).length, currentTrigger.length),
       ratio(previousTrigger.filter((run) => run.triggerHit).length, previousTrigger.length)
+    ),
+    globalScopeShare: pointSeries(
+      currentScopeTotal > 0 ? currentGlobalScope / currentScopeTotal : null,
+      previousScopeTotal > 0 ? previousGlobalScope / previousScopeTotal : null
     )
   };
 }
@@ -218,6 +238,16 @@ function buildTrend(
       value: values.points[index] ?? null
     }))
   };
+}
+
+function diagnosisCard(
+  key: string,
+  source: DashboardDiagnosisCard["source"],
+  title: string,
+  summary: string,
+  severity: DashboardDiagnosisCard["severity"]
+): DashboardDiagnosisCard {
+  return { key, source, title, summary, severity };
 }
 
 export function estimateStorageTrend(window: string, jobs: Awaited<ReturnType<typeof fetchStorageWriteJobs>>["jobs"]) {
@@ -304,18 +334,88 @@ export function buildDashboardDiagnosis(
   };
 }
 
+function buildDiagnosisCards(
+  retrievalMetrics: DashboardMetric[],
+  storageMetrics: DashboardMetric[],
+  runtimeTrend: ReturnType<typeof computeRuntimeWindowTrend>,
+  storageTrend: ReturnType<typeof estimateStorageTrend>,
+  degradedSources: string[]
+) {
+  const emptyRecall = retrievalMetrics.find((item) => item.key === "empty_recall_rate")?.value ?? null;
+  const conflictRate = storageMetrics.find((item) => item.key === "conflict_rate")?.value ?? null;
+  const workspaceOnlyRate = retrievalMetrics.find((item) => item.key === "workspace_only_rate")?.value ?? null;
+  const globalShare = retrievalMetrics.find((item) => item.key === "global_scope_share")?.value ?? null;
+  const workspaceShare = retrievalMetrics.find((item) => item.key === "workspace_scope_share")?.value ?? null;
+
+  return [
+    diagnosisCard(
+      "empty_recall_trend",
+      "runtime",
+      "Empty recall trend",
+      degradedSources.length > 0
+        ? `Runtime source is degraded: ${degradedSources.join(", ")}.`
+        : emptyRecall !== null && emptyRecall >= 0.35
+          ? "Recent recalls are frequently returning empty. Check current trigger rules and scope selection."
+          : "Empty recall remains within the current expected range.",
+      degradedSources.length > 0 ? "danger" : emptyRecall !== null && emptyRecall >= 0.35 ? "warning" : "info"
+    ),
+    diagnosisCard(
+      "scope_mix",
+      "cross",
+      "Global / workspace usage",
+      workspaceOnlyRate === 1
+        ? "Recent turns stayed in workspace-only mode, so global memory should not appear."
+        : globalShare !== null && workspaceShare !== null
+          ? `Recent selected scope share is global ${formatMetricValue(globalShare, "percent")} and workspace ${formatMetricValue(workspaceShare, "percent")}.`
+          : "Runtime has not yet exposed enough scope data, so this card is using partial scope signals.",
+      workspaceOnlyRate === 1 ? "info" : globalShare !== null && globalShare > 0.6 ? "warning" : "info"
+    ),
+    diagnosisCard(
+      "writeback_backlog",
+      "storage",
+      "Write-back backlog",
+      storageTrend.backlog.current !== null && storageTrend.backlog.current > 5
+        ? "Queued and processing storage jobs are building up in the current half-window."
+        : "No obvious backlog growth is visible in recent write-back jobs.",
+      storageTrend.backlog.current !== null && storageTrend.backlog.current > 5 ? "warning" : "info"
+    ),
+    diagnosisCard(
+      "conflict_pressure",
+      "storage",
+      "Conflict pressure",
+      conflictRate !== null && conflictRate >= 0.15
+        ? "Conflict rate is elevated. Governance or merge rules may need attention."
+        : "Conflict pressure is currently stable.",
+      conflictRate !== null && conflictRate >= 0.15 ? "warning" : "info"
+    )
+  ];
+}
+
 export async function getDashboard(window: string): Promise<DashboardResponse> {
   const { values } = getAppConfig();
 
   return getCachedValue(`dashboard:${window}`, values.DASHBOARD_CACHE_MS, async () => {
-    const [runtimeCurrent, runtimePrevious, runtimeRuns, storageCurrent, storagePrevious, jobs] = await Promise.all([
-      fetchRuntimeMetrics(),
+    const [runtimeCurrent, runtimeRuns, storageCurrent, jobs] = await Promise.all([
       fetchRuntimeMetrics(),
       fetchRuntimeRuns(""),
       fetchStorageMetrics(),
-      fetchStorageMetrics(),
       fetchStorageWriteJobs()
     ]);
+
+    const runtimeTrend = computeRuntimeWindowTrend(window, runtimeRuns.data);
+    const storageTrend = estimateStorageTrend(window, jobs.jobs);
+
+    const triggerRuns = runtimeRuns.data.triggerRuns;
+    const recallRuns = runtimeRuns.data.recallRuns;
+    const selectedScopeCounts = recallRuns.flatMap((run) => run.scopeHitCounts);
+    const totalSelectedScopeHits = selectedScopeCounts.reduce((sum, item) => sum + item.count, 0);
+    const globalScopeHits = selectedScopeCounts
+      .filter((item) => item.scope === "user")
+      .reduce((sum, item) => sum + item.count, 0);
+    const workspaceScopeHits = selectedScopeCounts
+      .filter((item) => item.scope === "workspace")
+      .reduce((sum, item) => sum + item.count, 0);
+    const workspaceOnlyTurns = triggerRuns.filter((run) => run.memoryMode === "workspace_only").length;
 
     const retrievalMetrics = [
       metric(
@@ -391,6 +491,32 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "percent",
         "runtime",
         "Share of turns that produced a submitted write-back candidate."
+      ),
+      metric(
+        "global_scope_share",
+        "Global memory share",
+        totalSelectedScopeHits > 0 ? globalScopeHits / totalSelectedScopeHits : null,
+        "percent",
+        "runtime",
+        "Share of recent recall hits that came from global memory.",
+        0.5,
+        0.7
+      ),
+      metric(
+        "workspace_scope_share",
+        "Workspace memory share",
+        totalSelectedScopeHits > 0 ? workspaceScopeHits / totalSelectedScopeHits : null,
+        "percent",
+        "runtime",
+        "Share of recent recall hits that came from workspace memory."
+      ),
+      metric(
+        "workspace_only_rate",
+        "Workspace-only mode rate",
+        triggerRuns.length > 0 ? workspaceOnlyTurns / triggerRuns.length : null,
+        "percent",
+        "runtime",
+        "Share of recent turns that ran in workspace-only mode."
       )
     ];
 
@@ -471,8 +597,6 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       )
     ];
 
-    const storageTrend = estimateStorageTrend(window, jobs.jobs);
-    const runtimeTrend = computeRuntimeWindowTrend(window, runtimeRuns.data);
     const trends = [
       buildTrend(
         "empty_recall_shift",
@@ -480,12 +604,7 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "Use this to see whether recalls recently started returning empty more often.",
         "runtime",
         "percent",
-        runtimeTrend.emptyRecall.current !== null || runtimeTrend.emptyRecall.previous !== null
-          ? runtimeTrend.emptyRecall
-          : seriesFromPair(
-              runtimeCurrent.metrics?.emptyRecallRate ?? null,
-              runtimePrevious.metrics?.emptyRecallRate ?? null
-            ),
+        runtimeTrend.emptyRecall,
         window,
         0.2,
         0.35
@@ -518,15 +637,21 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "If runtime recall latency rises while storage write latency stays flat, the slowdown is more likely on retrieval strategy or retrieval dependencies.",
         "runtime",
         "ms",
-        runtimeTrend.recallLatency.current !== null || runtimeTrend.recallLatency.previous !== null
-          ? runtimeTrend.recallLatency
-          : seriesFromPair(
-              runtimeCurrent.metrics?.recallP95Ms ?? null,
-              runtimePrevious.metrics?.recallP95Ms ?? null
-            ),
+        runtimeTrend.recallLatency,
         window,
         800,
         1200
+      ),
+      buildTrend(
+        "scope_mix_shift",
+        "Global memory share",
+        "Tracks whether recent recalls are leaning toward global memory or staying mostly inside the workspace boundary.",
+        "runtime",
+        "percent",
+        runtimeTrend.globalScopeShare,
+        window,
+        0.5,
+        0.7
       )
     ];
 
@@ -540,6 +665,13 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       storageMetrics,
       trendWindow: window,
       diagnosis: buildDashboardDiagnosis(retrievalMetrics, storageMetrics, degradedSources),
+      diagnosisCards: buildDiagnosisCards(
+        retrievalMetrics,
+        storageMetrics,
+        runtimeTrend,
+        storageTrend,
+        degradedSources
+      ),
       trends,
       sourceStatus
     };

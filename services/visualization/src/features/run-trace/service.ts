@@ -1,6 +1,7 @@
 import "server-only";
 
-import { RunTraceFilters, RunTraceResponse } from "@/lib/contracts";
+import { RunTraceFilters, RunTracePhaseNarrative, RunTraceResponse, Scope } from "@/lib/contracts";
+import { memoryModeSummary, scopeExplanation, scopeLabel } from "@/lib/format";
 import { toRunTraceQuery } from "@/lib/query-params";
 import {
   RuntimeDependencyRecord,
@@ -22,6 +23,47 @@ type RunAggregate = {
   writeBackRuns: RuntimeWritebackRecord[];
   dependencyStatus: RuntimeDependencyRecord[];
 };
+
+function uniqueScopes(scopes: Scope[]) {
+  return Array.from(new Set(scopes));
+}
+
+function formatScopeList(scopes: Scope[]) {
+  if (scopes.length === 0) {
+    return "none recorded";
+  }
+
+  return uniqueScopes(scopes)
+    .map((scope) => scopeLabel(scope))
+    .join(", ");
+}
+
+function summarizeRecall(run?: RuntimeRecallRecord) {
+  if (!run) {
+    return "No recall record";
+  }
+
+  if (run.resultState === "empty" || run.selectedCount === 0) {
+    return run.emptyReason ? `Triggered but empty: ${run.emptyReason}` : "Triggered but empty";
+  }
+
+  return `${run.selectedCount} records selected from ${formatScopeList(run.selectedScopes)}`;
+}
+
+function summarizeScopes(detail: RunAggregate) {
+  const triggerRun = detail.triggerRuns[0];
+  const recallRun = detail.recallRuns[0];
+  const injectionRun = detail.injectionRuns[0];
+
+  const requested = triggerRun?.requestedScopes ?? recallRun?.requestedScopes ?? [];
+  const selected = injectionRun?.selectedScopes ?? recallRun?.selectedScopes ?? [];
+
+  if (requested.length === 0 && selected.length === 0) {
+    return "Scope decision not recorded";
+  }
+
+  return `Requested ${formatScopeList(requested)}; selected ${formatScopeList(selected)}.`;
+}
 
 function groupByTrace(data: RuntimeObserveRunsSnapshot) {
   const traceIds = new Set([
@@ -86,7 +128,7 @@ export function buildNarrative(detail: RunAggregate) {
       outcomeCode: "empty_recall",
       outcomeLabel: "Empty recall",
       explanation:
-        "A trigger fired, but the recall stage returned no eligible memory records for the requested types and scope.",
+        "A trigger fired, but the recall stage returned no eligible memory records for the requested scopes and memory types.",
       incomplete
     };
   }
@@ -100,7 +142,7 @@ export function buildNarrative(detail: RunAggregate) {
       outcomeCode: "found_but_not_injected",
       outcomeLabel: "Found but not injected",
       explanation:
-        "Relevant memories were found, but they were trimmed away before prompt injection due to the active token budget or trim rules.",
+        "Relevant memories were found, but they were trimmed away before prompt injection because of the active budget or trim rules.",
       incomplete
     };
   }
@@ -110,7 +152,7 @@ export function buildNarrative(detail: RunAggregate) {
       outcomeCode: "injection_trimmed",
       outcomeLabel: "Injection trimmed",
       explanation:
-        "Relevant memories were found and injected, but part of the candidate set was trimmed to fit the context budget.",
+        "Relevant memories were found and injected, but part of the candidate set was trimmed before final injection.",
       incomplete
     };
   }
@@ -135,12 +177,12 @@ export function buildNarrative(detail: RunAggregate) {
     };
   }
 
-  if (recallRun.degraded || writeBackRun?.degraded) {
+  if (recallRun?.degraded || writeBackRun?.degraded) {
     return {
       outcomeCode: "dependency_unavailable",
       outcomeLabel: "Dependency degraded",
       explanation:
-        "The runtime service completed this trace in degraded mode because one of its dependencies was unavailable or slow.",
+        "The runtime completed this trace in degraded mode because one of its dependencies was unavailable or slow.",
       incomplete
     };
   }
@@ -149,9 +191,84 @@ export function buildNarrative(detail: RunAggregate) {
     outcomeCode: "completed",
     outcomeLabel: "Trace completed",
     explanation:
-      "This trace completed the turn, trigger, recall, injection, and write-back stages without a dominant anomaly.",
+      "This trace completed turn, trigger, recall, injection, and write-back stages without a dominant anomaly.",
     incomplete
   };
+}
+
+function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
+  const turn = detail.turn;
+  const triggerRun = detail.triggerRuns[0];
+  const recallRun = detail.recallRuns[0];
+  const injectionRun = detail.injectionRuns[0];
+  const writeBackRun = detail.writeBackRuns[0];
+
+  return [
+    {
+      key: "turn",
+      title: "Turn",
+      summary: `Turn ${turn.turnId ?? turn.traceId} ran in phase ${turn.phase ?? "unknown"}.`,
+      details: [
+        `Session: ${turn.sessionId ?? "not recorded"}`,
+        `Current input: ${turn.currentInput ?? "not recorded"}`,
+        `Assistant output: ${turn.assistantOutput ?? "not recorded"}`
+      ]
+    },
+    {
+      key: "trigger",
+      title: "Trigger",
+      summary: triggerRun?.triggerHit
+        ? `${memoryModeSummary(triggerRun.memoryMode)} Trigger fired because ${triggerRun.triggerReason ?? "the runtime recorded a trigger hit"}.`
+        : `Trigger did not fire. ${triggerRun?.triggerReason ?? "No trigger reason recorded."}`,
+      details: [
+        `Requested scopes: ${formatScopeList(triggerRun?.requestedScopes ?? [])}`,
+        `Selected scopes: ${formatScopeList(triggerRun?.selectedScopes ?? [])}`,
+        triggerRun?.scopeDecision ?? "No scope decision explanation recorded."
+      ]
+    },
+    {
+      key: "recall",
+      title: "Recall",
+      summary: summarizeRecall(recallRun),
+      details: [
+        `Memory mode: ${memoryModeSummary(recallRun?.memoryMode)}`,
+        `Requested scopes: ${formatScopeList(recallRun?.requestedScopes ?? [])}`,
+        `Selected scopes: ${formatScopeList(recallRun?.selectedScopes ?? [])}`,
+        ...(recallRun?.scopeHitCounts.map(
+          (item) => `${scopeLabel(item.scope)} hits: ${item.count}`
+        ) ?? []),
+        recallRun?.emptyReason ?? "No empty-recall explanation recorded."
+      ]
+    },
+    {
+      key: "injection",
+      title: "Injection",
+      summary: injectionRun?.injected
+        ? injectionRun.memorySummary ?? "Injection completed."
+        : injectionRun?.resultState ?? "No injection record",
+      details: [
+        `Selected scopes: ${formatScopeList(injectionRun?.selectedScopes ?? [])}`,
+        `Kept records: ${injectionRun?.keptRecordIds.join(", ") || "none recorded"}`,
+        `Dropped records: ${injectionRun?.trimmedRecordIds.join(", ") || "none recorded"}`,
+        `Trim reasons: ${injectionRun?.trimReasons.join(", ") || "none recorded"}`
+      ]
+    },
+    {
+      key: "writeback",
+      title: "Write-back",
+      summary: writeBackRun
+        ? `Write-back ${writeBackRun.resultState}. ${memoryModeSummary(writeBackRun.memoryMode)}`
+        : "No write-back record.",
+      details: [
+        `Submitted jobs: ${writeBackRun?.submittedJobIds.join(", ") || "none recorded"}`,
+        `Candidate summaries: ${writeBackRun?.candidateSummaries.join(" | ") || "none recorded"}`,
+        ...(writeBackRun?.scopeDecisions.map(
+          (item) => `${scopeLabel(item.scope)} x${item.count}: ${item.reason}`
+        ) ?? []),
+        `Filtered reasons: ${writeBackRun?.filteredReasons.join(", ") || "none recorded"}`
+      ]
+    }
+  ];
 }
 
 function buildListItem(detail: RunAggregate) {
@@ -162,17 +279,20 @@ function buildListItem(detail: RunAggregate) {
 
   return {
     turnId: detail.turn.turnId ?? detail.turn.traceId,
+    traceId: detail.turn.traceId,
     phase: detail.turn.phase,
     createdAt: detail.turn.createdAt,
+    memoryMode:
+      triggerRun?.memoryMode ??
+      recallRun?.memoryMode ??
+      injectionRun?.memoryMode ??
+      writeBackRun?.memoryMode ??
+      null,
+    scopeSummary: summarizeScopes(detail),
     triggerLabel: triggerRun?.triggerType
       ? `${triggerRun.triggerType}${triggerRun.triggerHit ? "" : " (miss)"}`
       : "No trigger record",
-    recallOutcome:
-      !recallRun
-        ? "No recall record"
-        : recallRun.resultState === "empty"
-          ? "Triggered but empty"
-          : `${recallRun.selectedCount} records selected`,
+    recallOutcome: summarizeRecall(recallRun),
     injectedCount: injectionRun?.injectedCount ?? 0,
     writeBackStatus: writeBackRun?.resultState ?? "not_recorded",
     degraded: recallRun?.degraded ?? writeBackRun?.degraded ?? false,
@@ -207,10 +327,10 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
 
   const selected =
     filters.turnId
-      ? grouped.find((item) => item.turn.turnId === filters.turnId) ??
-        grouped.find((item) => item.turn.traceId === filters.turnId) ??
-        null
-      : grouped[0] ?? null;
+      ? grouped.find((item) => item.turn.turnId === filters.turnId) ?? null
+      : filters.traceId
+        ? grouped.find((item) => item.turn.traceId === filters.traceId) ?? null
+        : grouped[0] ?? null;
 
   return {
     items: grouped.map((item) => buildListItem(item)),
@@ -225,6 +345,7 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             taskId: selected.turn.taskId,
             sessionId: selected.turn.sessionId,
             threadId: selected.turn.threadId,
+            host: selected.turn.host,
             phase: selected.turn.phase,
             inputSummary: selected.turn.currentInput,
             assistantOutputSummary: selected.turn.assistantOutput,
@@ -240,6 +361,7 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             taskId: turn.taskId,
             sessionId: turn.sessionId,
             threadId: turn.threadId,
+            host: turn.host,
             phase: turn.phase,
             inputSummary: turn.currentInput,
             assistantOutputSummary: turn.assistantOutput,
@@ -252,7 +374,15 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             triggerHit: run.triggerHit,
             triggerType: run.triggerType,
             triggerReason: run.triggerReason,
+            memoryMode: run.memoryMode,
             requestedTypes: run.requestedTypes,
+            requestedScopes: run.requestedScopes,
+            selectedScopes: run.selectedScopes,
+            scopeDecision:
+              run.scopeDecision ??
+              (run.selectedScopes.length > 0
+                ? `Selected ${formatScopeList(run.selectedScopes)}.`
+                : "No scope decision explanation recorded."),
             scopeLimit: run.scopeLimit,
             importanceThreshold: run.importanceThreshold,
             cooldownApplied: run.cooldownApplied,
@@ -265,11 +395,21 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             triggerType: run.triggerType,
             triggerHit: run.triggerHit,
             triggerReason: run.triggerReason,
+            memoryMode: run.memoryMode,
             requestedTypes: run.requestedTypes,
+            requestedScopes: run.requestedScopes,
+            selectedScopes: run.selectedScopes,
+            scopeHitCounts: run.scopeHitCounts.map((item) => ({
+              scope: item.scope,
+              scopeLabel: scopeLabel(item.scope),
+              count: item.count
+            })),
+            selectedRecordIds: run.selectedRecordIds,
             queryScope: run.queryScope,
             candidateCount: run.candidateCount,
             selectedCount: run.selectedCount,
             resultState: run.resultState,
+            emptyReason: run.emptyReason,
             latencyMs: run.durationMs,
             degraded: run.degraded,
             degradationReason: run.degradationReason,
@@ -279,6 +419,12 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             traceId: run.traceId,
             injected: run.injected,
             injectedCount: run.injectedCount,
+            memoryMode: run.memoryMode,
+            requestedScopes: run.requestedScopes,
+            selectedScopes: run.selectedScopes,
+            keptRecordIds: run.keptRecordIds,
+            injectionReason: run.injectionReason,
+            memorySummary: run.memorySummary,
             resultState: run.resultState,
             dropReasons: run.trimReasons,
             tokenEstimate: run.tokenEstimate,
@@ -288,9 +434,18 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
           })),
           writeBackRuns: selected.writeBackRuns.map((run) => ({
             traceId: run.traceId,
+            memoryMode: run.memoryMode,
             resultState: run.resultState,
             candidateCount: run.candidateCount,
             submittedCount: run.submittedCount,
+            submittedJobIds: run.submittedJobIds,
+            candidateSummaries: run.candidateSummaries,
+            scopeDecisions: run.scopeDecisions.map((item) => ({
+              scope: item.scope,
+              scopeLabel: scopeLabel(item.scope),
+              count: item.count,
+              reason: item.reason
+            })),
             filteredCount: run.filteredCount,
             filteredReasons: run.filteredReasons,
             degraded: run.degraded,
@@ -299,6 +454,7 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             createdAt: run.createdAt
           })),
           dependencyStatus: toDependencyStatus(selected.dependencyStatus),
+          phaseNarratives: buildPhaseNarratives(selected),
           narrative: buildNarrative(selected)
         }
       : null,
@@ -317,17 +473,19 @@ export function describeRunTraceEmptyState(response: RunTraceResponse) {
     };
   }
 
-  if (response.appliedFilters.turnId) {
+  if (response.appliedFilters.turnId || response.appliedFilters.traceId) {
     return {
-      title: "No trace found for this turn",
+      title: "No trace found for this selector",
       description:
-        "The runtime observe API is reachable, but it did not return a trace for the requested turn id."
+        "The runtime observe API is reachable, but it did not return a trace for the requested turn id or trace id."
     };
   }
 
   return {
-    title: "Enter a turn id to inspect a trace",
+    title: "Enter a turn id or trace id to inspect a trace",
     description:
-      "Recent traces can still be listed below, but the main trace view is keyed by turn id."
+      "Recent traces can still be listed below, but the main detail view is keyed by turn id or trace id."
   };
 }
+
+export { summarizeScopes, buildPhaseNarratives, formatScopeList, scopeExplanation };

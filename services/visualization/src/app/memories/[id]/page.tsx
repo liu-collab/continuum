@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
+import { GovernancePanel } from "@/features/memory-catalog/governance-panel";
 import { getMemoryDetail } from "@/features/memory-catalog/service";
 import { formatTimestamp } from "@/lib/format";
 
@@ -13,6 +14,10 @@ function statusTone(status: string) {
 
   if (status === "pending_confirmation") {
     return "warning";
+  }
+
+  if (status === "deleted") {
+    return "danger";
   }
 
   return "neutral";
@@ -36,8 +41,7 @@ export default async function MemoryDetailPage({
               {detail?.summary ?? "Memory not found"}
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              View the structured details, source, and status explanation for one published memory
-              record.
+              Inspect the published memory record, understand whether it is global or workspace memory, and run the minimum governance actions from this page.
             </p>
           </div>
           <Link
@@ -56,6 +60,9 @@ export default async function MemoryDetailPage({
               <div className="rounded-xl border bg-white/80 p-4">
                 <div className="text-sm font-semibold text-slate-900">Summary</div>
                 <p className="mt-3 text-sm leading-7 text-slate-700">{detail.summary}</p>
+                <div className="mt-4 rounded-xl bg-slate-50/80 p-3 text-sm leading-6 text-slate-600">
+                  {detail.visibilitySummary}
+                </div>
               </div>
               <div className="rounded-xl border bg-white/80 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -66,6 +73,9 @@ export default async function MemoryDetailPage({
                   <StatusBadge tone={statusTone(detail.status)}>{detail.status}</StatusBadge>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-slate-600">{detail.statusExplanation}</p>
+                <div className="mt-4 rounded-xl bg-slate-50/80 p-3 text-sm leading-6 text-slate-600">
+                  {detail.scopeExplanation}
+                </div>
               </div>
             </div>
           </section>
@@ -86,6 +96,10 @@ export default async function MemoryDetailPage({
                   <div>
                     <dt className="font-medium text-slate-900">Scope</dt>
                     <dd>{detail.scopeLabel}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium text-slate-900">Origin workspace</dt>
+                    <dd>{detail.originWorkspaceLabel}</dd>
                   </div>
                   <div>
                     <dt className="font-medium text-slate-900">Importance</dt>
@@ -133,6 +147,8 @@ export default async function MemoryDetailPage({
               </div>
             </div>
           </section>
+
+          <GovernancePanel detail={detail} />
 
           <section className="panel">
             <div className="panel-header">

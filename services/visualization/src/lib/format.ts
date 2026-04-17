@@ -1,6 +1,13 @@
 import { format, formatDistanceToNow } from "date-fns";
 
-import { DashboardMetric, MemoryStatus, MemoryType, Scope, SourceHealthStatus } from "@/lib/contracts";
+import {
+  DashboardMetric,
+  MemoryStatus,
+  MemoryType,
+  MemoryViewMode,
+  Scope,
+  SourceHealthStatus
+} from "@/lib/contracts";
 
 export function formatTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -64,10 +71,62 @@ export function scopeLabel(value: Scope) {
     case "task":
       return "Task";
     case "user":
-      return "User";
+      return "Global";
     case "workspace":
       return "Workspace";
   }
+}
+
+export function scopeExplanation(value: Scope, originWorkspaceId?: string | null) {
+  if (value === "user") {
+    return originWorkspaceId
+      ? `Global memory. It can appear in the current workspace because global memory is shared across workspaces. Origin workspace: ${originWorkspaceId}.`
+      : "Global memory. It can appear in the current workspace because global memory is shared across workspaces.";
+  }
+
+  if (value === "workspace") {
+    return "Workspace memory. It is only meant to be reused inside the current workspace boundary.";
+  }
+
+  if (value === "task") {
+    return "Task memory. It stays tied to the current task chain.";
+  }
+
+  return "Session memory. It belongs to the current session context only.";
+}
+
+export function memoryViewModeLabel(value: MemoryViewMode) {
+  return value === "workspace_only" ? "Workspace only" : "Workspace + global";
+}
+
+export function memoryViewModeExplanation(value: MemoryViewMode) {
+  return value === "workspace_only"
+    ? "Only workspace, task, and session memories from the current workspace are shown."
+    : "Workspace, task, and session memories from the current workspace are shown together with global memories.";
+}
+
+export function visibilitySummary(
+  scope: Scope,
+  memoryViewMode: MemoryViewMode,
+  originWorkspaceId?: string | null
+) {
+  if (scope === "user") {
+    return memoryViewMode === "workspace_only"
+      ? "This global memory is hidden in workspace-only mode."
+      : originWorkspaceId
+        ? `Visible because the current view includes global memory. Origin workspace: ${originWorkspaceId}.`
+        : "Visible because the current view includes global memory.";
+  }
+
+  if (scope === "workspace") {
+    return "Visible because it belongs to the current workspace.";
+  }
+
+  if (scope === "task") {
+    return "Visible because task memory is retained for the current workspace context.";
+  }
+
+  return "Visible because session memory is retained for the current workspace context.";
 }
 
 export function memoryStatusLabel(value: MemoryStatus) {
@@ -98,6 +157,18 @@ export function memoryStatusExplanation(value: MemoryStatus) {
     case "deleted":
       return "Removed from normal views and recall.";
   }
+}
+
+export function memoryModeSummary(value: MemoryViewMode | null | undefined) {
+  if (value === "workspace_only") {
+    return "Current mode is workspace only.";
+  }
+
+  if (value === "workspace_plus_global") {
+    return "Current mode includes workspace and global memory.";
+  }
+
+  return "Memory mode was not recorded.";
 }
 
 export function sourceStatusTone(status: SourceHealthStatus) {

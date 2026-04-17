@@ -56,6 +56,18 @@ export function pickBoolean(record: UnknownRecord, ...keys: string[]): boolean |
   return undefined;
 }
 
+export function pickRecord(record: UnknownRecord, ...keys: string[]): UnknownRecord | undefined {
+  for (const key of keys) {
+    const value = asRecord(record[key]);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
 export function pickArray(record: UnknownRecord, ...keys: string[]): unknown[] {
   for (const key of keys) {
     const value = record[key];

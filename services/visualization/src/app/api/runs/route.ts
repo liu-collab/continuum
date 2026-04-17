@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import { getRunTrace } from "@/features/run-trace/service";
 import { parseRunTraceFilters } from "@/lib/query-params";
+import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +12,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     if (error instanceof ZodError) {
-      return NextResponse.json(
-        { error: error.issues.map((issue) => issue.message).join("; ") },
-        { status: 400 }
-      );
+      return zodApiError(error);
     }
 
-    return NextResponse.json({ error: "Failed to load run trace." }, { status: 500 });
+    return jsonApiError("run_trace_failed", "Failed to load run trace.", 500);
   }
 }

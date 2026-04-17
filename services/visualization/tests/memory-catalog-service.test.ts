@@ -1,22 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
+const { queryCatalogViewMock } = vi.hoisted(() => ({
+  queryCatalogViewMock: vi.fn<() => Promise<any>>()
+}));
+
+queryCatalogViewMock.mockImplementation(async () => ({
+  rows: [],
+  total: 0,
+  warnings: [],
+  status: {
+    name: "storage_read_model",
+    label: "Storage read model",
+    kind: "dependency",
+    status: "unavailable",
+    checkedAt: new Date().toISOString(),
+    lastCheckedAt: new Date().toISOString(),
+    lastOkAt: null,
+    lastError: "connection failed",
+    responseTimeMs: 200,
+    detail: "connection failed"
+  }
+}));
+
 vi.mock("@/lib/server/storage-read-model-client", () => ({
-  queryMemoryReadModel: vi.fn(async () => ({
-    rows: [],
-    total: 0,
-    status: {
-      name: "storage_read_model",
-      label: "Storage read model",
-      kind: "dependency",
-      status: "unavailable",
-      checkedAt: new Date().toISOString(),
-      lastCheckedAt: new Date().toISOString(),
-      lastOkAt: null,
-      lastError: "connection failed",
-      responseTimeMs: 200,
-      detail: "connection failed"
-    }
-  })),
+  queryCatalogView: queryCatalogViewMock,
   fetchMemoryById: vi.fn(async (id: string) => ({
     id,
     workspace_id: "ws-1",
@@ -36,21 +43,25 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
     source: {
       source_type: "user_input",
       source_ref: "turn-1",
-      service_name: "retrieval-runtime"
+      service_name: "retrieval-runtime",
+      origin_workspace_id: "ws-origin"
     },
     last_confirmed_at: "2026-04-16T00:00:00Z",
-    created_at: null,
+    created_at: "2026-04-15T00:00:00Z",
     updated_at: "2026-04-16T00:00:00Z"
   })),
   mapSource: vi.fn((source: Record<string, unknown> | null) => ({
     sourceType: typeof source?.source_type === "string" ? source.source_type : null,
     sourceRef: typeof source?.source_ref === "string" ? source.source_ref : null,
-    sourceServiceName: typeof source?.service_name === "string" ? source.service_name : null
+    sourceServiceName: typeof source?.service_name === "string" ? source.service_name : null,
+    originWorkspaceId:
+      typeof source?.origin_workspace_id === "string" ? source.origin_workspace_id : null
   }))
 }));
 
 import {
   describeCatalogEmptyState,
+  getMemoryCatalog,
   getMemoryDetail
 } from "@/features/memory-catalog/service";
 import { MemoryCatalogResponse } from "@/lib/contracts";
@@ -66,6 +77,7 @@ describe("memory catalog service", () => {
         workspaceId: undefined,
         userId: undefined,
         taskId: undefined,
+        memoryViewMode: "workspace_plus_global",
         memoryType: undefined,
         scope: undefined,
         status: undefined,
@@ -74,6 +86,8 @@ describe("memory catalog service", () => {
         page: 1,
         pageSize: 20
       },
+      viewSummary: "summary",
+      viewWarnings: [],
       sourceStatus: {
         name: "storage_read_model",
         label: "Storage read model",
@@ -98,9 +112,84 @@ describe("memory catalog service", () => {
     const detail = await getMemoryDetail("memory-1");
 
     expect(detail).not.toBeNull();
-    expect(detail?.statusExplanation).toContain("eligible for automatic recall");
+    expect(detail?.scopeLabel).toBe("Global");
+    expect(detail?.scopeExplanation).toContain("Global memory");
+    expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
-    expect(detail?.sourceServiceName).toBe("retrieval-runtime");
+  });
+
+  it("returns workspace-only catalog view summary", async () => {
+    queryCatalogViewMock.mockResolvedValueOnce({
+      rows: [],
+      total: 0,
+      warnings: [],
+      status: {
+        name: "storage_read_model",
+        label: "Storage read model",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: new Date().toISOString(),
+        lastCheckedAt: new Date().toISOString(),
+        lastOkAt: new Date().toISOString(),
+        lastError: null,
+        responseTimeMs: 20,
+        detail: null
+      }
+    });
+
+    const response = await getMemoryCatalog({
+      workspaceId: "ws-1",
+      userId: "user-1",
+      taskId: undefined,
+      memoryViewMode: "workspace_only",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(response.viewSummary).toContain("workspace");
+    expect(response.appliedFilters.memoryViewMode).toBe("workspace_only");
+  });
+
+  it("workspace_only does not keep global scope when scope=user is requested", async () => {
+    queryCatalogViewMock.mockResolvedValueOnce({
+      rows: [],
+      total: 0,
+      warnings: [],
+      status: {
+        name: "storage_read_model",
+        label: "Storage read model",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: new Date().toISOString(),
+        lastCheckedAt: new Date().toISOString(),
+        lastOkAt: new Date().toISOString(),
+        lastError: null,
+        responseTimeMs: 20,
+        detail: null
+      }
+    });
+
+    const response = await getMemoryCatalog({
+      workspaceId: "ws-1",
+      userId: "user-1",
+      taskId: undefined,
+      memoryViewMode: "workspace_only",
+      memoryType: undefined,
+      scope: "user",
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(response.items).toEqual([]);
+    expect(response.total).toBe(0);
   });
 });

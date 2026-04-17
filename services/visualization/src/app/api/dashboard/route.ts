@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getDashboard } from "@/features/dashboard/service";
 import { parseDashboardWindow } from "@/lib/query-params";
+import { jsonApiError } from "@/lib/server/api-errors";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,6 +10,6 @@ export async function GET(request: NextRequest) {
     const data = await getDashboard(window);
     return NextResponse.json(data);
   } catch {
-    return NextResponse.json({ error: "Failed to load dashboard." }, { status: 500 });
+    return jsonApiError("dashboard_failed", "Failed to load dashboard.", 500);
   }
 }

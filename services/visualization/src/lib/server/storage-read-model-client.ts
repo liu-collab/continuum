@@ -2,7 +2,7 @@ import "server-only";
 
 import { Pool } from "pg";
 
-import { MemoryCatalogFilters, SourceStatus } from "@/lib/contracts";
+import { MemoryCatalogFilters, Scope, SourceStatus } from "@/lib/contracts";
 import { getAppConfig } from "@/lib/env";
 import { asRecord, pickString } from "@/lib/records";
 import { readSourceLastOk, rememberSourceSuccess } from "@/lib/server/source-status-memory";
@@ -30,6 +30,24 @@ type ReadModelQueryResult = {
   rows: ReadModelRow[];
   total: number;
   status: SourceStatus;
+};
+
+type CatalogViewQueryResult = ReadModelQueryResult & {
+  warnings: string[];
+};
+
+type QueryOptions = {
+  workspaceId?: string;
+  userId?: string;
+  taskId?: string;
+  memoryType?: string;
+  scope?: Scope;
+  scopeIn?: Scope[];
+  status?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+  limit?: number;
+  offset?: number;
 };
 
 declare global {
@@ -84,14 +102,138 @@ function unavailableStatus(
   };
 }
 
+function pushParam(params: Array<string | number | string[]>, value: string | number | string[]) {
+  params.push(value);
+  return `$${params.length}`;
+}
+
+function buildWhereClause(options: QueryOptions, params: Array<string | number | string[]>) {
+  const clauses: string[] = [];
+
+  if (options.workspaceId) {
+    clauses.push(`workspace_id = ${pushParam(params, options.workspaceId)}`);
+  }
+
+  if (options.userId) {
+    clauses.push(`user_id = ${pushParam(params, options.userId)}`);
+  }
+
+  if (options.taskId) {
+    clauses.push(`task_id = ${pushParam(params, options.taskId)}`);
+  }
+
+  if (options.memoryType) {
+    clauses.push(`memory_type = ${pushParam(params, options.memoryType)}`);
+  }
+
+  if (options.scope) {
+    clauses.push(`scope = ${pushParam(params, options.scope)}`);
+  }
+
+  if (options.scopeIn && options.scopeIn.length > 0) {
+    clauses.push(`scope = ANY(${pushParam(params, options.scopeIn)}::text[])`);
+  }
+
+  if (options.status) {
+    clauses.push(`status = ${pushParam(params, options.status)}`);
+  }
+
+  if (options.updatedFrom) {
+    clauses.push(`updated_at >= ${pushParam(params, options.updatedFrom)}`);
+  }
+
+  if (options.updatedTo) {
+    clauses.push(`updated_at <= ${pushParam(params, options.updatedTo)}`);
+  }
+
+  return clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+}
+
+async function executeReadModelQuery(pool: Pool, options: QueryOptions): Promise<ReadModelRow[]> {
+  const params: Array<string | number | string[]> = [];
+  const whereClause = buildWhereClause(options, params);
+  const limit =
+    typeof options.limit === "number" ? `LIMIT ${pushParam(params, options.limit)}` : "";
+  const offset =
+    typeof options.offset === "number" ? `OFFSET ${pushParam(params, options.offset)}` : "";
+
+  const query = `
+    SELECT
+      id,
+      workspace_id,
+      user_id,
+      task_id,
+      session_id,
+      memory_type,
+      scope,
+      status,
+      summary,
+      details,
+      importance,
+      confidence,
+      source,
+      last_confirmed_at,
+      created_at,
+      updated_at
+    FROM ${qualifiedReadModelTable()}
+    ${whereClause}
+    ORDER BY updated_at DESC NULLS LAST, id DESC
+    ${limit}
+    ${offset}
+  `;
+
+  const result = await pool.query<ReadModelRow>(query, params);
+  return result.rows;
+}
+
+async function countReadModelRows(pool: Pool, options: QueryOptions): Promise<number> {
+  const params: Array<string | number | string[]> = [];
+  const whereClause = buildWhereClause(options, params);
+  const query = `SELECT COUNT(*)::int AS total FROM ${qualifiedReadModelTable()} ${whereClause}`;
+  const result = await pool.query<{ total: number }>(query, params);
+  return result.rows[0]?.total ?? 0;
+}
+
+function healthyStatus(responseTimeMs: number, warnings: string[] = []): SourceStatus {
+  const checkedAt = new Date().toISOString();
+  rememberSourceSuccess("storage_read_model", checkedAt);
+
+  return {
+    name: "storage_read_model",
+    label: "Storage read model",
+    kind: "dependency",
+    status: warnings.length > 0 ? "partial" : "healthy",
+    checkedAt,
+    lastCheckedAt: checkedAt,
+    lastOkAt: checkedAt,
+    lastError: warnings.length > 0 ? warnings.join(" ") : null,
+    responseTimeMs,
+    detail: warnings.length > 0 ? warnings.join(" ") : null
+  };
+}
+
+function buildQueryOptions(filters: MemoryCatalogFilters): QueryOptions {
+  return {
+    workspaceId: filters.workspaceId,
+    userId: filters.userId,
+    taskId: filters.taskId,
+    memoryType: filters.memoryType,
+    scope: filters.scope,
+    status: filters.status,
+    updatedFrom: filters.updatedFrom,
+    updatedTo: filters.updatedTo
+  };
+}
+
 function mapSource(source: Record<string, unknown> | null) {
   const record = asRecord(source);
 
   return {
     sourceType: record ? pickString(record, "source_type", "sourceType") ?? null : null,
     sourceRef: record ? pickString(record, "source_ref", "sourceRef") ?? null : null,
-    sourceServiceName: record
-      ? pickString(record, "service_name", "serviceName") ?? null
+    sourceServiceName: record ? pickString(record, "service_name", "serviceName") ?? null : null,
+    originWorkspaceId: record
+      ? pickString(record, "origin_workspace_id", "originWorkspaceId") ?? null
       : null
   };
 }
@@ -123,100 +265,21 @@ export async function queryMemoryReadModel(
     };
   }
 
-  const filtersParams: Array<string | number> = [];
-  const clauses: string[] = [];
-  const addFilter = (value: string | number) => {
-    filtersParams.push(value);
-    return `$${filtersParams.length}`;
-  };
-
-  if (filters.workspaceId) {
-    clauses.push(`workspace_id = ${addFilter(filters.workspaceId)}`);
-  }
-
-  if (filters.userId) {
-    clauses.push(`user_id = ${addFilter(filters.userId)}`);
-  }
-
-  if (filters.taskId) {
-    clauses.push(`task_id = ${addFilter(filters.taskId)}`);
-  }
-
-  if (filters.memoryType) {
-    clauses.push(`memory_type = ${addFilter(filters.memoryType)}`);
-  }
-
-  if (filters.scope) {
-    clauses.push(`scope = ${addFilter(filters.scope)}`);
-  }
-
-  if (filters.status) {
-    clauses.push(`status = ${addFilter(filters.status)}`);
-  }
-
-  if (filters.updatedFrom) {
-    clauses.push(`updated_at >= ${addFilter(filters.updatedFrom)}`);
-  }
-
-  if (filters.updatedTo) {
-    clauses.push(`updated_at <= ${addFilter(filters.updatedTo)}`);
-  }
-
-  const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-
   try {
-    const totalQuery = `SELECT COUNT(*)::int AS total FROM ${qualifiedReadModelTable()} ${whereClause}`;
-    const totalResult = await pool.query<{ total: number }>(totalQuery, filtersParams);
-
-    const dataParams = [...filtersParams];
-    const limitPlaceholder = `$${dataParams.length + 1}`;
-    dataParams.push(filters.pageSize);
-    const offsetPlaceholder = `$${dataParams.length + 1}`;
-    dataParams.push((filters.page - 1) * filters.pageSize);
-
-    const dataQuery = `
-      SELECT
-        id,
-        workspace_id,
-        user_id,
-        task_id,
-        session_id,
-        memory_type,
-        scope,
-        status,
-        summary,
-        details,
-        importance,
-        confidence,
-        source,
-        last_confirmed_at,
-        NULL::text AS created_at,
-        updated_at
-      FROM ${qualifiedReadModelTable()}
-      ${whereClause}
-      ORDER BY updated_at DESC NULLS LAST, id DESC
-      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
-    `;
-
-    const dataResult = await pool.query<ReadModelRow>(dataQuery, dataParams);
-    const checkedAt = new Date().toISOString();
-    rememberSourceSuccess("storage_read_model", checkedAt);
+    const baseOptions = buildQueryOptions(filters);
+    const [rows, total] = await Promise.all([
+      executeReadModelQuery(pool, {
+        ...baseOptions,
+        limit: filters.pageSize,
+        offset: (filters.page - 1) * filters.pageSize
+      }),
+      countReadModelRows(pool, baseOptions)
+    ]);
 
     return {
-      rows: dataResult.rows,
-      total: totalResult.rows[0]?.total ?? 0,
-      status: {
-        name: "storage_read_model",
-        label: "Storage read model",
-        kind: "dependency",
-        status: "healthy",
-        checkedAt,
-        lastCheckedAt: checkedAt,
-        lastOkAt: checkedAt,
-        lastError: null,
-        responseTimeMs: Date.now() - startedAt,
-        detail: null
-      }
+      rows,
+      total,
+      status: healthyStatus(Date.now() - startedAt)
     };
   } catch (error) {
     return {
@@ -225,6 +288,126 @@ export async function queryMemoryReadModel(
       status: unavailableStatus(
         "unavailable",
         error instanceof Error ? error.message : "Read model query failed.",
+        Date.now() - startedAt
+      )
+    };
+  }
+}
+
+export async function queryCatalogView(
+  filters: MemoryCatalogFilters
+): Promise<CatalogViewQueryResult> {
+  const pool = getPool();
+  const { values, issues } = getAppConfig();
+  const startedAt = Date.now();
+  const warnings: string[] = [];
+
+  if (issues.length > 0) {
+    return {
+      rows: [],
+      total: 0,
+      warnings,
+      status: unavailableStatus("misconfigured", issues.join(" "), null)
+    };
+  }
+
+  if (!pool || !values.STORAGE_READ_MODEL_DSN) {
+    return {
+      rows: [],
+      total: 0,
+      warnings,
+      status: unavailableStatus(
+        "misconfigured",
+        "Missing STORAGE_READ_MODEL_DSN configuration.",
+        null
+      )
+    };
+  }
+
+  if (!filters.workspaceId) {
+    warnings.push(
+      "Current workspace is missing. Workspace, task, and session records cannot be resolved without workspace_id."
+    );
+  }
+
+  if (filters.memoryViewMode === "workspace_plus_global" && !filters.userId) {
+    warnings.push("Current user is missing. Global memories cannot be included without user_id.");
+  }
+
+  try {
+    const workspaceScopes = filters.scope
+      ? filters.scope === "user"
+        ? []
+        : [filters.scope]
+      : (["workspace", "task", "session"] satisfies Scope[]);
+    const globalScopes = filters.scope
+      ? filters.scope === "user"
+        ? (["user"] satisfies Scope[])
+        : []
+      : (["user"] satisfies Scope[]);
+
+    const workspaceQuery =
+      filters.workspaceId && workspaceScopes.length > 0
+        ? {
+            workspaceId: filters.workspaceId,
+            taskId: filters.taskId,
+            memoryType: filters.memoryType,
+            status: filters.status,
+            updatedFrom: filters.updatedFrom,
+            updatedTo: filters.updatedTo,
+            scopeIn: workspaceScopes
+          }
+        : null;
+
+    const globalQuery =
+      filters.memoryViewMode === "workspace_plus_global" && filters.userId && globalScopes.length > 0
+        ? {
+            userId: filters.userId,
+            memoryType: filters.memoryType,
+            status: filters.status,
+            updatedFrom: filters.updatedFrom,
+            updatedTo: filters.updatedTo,
+            scopeIn: globalScopes
+          }
+        : null;
+
+    const [workspaceRows, workspaceTotal, globalRows, globalTotal] = await Promise.all([
+      workspaceQuery ? executeReadModelQuery(pool, workspaceQuery) : Promise.resolve([]),
+      workspaceQuery ? countReadModelRows(pool, workspaceQuery) : Promise.resolve(0),
+      globalQuery ? executeReadModelQuery(pool, globalQuery) : Promise.resolve([]),
+      globalQuery ? countReadModelRows(pool, globalQuery) : Promise.resolve(0)
+    ]);
+
+    const dedupedRows = Array.from(
+      new Map([...workspaceRows, ...globalRows].map((row) => [row.id, row])).values()
+    );
+
+    const mergedRows = dedupedRows.sort((left, right) => {
+      const updatedCompare = (right.updated_at ?? "").localeCompare(left.updated_at ?? "");
+
+      if (updatedCompare !== 0) {
+        return updatedCompare;
+      }
+
+      return right.id.localeCompare(left.id);
+    });
+
+    const offset = (filters.page - 1) * filters.pageSize;
+
+    return {
+      rows: mergedRows.slice(offset, offset + filters.pageSize),
+      total: dedupedRows.length,
+      warnings,
+      status: healthyStatus(Date.now() - startedAt, warnings)
+    };
+  } catch (error) {
+    return {
+      rows: [],
+      total: 0,
+      warnings,
+      status: unavailableStatus(
+        "unavailable",
+        error instanceof Error ? error.message : "Catalog view query failed.",
         Date.now() - startedAt
       )
     };
@@ -246,21 +429,7 @@ export async function pingMemoryReadModel() {
 
   try {
     await pool.query(`SELECT 1 FROM ${qualifiedReadModelTable()} LIMIT 1`);
-    const checkedAt = new Date().toISOString();
-    rememberSourceSuccess("storage_read_model", checkedAt);
-
-    return {
-      name: "storage_read_model",
-      label: "Storage read model",
-      kind: "dependency" as const,
-      status: "healthy" as const,
-      checkedAt,
-      lastCheckedAt: checkedAt,
-      lastOkAt: checkedAt,
-      lastError: null,
-      responseTimeMs: Date.now() - startedAt,
-      detail: null
-    };
+    return healthyStatus(Date.now() - startedAt);
   } catch (error) {
     return unavailableStatus(
       "unavailable",
@@ -295,7 +464,7 @@ export async function fetchMemoryById(id: string): Promise<ReadModelRow | null> 
         confidence,
         source,
         last_confirmed_at,
-        NULL::text AS created_at,
+        created_at,
         updated_at
       FROM ${qualifiedReadModelTable()}
       WHERE id = $1

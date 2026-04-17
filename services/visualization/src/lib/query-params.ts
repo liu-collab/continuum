@@ -42,6 +42,7 @@ export function parseMemoryCatalogFilters(input: SearchParamInput): MemoryCatalo
     workspaceId: readString(input, "workspace_id"),
     userId: readString(input, "user_id"),
     taskId: readString(input, "task_id"),
+    memoryViewMode: readString(input, "memory_view_mode"),
     memoryType: readString(input, "memory_type"),
     scope: readString(input, "scope"),
     status: readString(input, "status"),
@@ -56,9 +57,7 @@ export function parseRunTraceFilters(input: SearchParamInput): RunTraceFilters {
   return RunTraceFiltersSchema.parse({
     turnId: readString(input, "turn_id"),
     sessionId: readString(input, "session_id"),
-    threadId: readString(input, "thread_id"),
-    workspaceId: readString(input, "workspace_id"),
-    taskId: readString(input, "task_id"),
+    traceId: readString(input, "trace_id"),
     page: readInt(input, "page") ?? 1,
     pageSize: readInt(input, "page_size") ?? 20
   });
@@ -83,6 +82,7 @@ export function toMemoryCatalogQuery(filters: MemoryCatalogFilters) {
     workspace_id: filters.workspaceId,
     user_id: filters.userId,
     task_id: filters.taskId,
+    memory_view_mode: filters.memoryViewMode,
     memory_type: filters.memoryType,
     scope: filters.scope,
     status: filters.status,
@@ -97,9 +97,7 @@ export function toRunTraceQuery(filters: RunTraceFilters) {
   return buildQueryString({
     turn_id: filters.turnId,
     session_id: filters.sessionId,
-    thread_id: filters.threadId,
-    workspace_id: filters.workspaceId,
-    task_id: filters.taskId,
+    trace_id: filters.traceId,
     page: filters.page,
     page_size: filters.pageSize
   });

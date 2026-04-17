@@ -52,7 +52,11 @@ export type RuntimeTriggerRecord = {
   triggerHit: boolean;
   triggerType: string | null;
   triggerReason: string | null;
+  memoryMode: "workspace_only" | "workspace_plus_global" | null;
   requestedTypes: Array<"fact_preference" | "task_state" | "episodic">;
+  requestedScopes: Array<"session" | "task" | "user" | "workspace">;
+  selectedScopes: Array<"session" | "task" | "user" | "workspace">;
+  scopeDecision: string | null;
   scopeLimit: string[];
   importanceThreshold: number | null;
   cooldownApplied: boolean;
@@ -66,11 +70,20 @@ export type RuntimeRecallRecord = {
   triggerHit: boolean;
   triggerType: string | null;
   triggerReason: string | null;
+  memoryMode: "workspace_only" | "workspace_plus_global" | null;
   requestedTypes: Array<"fact_preference" | "task_state" | "episodic">;
+  requestedScopes: Array<"session" | "task" | "user" | "workspace">;
+  selectedScopes: Array<"session" | "task" | "user" | "workspace">;
+  scopeHitCounts: Array<{
+    scope: "session" | "task" | "user" | "workspace";
+    count: number;
+  }>;
+  selectedRecordIds: string[];
   queryScope: string | null;
   candidateCount: number;
   selectedCount: number;
   resultState: string;
+  emptyReason: string | null;
   degraded: boolean;
   degradationReason: string | null;
   durationMs: number | null;
@@ -81,6 +94,12 @@ export type RuntimeInjectionRecord = {
   traceId: string;
   injected: boolean;
   injectedCount: number;
+  memoryMode: "workspace_only" | "workspace_plus_global" | null;
+  requestedScopes: Array<"session" | "task" | "user" | "workspace">;
+  selectedScopes: Array<"session" | "task" | "user" | "workspace">;
+  keptRecordIds: string[];
+  injectionReason: string | null;
+  memorySummary: string | null;
   tokenEstimate: number | null;
   trimmedRecordIds: string[];
   trimReasons: string[];
@@ -91,8 +110,16 @@ export type RuntimeInjectionRecord = {
 
 export type RuntimeWritebackRecord = {
   traceId: string;
+  memoryMode: "workspace_only" | "workspace_plus_global" | null;
   candidateCount: number;
   submittedCount: number;
+  submittedJobIds: string[];
+  candidateSummaries: string[];
+  scopeDecisions: Array<{
+    scope: "session" | "task" | "user" | "workspace";
+    count: number;
+    reason: string;
+  }>;
   filteredCount: number;
   filteredReasons: string[];
   resultState: string;
@@ -162,6 +189,23 @@ function toRequestedTypes(values: string[]) {
   );
 }
 
+function toScopes(values: string[]) {
+  return values.filter(
+    (item): item is "session" | "task" | "user" | "workspace" =>
+      ["session", "task", "user", "workspace"].includes(item)
+  );
+}
+
+function toMemoryMode(
+  value: string | null
+): "workspace_only" | "workspace_plus_global" | null {
+  if (value === "workspace_only" || value === "workspace_plus_global") {
+    return value;
+  }
+
+  return null;
+}
+
 function mapTurn(value: unknown): RuntimeTurnRecord | null {
   const record = asRecord(value);
 
@@ -197,9 +241,15 @@ function mapTriggerRun(value: unknown): RuntimeTriggerRecord | null {
     triggerHit: pickBoolean(record, "trigger_hit", "triggerHit") ?? false,
     triggerType: pickNullableString(record, "trigger_type", "triggerType"),
     triggerReason: pickNullableString(record, "trigger_reason", "triggerReason"),
+    memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
     requestedTypes: toRequestedTypes(
       pickStringArray(record, "requested_memory_types", "requestedTypes")
     ),
+    requestedScopes: toScopes(
+      pickStringArray(record, "requested_scopes", "requestedScopes", "scope_limit", "scopeLimit")
+    ),
+    selectedScopes: toScopes(pickStringArray(record, "selected_scopes", "selectedScopes")),
+    scopeDecision: pickNullableString(record, "scope_decision", "scopeDecision"),
     scopeLimit: pickStringArray(record, "scope_limit", "scopeLimit"),
     importanceThreshold:
       pickNumber(record, "importance_threshold", "importanceThreshold") ?? null,
@@ -222,13 +272,40 @@ function mapRecallRun(value: unknown): RuntimeRecallRecord | null {
     triggerHit: pickBoolean(record, "trigger_hit", "triggerHit") ?? false,
     triggerType: pickNullableString(record, "trigger_type", "triggerType"),
     triggerReason: pickNullableString(record, "trigger_reason", "triggerReason"),
+    memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
     requestedTypes: toRequestedTypes(
       pickStringArray(record, "requested_memory_types", "requestedTypes")
     ),
+    requestedScopes: toScopes(pickStringArray(record, "requested_scopes", "requestedScopes")),
+    selectedScopes: toScopes(pickStringArray(record, "selected_scopes", "selectedScopes")),
+    scopeHitCounts: pickArray(record, "scope_hit_counts", "scopeHitCounts")
+      .map((item) => {
+        const scopeRecord = asRecord(item);
+
+        if (!scopeRecord) {
+          return null;
+        }
+
+        const scope = toScopes([
+          pickString(scopeRecord, "scope") ?? ""
+        ])[0];
+
+        if (!scope) {
+          return null;
+        }
+
+        return {
+          scope,
+          count: pickNumber(scopeRecord, "count") ?? 0
+        };
+      })
+      .filter((item): item is { scope: "session" | "task" | "user" | "workspace"; count: number } => Boolean(item)),
+    selectedRecordIds: pickStringArray(record, "selected_record_ids", "selectedRecordIds"),
     queryScope: pickNullableString(record, "query_scope", "queryScope"),
     candidateCount: pickNumber(record, "candidate_count", "candidateCount") ?? 0,
     selectedCount: pickNumber(record, "selected_count", "selectedCount") ?? 0,
     resultState: pickString(record, "result_state", "resultState") ?? "unknown",
+    emptyReason: pickNullableString(record, "empty_reason", "emptyReason"),
     degraded: pickBoolean(record, "degraded") ?? false,
     degradationReason: pickNullableString(record, "degradation_reason", "degradationReason"),
     durationMs: pickNumber(record, "duration_ms", "durationMs") ?? null,
@@ -247,6 +324,12 @@ function mapInjectionRun(value: unknown): RuntimeInjectionRecord | null {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
     injected: pickBoolean(record, "injected") ?? false,
     injectedCount: pickNumber(record, "injected_count", "injectedCount") ?? 0,
+    memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
+    requestedScopes: toScopes(pickStringArray(record, "requested_scopes", "requestedScopes")),
+    selectedScopes: toScopes(pickStringArray(record, "selected_scopes", "selectedScopes")),
+    keptRecordIds: pickStringArray(record, "kept_record_ids", "keptRecordIds", "selected_record_ids", "selectedRecordIds"),
+    injectionReason: pickNullableString(record, "injection_reason", "injectionReason"),
+    memorySummary: pickNullableString(record, "memory_summary", "memorySummary"),
     tokenEstimate: pickNumber(record, "token_estimate", "tokenEstimate") ?? null,
     trimmedRecordIds: pickStringArray(record, "trimmed_record_ids", "trimmedRecordIds"),
     trimReasons: pickStringArray(record, "trim_reasons", "trimReasons"),
@@ -265,8 +348,32 @@ function mapWriteBackRun(value: unknown): RuntimeWritebackRecord | null {
 
   return {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
     candidateCount: pickNumber(record, "candidate_count", "candidateCount") ?? 0,
     submittedCount: pickNumber(record, "submitted_count", "submittedCount") ?? 0,
+    submittedJobIds: pickStringArray(record, "submitted_job_ids", "submittedJobIds"),
+    candidateSummaries: pickStringArray(record, "candidate_summaries", "candidateSummaries"),
+    scopeDecisions: pickArray(record, "scope_decisions", "scopeDecisions")
+      .map((item) => {
+        const scopeRecord = asRecord(item);
+
+        if (!scopeRecord) {
+          return null;
+        }
+
+        const scope = toScopes([pickString(scopeRecord, "scope") ?? ""])[0];
+
+        if (!scope) {
+          return null;
+        }
+
+        return {
+          scope,
+          count: pickNumber(scopeRecord, "count") ?? 0,
+          reason: pickString(scopeRecord, "reason") ?? "No scope decision reason recorded."
+        };
+      })
+      .filter((item): item is { scope: "session" | "task" | "user" | "workspace"; count: number; reason: string } => Boolean(item)),
     filteredCount: pickNumber(record, "filtered_count", "filteredCount") ?? 0,
     filteredReasons: pickStringArray(record, "filtered_reasons", "filteredReasons"),
     resultState: pickString(record, "result_state", "resultState") ?? "unknown",
