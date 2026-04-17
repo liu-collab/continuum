@@ -211,6 +211,48 @@ visualization 读两个环境变量：
 - 多 session 并行面板（首版单 session 主视图，session-list 只做切换）
 - 对话导出 / fork / 清空上下文（留给 0.2.x）
 - 代码编辑器写模式（文件预览只读，写回仍走 agent 的 fs_write 工具）
-- 主题定制 / 国际化（继承 visualization 现有约定）
+- 主题定制（继承 visualization 现有约定）
 - 移动端布局
 - cost-bar 的精确计费（首版仅基于 token 计数 + 可选 `provider.price_per_1k`，无需接入计费系统）
+
+## 9. 国际化（i18n）
+
+遵循 T12 §10 定义的分层策略：
+
+### 9.1 技术选型
+
+- 使用 **next-intl**（与 visualization 现有 Next.js 15 + RSC 兼容）
+- 若 visualization 自身已引入 i18n 库，复用之
+
+### 9.2 资源文件
+
+- 目录：`services/visualization/src/app/agent/_i18n/{zh-CN,en-US}/common.json`
+- 命名：key 用英文点分（如 `agent.toolConsole.untrustedBadge.shell`），value 按语言翻译
+- 必须覆盖：
+  - 所有组件的按钮 / 标题 / placeholder
+  - T08 §3.12 所有 error code 的展示文本（`code → { title, description, actionLabel? }`）
+  - MCP server 状态文本（`ok / unavailable / dead / disabled`）
+  - Trust level 标签（`builtin_read / builtin_write / shell / mcp:<name>`）
+  - Phase 标签（`task_start / task_switch / before_plan / before_response / session_start`）
+
+### 9.3 Locale 切换
+
+- 默认 locale 由 `app/agent/layout.tsx` 从 `NEXT_PUBLIC_MNA_DEFAULT_LOCALE` 或 `navigator.language` 决定
+- 用户可在顶部栏手动切换（zh-CN ⇄ en-US）
+- 切换后：
+  - 前端 UI 立即切换
+  - 已有 session 的对话历史不变
+  - 新建 session 时将当前 locale 传给 `POST /v1/agent/sessions` 的 `locale` 字段
+
+### 9.4 工具确认对话框
+
+- `tool_confirm_needed` 事件携带结构化字段（T08 §3.3）：`{ tool, params_preview, risk_hint? }`
+- 前端按 `tool` + `risk_hint` 查 i18n 表渲染提示文案
+- `params_preview` 原样显示（文件路径、命令字符串等，不翻译）
+
+### 9.5 错误提示
+
+- 后端 `error` 事件只返回 `code` + 英文 technical `message`
+- 前端按 `code` 查 `_i18n/common.json` 中的 `errors.<code>.title` 和 `errors.<code>.description` 展示给用户
+- 开发者控制台可显示原始 `message` 用于调试
+

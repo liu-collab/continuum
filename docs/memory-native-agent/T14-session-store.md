@@ -50,6 +50,7 @@ CREATE TABLE sessions (
   user_id      TEXT NOT NULL,
   title        TEXT,                 -- 用户可编辑；默认首轮 user 输入前 40 字
   memory_mode  TEXT NOT NULL,        -- workspace_only | workspace_plus_global
+  locale       TEXT NOT NULL,        -- zh-CN | en-US，创建时固化（T12 §10.3）
   created_at   TEXT NOT NULL,        -- ISO8601
   last_active_at TEXT NOT NULL,
   closed_at    TEXT                  -- 软关闭；null = 仍可续对话

@@ -62,6 +62,32 @@ src/http/
 
 权限确认**只走 WebSocket**（`tool_confirm` 事件），不提供 REST 入口，避免双通道状态同步 bug。
 
+#### POST /v1/agent/sessions 请求 schema
+
+```json
+{
+  "workspace_id": "project-abc",
+  "memory_mode": "workspace_plus_global",
+  "locale": "zh-CN"
+}
+```
+
+- `workspace_id`（必填）：工作区标识，用于 session 列表过滤与记忆隔离
+- `memory_mode`（可选）：默认从 `AgentConfig.memory.mode` 读取
+- `locale`（可选）：会话语言，优先级见 T12 §10.3；固化到 `sessions.locale` 列（T14）
+
+响应：
+
+```json
+{
+  "session_id": "sess_abc123",
+  "ws_url": "ws://127.0.0.1:4193/v1/agent/sessions/sess_abc123/ws?token=...",
+  "memory_mode": "workspace_plus_global",
+  "workspace_id": "project-abc",
+  "locale": "zh-CN"
+}
+```
+
 ### 3.3 WebSocket 事件通道
 
 - URL：`ws://127.0.0.1:4193/v1/agent/sessions/:id/ws`
@@ -87,7 +113,7 @@ type ServerEvent =
   | { kind: "injection_banner"; turn_id: string; injection: InjectionSummary | null; degraded: boolean }
   | { kind: "assistant_delta"; turn_id: string; text: string }
   | { kind: "tool_call_start"; turn_id: string; call_id: string; name: string; args_preview: string }
-  | { kind: "tool_confirm_needed"; confirm_id: string; call_id: string; prompt: string }
+  | { kind: "tool_confirm_needed"; confirm_id: string; call_id: string; tool: string; params_preview: string; risk_hint?: "write" | "shell" | "mcp" }
   | { kind: "tool_call_result"; call_id: string; ok: boolean; output_preview: string; artifact_ref?: string }
   | { kind: "turn_end"; turn_id: string; finish_reason: string }
   | { kind: "error"; scope: "turn" | "session"; code: string; message: string }

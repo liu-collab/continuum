@@ -129,6 +129,7 @@ export interface AgentConfig {
   cli: {
     systemPrompt: string | null;
   };
+  locale?: "zh-CN" | "en-US";    // 会话语言，优先级见 T12 §10.3
 }
 ```
 

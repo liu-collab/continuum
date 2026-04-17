@@ -61,7 +61,11 @@ export interface RunnerIO {
   emitTaskChange(turnId: string, change: TaskChangeEvent): void;   // task_start/task_switch 发出
   emitTurnEnd(turnId: string, finishReason: string): void;
   emitError(scope: "turn" | "session", err: Error): void;
-  requestConfirm(prompt: string): Promise<"allow" | "deny" | "allow_session">;
+  requestConfirm(payload: {
+    tool: string;              // "fs_write" / "shell_exec" / "mcp:<server>:<tool>"
+    params_preview: string;    // 脱敏后的参数摘要（文件路径、命令字符串等）
+    risk_hint?: "write" | "shell" | "mcp";
+  }): Promise<"allow" | "deny" | "allow_session">;
 }
 
 export class AgentRunner {
