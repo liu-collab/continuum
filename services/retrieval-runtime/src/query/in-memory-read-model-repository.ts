@@ -10,12 +10,24 @@ export class InMemoryReadModelRepository implements ReadModelRepository {
     }
 
     return this.records
-      .filter((record) => record.workspace_id === query.workspace_id)
-      .filter((record) => record.user_id === query.user_id)
       .filter((record) => query.status_filter.includes(record.status))
       .filter((record) => query.scope_filter.includes(record.scope))
+      .filter((record) => {
+        if (record.scope === "workspace") {
+          return record.workspace_id === query.workspace_id;
+        }
+        if (record.scope === "user") {
+          return record.user_id === query.user_id;
+        }
+        if (record.scope === "task") {
+          return record.workspace_id === query.workspace_id && Boolean(query.task_id) && record.task_id === query.task_id;
+        }
+        if (record.scope === "session") {
+          return record.workspace_id === query.workspace_id && record.session_id === query.session_id;
+        }
+        return false;
+      })
       .filter((record) => query.memory_type_filter.includes(record.memory_type))
-      .filter((record) => (query.task_id ? record.task_id === query.task_id || record.scope !== "task" : true))
       .filter((record) => record.importance >= query.importance_threshold)
       .slice(0, query.candidate_limit);
   }

@@ -4,7 +4,7 @@ import type { AppConfig } from "../config.js";
 
 const llmCandidateSchema = z.object({
   candidate_type: z.enum(["fact_preference", "task_state", "episodic"]),
-  scope: z.enum(["user", "task", "session"]),
+  scope: z.enum(["workspace", "user", "task", "session"]),
   summary: z.string().min(1),
   importance: z.number().int().min(1).max(5),
   confidence: z.number().min(0).max(1),
@@ -35,7 +35,7 @@ You extract durable memory candidates from one agent turn.
 Return strict JSON only with shape: {"candidates":[...]}.
 Each candidate must include:
 - candidate_type: "fact_preference" | "task_state" | "episodic"
-- scope: "user" | "task" | "session"
+- scope: "workspace" | "user" | "task" | "session"
 - summary: concise reusable sentence in Chinese or source language
 - importance: integer 1-5
 - confidence: number 0-1
@@ -47,6 +47,7 @@ Rules:
 - Use "task_state" only when the turn contains a concrete task progress or next-step update.
 - Use "fact_preference" for stable preferences or confirmed durable facts.
 - Use "episodic" for concrete commitments or externally observable events that may matter later.
+- Use "workspace" for repository rules, project constraints, directory conventions, or workspace background.
 - Return at most 5 candidates.
 `.trim();
 

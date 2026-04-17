@@ -77,25 +77,29 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         last_confirmed_at,
         summary_embedding
       FROM ${tableName}
-      WHERE workspace_id = $1
-        AND user_id = $2
-        AND status = ANY($3::text[])
-        AND scope = ANY($4::text[])
-        AND memory_type = ANY($5::text[])
-        AND importance >= $6
-        AND ($7::text IS NULL OR task_id = $7 OR scope <> 'task')
+      WHERE status = ANY($1::text[])
+        AND scope = ANY($2::text[])
+        AND memory_type = ANY($3::text[])
+        AND importance >= $4
+        AND (
+          (scope = 'workspace' AND workspace_id = $5)
+          OR (scope = 'user' AND user_id = $6)
+          OR (scope = 'task' AND workspace_id = $5 AND $7::text IS NOT NULL AND task_id = $7)
+          OR (scope = 'session' AND workspace_id = $5 AND session_id = $8)
+        )
       ORDER BY importance DESC, confidence DESC, updated_at DESC
-      LIMIT $8
+      LIMIT $9
     `;
 
     const values = [
-      query.workspace_id,
-      query.user_id,
       query.status_filter,
       query.scope_filter,
       query.memory_type_filter,
       query.importance_threshold,
+      query.workspace_id,
+      query.user_id,
       query.task_id ?? null,
+      query.session_id,
       query.candidate_limit,
     ];
 

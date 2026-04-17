@@ -2,7 +2,7 @@ import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { EmbeddingsClient } from "../query/embeddings-client.js";
 import type { ReadModelRepository } from "../query/read-model-repository.js";
-import type { MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
+import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import type { Logger } from "pino";
 import { normalizeText } from "../shared/utils.js";
 
@@ -24,18 +24,56 @@ function requestedTypesByPhase(phase: TriggerContext["phase"]): MemoryType[] {
   }
 }
 
-function scopeByPhase(phase: TriggerContext["phase"], hasTask: boolean): ScopeType[] {
+function dedupeScopes(scopes: ScopeType[]): ScopeType[] {
+  return [...new Set(scopes)];
+}
+
+function scopePlanByPhase(
+  phase: TriggerContext["phase"],
+  hasTask: boolean,
+  memoryMode: MemoryMode,
+): { scopes: ScopeType[]; reason: string } {
   switch (phase) {
     case "session_start":
-      return hasTask ? ["user", "task"] : ["user"];
+      return {
+        scopes: memoryMode === "workspace_plus_global" ? ["workspace", "user"] : ["workspace"],
+        reason:
+          memoryMode === "workspace_plus_global"
+            ? "session_start restores workspace memory plus global user memory"
+            : "session_start is limited to workspace memory in workspace_only mode",
+      };
     case "task_start":
     case "task_switch":
     case "before_plan":
-      return hasTask ? ["task", "user"] : ["user", "session"];
+      return {
+        scopes: dedupeScopes([
+          "workspace",
+          ...(hasTask ? ["task" as const] : []),
+          ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
+        ]),
+        reason:
+          memoryMode === "workspace_plus_global"
+            ? `${phase} restores workspace, task, and global user memory`
+            : `${phase} restores workspace memory and task memory without global user memory`,
+      };
     case "before_response":
-      return hasTask ? ["task", "user", "session"] : ["user", "session"];
+      return {
+        scopes: dedupeScopes([
+          "workspace",
+          ...(hasTask ? ["task" as const] : []),
+          "session",
+          ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
+        ]),
+        reason:
+          memoryMode === "workspace_plus_global"
+            ? "before_response can use workspace, task, session, and global user memory"
+            : "before_response can use workspace, task, and session memory only",
+      };
     case "after_response":
-      return [];
+      return {
+        scopes: [],
+        reason: "after_response does not perform recall",
+      };
   }
 }
 
@@ -56,13 +94,18 @@ export class TriggerEngine {
   ) {}
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
+    const memoryMode = context.memory_mode ?? "workspace_plus_global";
+    const scopePlan = scopePlanByPhase(context.phase, Boolean(context.task_id), memoryMode);
+
     if (context.phase === "after_response") {
       return {
         hit: false,
         trigger_type: "no_trigger",
         trigger_reason: "after_response only runs writeback inspection",
         requested_memory_types: [],
-        scope_limit: [],
+        memory_mode: memoryMode,
+        requested_scopes: [],
+        scope_reason: scopePlan.reason,
         importance_threshold: 3,
         cooldown_applied: false,
       };
@@ -79,13 +122,14 @@ export class TriggerEngine {
         trigger_type: "cooldown_skip",
         trigger_reason: "recent recall already covered the same topic within cooldown window",
         requested_memory_types: [],
-        scope_limit: [],
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: 3,
         cooldown_applied: true,
       };
     }
 
-    const scopeLimit = scopeByPhase(context.phase, Boolean(context.task_id));
     const requestedMemoryTypes = requestedTypesByPhase(context.phase);
 
     if (context.phase !== "before_response") {
@@ -95,7 +139,9 @@ export class TriggerEngine {
         trigger_type: "phase",
         trigger_reason: `${context.phase} is a mandatory retrieval phase`,
         requested_memory_types: requestedMemoryTypes,
-        scope_limit: scopeLimit,
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: context.phase === "session_start" ? 4 : 3,
         cooldown_applied: false,
       };
@@ -108,7 +154,9 @@ export class TriggerEngine {
         trigger_type: "history_reference",
         trigger_reason: "current input explicitly references prior context or preferences",
         requested_memory_types: requestedMemoryTypes,
-        scope_limit: scopeLimit,
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: 3,
         cooldown_applied: false,
       };
@@ -120,20 +168,24 @@ export class TriggerEngine {
         trigger_type: "no_trigger",
         trigger_reason: "input is too short and has no clear historical reference",
         requested_memory_types: [],
-        scope_limit: [],
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: 3,
         cooldown_applied: false,
       };
     }
 
-    const semanticScore = await this.semanticFallbackScore(context);
+    const semanticScore = await this.semanticFallbackScore(context, memoryMode, scopePlan.scopes);
     if (semanticScore.degraded) {
       return {
         hit: false,
         trigger_type: "no_trigger",
         trigger_reason: "semantic fallback degraded due to dependency failure",
         requested_memory_types: [],
-        scope_limit: [],
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: 3,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
@@ -149,7 +201,9 @@ export class TriggerEngine {
         trigger_type: "semantic_fallback",
         trigger_reason: "semantic similarity exceeded the fallback threshold",
         requested_memory_types: requestedMemoryTypes,
-        scope_limit: scopeLimit,
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
         importance_threshold: 4,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
@@ -161,7 +215,9 @@ export class TriggerEngine {
       trigger_type: "no_trigger",
       trigger_reason: "no hard trigger matched and semantic fallback stayed below threshold",
       requested_memory_types: [],
-      scope_limit: [],
+      memory_mode: memoryMode,
+      requested_scopes: scopePlan.scopes,
+      scope_reason: scopePlan.reason,
       importance_threshold: 3,
       cooldown_applied: false,
       semantic_score: semanticScore.score,
@@ -175,7 +231,11 @@ export class TriggerEngine {
     });
   }
 
-  private async semanticFallbackScore(context: TriggerContext): Promise<{
+  private async semanticFallbackScore(
+    context: TriggerContext,
+    memoryMode: MemoryMode,
+    requestedScopes: ScopeType[],
+  ): Promise<{
     score: number;
     degraded: boolean;
     degradation_reason?: string;
@@ -201,7 +261,8 @@ export class TriggerEngine {
             session_id: context.session_id,
             phase: context.phase,
             task_id: context.task_id,
-            scope_filter: ["user", "task", "session"],
+            memory_mode: memoryMode,
+            scope_filter: requestedScopes,
             memory_type_filter: ["fact_preference", "task_state", "episodic"],
             status_filter: ["active"],
             importance_threshold: 4,

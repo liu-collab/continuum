@@ -52,6 +52,24 @@ const ids = {
 
 const sampleRecords: CandidateMemory[] = [
   {
+    id: "mem-workspace",
+    workspace_id: ids.workspace,
+    user_id: ids.user,
+    session_id: null,
+    task_id: null,
+    memory_type: "fact_preference",
+    scope: "workspace",
+    summary: "工作区约束：这个仓库默认保持中文注释和简洁输出。",
+    details: null,
+    source: { turn_id: "t-0" },
+    importance: 5,
+    confidence: 0.96,
+    status: "active",
+    updated_at: "2026-04-15T09:00:00.000Z",
+    last_confirmed_at: "2026-04-15T09:00:00.000Z",
+    summary_embedding: [1, 0, 0],
+  },
+  {
     id: "mem-preference",
     workspace_id: ids.workspace,
     user_id: ids.user,
@@ -196,6 +214,8 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block).not.toBeNull();
     expect(response.injection_block?.memory_records.length).toBeGreaterThan(0);
     expect(response.memory_packet?.records.length).toBeGreaterThan(0);
+    expect(response.injection_block?.memory_mode).toBe("workspace_plus_global");
+    expect(response.injection_block?.requested_scopes).toContain("workspace");
   });
 
   it("returns no injection when trigger is not hit", async () => {
@@ -253,6 +273,7 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block).not.toBeNull();
     expect(response.injection_block?.trimmed_record_ids.length).toBeGreaterThan(0);
     expect(response.injection_block?.memory_records.length).toBeLessThanOrEqual(baseConfig.INJECTION_RECORD_LIMIT);
+    expect(response.injection_block?.selected_scopes.length).toBeGreaterThan(0);
   });
 
   it("filters low-value writeback content and submits structured candidates", async () => {
@@ -279,6 +300,7 @@ describe("retrieval-runtime service", () => {
       ),
     ).toBe(true);
     expect(response.write_back_candidates.every((candidate) => candidate.source.service_name === "retrieval-runtime")).toBe(true);
+    expect(response.memory_mode).toBe("workspace_plus_global");
   });
 
   it("uses configured llm extraction before falling back to rules", async () => {
@@ -309,6 +331,7 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates).toHaveLength(1);
     expect(response.write_back_candidates[0]?.source.source_type).toBe("writeback_llm");
     expect(response.write_back_candidates[0]?.summary).toBe("默认用中文输出");
+    expect(response.write_back_candidates[0]?.scope).toBe("user");
   });
 
   it("falls back to rules when llm extraction fails", async () => {
@@ -393,6 +416,217 @@ describe("retrieval-runtime service", () => {
 
     expect(response.degraded).toBe(true);
     expect(response.submitted_jobs[0]?.status).toBe("dependency_unavailable");
+  });
+
+  it("does not read global user memory in workspace_only mode", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次那个仓库约束继续沿用。",
+      memory_mode: "workspace_only",
+    });
+
+    expect(response.injection_block).not.toBeNull();
+    expect(response.memory_packet?.requested_scopes).not.toContain("user");
+    expect(response.injection_block?.requested_scopes).not.toContain("user");
+    expect(response.injection_block?.memory_records.some((record) => record.scope === "user")).toBe(false);
+    expect(response.injection_block?.memory_records.some((record) => record.scope === "workspace")).toBe(true);
+  });
+
+  it("reads workspace and global user memory in workspace_plus_global mode", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次那个约定继续。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.memory_packet?.requested_scopes).toContain("workspace");
+    expect(response.memory_packet?.requested_scopes).toContain("user");
+    expect(response.memory_packet?.selected_scopes).toContain("workspace");
+    expect(response.memory_packet?.selected_scopes).toContain("user");
+  });
+
+  it("keeps user scope visible across workspaces while isolating workspace scope", async () => {
+    const anotherWorkspace = "550e8400-e29b-41d4-a716-446655440099";
+    const { service } = createRuntime({
+      records: [
+        ...sampleRecords,
+        {
+          id: "mem-other-workspace",
+          workspace_id: anotherWorkspace,
+          user_id: ids.user,
+          session_id: null,
+          task_id: null,
+          memory_type: "fact_preference",
+          scope: "workspace",
+          summary: "另一个工作区约束：不要带进当前仓库。",
+          details: null,
+          source: null,
+          importance: 5,
+          confidence: 0.9,
+          status: "active",
+          updated_at: "2026-04-15T08:00:00.000Z",
+          last_confirmed_at: null,
+          summary_embedding: [1, 0, 0],
+        },
+        {
+          id: "mem-global-origin-other-workspace",
+          workspace_id: anotherWorkspace,
+          user_id: ids.user,
+          session_id: null,
+          task_id: null,
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "全局偏好：始终用中文回答。",
+          details: null,
+          source: null,
+          importance: 5,
+          confidence: 0.95,
+          status: "active",
+          updated_at: "2026-04-15T07:00:00.000Z",
+          last_confirmed_at: null,
+          summary_embedding: [1, 0, 0],
+        },
+      ],
+    });
+
+    const response = await service.prepareContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "恢复上下文",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.memory_packet?.records.some((record) => record.id === "mem-other-workspace")).toBe(false);
+    expect(response.memory_packet?.records.some((record) => record.id === "mem-global-origin-other-workspace")).toBe(true);
+  });
+
+  it("records mode and scope explanations in runtime observability", async () => {
+    const { service, repository } = createRuntime();
+
+    const prepared = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次那个仓库约束继续沿用。",
+      memory_mode: "workspace_only",
+    });
+
+    const runs = await repository.getRuns({ trace_id: prepared.trace_id });
+    expect(runs.trigger_runs[0]?.memory_mode).toBe("workspace_only");
+    expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
+    expect(runs.recall_runs[0]?.matched_scopes).toContain("workspace");
+    expect(runs.injection_runs[0]?.selected_scopes).toContain("workspace");
+  });
+
+  it("reuses the same trace for finalizeTurn so writeback closes the five-stage run", async () => {
+    const { service, repository } = createRuntime();
+
+    const prepared = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-shared-trace",
+      phase: "before_response",
+      current_input: "上次那个仓库约束继续沿用。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    const finalized = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-shared-trace",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。下一步: 继续补测试。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(finalized.trace_id).toBe(prepared.trace_id);
+
+    const runs = await repository.getRuns({ trace_id: prepared.trace_id });
+    expect(runs.turns).toHaveLength(1);
+    expect(runs.trigger_runs).toHaveLength(1);
+    expect(runs.recall_runs).toHaveLength(1);
+    expect(runs.injection_runs).toHaveLength(1);
+    expect(runs.writeback_submissions).toHaveLength(1);
+  });
+
+  it("does not mark writeback as submitted when storage dependency is unavailable", async () => {
+    const { service } = createRuntime({
+      storageClient: new StubStorageClient([], true),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    });
+
+    expect(response.degraded).toBe(true);
+    expect(response.writeback_submitted).toBe(false);
+  });
+
+  it("classifies stable preferences as user scope and project rules as workspace scope", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "workspace",
+            summary: "默认使用中文输出",
+            importance: 5,
+            confidence: 0.95,
+            write_reason: "stable user preference",
+          },
+          {
+            candidate_type: "fact_preference",
+            scope: "workspace",
+            summary: "仓库规则：提交前必须跑接口测试",
+            importance: 5,
+            confidence: 0.92,
+            write_reason: "repository constraint",
+          },
+        ],
+      }),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "custom_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "继续",
+      assistant_output: "好的",
+    });
+
+    expect(response.write_back_candidates.map((candidate) => candidate.scope)).toEqual(["user", "workspace"]);
   });
 
   it("serves public HTTP endpoints with stable response shapes", async () => {

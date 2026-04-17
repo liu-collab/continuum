@@ -57,6 +57,7 @@ function buildSessionStartPayload(event) {
     workspace_id: resolveField(event, ["workspace_id", "workspaceId"], "MEMORY_WORKSPACE_ID", "workspace_id"),
     task_id: event.task_id ?? event.taskId,
     recent_context_summary: event.recent_context_summary ?? event.recentContextSummary,
+    memory_mode: event.memory_mode ?? event.memoryMode ?? process.env.MEMORY_MODE,
   };
 }
 
@@ -73,7 +74,8 @@ function buildPreparePayload(event) {
     current_input: event.user_prompt ?? event.prompt ?? "",
     recent_context_summary: event.recent_context_summary ?? event.recentContextSummary,
     cwd: event.cwd,
-    source: event.source ?? "claude_hook"
+    source: event.source ?? "claude_hook",
+    memory_mode: event.memory_mode ?? event.memoryMode ?? process.env.MEMORY_MODE,
   };
 }
 
@@ -88,7 +90,8 @@ function buildFinalizePayload(event) {
     turn_id: event.turn_id ?? event.turnId,
     current_input: event.user_prompt ?? event.prompt ?? "",
     assistant_output: event.assistant_final ?? event.assistantFinal ?? "",
-    tool_results_summary: event.tool_trace_summary ?? event.toolTraceSummary
+    tool_results_summary: event.tool_trace_summary ?? event.toolTraceSummary,
+    memory_mode: event.memory_mode ?? event.memoryMode ?? process.env.MEMORY_MODE,
   };
 }
 

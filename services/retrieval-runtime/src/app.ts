@@ -7,6 +7,8 @@ import { finalizeTurnInputSchema, prepareContextInputSchema } from "./host-adapt
 import type { RetrievalRuntimeService } from "./runtime-service.js";
 import { observeRunsQuerySchema } from "./api/schemas.js";
 
+const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
+
 export function createApp(runtimeService: RetrievalRuntimeService) {
   const app = Fastify({
     logger: false,
@@ -46,13 +48,14 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
     const payloadSchema = z
       .object({
         host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent"]),
-        session_id: z.string().uuid(),
+        session_id: z.string().min(1),
         cwd: z.string().optional(),
         source: z.string().optional(),
         user_id: z.string().uuid(),
         workspace_id: z.string().uuid(),
         task_id: z.string().uuid().optional(),
         recent_context_summary: z.string().optional(),
+        memory_mode: memoryModeSchema.optional(),
       });
     const parsed = payloadSchema.safeParse(request.body);
     if (!parsed.success) {

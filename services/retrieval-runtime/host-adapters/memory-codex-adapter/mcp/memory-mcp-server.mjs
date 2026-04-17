@@ -16,7 +16,7 @@ async function callRuntime(path, init) {
   return response.json();
 }
 
-function resolveIdentityField(input, key, envKey, fallback) {
+function resolveIdentityField(input, key, envKey, label) {
   const value = input?.[key];
   if (typeof value === "string" && value.trim()) {
     return value.trim();
@@ -27,7 +27,7 @@ function resolveIdentityField(input, key, envKey, fallback) {
     return envValue.trim();
   }
 
-  return fallback;
+  throw new Error(`missing required identity field: ${label}. Set ${envKey} or provide ${key}.`);
 }
 
 export function createTools(baseUrl = runtimeBaseUrl) {
@@ -84,6 +84,7 @@ export function createTools(baseUrl = runtimeBaseUrl) {
           workspace_id: { type: "string" },
           user_id: { type: "string" },
           session_id: { type: "string" },
+          memory_mode: { type: "string", enum: ["workspace_only", "workspace_plus_global"] },
         },
         required: ["query"],
         additionalProperties: false,
@@ -94,11 +95,12 @@ export function createTools(baseUrl = runtimeBaseUrl) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             host: "codex_app_server",
-            workspace_id: resolveIdentityField(input, "workspace_id", "MEMORY_WORKSPACE_ID", "00000000-0000-0000-0000-000000000000"),
-            user_id: resolveIdentityField(input, "user_id", "MEMORY_USER_ID", "00000000-0000-0000-0000-000000000000"),
-            session_id: resolveIdentityField(input, "session_id", "MEMORY_SESSION_ID", "00000000-0000-0000-0000-000000000000"),
+            workspace_id: resolveIdentityField(input, "workspace_id", "MEMORY_WORKSPACE_ID", "workspace_id"),
+            user_id: resolveIdentityField(input, "user_id", "MEMORY_USER_ID", "user_id"),
+            session_id: resolveIdentityField(input, "session_id", "MEMORY_SESSION_ID", "session_id"),
             phase: "before_response",
             current_input: input.query,
+            memory_mode: input.memory_mode ?? process.env.MEMORY_MODE,
           }),
         });
 
@@ -135,6 +137,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
                 hit: trigger.trigger_hit,
                 type: trigger.trigger_type,
                 reason: trigger.trigger_reason,
+                memory_mode: trigger.memory_mode,
+                requested_scopes: trigger.requested_scopes,
               }
             : "no trigger record",
           recall: recall
@@ -143,6 +147,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
                 candidate_count: recall.candidate_count,
                 selected_count: recall.selected_count,
                 degraded: recall.degraded,
+                matched_scopes: recall.matched_scopes,
+                scope_hit_counts: recall.scope_hit_counts,
               }
             : "no recall record",
           injection: injection
@@ -151,6 +157,7 @@ export function createTools(baseUrl = runtimeBaseUrl) {
                 count: injection.injected_count,
                 trimmed: injection.trimmed_record_ids?.length ?? 0,
                 state: injection.result_state,
+                selected_scopes: injection.selected_scopes,
               }
             : "no injection record",
         };

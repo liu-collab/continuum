@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
+
 export const observeRunsQuerySchema = z.object({
   session_id: z.string().optional(),
   turn_id: z.string().optional(),

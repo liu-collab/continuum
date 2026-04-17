@@ -39,6 +39,22 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   }
 
   async recordTurn(turn: RuntimeTurnRecord): Promise<void> {
+    const existingIndex = this.turns.findIndex((entry) => entry.trace_id === turn.trace_id);
+    if (existingIndex >= 0) {
+      const existing = this.turns[existingIndex];
+      if (existing) {
+        this.turns[existingIndex] = {
+          ...existing,
+          ...turn,
+          phase: existing.phase,
+          current_input: existing.current_input,
+          assistant_output: turn.assistant_output ?? existing.assistant_output,
+          created_at: existing.created_at,
+        };
+      }
+      return;
+    }
+
     this.turns.unshift(turn);
   }
 
@@ -56,6 +72,35 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
 
   async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {
     this.writebackSubmissions.unshift(run);
+  }
+
+  async findTraceIdForFinalize(input: {
+    session_id: string;
+    turn_id?: string;
+    thread_id?: string;
+    current_input?: string;
+  }): Promise<string | null> {
+    const candidates = this.turns.filter((turn) => {
+      if (turn.session_id !== input.session_id) {
+        return false;
+      }
+      if (turn.phase === "after_response") {
+        return false;
+      }
+      if (input.turn_id) {
+        return turn.turn_id === input.turn_id;
+      }
+      if (input.thread_id) {
+        return turn.thread_id === input.thread_id;
+      }
+      if (input.current_input) {
+        return turn.current_input === input.current_input;
+      }
+      return false;
+    });
+
+    const latest = candidates.sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+    return latest?.trace_id ?? null;
   }
 
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {

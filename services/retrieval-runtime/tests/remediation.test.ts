@@ -229,7 +229,9 @@ describe("retrieval-runtime remediation", () => {
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
       requested_memory_types: ["fact_preference"],
-      scope_limit: ["user", "task"],
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task", "user"],
+      scope_reason: "before_response can use workspace, task, session, and global user memory",
       importance_threshold: 3,
       cooldown_applied: false,
       semantic_score: 0.91,
@@ -240,8 +242,11 @@ describe("retrieval-runtime remediation", () => {
       trace_id: "trace-1",
       candidate_count: 2,
       submitted_count: 1,
+      memory_mode: "workspace_plus_global",
+      final_scopes: ["user", "workspace"],
       filtered_count: 1,
       filtered_reasons: ["duplicate_candidate"],
+      scope_reasons: ["默认中文输出: stable preference or working habit is classified as global user memory"],
       result_state: "submitted",
       degraded: false,
       duration_ms: 20,
@@ -280,13 +285,16 @@ describe("retrieval-runtime remediation", () => {
       task_id: ids.task,
         phase: "before_response",
         current_input: "之前的偏好还继续保留",
+        memory_mode: "workspace_plus_global",
       },
       {
         hit: true,
         trigger_type: "history_reference",
         trigger_reason: "current input explicitly references prior context or preferences",
         requested_memory_types: ["fact_preference"],
-        scope_limit: ["user", "task"],
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["workspace", "task", "user"],
+        scope_reason: "before_response can use workspace, task, session, and global user memory",
         importance_threshold: 3,
         cooldown_applied: false,
       },
@@ -316,7 +324,9 @@ describe("retrieval-runtime remediation", () => {
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
       requested_memory_types: ["fact_preference"],
-      scope_limit: ["user"],
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "user"],
+      scope_reason: "session_start restores workspace memory plus global user memory",
       importance_threshold: 3,
       cooldown_applied: false,
       duration_ms: 6,
@@ -327,6 +337,11 @@ describe("retrieval-runtime remediation", () => {
       trigger_hit: true,
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "user"],
+      matched_scopes: [],
+      scope_hit_counts: {},
+      scope_reason: "session_start restores workspace memory plus global user memory",
       query_scope: "scope=user",
       requested_memory_types: ["fact_preference"],
       candidate_count: 0,
@@ -340,8 +355,11 @@ describe("retrieval-runtime remediation", () => {
       trace_id: "trace-2",
       candidate_count: 1,
       submitted_count: 0,
+      memory_mode: "workspace_plus_global",
+      final_scopes: ["workspace"],
       filtered_count: 2,
       filtered_reasons: ["duplicate_candidate", "candidate_limit_exceeded"],
+      scope_reasons: ["仓库规则: repository or project-specific constraint is classified as workspace memory"],
       result_state: "failed",
       degraded: true,
       degradation_reason: "dependency_unavailable",
@@ -354,6 +372,7 @@ describe("retrieval-runtime remediation", () => {
     expect(runs.trigger_runs).toHaveLength(1);
     expect(runs.total).toBe(1);
     expect(runs.recall_runs[0]?.result_state).toBe("empty");
+    expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.writeback_submissions[0]?.filtered_count).toBe(2);
     expect(runs.writeback_submissions[0]?.filtered_reasons).toContain("duplicate_candidate");
   });
@@ -448,6 +467,7 @@ describe("retrieval-runtime remediation", () => {
       session_id: "550e8400-e29b-41d4-a716-446655440002",
       phase: "before_response",
       current_input: "继续刚才那个方案",
+      memory_mode: "workspace_plus_global",
     });
 
     expect(decision.hit).toBe(false);
@@ -477,6 +497,29 @@ describe("retrieval-runtime remediation", () => {
     expect(proxyContent).not.toContain("unknown-workspace");
     expect(proxyContent).not.toContain("unknown-user");
     expect(proxyContent).not.toContain("unknown-session");
+  });
+
+  it("does not ship zero-uuid fallback identities in the Codex MCP bridge", async () => {
+    const mcpPath = path.resolve(
+      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      "host-adapters/memory-codex-adapter/mcp/memory-mcp-server.mjs",
+    );
+    const content = await readFile(mcpPath, "utf8");
+
+    expect(content).toContain("missing required identity field");
+    expect(content).not.toContain("00000000-0000-0000-0000-000000000000");
+  });
+
+  it("does not pretend finalize-turn forwarding succeeded in the Codex proxy", async () => {
+    const proxyPath = path.resolve(
+      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      "host-adapters/memory-codex-adapter/bin/memory-codex-proxy.mjs",
+    );
+    const content = await readFile(proxyPath, "utf8");
+
+    expect(content).toContain("finalize-turn failed with");
+    expect(content).toContain("forwarded: false");
+    expect(content).not.toContain('JSON.stringify({ forwarded: true })');
   });
 
   it("resolves Claude bridge identity fields from environment variables", async () => {
@@ -614,6 +657,7 @@ describe("retrieval-runtime remediation", () => {
           session_id: ids.session,
           phase: "before_response",
           task_id: ids.task,
+          memory_mode: "workspace_plus_global",
           scope_filter: ["user"],
           memory_type_filter: ["fact_preference"],
           status_filter: ["active"],

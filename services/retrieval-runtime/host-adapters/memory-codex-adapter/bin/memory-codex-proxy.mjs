@@ -37,7 +37,8 @@ async function prepareContext(event) {
     turn_id: event.turnId,
     phase: "before_response",
     current_input: extractUserPrompt(event),
-    recent_context_summary: event.recentContextSummary
+    recent_context_summary: event.recentContextSummary,
+    memory_mode: event.memoryMode ?? event.memory_mode ?? process.env.MEMORY_MODE,
   };
 
   const response = await fetch(new URL("/v1/runtime/prepare-context", runtimeBaseUrl), {
@@ -64,14 +65,21 @@ async function finalizeTurn(event) {
     turn_id: event.turnId,
     current_input: event.userPrompt ?? "",
     assistant_output: event.assistantFinal ?? "",
-    tool_results_summary: event.toolTraceSummary
+    tool_results_summary: event.toolTraceSummary,
+    memory_mode: event.memoryMode ?? event.memory_mode ?? process.env.MEMORY_MODE,
   };
 
-  await fetch(new URL("/v1/runtime/finalize-turn", runtimeBaseUrl), {
+  const response = await fetch(new URL("/v1/runtime/finalize-turn", runtimeBaseUrl), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload)
   });
+
+  if (!response.ok) {
+    throw new Error(`finalize-turn failed with ${response.status}`);
+  }
+
+  return response.json();
 }
 
 async function main() {
@@ -112,12 +120,19 @@ async function main() {
 
   if (mode === "turn-completed") {
     try {
-      await finalizeTurn(event);
-      process.stdout.write(JSON.stringify({ forwarded: true }));
+      const finalized = await finalizeTurn(event);
+      process.stdout.write(
+        JSON.stringify({
+          forwarded: Boolean(finalized?.writeback_submitted),
+          traceId: finalized?.trace_id,
+          candidateCount: finalized?.candidate_count ?? 0,
+          degraded: Boolean(finalized?.degraded),
+        }),
+      );
     } catch (error) {
       process.stdout.write(
         JSON.stringify({
-          forwarded: true,
+          forwarded: false,
           degraded: true,
           reason: error instanceof Error ? error.message : String(error)
         }),

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { CandidateMemory, MemoryPacket, MemoryType, RetrievalQuery, TriggerDecision } from "../shared/types.js";
+import type { CandidateMemory, MemoryPacket, MemoryType, RetrievalQuery, ScopeType, TriggerDecision } from "../shared/types.js";
 import { textToLines } from "../shared/utils.js";
 
 function summarizeRecords(records: CandidateMemory[]): string {
@@ -44,6 +44,7 @@ export function buildMemoryPacket(
   decision: TriggerDecision,
   candidates: CandidateMemory[],
 ): MemoryPacket {
+  const selectedScopes = [...new Set(candidates.map((candidate) => candidate.scope))] as ScopeType[];
   const priority_breakdown: Record<MemoryType, number> = {
     fact_preference: candidates.filter((candidate) => candidate.memory_type === "fact_preference").length,
     task_state: candidates.filter((candidate) => candidate.memory_type === "task_state").length,
@@ -53,7 +54,11 @@ export function buildMemoryPacket(
   return {
     packet_id: randomUUID(),
     trigger: decision.trigger_reason,
-    query_scope: `scope=${query.scope_filter.join(",")}; types=${query.memory_type_filter.join(",")}; importance>=${query.importance_threshold}`,
+    memory_mode: decision.memory_mode,
+    requested_scopes: decision.requested_scopes,
+    selected_scopes: selectedScopes,
+    scope_reason: decision.scope_reason,
+    query_scope: `mode=${query.memory_mode}; requested_scopes=${query.scope_filter.join(",")}; selected_scopes=${selectedScopes.join(",") || "none"}; types=${query.memory_type_filter.join(",")}; importance>=${query.importance_threshold}`,
     records: candidates,
     packet_summary: summarizeRecords(candidates),
     injection_hint: injectionHint(decision),

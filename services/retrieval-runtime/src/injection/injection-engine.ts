@@ -68,6 +68,9 @@ export class InjectionEngine {
       memory_summary: packet.packet_summary,
       memory_records: kept,
       token_estimate: usedTokens,
+      memory_mode: packet.memory_mode,
+      requested_scopes: packet.requested_scopes,
+      selected_scopes: [...new Set(kept.map((record) => record.scope))],
       trimmed_record_ids: trimmedRecordIds,
       trim_reasons: trimReasons,
     };

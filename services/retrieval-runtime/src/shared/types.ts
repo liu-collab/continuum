@@ -9,8 +9,9 @@ export type RuntimePhase =
   | "after_response";
 
 export type MemoryType = "fact_preference" | "task_state" | "episodic";
-export type ScopeType = "user" | "task" | "session";
-export type RecordStatus = "active" | "superseded" | "archived";
+export type MemoryMode = "workspace_only" | "workspace_plus_global";
+export type ScopeType = "workspace" | "user" | "task" | "session";
+export type RecordStatus = "active" | "pending_confirmation" | "superseded" | "archived" | "deleted";
 
 export interface TriggerContext {
   host: HostKind;
@@ -25,6 +26,7 @@ export interface TriggerContext {
   cwd?: string;
   source?: string;
   recent_context_summary?: string;
+  memory_mode?: MemoryMode;
 }
 
 export interface RetrievalQuery {
@@ -33,6 +35,7 @@ export interface RetrievalQuery {
   session_id: string;
   phase: RuntimePhase;
   task_id?: string;
+  memory_mode: MemoryMode;
   scope_filter: ScopeType[];
   memory_type_filter: MemoryType[];
   status_filter: RecordStatus[];
@@ -67,7 +70,9 @@ export interface TriggerDecision {
   trigger_type: "phase" | "history_reference" | "semantic_fallback" | "cooldown_skip" | "no_trigger";
   trigger_reason: string;
   requested_memory_types: MemoryType[];
-  scope_limit: ScopeType[];
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  scope_reason: string;
   importance_threshold: number;
   cooldown_applied: boolean;
   semantic_score?: number;
@@ -78,6 +83,10 @@ export interface TriggerDecision {
 export interface MemoryPacket {
   packet_id: string;
   trigger: string;
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  selected_scopes: ScopeType[];
+  scope_reason: string;
   query_scope: string;
   records: CandidateMemory[];
   packet_summary: string;
@@ -102,6 +111,9 @@ export interface InjectionBlock {
   memory_summary: string;
   memory_records: InjectionRecord[];
   token_estimate: number;
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  selected_scopes: ScopeType[];
   trimmed_record_ids: string[];
   trim_reasons: string[];
 }
@@ -165,6 +177,7 @@ export interface SessionStartResponse {
   trace_id: string;
   additional_context: string;
   active_task_summary: string | null;
+  memory_mode: MemoryMode;
   dependency_status: DependencyStatusSnapshot;
   degraded: boolean;
 }
@@ -180,12 +193,14 @@ export interface FinalizeTurnInput {
   thread_id?: string;
   turn_id?: string;
   tool_results_summary?: string;
+  memory_mode?: MemoryMode;
 }
 
 export interface FinalizeTurnResponse {
   trace_id: string;
   write_back_candidates: WriteBackCandidate[];
   submitted_jobs: SubmittedWriteBackJob[];
+  memory_mode: MemoryMode;
   candidate_count: number;
   filtered_count: number;
   filtered_reasons: string[];
@@ -214,6 +229,11 @@ export interface RecallRunRecord {
   trigger_hit: boolean;
   trigger_type: TriggerDecision["trigger_type"];
   trigger_reason: string;
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  matched_scopes: ScopeType[];
+  scope_hit_counts: Partial<Record<ScopeType, number>>;
+  scope_reason: string;
   query_scope: string;
   requested_memory_types: MemoryType[];
   candidate_count: number;
@@ -231,7 +251,9 @@ export interface TriggerRunRecord {
   trigger_type: TriggerDecision["trigger_type"];
   trigger_reason: string;
   requested_memory_types: MemoryType[];
-  scope_limit: ScopeType[];
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  scope_reason: string;
   importance_threshold: number;
   cooldown_applied: boolean;
   semantic_score?: number;
@@ -246,6 +268,9 @@ export interface InjectionRunRecord {
   injected: boolean;
   injected_count: number;
   token_estimate: number;
+  memory_mode: MemoryMode;
+  requested_scopes: ScopeType[];
+  selected_scopes: ScopeType[];
   trimmed_record_ids: string[];
   trim_reasons: string[];
   result_state: "not_triggered" | "no_records" | "trimmed_to_zero" | "injected";
@@ -257,8 +282,11 @@ export interface WritebackSubmissionRecord {
   trace_id: string;
   candidate_count: number;
   submitted_count: number;
+  memory_mode: MemoryMode;
+  final_scopes: ScopeType[];
   filtered_count: number;
   filtered_reasons: string[];
+  scope_reasons: string[];
   result_state: "no_candidates" | "submitted" | "failed";
   degraded: boolean;
   degradation_reason?: string;

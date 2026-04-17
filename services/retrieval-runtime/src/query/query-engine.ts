@@ -21,6 +21,9 @@ function recencyScore(updatedAt: string): number {
 }
 
 function scopeBoost(scope: ScopeType, context: TriggerContext): number {
+  if (scope === "workspace") {
+    return 0.9;
+  }
   if (context.task_id && scope === "task") {
     return 1;
   }
@@ -41,7 +44,8 @@ export function buildRetrievalQuery(
     session_id: context.session_id,
     phase: context.phase,
     task_id: context.task_id,
-    scope_filter: decision.scope_limit,
+    memory_mode: decision.memory_mode,
+    scope_filter: decision.requested_scopes,
     memory_type_filter: decision.requested_memory_types,
     status_filter: ["active"],
     importance_threshold: decision.importance_threshold,

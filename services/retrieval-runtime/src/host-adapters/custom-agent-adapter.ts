@@ -19,6 +19,7 @@ export class CustomAgentAdapter
         recent_context_summary: input.recent_context_summary,
         cwd: input.cwd,
         source: input.source,
+        memory_mode: input.memory_mode,
       };
     }
 
@@ -33,6 +34,7 @@ export class CustomAgentAdapter
       recent_context_summary: input.recent_context_summary,
       cwd: input.cwd,
       source: input.source,
+      memory_mode: input.memory_mode,
     };
   }
 
@@ -48,6 +50,7 @@ export class CustomAgentAdapter
       current_input: input.current_input,
       assistant_output: input.assistant_output,
       tool_results_summary: input.tool_results_summary,
+      memory_mode: input.memory_mode,
     };
   }
 }

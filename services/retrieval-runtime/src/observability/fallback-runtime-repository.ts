@@ -48,6 +48,15 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
     await this.tryPrimaryOrFallback((repository) => repository.recordWritebackSubmission(run));
   }
 
+  async findTraceIdForFinalize(input: {
+    session_id: string;
+    turn_id?: string;
+    thread_id?: string;
+    current_input?: string;
+  }): Promise<string | null> {
+    return this.tryRead((repository) => repository.findTraceIdForFinalize(input));
+  }
+
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {
     await this.tryPrimaryOrFallback((repository) => repository.updateDependencyStatus(status));
   }

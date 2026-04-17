@@ -38,7 +38,9 @@ interface TriggerRunRow extends RuntimeRowBase {
   trigger_type: TriggerRunRecord["trigger_type"];
   trigger_reason: string;
   requested_memory_types: unknown;
-  scope_limit: unknown;
+  memory_mode: string;
+  requested_scopes: unknown;
+  scope_reason: string;
   importance_threshold: number;
   cooldown_applied: boolean;
   semantic_score: number | null;
@@ -51,6 +53,11 @@ interface RecallRunRow extends RuntimeRowBase {
   trigger_hit: boolean;
   trigger_type: RecallRunRecord["trigger_type"];
   trigger_reason: string;
+  memory_mode: string;
+  requested_scopes: unknown;
+  matched_scopes: unknown;
+  scope_hit_counts: unknown;
+  scope_reason: string;
   query_scope: string;
   requested_memory_types: unknown;
   candidate_count: number;
@@ -65,6 +72,9 @@ interface InjectionRunRow extends RuntimeRowBase {
   injected: boolean;
   injected_count: number;
   token_estimate: number;
+  memory_mode: string;
+  requested_scopes: unknown;
+  selected_scopes: unknown;
   trimmed_record_ids: unknown;
   trim_reasons: unknown;
   result_state: InjectionRunRecord["result_state"];
@@ -74,8 +84,11 @@ interface InjectionRunRow extends RuntimeRowBase {
 interface WritebackRunRow extends RuntimeRowBase {
   candidate_count: number;
   submitted_count: number;
+  memory_mode: string;
+  final_scopes: unknown;
   filtered_count: number;
   filtered_reasons: unknown;
+  scope_reasons: unknown;
   result_state: WritebackSubmissionRecord["result_state"];
   degraded: boolean;
   degradation_reason: string | null;
@@ -137,7 +150,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trigger_type TEXT NOT NULL,
         trigger_reason TEXT NOT NULL,
         requested_memory_types JSONB NOT NULL,
-        scope_limit JSONB NOT NULL,
+        memory_mode TEXT NOT NULL,
+        requested_scopes JSONB NOT NULL,
+        scope_reason TEXT NOT NULL,
         importance_threshold INTEGER NOT NULL,
         cooldown_applied BOOLEAN NOT NULL,
         semantic_score DOUBLE PRECISION NULL,
@@ -153,6 +168,11 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trigger_hit BOOLEAN NOT NULL,
         trigger_type TEXT NOT NULL,
         trigger_reason TEXT NOT NULL,
+        memory_mode TEXT NOT NULL,
+        requested_scopes JSONB NOT NULL,
+        matched_scopes JSONB NOT NULL,
+        scope_hit_counts JSONB NOT NULL,
+        scope_reason TEXT NOT NULL,
         query_scope TEXT NOT NULL,
         requested_memory_types JSONB NOT NULL,
         candidate_count INTEGER NOT NULL,
@@ -170,6 +190,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         injected BOOLEAN NOT NULL,
         injected_count INTEGER NOT NULL,
         token_estimate INTEGER NOT NULL,
+        memory_mode TEXT NOT NULL,
+        requested_scopes JSONB NOT NULL,
+        selected_scopes JSONB NOT NULL,
         trimmed_record_ids JSONB NOT NULL,
         trim_reasons JSONB NOT NULL,
         result_state TEXT NOT NULL,
@@ -182,8 +205,11 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trace_id TEXT PRIMARY KEY,
         candidate_count INTEGER NOT NULL,
         submitted_count INTEGER NOT NULL,
+        memory_mode TEXT NOT NULL,
+        final_scopes JSONB NOT NULL,
         filtered_count INTEGER NOT NULL,
         filtered_reasons JSONB NOT NULL,
+        scope_reasons JSONB NOT NULL,
         result_state TEXT NOT NULL,
         degraded BOOLEAN NOT NULL,
         degradation_reason TEXT NULL,
@@ -207,6 +233,15 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_turns (
         trace_id, host, workspace_id, user_id, session_id, phase, task_id, thread_id, turn_id, current_input, assistant_output, created_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ON CONFLICT (trace_id) DO UPDATE
+      SET host = EXCLUDED.host,
+          workspace_id = EXCLUDED.workspace_id,
+          user_id = EXCLUDED.user_id,
+          session_id = EXCLUDED.session_id,
+          task_id = COALESCE(EXCLUDED.task_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.task_id),
+          thread_id = COALESCE(EXCLUDED.thread_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.thread_id),
+          turn_id = COALESCE(EXCLUDED.turn_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.turn_id),
+          assistant_output = COALESCE(EXCLUDED.assistant_output, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.assistant_output)
       `,
       [
         turn.trace_id,
@@ -229,9 +264,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs (
-        trace_id, trigger_hit, trigger_type, trigger_reason, requested_memory_types, scope_limit,
+        trace_id, trigger_hit, trigger_type, trigger_reason, requested_memory_types, memory_mode, requested_scopes, scope_reason,
         importance_threshold, cooldown_applied, semantic_score, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15)
       `,
       [
         run.trace_id,
@@ -239,7 +274,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         run.trigger_type,
         run.trigger_reason,
         JSON.stringify(run.requested_memory_types),
-        JSON.stringify(run.scope_limit),
+        run.memory_mode,
+        JSON.stringify(run.requested_scopes),
+        run.scope_reason,
         run.importance_threshold,
         run.cooldown_applied,
         run.semantic_score ?? null,
@@ -255,15 +292,20 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs (
-        trace_id, trigger_hit, trigger_type, trigger_reason, query_scope, requested_memory_types,
+        trace_id, trigger_hit, trigger_type, trigger_reason, memory_mode, requested_scopes, matched_scopes, scope_hit_counts, scope_reason, query_scope, requested_memory_types,
         candidate_count, selected_count, result_state, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18)
       `,
       [
         run.trace_id,
         run.trigger_hit,
         run.trigger_type,
         run.trigger_reason,
+        run.memory_mode,
+        JSON.stringify(run.requested_scopes),
+        JSON.stringify(run.matched_scopes),
+        JSON.stringify(run.scope_hit_counts),
+        run.scope_reason,
         run.query_scope,
         JSON.stringify(run.requested_memory_types),
         run.candidate_count,
@@ -281,14 +323,17 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs (
-        trace_id, injected, injected_count, token_estimate, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9)
+        trace_id, injected, injected_count, token_estimate, memory_mode, requested_scopes, selected_scopes, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)
       `,
       [
         run.trace_id,
         run.injected,
         run.injected_count,
         run.token_estimate,
+        run.memory_mode,
+        JSON.stringify(run.requested_scopes),
+        JSON.stringify(run.selected_scopes),
         JSON.stringify(run.trimmed_record_ids),
         JSON.stringify(run.trim_reasons),
         run.result_state,
@@ -302,15 +347,18 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions (
-        trace_id, candidate_count, submitted_count, filtered_count, filtered_reasons, result_state, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10)
+        trace_id, candidate_count, submitted_count, memory_mode, final_scopes, filtered_count, filtered_reasons, scope_reasons, result_state, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13)
       `,
       [
         run.trace_id,
         run.candidate_count,
         run.submitted_count,
+        run.memory_mode,
+        JSON.stringify(run.final_scopes),
         run.filtered_count,
         JSON.stringify(run.filtered_reasons),
+        JSON.stringify(run.scope_reasons),
         run.result_state,
         run.degraded,
         run.degradation_reason ?? null,
@@ -318,6 +366,42 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         run.created_at,
       ],
     );
+  }
+
+  async findTraceIdForFinalize(input: {
+    session_id: string;
+    turn_id?: string;
+    thread_id?: string;
+    current_input?: string;
+  }): Promise<string | null> {
+    const whereClauses = ["session_id = $1", "phase <> 'after_response'"];
+    const values: unknown[] = [input.session_id];
+
+    if (input.turn_id) {
+      values.push(input.turn_id);
+      whereClauses.push(`turn_id = $${values.length}`);
+    } else if (input.thread_id) {
+      values.push(input.thread_id);
+      whereClauses.push(`thread_id = $${values.length}`);
+    } else if (input.current_input) {
+      values.push(input.current_input);
+      whereClauses.push(`current_input = $${values.length}`);
+    } else {
+      return null;
+    }
+
+    const result = await this.pool.query<{ trace_id: string }>(
+      `
+      SELECT trace_id
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
+      WHERE ${whereClauses.join(" AND ")}
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      values,
+    );
+
+    return result.rows[0]?.trace_id ?? null;
   }
 
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {
@@ -449,7 +533,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trigger_type: row.trigger_type,
         trigger_reason: row.trigger_reason,
         requested_memory_types: asStringArray(row.requested_memory_types) as TriggerRunRecord["requested_memory_types"],
-        scope_limit: asStringArray(row.scope_limit) as TriggerRunRecord["scope_limit"],
+        memory_mode: row.memory_mode as TriggerRunRecord["memory_mode"],
+        requested_scopes: asStringArray(row.requested_scopes) as TriggerRunRecord["requested_scopes"],
+        scope_reason: row.scope_reason,
         importance_threshold: Number(row.importance_threshold),
         cooldown_applied: row.cooldown_applied,
         semantic_score: row.semantic_score ?? undefined,
@@ -463,6 +549,11 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trigger_hit: row.trigger_hit,
         trigger_type: row.trigger_type,
         trigger_reason: row.trigger_reason,
+        memory_mode: row.memory_mode as RecallRunRecord["memory_mode"],
+        requested_scopes: asStringArray(row.requested_scopes) as RecallRunRecord["requested_scopes"],
+        matched_scopes: asStringArray(row.matched_scopes) as RecallRunRecord["matched_scopes"],
+        scope_hit_counts: (row.scope_hit_counts as RecallRunRecord["scope_hit_counts"]) ?? {},
+        scope_reason: row.scope_reason,
         query_scope: row.query_scope,
         requested_memory_types: asStringArray(row.requested_memory_types) as RecallRunRecord["requested_memory_types"],
         candidate_count: Number(row.candidate_count),
@@ -478,6 +569,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         injected: row.injected,
         injected_count: Number(row.injected_count),
         token_estimate: Number(row.token_estimate),
+        memory_mode: row.memory_mode as InjectionRunRecord["memory_mode"],
+        requested_scopes: asStringArray(row.requested_scopes) as InjectionRunRecord["requested_scopes"],
+        selected_scopes: asStringArray(row.selected_scopes) as InjectionRunRecord["selected_scopes"],
         trimmed_record_ids: asStringArray(row.trimmed_record_ids),
         trim_reasons: asStringArray(row.trim_reasons),
         result_state: row.result_state,
@@ -488,8 +582,11 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trace_id: row.trace_id,
         candidate_count: Number(row.candidate_count),
         submitted_count: Number(row.submitted_count),
+        memory_mode: row.memory_mode as WritebackSubmissionRecord["memory_mode"],
+        final_scopes: asStringArray(row.final_scopes) as WritebackSubmissionRecord["final_scopes"],
         filtered_count: Number(row.filtered_count),
         filtered_reasons: asStringArray(row.filtered_reasons),
+        scope_reasons: asStringArray(row.scope_reasons),
         result_state: row.result_state,
         degraded: row.degraded,
         degradation_reason: row.degradation_reason ?? undefined,

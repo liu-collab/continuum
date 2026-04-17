@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { FinalizeTurnInput, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
+import type { FinalizeTurnInput, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
 import { normalizeText } from "../shared/utils.js";
 import type { LlmExtractionCandidate, LlmExtractor } from "./llm-extractor.js";
 import type { StorageWritebackClient } from "./storage-client.js";
@@ -12,13 +12,14 @@ export interface WritebackEngineResult {
   submitted_jobs: SubmittedWriteBackJob[];
   filtered_count: number;
   filtered_reasons: string[];
+  scope_reasons: string[];
   degraded: boolean;
   degradation_reason?: string;
 }
 
 interface CandidateDraft {
   candidate_type: "fact_preference" | "task_state" | "episodic";
-  scope: WriteBackCandidate["scope"];
+  scope: ScopeType;
   summary: string;
   details: Record<string, unknown>;
   importance: number;
@@ -27,6 +28,10 @@ interface CandidateDraft {
   source_type: string;
   source_ref: string;
   confirmed_by_user?: boolean;
+}
+
+interface ClassifiedDraft extends CandidateDraft {
+  scope_reason: string;
 }
 
 function buildCandidate(
@@ -88,7 +93,7 @@ export class WritebackEngine {
 
   async extractCandidates(
     input: FinalizeTurnInput,
-  ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[] }> {
+  ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] }> {
     if (this.llmExtractor) {
       try {
         const llmResult = await this.llmExtractor.extract({
@@ -111,7 +116,7 @@ export class WritebackEngine {
     return this.extractByRules(input);
   }
 
-  private extractByRules(input: FinalizeTurnInput): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[] } {
+  private extractByRules(input: FinalizeTurnInput): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
     const rawCandidates: CandidateDraft[] = [];
     const filteredReasons: string[] = [];
     const normalizedUser = normalizeText(input.current_input);
@@ -122,7 +127,7 @@ export class WritebackEngine {
     if (preferenceMatch?.[1]) {
       rawCandidates.push({
         candidate_type: "fact_preference",
-        scope: "user",
+        scope: "workspace",
         summary: preferenceMatch[1],
         details: { user_prompt: normalizedUser, extraction_method: "rules" },
         importance: 4,
@@ -140,7 +145,7 @@ export class WritebackEngine {
     if (factMatch?.[1]) {
       rawCandidates.push({
         candidate_type: "fact_preference",
-        scope: "session",
+        scope: "workspace",
         summary: factMatch[1],
         details: { assistant_output: normalizedAssistant, extraction_method: "rules" },
         importance: 4,
@@ -217,13 +222,16 @@ export class WritebackEngine {
     input: FinalizeTurnInput,
     drafts: CandidateDraft[],
     filteredReasons: string[],
-  ): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[] } {
-    const candidates = drafts
+  ): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
+    const classifiedDrafts = drafts.map((draft) => this.classifyScope(input, draft));
+    const scopeReasons: string[] = [];
+    const candidates = classifiedDrafts
       .map((draft) => {
         if (draft.scope === "task" && !input.task_id) {
           filteredReasons.push(`missing_task_id:${draft.candidate_type}`);
           return null;
         }
+        scopeReasons.push(`${draft.summary}: ${draft.scope_reason}`);
         return buildCandidate(input, draft);
       })
       .filter((candidate): candidate is WriteBackCandidate => {
@@ -264,12 +272,13 @@ export class WritebackEngine {
       candidates: limited,
       filtered_count: filteredReasons.length,
       filtered_reasons: filteredReasons,
+      scope_reasons: scopeReasons.slice(0, limited.length),
     };
   }
 
   private toDraftFromLlm(input: FinalizeTurnInput, candidate: LlmExtractionCandidate): CandidateDraft {
     const normalizedSummary = normalizeText(candidate.summary);
-    const scope = candidate.scope === "task" && !input.task_id ? "session" : candidate.scope;
+    const scope = candidate.scope === "task" && !input.task_id ? "workspace" : candidate.scope;
     const details: Record<string, unknown> = {
       extraction_method: "llm",
       extracted_summary: normalizedSummary,
@@ -294,15 +303,79 @@ export class WritebackEngine {
     };
   }
 
+  private classifyScope(input: FinalizeTurnInput, draft: CandidateDraft): ClassifiedDraft {
+    const text = normalizeText(
+      [draft.summary, JSON.stringify(draft.details), draft.write_reason, draft.source_type]
+        .filter(Boolean)
+        .join(" "),
+    ).toLowerCase();
+    const preferenceText = normalizeText([draft.summary, draft.write_reason].filter(Boolean).join(" ")).toLowerCase();
+    const workspaceHints = ["仓库", "项目", "repo", "repository", "workspace", "目录", "convention", "constraint", "约束", "规则"];
+    const userHints = ["偏好", "习惯", "风格", "prefer", "usually", "always", "默认"];
+    const sessionHints = ["这轮", "本轮", "当前会话", "just now", "this turn", "temporary"];
+    const taskHints = ["任务", "todo", "next step", "plan", "任务状态", "progress"];
+
+    if (draft.candidate_type === "task_state") {
+      return {
+        ...draft,
+        scope: input.task_id ? "task" : "workspace",
+        scope_reason: input.task_id
+          ? "task_state candidates are stored as task memory when task_id is available"
+          : "task_state without task_id falls back to workspace memory",
+      };
+    }
+
+    if (draft.candidate_type === "fact_preference" && userHints.some((hint) => preferenceText.includes(hint))) {
+      return {
+        ...draft,
+        scope: "user",
+        scope_reason: "stable preference or working habit is classified as global user memory",
+      };
+    }
+
+    if (workspaceHints.some((hint) => text.includes(hint))) {
+      return {
+        ...draft,
+        scope: "workspace",
+        scope_reason: "repository or project-specific constraint is classified as workspace memory",
+      };
+    }
+
+    if (draft.candidate_type === "episodic" && sessionHints.some((hint) => text.includes(hint))) {
+      return {
+        ...draft,
+        scope: "session",
+        scope_reason: "temporary session context stays in session scope",
+      };
+    }
+
+    if (taskHints.some((hint) => text.includes(hint))) {
+      return {
+        ...draft,
+        scope: input.task_id ? "task" : "workspace",
+        scope_reason: input.task_id
+          ? "task progress or next-step content is classified as task memory"
+          : "task-like content without task_id falls back to workspace memory",
+      };
+    }
+
+    return {
+      ...draft,
+      scope: "workspace",
+      scope_reason: "uncertain candidates default to workspace memory to avoid leaking project context into global memory",
+    };
+  }
+
   async submit(input: FinalizeTurnInput): Promise<WritebackEngineResult> {
     const extraction = await this.extractCandidates(input);
-    const { candidates, filtered_count, filtered_reasons } = extraction;
+    const { candidates, filtered_count, filtered_reasons, scope_reasons } = extraction;
     if (candidates.length === 0) {
       return {
         candidates: [],
         submitted_jobs: [],
         filtered_count,
         filtered_reasons,
+        scope_reasons: [],
         degraded: false,
       };
     }
@@ -323,6 +396,7 @@ export class WritebackEngine {
         })),
         filtered_count,
         filtered_reasons,
+        scope_reasons,
         degraded: true,
         degradation_reason: writebackResult.error?.code ?? "dependency_unavailable",
       };
@@ -333,6 +407,7 @@ export class WritebackEngine {
       submitted_jobs: writebackResult.value ?? [],
       filtered_count,
       filtered_reasons,
+      scope_reasons,
       degraded: false,
     };
   }

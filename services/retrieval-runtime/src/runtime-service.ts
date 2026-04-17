@@ -9,6 +9,7 @@ import type {
   DependencyStatusSnapshot,
   FinalizeTurnInput,
   FinalizeTurnResponse,
+  MemoryMode,
   ObserveRunsFilters,
   PrepareContextResponse,
   SessionStartResponse,
@@ -18,6 +19,14 @@ import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
+
+function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
+  return memoryMode ?? "workspace_plus_global";
+}
+
+function isWritebackAccepted(status: FinalizeTurnResponse["submitted_jobs"][number]["status"]): boolean {
+  return status === "accepted" || status === "accepted_async" || status === "merged";
+}
 
 export class RetrievalRuntimeService {
   constructor(
@@ -31,31 +40,37 @@ export class RetrievalRuntimeService {
   ) {}
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
+    const normalizedContext = {
+      ...context,
+      memory_mode: resolveMemoryMode(context.memory_mode),
+    };
     const traceId = randomUUID();
     const turnStartedAt = Date.now();
     await this.repository.recordTurn({
       trace_id: traceId,
-      host: context.host,
-      workspace_id: context.workspace_id,
-      user_id: context.user_id,
-      session_id: context.session_id,
-      phase: context.phase,
-      task_id: context.task_id,
-      thread_id: context.thread_id,
-      turn_id: context.turn_id,
-      current_input: context.current_input,
+      host: normalizedContext.host,
+      workspace_id: normalizedContext.workspace_id,
+      user_id: normalizedContext.user_id,
+      session_id: normalizedContext.session_id,
+      phase: normalizedContext.phase,
+      task_id: normalizedContext.task_id,
+      thread_id: normalizedContext.thread_id,
+      turn_id: normalizedContext.turn_id,
+      current_input: normalizedContext.current_input,
       created_at: nowIso(),
     });
 
     const triggerStartedAt = Date.now();
-    const decision = await this.triggerEngine.decide(context);
+    const decision = await this.triggerEngine.decide(normalizedContext);
     await this.repository.recordTriggerRun({
       trace_id: traceId,
       trigger_hit: decision.hit,
       trigger_type: decision.trigger_type,
       trigger_reason: decision.trigger_reason,
       requested_memory_types: decision.requested_memory_types,
-      scope_limit: decision.scope_limit,
+      memory_mode: decision.memory_mode,
+      requested_scopes: decision.requested_scopes,
+      scope_reason: decision.scope_reason,
       importance_threshold: decision.importance_threshold,
       cooldown_applied: decision.cooldown_applied,
       semantic_score: decision.semantic_score,
@@ -71,6 +86,11 @@ export class RetrievalRuntimeService {
         trigger_hit: false,
         trigger_type: decision.trigger_type,
         trigger_reason: decision.trigger_reason,
+        memory_mode: decision.memory_mode,
+        requested_scopes: decision.requested_scopes,
+        matched_scopes: [],
+        scope_hit_counts: {},
+        scope_reason: decision.scope_reason,
         query_scope: "not_triggered",
         requested_memory_types: [],
         candidate_count: 0,
@@ -87,6 +107,9 @@ export class RetrievalRuntimeService {
         injected: false,
         injected_count: 0,
         token_estimate: 0,
+        memory_mode: decision.memory_mode,
+        requested_scopes: decision.requested_scopes,
+        selected_scopes: [],
         trimmed_record_ids: [],
         trim_reasons: [],
         result_state: "not_triggered",
@@ -108,14 +131,23 @@ export class RetrievalRuntimeService {
     }
 
     const recallStartedAt = Date.now();
-    const queryResult = await this.queryEngine.query(context, decision);
+    const queryResult = await this.queryEngine.query(normalizedContext, decision);
     const packet = buildMemoryPacket(queryResult.query, decision, queryResult.candidates);
+    const scopeHitCounts = queryResult.candidates.reduce<Partial<Record<typeof packet.selected_scopes[number], number>>>((acc, candidate) => {
+      acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
+      return acc;
+    }, {});
 
     await this.repository.recordRecallRun({
       trace_id: traceId,
       trigger_hit: true,
       trigger_type: decision.trigger_type,
       trigger_reason: decision.trigger_reason,
+      memory_mode: decision.memory_mode,
+      requested_scopes: decision.requested_scopes,
+      matched_scopes: packet.selected_scopes,
+      scope_hit_counts: scopeHitCounts,
+      scope_reason: decision.scope_reason,
       query_scope: packet.query_scope,
       requested_memory_types: decision.requested_memory_types,
       candidate_count: queryResult.candidates.length,
@@ -140,6 +172,9 @@ export class RetrievalRuntimeService {
       injected: Boolean(injectionBlock),
       injected_count: injectionBlock?.memory_records.length ?? 0,
       token_estimate: injectionBlock?.token_estimate ?? 0,
+      memory_mode: decision.memory_mode,
+      requested_scopes: packet.requested_scopes,
+      selected_scopes: injectionBlock?.selected_scopes ?? [],
       trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
       trim_reasons: injectionBlock?.trim_reasons ?? [],
       result_state:
@@ -177,38 +212,52 @@ export class RetrievalRuntimeService {
       trace_id: prepared.trace_id,
       additional_context: additionalContext,
       active_task_summary: activeTaskSummary,
+      memory_mode: context.memory_mode ?? "workspace_plus_global",
       dependency_status: prepared.dependency_status,
       degraded: prepared.degraded,
     };
   }
 
   async finalizeTurn(input: FinalizeTurnInput): Promise<FinalizeTurnResponse> {
-    const traceId = randomUUID();
+    const normalizedInput = {
+      ...input,
+      memory_mode: resolveMemoryMode(input.memory_mode),
+    };
+    const traceId =
+      (await this.repository.findTraceIdForFinalize({
+        session_id: normalizedInput.session_id,
+        turn_id: normalizedInput.turn_id,
+        thread_id: normalizedInput.thread_id,
+        current_input: normalizedInput.current_input,
+      })) ?? randomUUID();
     const startedAt = Date.now();
 
     await this.repository.recordTurn({
       trace_id: traceId,
-      host: input.host,
-      workspace_id: input.workspace_id,
-      user_id: input.user_id,
-      session_id: input.session_id,
+      host: normalizedInput.host,
+      workspace_id: normalizedInput.workspace_id,
+      user_id: normalizedInput.user_id,
+      session_id: normalizedInput.session_id,
       phase: "after_response",
-      task_id: input.task_id,
-      thread_id: input.thread_id,
-      turn_id: input.turn_id,
-      current_input: input.current_input,
-      assistant_output: input.assistant_output,
+      task_id: normalizedInput.task_id,
+      thread_id: normalizedInput.thread_id,
+      turn_id: normalizedInput.turn_id,
+      current_input: normalizedInput.current_input,
+      assistant_output: normalizedInput.assistant_output,
       created_at: nowIso(),
     });
 
-    const result = await this.writebackEngine.submit(input);
+    const result = await this.writebackEngine.submit(normalizedInput);
 
     await this.repository.recordWritebackSubmission({
       trace_id: traceId,
       candidate_count: result.candidates.length,
       submitted_count: result.submitted_jobs.filter((job) => job.status !== "dependency_unavailable" && job.status !== "rejected").length,
+      memory_mode: normalizedInput.memory_mode,
+      final_scopes: [...new Set(result.candidates.map((candidate) => candidate.scope))],
       filtered_count: result.filtered_count,
       filtered_reasons: result.filtered_reasons,
+      scope_reasons: result.scope_reasons,
       result_state:
         result.candidates.length === 0
           ? "no_candidates"
@@ -225,10 +274,11 @@ export class RetrievalRuntimeService {
       trace_id: traceId,
       write_back_candidates: result.candidates,
       submitted_jobs: result.submitted_jobs,
+      memory_mode: normalizedInput.memory_mode,
       candidate_count: result.candidates.length,
       filtered_count: result.filtered_count,
       filtered_reasons: result.filtered_reasons,
-      writeback_submitted: result.submitted_jobs.length > 0,
+      writeback_submitted: result.submitted_jobs.some((job) => isWritebackAccepted(job.status)),
       degraded: result.degraded,
       dependency_status: await this.dependencyGuard.snapshot(),
     };
