@@ -7,6 +7,8 @@ export * from "./memory-client/index.js";
 export * from "./mcp-client/index.js";
 export * from "./providers/index.js";
 export * from "./shared/token.js";
+export * from "./session-store/index.js";
+export * from "./tools/index.js";
 
 export interface StartOptions {
   host?: string;

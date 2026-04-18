@@ -1,5 +1,8 @@
 # T05 — 内置工具层（fs / shell / mcp 分发）
 
+- 状态：已完成
+- 验证结果：`fs / shell / mcp` 工具、权限门、dispatcher、工具审计与测试已落地；`npm run check`、`npm test`、`npm run build` 已通过
+
 ## 1. 目标
 
 给 agent 提供首版可用的工具集合：文件读写、Shell 执行、MCP 工具转发。
@@ -152,3 +155,26 @@ class ToolDispatcher {
 - 网络工具（http_fetch、web_search）
 - 代码执行沙箱（首版只靠权限门 + 黑名单）
 - 批量工具调用并发（runner 决定并发策略）
+
+## 8. 当前落地说明
+
+- 已新增 `src/tools/` 目录，包含：
+  - `types / errors / helpers / registry / permission-gate / dispatcher`
+  - `builtin/fs-read / fs-write / fs-edit / shell-exec / mcp-call`
+- `ToolDispatcher` 已接入：
+  - `auto / confirm` 权限门
+  - session 级 `allow_session` 确认缓存
+  - `args_hash / args_preview / permission_decision / artifact_ref` 审计写入
+- 文件工具已落实：
+  - 相对路径约束
+  - `realpath` 后再次校验工作区边界
+  - `fs_edit` 的唯一匹配约束
+- `shell_exec` 已落实：
+  - `cmd.exe` / `sh` 跨平台分派
+  - deny pattern 拦截
+  - timeout / abort 处理
+- `mcp_call` 已对接 T06 `McpRegistry`，并把 server 不可达映射为 `mcp_disconnected`
+- 已补 3 组测试，覆盖：
+  - 文件读写、越权拒绝、唯一替换校验
+  - shell 正常执行、黑名单、超时
+  - dispatcher 的拒绝、session 级放行缓存、审计写入、MCP 错误映射
