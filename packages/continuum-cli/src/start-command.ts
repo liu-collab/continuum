@@ -28,6 +28,7 @@ import {
   buildEmbeddingsEndpoint,
   resolveThirdPartyEmbeddingConfig,
 } from "./embedding-config.js";
+import { startManagedMna } from "./mna-command.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -308,6 +309,13 @@ export async function runStartCommand(
   await waitForHealthy(`${storageUrl}/health`, 120_000);
   await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
   await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
+  const mna = await startManagedMna(
+    {
+      ...options,
+      "runtime-url": runtimeUrl,
+    },
+    importMetaUrl,
+  );
 
   await writeManagedState({
     version: 1,
@@ -327,6 +335,7 @@ export async function runStartCommand(
   process.stdout.write(`storage: ${storageUrl}\n`);
   process.stdout.write(`runtime: ${runtimeUrl}\n`);
   process.stdout.write(`visualization: ${uiUrl}\n`);
+  process.stdout.write(`memory-native-agent: ${mna.url}\n`);
   process.stdout.write(`third-party embeddings: ${embeddingsUrl}\n`);
 
   if (open) {

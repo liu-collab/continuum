@@ -12,6 +12,7 @@ const stackTemplateDir = path.join(packageDir, "templates", "stack");
 const storageDir = path.join(repoRoot, "services", "storage");
 const runtimeDir = path.join(repoRoot, "services", "retrieval-runtime");
 const visualizationDir = path.join(repoRoot, "services", "visualization");
+const memoryNativeAgentDir = path.join(repoRoot, "services", "memory-native-agent");
 const vendorDir = path.join(packageDir, "vendor");
 const vendorStageDir = path.join(packageDir, "vendor-stage");
 const visualizationBuildDir = path.join(visualizationDir, ".next");
@@ -100,6 +101,11 @@ async function copyVisualizationBundle() {
   await cp(publicSource, path.join(targetDir, "public"), { recursive: true });
 }
 
+async function copyMemoryNativeAgentBundle() {
+  const targetDir = path.join(vendorStageDir, "memory-native-agent");
+  await copyEntries(memoryNativeAgentDir, targetDir, ["bin", "dist", "package.json"]);
+}
+
 async function copyStackTemplate() {
   const targetDir = path.join(vendorStageDir, "stack");
   await cp(stackTemplateDir, targetDir, { recursive: true });
@@ -175,6 +181,7 @@ async function main() {
   await copyStorageBundle();
   await copyRuntimeBundle();
   await copyVisualizationBundle();
+  await copyMemoryNativeAgentBundle();
   await copyStackTemplate();
   await copyStackSources();
   await replaceVendorDir();

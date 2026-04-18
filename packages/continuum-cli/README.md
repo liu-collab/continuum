@@ -10,6 +10,7 @@
 - `continuum ui`
 - `continuum claude install`
 - `continuum codex`
+- `continuum mna`
 
 这层只做交付、安装和启动编排，不承担三大服务的业务实现。
 
@@ -29,6 +30,8 @@
 - 向量检索直接连接用户提供的第三方 `OpenAI-compatible embeddings API`
 - 默认绑定到 `127.0.0.1`（仅本机访问），可通过 `--bind-host 0.0.0.0` 允许局域网访问
 - `continuum stop` 停止并移除 managed 容器，清理状态文件
+- `continuum start` 会在 stack 就绪后再启动 `memory-native-agent`
+- `continuum mna` 用来单独安装、启动、停止、查看日志和读取 token
 - `continuum ui` 会优先连接已经通过 `continuum start` 启动好的页面；如果本地没有运行中的页面，才回退到包内自带的可视化产物
 
 ## 第三方向量配置
@@ -66,3 +69,17 @@ continuum start --bind-host 0.0.0.0
 ```
 
 **注意**：使用 `0.0.0.0` 会将服务暴露到局域网，请确保在可信网络环境下使用。
+
+## `continuum mna`
+
+可直接单独操作 `memory-native-agent`：
+
+```bash
+continuum mna install
+continuum mna start
+continuum mna stop
+continuum mna logs
+continuum mna token
+```
+
+默认地址是 `http://127.0.0.1:4193`，默认数据目录是 `~/.mna`。

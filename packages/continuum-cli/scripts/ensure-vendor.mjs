@@ -17,6 +17,8 @@ const requiredPaths = [
   path.join(packageDir, "vendor", "runtime", "node_modules"),
   path.join(packageDir, "vendor", "runtime", "host-adapters", "memory-claude-plugin"),
   path.join(packageDir, "vendor", "visualization", "standalone", "server.js"),
+  path.join(packageDir, "vendor", "memory-native-agent", "bin", "mna-server.mjs"),
+  path.join(packageDir, "vendor", "memory-native-agent", "package.json"),
   path.join(packageDir, "vendor", "stack", "Dockerfile"),
   path.join(packageDir, "vendor", "stack", "entrypoint.mjs"),
   path.join(packageDir, "vendor", "stack", "storage-src", "package.json"),

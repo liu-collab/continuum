@@ -13,6 +13,7 @@
 - `continuum ui`
 - `continuum claude install`
 - `continuum codex`
+- `continuum mna`
 
 ## 为什么要单独拆出来
 
@@ -59,6 +60,7 @@
 - 启动接好 Continuum 的 Codex
 - 做健康检查和数据库探测
 - 在当前首版默认模式下传入工作区标识和默认 `memory_mode`
+- 管理 `memory-native-agent` 本地进程（安装、启动、停止、token 操作）
 
 ### `@jiankarlin/continuum` 不负责
 

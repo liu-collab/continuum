@@ -134,7 +134,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 未开始 | 全部 | T01-T09, T11, T12 | 可能补测试桩 |
 | [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | 已完成 | visualization | T08, T12 | `visualization` |
 | [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | 进行中 | mna | T01 | 无 |
-| [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | 未开始 | continuum-cli | T01, T12 | `continuum-cli` |
+| [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | 已完成 | continuum-cli | T01, T12 | `continuum-cli` |
 | [T14](./T14-session-store.md) | 会话持久化、工具审计与清理 | 已完成 | mna | T01 | 无 |
 
 ## 6.1 当前进度
@@ -148,6 +148,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T07` 已完成：runner 主循环、phase 检测、任务状态、工具输出包裹、流式桥接、写回判定与 runner 测试已落地。
 - `T08` 已完成：HTTP/WS 路由装配、token 鉴权、session CRUD、文件与 artifact 读取、MCP 管理、OpenAPI 输出、事件缓冲回放与 HTTP/WS 测试已落地。
 - `T11` 已完成：`/agent` 与 `/agent/[sessionId]` 页面、会话列表、文件树、聊天流、Prompt Inspector、工具确认弹窗、MCP 面板、基础 cost bar、Monaco 文件预览、前端 reducer 测试和浏览器直连 mna 所需的 loopback CORS 已落地。
+- `T13` 已完成：`continuum start/status/stop` 已接入 mna，`continuum mna install/start/stop/logs/token` 已落地，vendor 打包和交付文档已同步。
 - `T12` 进行中：`token` 引导、默认 `system prompt`、流式常量、`record-replay provider` 已落地；artifact、工具信任边界、stream-bridge 和 i18n 相关收口将在 `T05/T07/T08/T11/T14` 继续完成。
 - `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
 - `T14` 已完成：`SQLite session-store`、启动 migration、会话/轮次/消息/工具审计/`prompt snapshot` 持久化、`crashed` 恢复标记与 purge 测试已落地。

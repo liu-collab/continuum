@@ -6,6 +6,23 @@
 
 这是产品侧决策：**用户体验上 mna 应该和 runtime/storage/visualization 一样被 continuum 统一编排**。
 
+## 1.1 当前状态
+
+当前状态：已完成。
+
+这轮已经落地：
+
+- `continuum start` 会在 stack 就绪后追加启动 `memory-native-agent`
+- `continuum status` 会显示 mna 健康状态、token 路径和 artifacts 路径
+- `continuum stop` 会先停止 mna，再收口其他 managed 资源
+- 新增 `continuum mna install/start/stop/logs/token`
+- vendor 打包和校验已纳入 `memory-native-agent`
+
+当前保留项：
+
+- `continuum mna token --rotate` 目前给出明确引导，实际轮换仍依赖 stop/start 重建 token
+- `continuum mna logs --tail N` 还没有做 tail 参数，只输出完整日志文件
+
 ## 2. 前置依赖
 
 - T01 mna 骨架完成（可执行的 HTTP server）
@@ -116,6 +133,12 @@ continuum 0.2.0
 - `continuum mna token --rotate` 生效，浏览器刷新 `/agent` 后自动拉新 token 恢复工作。
 - `continuum start` 时 mna 端口已被占用 → 明确错误提示，整个 start 流程失败，不留半启动状态。
 - 卸载 `@jiankarlin/continuum` 后 `~/.mna/token.txt` 与 `~/.mna/artifacts/` 保留（属于用户数据，不清理）。
+
+### 5.1 当前验收结果
+
+- CLI 单测已补到 `mna` 帮助与参数解析
+- `continuum-cli` 的类型检查、测试、构建已通过
+- 真正的整链路启停会在 T10 端到端阶段继续复核
 
 ## 6. 相关契约
 

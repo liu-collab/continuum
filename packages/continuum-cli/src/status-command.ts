@@ -8,6 +8,7 @@ import {
   fetchJson,
 } from "./utils.js";
 import { buildManagedDatabaseUrl, readManagedState } from "./managed-state.js";
+import { getManagedMnaStatus } from "./mna-command.js";
 
 type StatusCheckResult = {
   name: string;
@@ -154,15 +155,28 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   const strict = options.strict === true || options.strict === "true";
   const json = options.json === true || options.json === "true";
 
+  const mnaStatus = await getManagedMnaStatus(options);
   const results = await Promise.all([
     checkStorage(storageUrl, timeoutMs),
     checkRuntime(runtimeUrl, timeoutMs),
     checkUi(uiUrl, timeoutMs),
     checkDatabase(databaseUrl, timeoutMs),
   ]);
+  const mnaResult: StatusCheckResult = mnaStatus.health.ok
+    ? {
+        name: "memory-native-agent",
+        status: "healthy",
+        detail: `${mnaStatus.url} token=${mnaStatus.tokenPath}`,
+      }
+    : {
+        name: "memory-native-agent",
+        status: mnaStatus.record ? "degraded" : "unavailable",
+        detail: mnaStatus.health.error ?? `http_${mnaStatus.health.status ?? "unknown"}`,
+      };
+  const allResults = [...results, mnaResult];
 
-  const hasFailure = results.some((result) => result.status === "unavailable");
-  const hasDegraded = results.some((result) => result.status === "degraded");
+  const hasFailure = allResults.some((result) => result.status === "unavailable");
+  const hasDegraded = allResults.some((result) => result.status === "degraded");
   const exitCode = hasFailure || (strict && hasDegraded) ? 1 : 0;
 
   if (json) {
@@ -170,7 +184,13 @@ export async function runStatusCommand(options: Record<string, string | boolean>
       `${JSON.stringify(
         {
           status: exitCode === 0 ? "ok" : "failed",
-          checks: results,
+          checks: allResults,
+          mna: {
+            url: mnaStatus.url,
+            tokenPath: mnaStatus.tokenPath,
+            artifactsPath: mnaStatus.artifactsPath,
+            dependency: mnaStatus.dependency.body ?? null,
+          },
         },
         null,
         2,
@@ -180,8 +200,12 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   }
 
   process.stdout.write("Continuum status\n");
-  for (const result of results) {
+  for (const result of allResults) {
     process.stdout.write(`${formatLine(result)}\n`);
+  }
+  if (mnaStatus.health.ok) {
+    process.stdout.write(`mna token path      ${mnaStatus.tokenPath}\n`);
+    process.stdout.write(`mna artifacts path  ${mnaStatus.artifactsPath}\n`);
   }
 
   return exitCode;

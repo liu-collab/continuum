@@ -8,6 +8,10 @@ export type ManagedServiceRecord = {
   name: string;
   pid: number;
   logPath: string;
+  url?: string;
+  tokenPath?: string;
+  artifactsPath?: string;
+  version?: string;
 };
 
 export type ContinuumManagedState = {
@@ -35,6 +39,10 @@ export function continuumHomeDir() {
 
 export function continuumLogsDir() {
   return path.join(continuumHomeDir(), "logs");
+}
+
+export function continuumManagedDir() {
+  return path.join(continuumHomeDir(), "managed");
 }
 
 export function continuumStatePath() {

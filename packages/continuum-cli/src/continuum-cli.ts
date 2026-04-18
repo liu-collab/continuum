@@ -5,6 +5,7 @@ import { runClaudeInstallCommand } from "./claude-command.js";
 import { runCodexCommand } from "./codex-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
+import { runMnaCommand } from "./mna-command.js";
 import { runRuntimeCommand } from "./runtime-command.js";
 import { runStartCommand } from "./start-command.js";
 import { runStopCommand } from "./stop-command.js";
@@ -52,6 +53,10 @@ export async function runCli(argv: string[], importMetaUrl: string) {
   if (primary === "runtime") {
     await runRuntimeCommand(importMetaUrl);
     return 0;
+  }
+
+  if (primary === "mna") {
+    return runMnaCommand(secondary, parsed.options, importMetaUrl);
   }
 
   if (primary === "mcp-server") {

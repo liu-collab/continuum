@@ -6,6 +6,7 @@ import {
   readManagedState,
   writeManagedState,
 } from "./managed-state.js";
+import { stopManagedMna } from "./mna-command.js";
 
 async function runForegroundQuiet(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
@@ -32,6 +33,7 @@ async function runForegroundQuiet(command: string, args: string[]) {
 }
 
 export async function runStopCommand() {
+  await stopManagedMna().catch(() => undefined);
   const state = await readManagedState();
   const containerName = state.postgres?.containerName ?? DEFAULT_MANAGED_STACK_CONTAINER;
 

@@ -49,6 +49,15 @@ describe("continuum cli", () => {
     expect(renderHelp()).toContain("continuum stop");
   });
 
+  it("parses the mna command and exposes it in help", () => {
+    const parsed = parseArgs(["mna", "start", "--mna-port", "4193", "--mna-home", "C:/tmp/.mna"]);
+
+    expect(parsed.command).toEqual(["mna", "start"]);
+    expect(parsed.options["mna-port"]).toBe("4193");
+    expect(parsed.options["mna-home"]).toBe("C:/tmp/.mna");
+    expect(renderHelp()).toContain("continuum mna <install|start|stop|logs|token>");
+  });
+
   it("returns non-zero when strict status checks fail", async () => {
     const exitCode = await runStatusCommand({
       json: true,
