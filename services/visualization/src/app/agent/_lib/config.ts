@@ -1,6 +1,22 @@
-export const mnaRouteLocalConfig = {
-  notes: [
-    "浏览器端的 mna 相关代码统一放在 app/agent/_lib。",
-    "只有出现跨 feature 复用时，才上提到全局 src/lib。"
-  ]
-} as const;
+import type { AgentLocale } from "./openapi-types";
+
+export const DEFAULT_MNA_BASE_URL = "http://127.0.0.1:4193";
+export const DEFAULT_AGENT_LOCALE: AgentLocale = "zh-CN";
+
+export function resolveBrowserLocale(preferredLocale?: string | null): AgentLocale {
+  const rawLocale = preferredLocale ?? (typeof navigator === "undefined" ? DEFAULT_AGENT_LOCALE : navigator.language);
+  return rawLocale.toLowerCase().startsWith("en") ? "en-US" : "zh-CN";
+}
+
+export function toWebSocketUrl(baseUrl: string, sessionId: string, token: string, lastEventId?: number) {
+  const normalized = new URL(baseUrl);
+  normalized.protocol = normalized.protocol === "https:" ? "wss:" : "ws:";
+  normalized.pathname = `/v1/agent/sessions/${sessionId}/ws`;
+  normalized.searchParams.set("token", token);
+
+  if (typeof lastEventId === "number" && Number.isFinite(lastEventId)) {
+    normalized.searchParams.set("last_event_id", String(lastEventId));
+  }
+
+  return normalized.toString();
+}

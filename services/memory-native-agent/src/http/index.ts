@@ -8,6 +8,21 @@ import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerSessionWebsocket } from "./ws/session-ws.js";
 
 export function registerHttpRoutes(app: RuntimeFastifyInstance) {
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin)) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Vary", "Origin");
+    }
+
+    reply.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    reply.header("Access-Control-Allow-Headers", "Authorization,Content-Type");
+
+    if (request.method === "OPTIONS") {
+      return reply.code(204).send();
+    }
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
       ? error.code

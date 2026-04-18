@@ -412,6 +412,12 @@
 - 运行轨迹页当前正式只保留 `turn_id`、`session_id`、`trace_id`、`page`、`page_size`
 - 运行轨迹详情应按 `turn`、`trigger`、`recall`、`injection`、`writeback` 五段解释
 
+补充说明：
+
+`visualization` 自身的后端进程不调用 `retrieval-runtime` 主链路接口。
+如果用户通过 `visualization` 前端发起 agent 对话，主链路调用由 `memory-native-agent` 作为宿主发起，
+`visualization` 只承担渲染职责。此种前后端跨服务聚合不视为耦合。
+
 ## 12. 第一版默认决策
 
 为了避免首版过于发散，先固定下面这些默认决策：

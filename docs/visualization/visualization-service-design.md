@@ -21,6 +21,8 @@
 - 目录页、详情页、轨迹页、看板页、健康面板
 - runtime 五段聚合、看板趋势计算、局部降级和健康状态分离
 - 详情页最小治理动作 `confirm / invalidate / archive / delete`
+- `/agent` 与 `/agent/[sessionId]` 页面、会话列表、文件树、聊天流、工具确认弹窗、记忆面板、MCP 面板、Prompt Inspector、Monaco 文件预览
+- visualization 前端直连 `memory-native-agent` 的浏览器链路与 loopback CORS
 
 还没有完全收口：
 
@@ -28,6 +30,7 @@
 - 页面还没有提供 `edit / restore_version` 的正式治理入口
 - API 错误响应还没有统一到正式错误结构
 - 轨迹页还没有把文档承诺的部分 Turn 原始字段展示完整
+- `/agent` 页面的完整 i18n、组件级 mock 测试和 Playwright UI e2e 还没有补齐
 
 ## 2. 这个服务要解决什么问题
 

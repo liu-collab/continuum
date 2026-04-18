@@ -1,8 +1,15 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight, BookText, ChartSpline, HeartPulse, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookText, Bot, ChartSpline, HeartPulse, ShieldCheck } from "lucide-react";
 
 const cards = [
+  {
+    href: "/agent" as Route,
+    title: "内置 Agent",
+    description:
+      "在 visualization 页面内直接和 memory-native-agent 对话，查看注入、工具调用、MCP 状态和 prompt 检查结果。",
+    icon: Bot
+  },
   {
     href: "/memories" as Route,
     title: "记忆目录",

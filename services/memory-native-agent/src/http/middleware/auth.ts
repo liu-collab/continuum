@@ -2,6 +2,10 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { RuntimeFastifyInstance } from "../types.js";
 
 export async function verifyToken(request: FastifyRequest, reply: FastifyReply) {
+  if (request.method === "OPTIONS") {
+    return;
+  }
+
   const url = request.url.split("?")[0];
   if (url === "/healthz" || url === "/readyz") {
     return;

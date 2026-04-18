@@ -7,6 +7,26 @@
 
 后端数据完全来自 `memory-native-agent`（T08 HTTP + WebSocket），visualization 自身不承接业务逻辑。
 
+## 1.1 当前状态
+
+当前状态：已完成。
+
+这轮已经实际落地的范围：
+
+- `/agent` 与 `/agent/[sessionId]` 页面可直接创建或恢复 session
+- 浏览器通过 `/api/agent/token` 取 token 后，直接调用 mna 的 HTTP / WebSocket
+- 会话列表、文件树、文件预览、聊天流、工具控制台、记忆面板、MCP 面板、Prompt Inspector、工具确认弹窗已接入
+- `memory_mode` 切换、session 改标题、session purge、MCP restart / disable、provider model 下一轮切换都已接入
+- `event-reducer` 已能处理会话恢复、流式文本、phase 轨迹、任务切换、工具确认、错误和 replay gap
+- visualization 侧增加了 reducer 测试；mna 侧补了 loopback CORS 测试，保证浏览器直连链路成立
+
+当前仍保留但不阻塞本阶段收口的点：
+
+- 还没有做 T11 文档里要求的完整 i18n 资源层和 locale 切换控件
+- 还没有补完整的 React 组件测试、MSW REST mock 和 fake WebSocket 测试
+- 还没有把 Prompt Inspector / 文件预览的 Monaco 做更细的懒加载指标验证
+- `provider-switch` 当前支持“同 provider 下切 model”，还没有做多 provider 注册与选择
+
 ## 2. 前置依赖
 
 - T08 mna HTTP/WS API 完成。
@@ -171,6 +191,15 @@ visualization 读两个环境变量：
 - 既有 `/memory`、`/runs`、`/dashboard` 页面功能回归无影响。
 - Lighthouse 性能可以不做首版硬性要求，但首屏 JS 不能因为引入 Monaco 膨胀到 > 2MB。
 
+### 5.1 当前验收结果
+
+- `/agent` 已能创建 session、发送消息并消费流式回复
+- 工具权限确认弹窗已接入 WS `tool_confirm_needed`
+- mna 不可达时页面会显示离线原因，不会白屏
+- `memory_mode` 切换已通过 HTTP 接口接入，并回写当前 session 状态
+- 既有 visualization 单元测试全部通过，新增 reducer 测试已通过
+- 真正的 UI e2e 还留在 T10 一并完成
+
 ## 6. 相关契约
 
 - `docs/visualization/visualization-service-design.md`：新增 agent 路由视为 visualization 的独立 feature
@@ -255,4 +284,3 @@ visualization 读两个环境变量：
 - 后端 `error` 事件只返回 `code` + 英文 technical `message`
 - 前端按 `code` 查 `_i18n/common.json` 中的 `errors.<code>.title` 和 `errors.<code>.description` 展示给用户
 - 开发者控制台可显示原始 `message` 用于调试
-

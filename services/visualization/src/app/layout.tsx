@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 import { Manrope, Newsreader } from "next/font/google";
 import Link from "next/link";
-import { Activity, BookText, ChartSpline, HeartPulse } from "lucide-react";
+import { Activity, BookText, Bot, ChartSpline, HeartPulse } from "lucide-react";
 
 import { Providers } from "@/app/providers";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ const serif = Newsreader({
 
 const navigation = [
   { href: "/" as Route, label: "概览", icon: Activity },
+  { href: "/agent" as Route, label: "内置 Agent", icon: Bot },
   { href: "/memories" as Route, label: "记忆目录", icon: BookText },
   { href: "/runs" as Route, label: "运行轨迹", icon: HeartPulse },
   { href: "/dashboard" as Route, label: "指标看板", icon: ChartSpline }
