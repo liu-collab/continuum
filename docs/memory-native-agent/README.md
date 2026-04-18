@@ -120,22 +120,27 @@ services/retrieval-runtime/                # 小幅改动（T03）
 
 ## 6. 任务索引
 
-| 编号 | 标题 | 所在服务 | 前置依赖 | 跨服务改动 |
-| :--- | :--- | :--- | :--- | :--- |
-| [T01](./T01-scaffold.md) | mna 包骨架与 HTTP 服务初始化 | mna | — | 无 |
-| [T02](./T02-memory-client.md) | retrieval-runtime HTTP 客户端 | mna | T01, T03 | 无 |
-| [T03](./T03-runtime-adapter.md) | runtime 新增 adapter 与 host 枚举 | retrieval-runtime | — | `retrieval-runtime` |
-| [T04](./T04-model-providers.md) | 模型 provider 抽象与三实现 | mna | T01 | 无 |
-| [T05](./T05-tools.md) | 内置工具层（fs / shell / mcp 分发） | mna | T01, T06, T12 | 无 |
-| [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | mna | T01 | 无 |
-| [T07](./T07-agent-runner.md) | agent 主循环与生命周期钩子 | mna | T02, T04, T05, T09, T12 | 无 |
-| [T08](./T08-http-api.md) | HTTP + WebSocket API 服务端 | mna | T07, T12 | 无 |
-| [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | mna | T01 | 无 |
-| [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 全部 | T01-T09, T11, T12 | 可能补测试桩 |
-| [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | visualization | T08, T12 | `visualization` |
-| [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | mna | T01 | 无 |
-| [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | continuum-cli | T01, T12 | `continuum-cli` |
-| [T14](./T14-session-store.md) | 会话持久化、工具审计与清理 | mna | T01 | 无 |
+| 编号 | 标题 | 状态 | 所在服务 | 前置依赖 | 跨服务改动 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| [T01](./T01-scaffold.md) | mna 包骨架与 HTTP 服务初始化 | 已完成 | mna | — | 无 |
+| [T02](./T02-memory-client.md) | retrieval-runtime HTTP 客户端 | 未开始 | mna | T01, T03 | 无 |
+| [T03](./T03-runtime-adapter.md) | runtime 新增 adapter 与 host 枚举 | 未开始 | retrieval-runtime | — | `retrieval-runtime` |
+| [T04](./T04-model-providers.md) | 模型 provider 抽象与三实现 | 未开始 | mna | T01 | 无 |
+| [T05](./T05-tools.md) | 内置工具层（fs / shell / mcp 分发） | 未开始 | mna | T01, T06, T12 | 无 |
+| [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | 未开始 | mna | T01 | 无 |
+| [T07](./T07-agent-runner.md) | agent 主循环与生命周期钩子 | 未开始 | mna | T02, T04, T05, T09, T12 | 无 |
+| [T08](./T08-http-api.md) | HTTP + WebSocket API 服务端 | 未开始 | mna | T07, T12 | 无 |
+| [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | 未开始 | mna | T01 | 无 |
+| [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 未开始 | 全部 | T01-T09, T11, T12 | 可能补测试桩 |
+| [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | 未开始 | visualization | T08, T12 | `visualization` |
+| [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | 未开始 | mna | T01 | 无 |
+| [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | 未开始 | continuum-cli | T01, T12 | `continuum-cli` |
+| [T14](./T14-session-store.md) | 会话持久化、工具审计与清理 | 未开始 | mna | T01 | 无 |
+
+## 6.1 当前进度
+
+- `T01` 已完成：工程骨架、最小 `Fastify` HTTP 服务、`/healthz`、启动脚本、smoke test 已落地。
+- `T02` 起依赖 `T03`，下一步先补 `retrieval-runtime` 的 `memory_native_agent` adapter。
 
 ## 7. 推荐实施顺序与并行度
 

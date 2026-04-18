@@ -1,0 +1,39 @@
+{
+  "name": "@jiankarlin/memory-native-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Continuum memory native agent service.",
+  "type": "module",
+  "bin": {
+    "mna-server": "./bin/mna-server.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "README.md",
+    "RELEASE.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx watch bin/mna-server.mjs",
+    "start": "node bin/mna-server.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fastify/websocket": "^11.0.2",
+    "fastify": "^5.2.1",
+    "pino": "^9.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}

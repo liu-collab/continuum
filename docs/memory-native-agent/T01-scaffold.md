@@ -1,5 +1,12 @@
 # T01 — mna 包骨架与 HTTP 服务初始化
 
+## 当前状态
+
+- 状态：已完成
+- 完成时间：2026-04-18
+- 验证结果：`npm run check`、`npm run build`、`npm test` 已通过
+- 代码位置：`services/memory-native-agent/`
+
 ## 1. 目标
 
 在 `services/memory-native-agent/` 下建立一套可构建、可测试、可本地启动的 Node.js + TypeScript 工程骨架，
