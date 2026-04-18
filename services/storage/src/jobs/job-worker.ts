@@ -57,6 +57,7 @@ export class JobWorker {
     }
 
     await this.processRefreshJobs();
+    await this.projector.refreshPendingEmbeddings(this.options.batch_size);
     return jobs.length;
   }
 

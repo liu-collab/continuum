@@ -203,6 +203,16 @@ export function createApp(service: StorageService): FastifyInstance {
     return ok(record);
   });
 
+  app.get("/v1/storage/records/:recordId/versions", async (request) => {
+    const params = z.object({ recordId: z.uuid() }).parse(request.params);
+    return ok(await service.listRecordVersions(params.recordId));
+  });
+
+  app.get("/v1/storage/records/:recordId/history", async (request) => {
+    const params = z.object({ recordId: z.uuid() }).parse(request.params);
+    return ok(await service.getRecordHistory(params.recordId));
+  });
+
   app.get("/v1/storage/conflicts", async (request) => {
     const query = z.object({ status: z.enum(["open", "resolved", "ignored"]).optional() }).parse(
       request.query,

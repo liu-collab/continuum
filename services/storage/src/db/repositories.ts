@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   AcceptedWriteBackJob,
+  GovernanceAction,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -28,6 +29,7 @@ export interface JobCreateInput {
 
 export interface WriteJobRepository {
   enqueue(input: JobCreateInput): Promise<MemoryWriteJob>;
+  enqueueMany(inputs: JobCreateInput[]): Promise<MemoryWriteJob[]>;
   findById(id: string): Promise<MemoryWriteJob | null>;
   findByIdempotencyKey(idempotencyKey: string): Promise<MemoryWriteJob | null>;
   claimQueuedJobs(limit: number): Promise<MemoryWriteJob[]>;
@@ -83,6 +85,7 @@ export interface RecordRepository {
     page_size: number;
   }): Promise<RecordListPage>;
   getVersion(recordId: string, versionNo: number): Promise<MemoryRecordVersion | null>;
+  listVersions(recordId: string): Promise<MemoryRecordVersion[]>;
 }
 
 export interface ConflictRepository {
@@ -100,12 +103,14 @@ export interface GovernanceRepository {
     actor_type: string;
     actor_id: string;
   }): Promise<void>;
+  listActions(recordId: string): Promise<GovernanceAction[]>;
 }
 
 export interface ReadModelRepository {
   upsert(entry: ReadModelEntry): Promise<void>;
   delete(recordId: string): Promise<void>;
   findById(recordId: string): Promise<ReadModelEntry | null>;
+  listPendingEmbeddings(limit: number): Promise<ReadModelEntry[]>;
   enqueueRefresh(input: {
     source_record_id: string;
     refresh_type: "insert" | "update" | "delete";
@@ -185,6 +190,37 @@ function createWriteJobRepository(session: DbSession): WriteJobRepository {
       );
 
       return mapWriteJob(requireRow(result.rows[0], "memory_write_jobs insert"));
+    },
+
+    async enqueueMany(inputs) {
+      const jobs: MemoryWriteJob[] = [];
+      for (const input of inputs) {
+        const existing = await this.findByIdempotencyKey(input.idempotency_key);
+        if (existing) {
+          jobs.push(existing);
+          continue;
+        }
+
+        const result = await session.query(
+          `
+            insert into ${table}
+              (idempotency_key, workspace_id, user_id, candidate_json, candidate_hash, source_service, job_status)
+            values
+              ($1, $2, $3, $4::jsonb, $5, $6, 'queued')
+            returning *
+          `,
+          [
+            input.idempotency_key,
+            input.candidate.workspace_id,
+            input.candidate.user_id ?? null,
+            JSON.stringify(input.candidate),
+            input.candidate_hash,
+            input.source_service,
+          ],
+        );
+        jobs.push(mapWriteJob(requireRow(result.rows[0], "memory_write_jobs enqueueMany insert")));
+      }
+      return jobs;
     },
 
     async findById(id) {
@@ -475,6 +511,19 @@ function createRecordRepository(session: DbSession): RecordRepository {
 
       return result.rows[0] ? mapVersion(result.rows[0]) : null;
     },
+    async listVersions(recordId) {
+      const result = await session.query(
+        `
+          select *
+          from ${versionsTable}
+          where record_id = $1
+          order by changed_at desc, version_no desc
+        `,
+        [recordId],
+      );
+
+      return result.rows.map(mapVersion);
+    },
   };
 }
 
@@ -579,6 +628,26 @@ function createGovernanceRepository(session: DbSession): GovernanceRepository {
         ],
       );
     },
+    async listActions(recordId) {
+      const result = await session.query(
+        `
+          select record_id, action_type, action_payload, actor_type, actor_id, created_at
+          from ${table}
+          where record_id = $1
+          order by created_at desc
+        `,
+        [recordId],
+      );
+
+      return result.rows.map((row) => ({
+        record_id: String(row.record_id),
+        action_type: String(row.action_type) as GovernanceAction["action_type"],
+        action_payload: (row.action_payload as Record<string, unknown> | null) ?? {},
+        actor_type: String(row.actor_type) as GovernanceAction["actor_type"],
+        actor_id: String(row.actor_id),
+        created_at: toIsoString(row.created_at),
+      }));
+    },
   };
 }
 
@@ -594,13 +663,14 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
             (
               id, workspace_id, user_id, task_id, session_id, memory_type, scope, status,
               summary, details, importance, confidence, source,
-              last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding
+              last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding,
+              embedding_status, embedding_attempted_at
             )
           values
             (
               $1, $2, $3, $4, $5, $6, $7, $8,
               $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-              $15, $16, $17, $18::vector
+              $15, $16, $17, $18, $19::vector, $20, $21
             )
           on conflict (id) do update
           set workspace_id = excluded.workspace_id,
@@ -619,7 +689,9 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
               last_used_at = excluded.last_used_at,
               created_at = excluded.created_at,
               updated_at = excluded.updated_at,
-              summary_embedding = excluded.summary_embedding
+              summary_embedding = excluded.summary_embedding,
+              embedding_status = excluded.embedding_status,
+              embedding_attempted_at = excluded.embedding_attempted_at
         `,
         [
           entry.id,
@@ -640,6 +712,8 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
           entry.created_at,
           entry.updated_at,
           entry.summary_embedding ? `[${entry.summary_embedding.join(",")}]` : null,
+          entry.embedding_status ?? "ok",
+          entry.embedding_attempted_at ?? null,
         ],
       );
     },
@@ -651,6 +725,21 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
     async findById(recordId) {
       const result = await session.query(`select * from ${table} where id = $1`, [recordId]);
       return result.rows[0] ? mapReadModel(result.rows[0]) : null;
+    },
+
+    async listPendingEmbeddings(limit) {
+      const result = await session.query(
+        `
+          select *
+          from ${table}
+          where embedding_status = 'pending'
+          order by updated_at asc
+          limit $1
+        `,
+        [limit],
+      );
+
+      return result.rows.map(mapReadModel);
     },
 
     async enqueueRefresh(input) {
@@ -745,7 +834,7 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
 
   return {
     async collect() {
-      const [jobs, records, conflicts, outcomes, projector] = await Promise.all([
+      const [jobs, records, conflicts, outcomes, projector, embeddingState] = await Promise.all([
         session.query(`
           select
             count(*)::int as write_jobs_total,
@@ -786,6 +875,11 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
             )::int as projector_embedding_degraded_jobs
           from ${refreshTable}
         `),
+        session.query(`
+          select
+            count(*) filter (where embedding_status = 'pending')::int as pending_embedding_records
+          from ${tableName(session.sharedSchema, "memory_read_model_v1")}
+        `),
       ]);
 
       return {
@@ -794,6 +888,7 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
         ...toMetricObject(conflicts.rows[0]),
         ...toMetricObject(outcomes.rows[0]),
         ...toMetricObject(projector.rows[0]),
+        ...toMetricObject(embeddingState.rows[0]),
       } as unknown as StorageMetrics;
     },
   };
@@ -904,6 +999,8 @@ function mapReadModel(row: Record<string, unknown>): ReadModelEntry {
     created_at: toIsoString(row.created_at),
     updated_at: toIsoString(row.updated_at),
     summary_embedding: parseVector(row.summary_embedding),
+    embedding_status: nullableString(row.embedding_status) as ReadModelEntry["embedding_status"],
+    embedding_attempted_at: nullableIsoString(row.embedding_attempted_at),
   };
 }
 

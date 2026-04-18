@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  GovernanceAction,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -78,6 +79,13 @@ export function createMemoryRepositories(
     },
     async findByIdempotencyKey(idempotencyKey) {
       return state.jobs.find((job) => job.idempotency_key === idempotencyKey) ?? null;
+    },
+    async enqueueMany(inputs) {
+      const jobs: MemoryWriteJob[] = [];
+      for (const input of inputs) {
+        jobs.push(await this.enqueue(input));
+      }
+      return jobs;
     },
     async claimQueuedJobs(limit) {
       const claimed = state.jobs
@@ -227,6 +235,11 @@ export function createMemoryRepositories(
         ) ?? null
       );
     },
+    async listVersions(recordId) {
+      return state.versions
+        .filter((version) => version.record_id === recordId)
+        .sort((left, right) => right.changed_at.localeCompare(left.changed_at));
+    },
   };
 
   const conflicts: ConflictRepository = {
@@ -273,6 +286,18 @@ export function createMemoryRepositories(
     async appendAction(input) {
       state.governanceActions.push(input);
     },
+    async listActions(recordId) {
+      return state.governanceActions
+        .filter((action) => action.record_id === recordId)
+        .map((action) => ({
+          record_id: String(action.record_id),
+          action_type: String(action.action_type) as GovernanceAction["action_type"],
+          action_payload: (action.action_payload as Record<string, unknown> | null) ?? {},
+          actor_type: String(action.actor_type) as GovernanceAction["actor_type"],
+          actor_id: String(action.actor_id),
+          created_at: new Date().toISOString(),
+        }));
+    },
   };
 
   const readModel: ReadModelRepository = {
@@ -292,6 +317,11 @@ export function createMemoryRepositories(
     },
     async findById(recordId) {
       return state.readModel.find((item) => item.id === recordId) ?? null;
+    },
+    async listPendingEmbeddings(limit) {
+      return state.readModel
+        .filter((item) => item.embedding_status === "pending")
+        .slice(0, limit);
     },
     async enqueueRefresh(input) {
       const job: ReadModelRefreshJob = {
@@ -375,6 +405,7 @@ export function createMemoryRepositories(
         projector_embedding_degraded_jobs: state.refreshJobs.filter(
           (job) => job.job_status === "succeeded" && job.error_message === "embedding_unavailable",
         ).length,
+        pending_embedding_records: state.readModel.filter((record) => record.embedding_status === "pending").length,
       };
     },
   };

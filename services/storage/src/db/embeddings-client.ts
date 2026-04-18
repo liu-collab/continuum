@@ -2,12 +2,22 @@ import type { StorageConfig } from "../config.js";
 
 export interface EmbeddingsClient {
   embedText(text: string, signal?: AbortSignal): Promise<number[]>;
+  embedTexts?(texts: string[], signal?: AbortSignal): Promise<number[][]>;
 }
 
 export class HttpEmbeddingsClient implements EmbeddingsClient {
   constructor(private readonly config: StorageConfig) {}
 
   async embedText(text: string, signal?: AbortSignal): Promise<number[]> {
+    const [embedding] = await this.embedTexts([text], signal);
+    if (!embedding) {
+      throw new Error("embeddings response did not include an embedding vector");
+    }
+
+    return embedding;
+  }
+
+  async embedTexts(texts: string[], signal?: AbortSignal): Promise<number[][]> {
     if (!this.config.embedding_base_url) {
       throw new Error("embedding base url is not configured");
     }
@@ -22,7 +32,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
       },
       body: JSON.stringify({
         model: this.config.embedding_model,
-        input: text,
+        input: texts,
       }),
     };
 
@@ -37,13 +47,14 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
     }
 
     const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
-    const embedding = payload.data?.[0]?.embedding;
+    const embeddings =
+      payload.data?.map((item) => item.embedding).filter((item): item is number[] => Array.isArray(item)) ?? [];
 
-    if (!embedding || !Array.isArray(embedding)) {
+    if (embeddings.length !== texts.length) {
       throw new Error("embeddings response did not include an embedding vector");
     }
 
-    return embedding.map((item) => Number(item));
+    return embeddings.map((embedding) => embedding.map((item) => Number(item)));
   }
 
   private buildEmbeddingsUrl() {

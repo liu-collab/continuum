@@ -361,6 +361,8 @@ export interface ReadModelEntry {
   created_at: string;
   updated_at: string;
   summary_embedding: number[] | null;
+  embedding_status: "ok" | "pending" | "failed";
+  embedding_attempted_at: string | null;
 }
 
 export interface StorageMetrics {
@@ -381,6 +383,23 @@ export interface StorageMetrics {
   projector_failed_jobs: number;
   projector_dead_letter_jobs: number;
   projector_embedding_degraded_jobs: number;
+  pending_embedding_records: number;
+}
+
+export interface GovernanceAction {
+  record_id: string;
+  action_type: GovernanceActionType;
+  action_payload: Record<string, unknown>;
+  actor_type: "system" | "user" | "operator";
+  actor_id: string;
+  created_at: string;
+}
+
+export interface RecordHistoryEntry {
+  entry_type: "governance_action" | "record_version";
+  created_at: string;
+  record_id: string;
+  payload: GovernanceAction | MemoryRecordVersion;
 }
 
 export interface ReadModelRefreshJob {

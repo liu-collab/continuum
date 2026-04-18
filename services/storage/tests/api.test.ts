@@ -548,4 +548,67 @@ describe("storage api", () => {
     expect(response.json().data.page).toBe(1);
     expect(response.json().data.page_size).toBe(10);
   });
+
+  it("serves record versions and history routes", async () => {
+    const repositories = createMemoryRepositories();
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+    const job = await service.submitWriteBackCandidate(buildCandidate());
+    expect(job.id).toBeTruthy();
+    await service.processWriteJobs();
+    const records = await service.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: undefined,
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+    const [stored] = records.items;
+
+    await service.archiveRecord(stored!.id, {
+      actor: {
+        actor_type: "operator",
+        actor_id: "tester",
+      },
+      reason: "check history api",
+    });
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const versionsResponse = await app.inject({
+      method: "GET",
+      url: `/v1/storage/records/${stored!.id}/versions`,
+    });
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: `/v1/storage/records/${stored!.id}/history`,
+    });
+
+    expect(versionsResponse.statusCode).toBe(200);
+    expect(historyResponse.statusCode).toBe(200);
+    expect(versionsResponse.json().data.length).toBeGreaterThan(0);
+    expect(historyResponse.json().data.length).toBeGreaterThan(0);
+  });
 });

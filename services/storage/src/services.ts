@@ -7,6 +7,7 @@ import type {
   DeleteRecordInput,
   InvalidateRecordInput,
   RecordListPage,
+  RecordHistoryEntry,
   RecordPatchInput,
   ResolveConflictInput,
   RestoreVersionInput,
@@ -102,8 +103,22 @@ export class StorageService {
   }
 
   async submitWriteBackCandidates(candidates: WriteBackCandidate[]) {
-    const jobs = await Promise.all(
-      candidates.map((candidate) => this.submitWriteBackCandidate(candidate)),
+    const jobs = await this.repositories.jobs.enqueueMany(
+      candidates.map((candidate) => {
+        const normalized = normalizeCandidate(candidate);
+        const idempotencyKey =
+          candidate.idempotency_key ??
+          createHash("sha256")
+            .update(JSON.stringify(candidate))
+            .digest("hex");
+
+        return {
+          idempotency_key: idempotencyKey,
+          candidate_hash: normalized.candidate_hash,
+          source_service: candidate.source.service_name,
+          candidate,
+        };
+      }),
     );
 
     return jobs;
@@ -188,6 +203,32 @@ export class StorageService {
 
   async restoreVersion(recordId: string, input: RestoreVersionInput) {
     return this.governance.restoreVersion(recordId, input);
+  }
+
+  async listRecordVersions(recordId: string) {
+    return this.repositories.records.listVersions(recordId);
+  }
+
+  async getRecordHistory(recordId: string): Promise<RecordHistoryEntry[]> {
+    const [versions, actions] = await Promise.all([
+      this.repositories.records.listVersions(recordId),
+      this.repositories.governance.listActions(recordId),
+    ]);
+
+    return [
+      ...versions.map((version) => ({
+        entry_type: "record_version" as const,
+        created_at: version.changed_at,
+        record_id: version.record_id,
+        payload: version,
+      })),
+      ...actions.map((action) => ({
+        entry_type: "governance_action" as const,
+        created_at: action.created_at,
+        record_id: action.record_id,
+        payload: action,
+      })),
+    ].sort((left, right) => right.created_at.localeCompare(left.created_at));
   }
 
   async listConflicts(status?: string) {

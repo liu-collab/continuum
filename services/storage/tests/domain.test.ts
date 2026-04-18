@@ -103,6 +103,47 @@ describe("storage domain rules", () => {
     expect(conflict.should_mark_pending_confirmation).toBe(true);
   });
 
+  it("opens conflict for opposite chinese fact preference", () => {
+    const existing = {
+      id: "record-zh-1",
+      workspace_id: "11111111-1111-1111-1111-111111111111",
+      user_id: "22222222-2222-2222-2222-222222222222",
+      task_id: null,
+      session_id: null,
+      memory_type: "fact_preference" as const,
+      scope: "user" as const,
+      status: "active" as const,
+      summary: "用户喜欢简洁回答",
+      details_json: { subject: "user", predicate: "喜欢简洁回答" },
+      importance: 5,
+      confidence: 0.7,
+      dedupe_key: "fact_preference:user:user:简洁回答",
+      source_type: "user_input",
+      source_ref: "turn-zh-1",
+      created_by_service: "retrieval-runtime",
+      last_confirmed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      archived_at: null,
+      deleted_at: null,
+      version: 1,
+    };
+
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        summary: "用户不喜欢简洁回答",
+        details: {
+          subject: "user",
+          predicate: "不喜欢简洁回答",
+        },
+        confidence: 0.6,
+      }),
+    );
+
+    const decision = decideMerge(normalized, [existing]);
+    expect(decision.decision).toBe("open_conflict");
+  });
+
   it("keeps user scope dedupe stable across workspaces", () => {
     const normalizedA = normalizeCandidate(buildCandidate());
     const normalizedB = normalizeCandidate(

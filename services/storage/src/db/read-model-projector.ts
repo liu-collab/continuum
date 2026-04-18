@@ -44,6 +44,8 @@ export class ReadModelProjector {
       created_at: record.created_at,
       updated_at: record.updated_at,
       summary_embedding: embeddingResult.embedding,
+      embedding_status: embeddingResult.embedding ? "ok" : "pending",
+      embedding_attempted_at: new Date().toISOString(),
     };
 
     await this.repository.upsert(entry);
@@ -51,6 +53,43 @@ export class ReadModelProjector {
       embedding_updated: Boolean(embeddingResult.embedding),
       degradation_reason: embeddingResult.degradation_reason,
     };
+  }
+
+  async refreshPendingEmbeddings(limit: number) {
+    if (!this.embeddingsClient?.embedTexts) {
+      return 0;
+    }
+
+    const entries = await this.repository.listPendingEmbeddings(limit);
+    if (entries.length === 0) {
+      return 0;
+    }
+
+    try {
+      const embeddings = await this.embeddingsClient.embedTexts(entries.map((entry) => entry.summary));
+      await Promise.all(
+        entries.map((entry, index) =>
+          this.repository.upsert({
+            ...entry,
+            summary_embedding: embeddings[index] ?? null,
+            embedding_status: embeddings[index] ? "ok" : "failed",
+            embedding_attempted_at: new Date().toISOString(),
+          }),
+        ),
+      );
+      return entries.length;
+    } catch {
+      await Promise.all(
+        entries.map((entry) =>
+          this.repository.upsert({
+            ...entry,
+            embedding_status: "pending",
+            embedding_attempted_at: new Date().toISOString(),
+          }),
+        ),
+      );
+      return 0;
+    }
   }
 
   private async generateEmbedding(summary: string) {

@@ -105,18 +105,23 @@ function isOppositeFact(existing: MemoryRecord, normalized: NormalizedMemory): b
 
 function polarity(value: string): "positive" | "negative" | "neutral" {
   const normalized = value.toLowerCase();
+  const negativeZh = ["不喜欢", "讨厌", "反对", "避免", "拒绝", "不要"];
+  const positiveZh = ["喜欢", "偏好", "习惯", "要求", "倾向", "选择"];
 
   if (
+    negativeZh.some((token) => value.includes(token)) ||
     normalized.includes("not ") ||
     normalized.includes("don't ") ||
     normalized.includes("do not ") ||
     normalized.includes("dislike") ||
-    normalized.includes("avoid")
+    normalized.includes("avoid") ||
+    normalized.includes("hate")
   ) {
     return "negative";
   }
 
   if (
+    positiveZh.some((token) => value.includes(token)) ||
     normalized.includes("prefer") ||
     normalized.includes("like") ||
     normalized.includes("love") ||

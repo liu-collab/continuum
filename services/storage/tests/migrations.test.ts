@@ -150,7 +150,7 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
           from information_schema.columns
           where table_schema = $1
             and table_name = 'memory_read_model_v1'
-            and column_name in ('details', 'source', 'summary_embedding', 'created_at')
+            and column_name in ('details', 'source', 'summary_embedding', 'created_at', 'embedding_status', 'embedding_attempted_at')
           order by column_name
         `,
         [context.sharedSchema],
@@ -159,6 +159,8 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
       expect(readModelColumns.rows.map((row) => row.column_name)).toEqual([
         "created_at",
         "details",
+        "embedding_attempted_at",
+        "embedding_status",
         "source",
         "summary_embedding",
       ]);

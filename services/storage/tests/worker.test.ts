@@ -218,6 +218,59 @@ describe("job worker", () => {
     expect(metrics.projector_failed_jobs).toBe(0);
   });
 
+  it("refreshes pending embeddings in batch after service recovery", async () => {
+    const repositories = createMemoryRepositories({
+      readModel: [
+        {
+          id: "pending-embedding-record",
+          workspace_id: "11111111-1111-4111-8111-111111111111",
+          user_id: "22222222-2222-4222-8222-222222222222",
+          task_id: null,
+          session_id: null,
+          memory_type: "fact_preference",
+          scope: "user",
+          status: "active",
+          summary: "用户偏好简洁回答",
+          details: { subject: "user", predicate: "偏好简洁回答" },
+          importance: 5,
+          confidence: 0.9,
+          source: null,
+          last_confirmed_at: null,
+          last_used_at: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          summary_embedding: null,
+          embedding_status: "pending",
+          embedding_attempted_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    const worker = new JobWorker(
+      repositories,
+      createLogger("silent"),
+      {
+        batch_size: 10,
+        max_retries: 3,
+        read_model_refresh_max_retries: 2,
+      },
+      {
+        async embedText() {
+          return [0.1, 0.2, 0.3];
+        },
+        async embedTexts(texts) {
+          return texts.map(() => [0.1, 0.2, 0.3]);
+        },
+      },
+    );
+
+    await worker.processAvailableJobs();
+
+    const projected = await repositories.readModel.findById("pending-embedding-record");
+    expect(projected?.summary_embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(projected?.embedding_status).toBe("ok");
+  });
+
   it("does not duplicate a user memory when written from another workspace", async () => {
     const repositories = createMemoryRepositories();
     const logger = createLogger("silent");

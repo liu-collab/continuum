@@ -45,4 +45,30 @@ describe("storage embeddings client", () => {
     expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
     expect(embedding).toEqual([0.1, 0.2, 0.3]);
   });
+
+  it("supports batch embeddings on third-party endpoints", async () => {
+    let calledUrl = "";
+    let payloadInput: unknown;
+
+    globalThis.fetch = (async (input, init) => {
+      calledUrl = String(input);
+      payloadInput = init?.body ? JSON.parse(String(init.body)) : null;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: [0.1, 0.2] }, { embedding: [0.3, 0.4] }],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const client = new HttpEmbeddingsClient(baseConfig);
+    const embeddings = await client.embedTexts!(["hello", "world"]);
+
+    expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
+    expect(payloadInput).toMatchObject({ input: ["hello", "world"] });
+    expect(embeddings).toEqual([
+      [0.1, 0.2],
+      [0.3, 0.4],
+    ]);
+  });
 });
