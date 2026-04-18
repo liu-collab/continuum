@@ -1,5 +1,12 @@
 # T09 — 配置与工作区 / memory_mode 解析
 
+## 当前状态
+
+- 状态：已完成
+- 完成时间：2026-04-18
+- 验证结果：`npm run check`、`npm run build`、`npm test` 已通过
+- 代码位置：`services/memory-native-agent/src/config/`
+
 ## 1. 目标
 
 定义 `memory-native-agent` 的配置文件格式与加载策略，解析并传递 `workspace_id`、`user_id`、`memory_mode` 给 runner / memory-client。

@@ -130,7 +130,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | 未开始 | mna | T01 | 无 |
 | [T07](./T07-agent-runner.md) | agent 主循环与生命周期钩子 | 未开始 | mna | T02, T04, T05, T09, T12 | 无 |
 | [T08](./T08-http-api.md) | HTTP + WebSocket API 服务端 | 未开始 | mna | T07, T12 | 无 |
-| [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | 未开始 | mna | T01 | 无 |
+| [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | 已完成 | mna | T01 | 无 |
 | [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 未开始 | 全部 | T01-T09, T11, T12 | 可能补测试桩 |
 | [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | 未开始 | visualization | T08, T12 | `visualization` |
 | [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | 未开始 | mna | T01 | 无 |
@@ -142,6 +142,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T01` 已完成：工程骨架、最小 `Fastify` HTTP 服务、`/healthz`、启动脚本、smoke test 已落地。
 - `T02` 已完成：`memory-client` 已提供 `sessionStartContext / prepareContext / finalizeTurn / dependencyStatus / healthz`，并补齐超时、错误分类、降级回退和契约校验测试。
 - `T03` 已完成：`retrieval-runtime` 已正式支持 `memory_native_agent` 宿主枚举和独立 adapter。
+- `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
 
 ## 7. 推荐实施顺序与并行度
 
