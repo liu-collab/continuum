@@ -1,5 +1,12 @@
 # T04 — 模型 provider 抽象与三实现
 
+## 当前状态
+
+- 状态：已完成
+- 完成时间：2026-04-18
+- 验证结果：`npm run check`、`npm run build`、`npm test` 已通过
+- 代码位置：`services/memory-native-agent/src/providers/`
+
 ## 1. 目标
 
 定义 `IModelProvider` 接口，实现三个首版 provider：
