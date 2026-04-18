@@ -16,7 +16,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/25 px-4">
-      <div className="w-full max-w-xl rounded-3xl border bg-white p-6 shadow-2xl">
+      <div data-testid="tool-confirm-dialog" className="w-full max-w-xl rounded-3xl border bg-white p-6 shadow-2xl">
         <div className="flex items-start gap-3">
           <div className="rounded-full bg-amber-100 p-2 text-amber-700">
             <AlertTriangle className="h-5 w-5" />
@@ -36,6 +36,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
           <button
             type="button"
             onClick={() => onDecision("deny")}
+            data-testid="confirm-deny"
             className="rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             拒绝
@@ -43,6 +44,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
           <button
             type="button"
             onClick={() => onDecision("allow")}
+            data-testid="confirm-allow"
             className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/5"
           >
             允许
@@ -50,6 +52,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
           <button
             type="button"
             onClick={() => onDecision("allow_session")}
+            data-testid="confirm-allow-session"
             className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
           >
             本会话始终允许

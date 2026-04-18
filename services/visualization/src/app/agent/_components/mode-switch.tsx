@@ -12,6 +12,7 @@ export function ModeSwitch({ value, onChange }: ModeSwitchProps) {
     <label className="flex items-center gap-3 rounded-full border bg-white/85 px-4 py-2 text-sm text-slate-700">
       <span className="font-semibold text-slate-900">memory mode</span>
       <select
+        data-testid="memory-mode-select"
         value={value}
         onChange={(event) => onChange(event.target.value as AgentMemoryMode)}
         className="bg-transparent text-sm outline-none"

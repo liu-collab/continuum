@@ -47,9 +47,9 @@ export function ChatPanel({
                   : "danger"
             }
           >
-            {connection}
+            <span data-testid="agent-connection-state">{connection}</span>
           </StatusBadge>
-          {degraded ? <StatusBadge tone="warning">memory degraded</StatusBadge> : null}
+          {degraded ? <StatusBadge tone="warning"><span data-testid="agent-degraded-banner">memory degraded</span></StatusBadge> : null}
           {activeTaskLabel ? <StatusBadge tone="neutral">{activeTaskLabel}</StatusBadge> : null}
         </div>
         <h2 className="mt-3 font-[var(--font-serif)] text-3xl text-slate-900">
@@ -88,7 +88,7 @@ export function ChatPanel({
               {turn.injection ? (
                 <div className="rounded-2xl border bg-white px-4 py-3">
                   <div className="text-sm font-semibold text-slate-900">Injection Banner</div>
-                  <div className="mt-2 text-sm leading-6 text-slate-700">{turn.injection.memory_summary}</div>
+                  <div className="mt-2 text-sm leading-6 text-slate-700" data-testid={`injection-summary-${turn.turnId}`}>{turn.injection.memory_summary}</div>
                 </div>
               ) : null}
 
@@ -102,11 +102,12 @@ export function ChatPanel({
                 </div>
               ) : null}
 
-              <MessageBubble title="You" content={turn.userInput || "等待用户输入..."} tone="user" />
+              <MessageBubble title="You" content={turn.userInput || "等待用户输入..."} tone="user" testId={`user-message-${turn.turnId}`} />
               <MessageBubble
                 title="Assistant"
                 content={turn.assistantOutput || (turn.status === "streaming" ? "正在生成..." : "还没有输出。")}
                 tone="assistant"
+                testId={`assistant-message-${turn.turnId}`}
               />
 
               {turn.errors.length > 0 ? (
@@ -137,6 +138,7 @@ export function ChatPanel({
           }}
         >
           <textarea
+            data-testid="agent-input"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="输入消息，Enter 发送，Shift+Enter 换行"
@@ -165,6 +167,7 @@ export function ChatPanel({
               type="button"
               onClick={onAbort}
               disabled={!isBusy}
+              data-testid="abort-turn"
               className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Square className="h-4 w-4" />
@@ -173,6 +176,7 @@ export function ChatPanel({
             <button
               type="submit"
               disabled={connection !== "open" || !draft.trim()}
+              data-testid="send-message"
               className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
@@ -188,14 +192,16 @@ export function ChatPanel({
 function MessageBubble({
   title,
   content,
-  tone
+  tone,
+  testId
 }: {
   title: string;
   content: string;
   tone: "user" | "assistant";
+  testId?: string;
 }) {
   return (
-    <div className={`rounded-3xl px-5 py-4 ${tone === "user" ? "bg-white" : "bg-white/70"}`}>
+    <div data-testid={testId} className={`rounded-3xl px-5 py-4 ${tone === "user" ? "bg-white" : "bg-white/70"}`}>
       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</div>
       <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-800">{content}</div>
     </div>
