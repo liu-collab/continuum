@@ -65,6 +65,13 @@ export interface RunningE2eStack {
     listWriteJobs(limit?: number): Promise<Array<Record<string, unknown>>>;
     listRecords(filters: Record<string, unknown>): Promise<{ items: Array<Record<string, unknown>> }>;
   };
+  stopStorage(): Promise<void>;
+  restartStorage(): Promise<void>;
+  invalidateRecord(recordId: string, input?: {
+    actor_type?: "system" | "user" | "operator";
+    actor_id?: string;
+    reason?: string;
+  }): Promise<Record<string, unknown>>;
   close(): Promise<void>;
   workerDrain(): Promise<void>;
 }
@@ -179,9 +186,12 @@ class DeterministicEmbeddingsClient {
 
 class StorageReadModelRepository {
   constructor(
-    private readonly storageService: {
-      listRecords(filters: Record<string, unknown>): Promise<{ items: Array<Record<string, unknown>> }>;
-    },
+    private readonly getStorageService: () =>
+      | {
+          listRecords(filters: Record<string, unknown>): Promise<{ items: Array<Record<string, unknown>> }>;
+        }
+      | undefined,
+    private readonly isStorageAvailable: () => boolean,
   ) {}
 
   async searchCandidates(query: {
@@ -195,12 +205,19 @@ class StorageReadModelRepository {
     importance_threshold: number;
     candidate_limit: number;
   }) {
+    if (!this.isStorageAvailable()) {
+      throw new Error("storage unavailable");
+    }
     const filters = {
       workspace_id: query.workspace_id,
       page: 1,
       page_size: 100,
     };
-    const result = await this.storageService.listRecords(filters);
+    const storageService = this.getStorageService();
+    if (!storageService) {
+      throw new Error("storage unavailable");
+    }
+    const result = await storageService.listRecords(filters);
     return result.items
       .filter((record) => query.status_filter.includes(record.status as RecordStatus))
       .filter((record) => query.scope_filter.includes(record.scope as Scope))
@@ -258,8 +275,8 @@ function summaryToVector(summary: string): number[] {
   return [0.8, 0.2, 0];
 }
 
-async function startFastify(app: FastifyInstance) {
-  await app.listen({ host: "127.0.0.1", port: 0 });
+async function startFastify(app: FastifyInstance, port = 0) {
+  await app.listen({ host: "127.0.0.1", port });
   const address = app.server.address();
   if (!address || typeof address === "string") {
     throw new Error("server address unavailable");
@@ -389,18 +406,14 @@ async function createRuntimeStack(storageBaseUrl: string) {
   };
 }
 
-async function createStorageStack() {
+async function createStorageStack(repositories: unknown, port = 0) {
   const [
     { createApp },
     { createStorageService },
-    { createMemoryRepositories },
   ] = await Promise.all([
     importStorageAppModule(),
     importStorageServiceModule(),
-    importStorageMemoryRepoModule(),
   ]);
-
-  const repositories = createMemoryRepositories();
   const service = createStorageService({
     repositories,
     logger: {
@@ -427,13 +440,33 @@ async function createStorageStack() {
     },
   });
   const app = createApp(service);
-  const started = await startFastify(app);
+  const started = await startFastify(app, port);
 
   return {
     app: started.app,
     baseUrl: started.baseUrl,
+    port: started.port,
     service,
   };
+}
+
+async function stopFastify(app?: FastifyInstance) {
+  if (!app) {
+    return;
+  }
+  await app.close().catch(() => undefined);
+}
+
+async function stopFastifyWithTimeout(app?: FastifyInstance, timeoutMs = 1_500) {
+  if (!app) {
+    return;
+  }
+  await Promise.race([
+    stopFastify(app),
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, timeoutMs);
+    }),
+  ]);
 }
 
 async function waitForWritebackJob(
@@ -522,6 +555,8 @@ export async function createE2eStack(options?: {
   const withRuntime = options?.withRuntime ?? true;
   const { root, workspaceDir } = createHomeAndWorkspace();
   const startedApps: FastifyInstance[] = [];
+  const { createMemoryRepositories } = await importStorageMemoryRepoModule();
+  const storageRepositories = createMemoryRepositories();
 
   const providerServer = await startStubProviderServer();
   startedApps.push(providerServer.app);
@@ -529,12 +564,17 @@ export async function createE2eStack(options?: {
   let storageApp: FastifyInstance | undefined;
   let storageService: RunningE2eStack["storageService"] | undefined;
   let storageBaseUrl = "http://127.0.0.1:1";
+  let storageOnline = false;
+
+  let storagePort = 0;
 
   if (withStorage) {
-    const storageStack = await createStorageStack();
+    const storageStack = await createStorageStack(storageRepositories);
     storageApp = storageStack.app;
     storageService = storageStack.service;
     storageBaseUrl = storageStack.baseUrl;
+    storagePort = storageStack.port;
+    storageOnline = true;
     startedApps.push(storageStack.app);
   }
 
@@ -548,7 +588,9 @@ export async function createE2eStack(options?: {
     }
 
     const runtimeStack = await createRuntimeStack(storageBaseUrl);
-    const runtimeService = runtimeStack.createService(new StorageReadModelRepository(storageService));
+    const runtimeService = runtimeStack.createService(
+      new StorageReadModelRepository(() => storageService, () => storageOnline),
+    );
     const startedRuntime = await startFastify(runtimeStack.createApp(runtimeService));
     runtimeApp = startedRuntime.app;
     runtimeRepository = runtimeStack.runtimeRepository;
@@ -580,6 +622,58 @@ export async function createE2eStack(options?: {
     runtimeRepository,
     storageApp,
     storageService,
+    async stopStorage() {
+      if (!storageApp) {
+        return;
+      }
+      storageOnline = false;
+      const index = startedApps.indexOf(storageApp);
+      if (index >= 0) {
+        startedApps.splice(index, 1);
+      }
+      await stopFastify(storageApp);
+      storageApp = undefined;
+    },
+    async restartStorage() {
+      if (storageApp) {
+        return;
+      }
+      const storageStack = await createStorageStack(storageRepositories, storagePort);
+      storageApp = storageStack.app;
+      storageService = storageStack.service;
+      storagePort = storageStack.port;
+      storageOnline = true;
+      startedApps.push(storageStack.app);
+    },
+    async invalidateRecord(recordId, input) {
+      if (!storageApp) {
+        throw new Error("storage app unavailable");
+      }
+      const address = storageApp.server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("storage address unavailable");
+      }
+      const response = await fetch(`http://127.0.0.1:${address.port}/v1/storage/records/${recordId}/invalidate`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          actor: {
+            actor_type: input?.actor_type ?? "operator",
+            actor_id: input?.actor_id ?? "mna-e2e",
+          },
+          reason: input?.reason ?? "e2e invalidate record",
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`invalidate record failed: ${response.status}`);
+      }
+      const payload = (await response.json()) as {
+        data?: Record<string, unknown>;
+      };
+      return payload.data ?? {};
+    },
     async workerDrain() {
       if (!storageService) {
         return;
@@ -588,9 +682,9 @@ export async function createE2eStack(options?: {
       await storageService.processWriteJobs();
     },
     async close() {
-      await Promise.all(startedApps.reverse().map(async (app) => {
-        await app.close().catch(() => undefined);
-      }));
+      for (const app of [...startedApps].reverse()) {
+        await stopFastifyWithTimeout(app);
+      }
       fs.rmSync(root, { recursive: true, force: true });
     },
   };
@@ -664,6 +758,7 @@ export async function fetchDependencyStatus(stack: RunningE2eStack) {
 export async function runTurn(wsUrl: string, input: {
   turnId: string;
   text: string;
+  settleMs?: number;
 }) {
   const messages: Array<Record<string, unknown>> = [];
   const ws = new WebSocket(wsUrl);
@@ -683,7 +778,7 @@ export async function runTurn(wsUrl: string, input: {
       messages.push(payload);
       if (payload.kind === "turn_end" && payload.turn_id === input.turnId) {
         clearTimeout(timer);
-        resolve(messages);
+        setTimeout(() => resolve(messages), input.settleMs ?? 0);
       }
     });
 
