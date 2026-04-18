@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { EmbeddingsClient } from "../query/embeddings-client.js";
 import type { ReadModelRepository } from "../query/read-model-repository.js";
+import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/messages.js";
 import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import type { Logger } from "pino";
 import { normalizeText } from "../shared/utils.js";
@@ -37,10 +38,7 @@ function scopePlanByPhase(
     case "session_start":
       return {
         scopes: memoryMode === "workspace_plus_global" ? ["workspace", "user"] : ["workspace"],
-        reason:
-          memoryMode === "workspace_plus_global"
-            ? "session_start restores workspace memory plus global user memory"
-            : "session_start is limited to workspace memory in workspace_only mode",
+        reason: scopePlanReason(phase, memoryMode, hasTask),
       };
     case "task_start":
     case "task_switch":
@@ -51,10 +49,7 @@ function scopePlanByPhase(
           ...(hasTask ? ["task" as const] : []),
           ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
         ]),
-        reason:
-          memoryMode === "workspace_plus_global"
-            ? `${phase} restores workspace, task, and global user memory`
-            : `${phase} restores workspace memory and task memory without global user memory`,
+        reason: scopePlanReason(phase, memoryMode, hasTask),
       };
     case "before_response":
       return {
@@ -64,15 +59,12 @@ function scopePlanByPhase(
           "session",
           ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
         ]),
-        reason:
-          memoryMode === "workspace_plus_global"
-            ? "before_response can use workspace, task, session, and global user memory"
-            : "before_response can use workspace, task, and session memory only",
+        reason: scopePlanReason(phase, memoryMode, hasTask),
       };
     case "after_response":
       return {
         scopes: [],
-        reason: "after_response does not perform recall",
+        reason: scopePlanReason(phase, memoryMode, hasTask),
       };
   }
 }
@@ -83,8 +75,6 @@ function shouldSkipForShortInput(text: string): boolean {
 }
 
 export class TriggerEngine {
-  private readonly cooldown = new Map<string, { input: string; expires_at: number }>();
-
   constructor(
     private readonly config: AppConfig,
     private readonly embeddingsClient: EmbeddingsClient,
@@ -101,63 +91,46 @@ export class TriggerEngine {
       return {
         hit: false,
         trigger_type: "no_trigger",
-        trigger_reason: "after_response only runs writeback inspection",
+        trigger_reason: runtimeMessages.afterResponseReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
         requested_scopes: [],
         scope_reason: scopePlan.reason,
-        importance_threshold: 3,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
       };
     }
 
     const normalizedInput = normalizeText(context.current_input).toLowerCase();
-    const cooldownKey = `${context.session_id}:${context.phase}`;
-    const cooldownEntry = this.cooldown.get(cooldownKey);
-    const cooldownApplied = Boolean(cooldownEntry && cooldownEntry.expires_at > Date.now() && cooldownEntry.input === normalizedInput);
-
-    if (cooldownApplied) {
-      return {
-        hit: false,
-        trigger_type: "cooldown_skip",
-        trigger_reason: "recent recall already covered the same topic within cooldown window",
-        requested_memory_types: [],
-        memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
-        scope_reason: scopePlan.reason,
-        importance_threshold: 3,
-        cooldown_applied: true,
-      };
-    }
-
     const requestedMemoryTypes = requestedTypesByPhase(context.phase);
 
     if (context.phase !== "before_response") {
-      this.recordCooldown(cooldownKey, normalizedInput);
       return {
         hit: true,
         trigger_type: "phase",
-        trigger_reason: `${context.phase} is a mandatory retrieval phase`,
+        trigger_reason: phaseTriggerReason(context.phase),
         requested_memory_types: requestedMemoryTypes,
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold: context.phase === "session_start" ? 4 : 3,
+        importance_threshold:
+          context.phase === "session_start"
+            ? this.config.IMPORTANCE_THRESHOLD_SESSION_START
+            : this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
       };
     }
 
     if (HISTORY_PATTERNS.some((pattern) => normalizedInput.includes(pattern.toLowerCase()))) {
-      this.recordCooldown(cooldownKey, normalizedInput);
       return {
         hit: true,
         trigger_type: "history_reference",
-        trigger_reason: "current input explicitly references prior context or preferences",
+        trigger_reason: runtimeMessages.historyReferenceReason,
         requested_memory_types: requestedMemoryTypes,
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold: 3,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
       };
     }
@@ -166,12 +139,12 @@ export class TriggerEngine {
       return {
         hit: false,
         trigger_type: "no_trigger",
-        trigger_reason: "input is too short and has no clear historical reference",
+        trigger_reason: runtimeMessages.shortInputSkipReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold: 3,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
       };
     }
@@ -181,12 +154,12 @@ export class TriggerEngine {
       return {
         hit: false,
         trigger_type: "no_trigger",
-        trigger_reason: "semantic fallback degraded due to dependency failure",
+        trigger_reason: runtimeMessages.semanticDegradedReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold: 3,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
         degraded: true,
@@ -195,16 +168,15 @@ export class TriggerEngine {
     }
 
     if (semanticScore.score >= this.config.SEMANTIC_TRIGGER_THRESHOLD) {
-      this.recordCooldown(cooldownKey, normalizedInput);
       return {
         hit: true,
         trigger_type: "semantic_fallback",
-        trigger_reason: "semantic similarity exceeded the fallback threshold",
+        trigger_reason: runtimeMessages.semanticFallbackReason,
         requested_memory_types: requestedMemoryTypes,
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold: 4,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
       };
@@ -213,22 +185,15 @@ export class TriggerEngine {
     return {
       hit: false,
       trigger_type: "no_trigger",
-      trigger_reason: "no hard trigger matched and semantic fallback stayed below threshold",
+      trigger_reason: runtimeMessages.noTriggerReason,
       requested_memory_types: [],
       memory_mode: memoryMode,
       requested_scopes: scopePlan.scopes,
       scope_reason: scopePlan.reason,
-      importance_threshold: 3,
+      importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
       cooldown_applied: false,
       semantic_score: semanticScore.score,
     };
-  }
-
-  private recordCooldown(key: string, input: string): void {
-    this.cooldown.set(key, {
-      input,
-      expires_at: Date.now() + this.config.TRIGGER_COOLDOWN_MS,
-    });
   }
 
   private async semanticFallbackScore(
@@ -265,7 +230,7 @@ export class TriggerEngine {
             scope_filter: requestedScopes,
             memory_type_filter: ["fact_preference", "task_state", "episodic"],
             status_filter: ["active"],
-            importance_threshold: 4,
+            importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
             semantic_query_text: queryText,
             candidate_limit: 8,
           },

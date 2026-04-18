@@ -1,7 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__;
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_turns (
-  trace_id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL,
   host TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -12,11 +12,13 @@ CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_turns (
   turn_id TEXT NULL,
   current_input TEXT NOT NULL,
   assistant_output TEXT NULL,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (trace_id, phase)
 );
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_trigger_runs (
-  trace_id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
   trigger_hit BOOLEAN NOT NULL,
   trigger_type TEXT NOT NULL,
   trigger_reason TEXT NOT NULL,
@@ -30,11 +32,13 @@ CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_trigger_runs (
   degraded BOOLEAN NULL,
   degradation_reason TEXT NULL,
   duration_ms INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (trace_id, phase)
 );
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_recall_runs (
-  trace_id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
   trigger_hit BOOLEAN NOT NULL,
   trigger_type TEXT NOT NULL,
   trigger_reason TEXT NOT NULL,
@@ -51,11 +55,13 @@ CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_recall_runs (
   degraded BOOLEAN NOT NULL,
   degradation_reason TEXT NULL,
   duration_ms INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (trace_id, phase)
 );
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_injection_runs (
-  trace_id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
   injected BOOLEAN NOT NULL,
   injected_count INTEGER NOT NULL,
   token_estimate INTEGER NOT NULL,
@@ -66,11 +72,13 @@ CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_injection_runs (
   trim_reasons JSONB NOT NULL,
   result_state TEXT NOT NULL,
   duration_ms INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (trace_id, phase)
 );
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_writeback_submissions (
-  trace_id TEXT PRIMARY KEY,
+  trace_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
   candidate_count INTEGER NOT NULL,
   submitted_count INTEGER NOT NULL,
   memory_mode TEXT NOT NULL,
@@ -82,7 +90,8 @@ CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_writeback_submission
   degraded BOOLEAN NOT NULL,
   degradation_reason TEXT NULL,
   duration_ms INTEGER NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL
+  created_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (trace_id, phase)
 );
 
 CREATE TABLE IF NOT EXISTS __RUNTIME_SCHEMA_IDENT__.runtime_dependency_status (

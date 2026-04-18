@@ -177,6 +177,7 @@ export interface SessionStartResponse {
   trace_id: string;
   additional_context: string;
   active_task_summary: string | null;
+  injection_block: InjectionBlock | null;
   memory_mode: MemoryMode;
   dependency_status: DependencyStatusSnapshot;
   degraded: boolean;
@@ -226,6 +227,7 @@ export interface RuntimeTurnRecord {
 
 export interface RecallRunRecord {
   trace_id: string;
+  phase: RuntimePhase;
   trigger_hit: boolean;
   trigger_type: TriggerDecision["trigger_type"];
   trigger_reason: string;
@@ -247,6 +249,7 @@ export interface RecallRunRecord {
 
 export interface TriggerRunRecord {
   trace_id: string;
+  phase: RuntimePhase;
   trigger_hit: boolean;
   trigger_type: TriggerDecision["trigger_type"];
   trigger_reason: string;
@@ -265,6 +268,7 @@ export interface TriggerRunRecord {
 
 export interface InjectionRunRecord {
   trace_id: string;
+  phase: RuntimePhase;
   injected: boolean;
   injected_count: number;
   token_estimate: number;
@@ -280,6 +284,7 @@ export interface InjectionRunRecord {
 
 export interface WritebackSubmissionRecord {
   trace_id: string;
+  phase: RuntimePhase;
   candidate_count: number;
   submitted_count: number;
   memory_mode: MemoryMode;

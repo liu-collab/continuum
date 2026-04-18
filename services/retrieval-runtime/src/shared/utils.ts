@@ -10,6 +10,15 @@ export function normalizeText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
+export function truncateFromTail(text: string | undefined, maxLength: number): string {
+  const normalized = normalizeText(text ?? "");
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return normalized.slice(normalized.length - maxLength);
+}
+
 export function textToLines(text: string): string[] {
   return normalizeText(text)
     .split(/(?<=[.!?。！？])\s+/)

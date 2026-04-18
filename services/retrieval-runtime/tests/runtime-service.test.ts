@@ -39,8 +39,10 @@ const baseConfig: AppConfig = {
   PACKET_RECORD_LIMIT: 10,
   INJECTION_RECORD_LIMIT: 2,
   INJECTION_TOKEN_BUDGET: 64,
-  TRIGGER_COOLDOWN_MS: 1000,
-  SEMANTIC_TRIGGER_THRESHOLD: 0.85,
+  SEMANTIC_TRIGGER_THRESHOLD: 0.72,
+  IMPORTANCE_THRESHOLD_SESSION_START: 4,
+  IMPORTANCE_THRESHOLD_DEFAULT: 3,
+  IMPORTANCE_THRESHOLD_SEMANTIC: 4,
 };
 
 const ids = {
@@ -216,6 +218,8 @@ describe("retrieval-runtime service", () => {
     expect(response.memory_packet?.records.length).toBeGreaterThan(0);
     expect(response.injection_block?.memory_mode).toBe("workspace_plus_global");
     expect(response.injection_block?.requested_scopes).toContain("workspace");
+    expect(response.injection_block?.memory_summary).toContain("偏好与约束");
+    expect(response.memory_packet?.injection_hint).toContain("优先");
   });
 
   it("returns no injection when trigger is not hit", async () => {
@@ -538,8 +542,20 @@ describe("retrieval-runtime service", () => {
     expect(runs.injection_runs[0]?.selected_scopes).toContain("workspace");
   });
 
-  it("reuses the same trace for finalizeTurn so writeback closes the five-stage run", async () => {
+  it("reuses the same trace for prepare and finalize phases and keeps phase records split", async () => {
     const { service, repository } = createRuntime();
+
+    const preparedTaskStart = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-shared-trace",
+      phase: "task_start",
+      current_input: "开始当前任务。",
+      memory_mode: "workspace_plus_global",
+    });
 
     const prepared = await service.prepareContext({
       host: "claude_code_plugin",
@@ -552,6 +568,8 @@ describe("retrieval-runtime service", () => {
       current_input: "上次那个仓库约束继续沿用。",
       memory_mode: "workspace_plus_global",
     });
+
+    expect(preparedTaskStart.trace_id).toBe(prepared.trace_id);
 
     const finalized = await service.finalizeTurn({
       host: "claude_code_plugin",
@@ -568,11 +586,13 @@ describe("retrieval-runtime service", () => {
     expect(finalized.trace_id).toBe(prepared.trace_id);
 
     const runs = await repository.getRuns({ trace_id: prepared.trace_id });
-    expect(runs.turns).toHaveLength(1);
-    expect(runs.trigger_runs).toHaveLength(1);
-    expect(runs.recall_runs).toHaveLength(1);
-    expect(runs.injection_runs).toHaveLength(1);
+    expect(runs.turns).toHaveLength(3);
+    expect(runs.turns.map((run) => run.phase)).toEqual(["after_response", "before_response", "task_start"]);
+    expect(runs.trigger_runs).toHaveLength(2);
+    expect(runs.recall_runs).toHaveLength(2);
+    expect(runs.injection_runs).toHaveLength(2);
     expect(runs.writeback_submissions).toHaveLength(1);
+    expect(runs.writeback_submissions[0]?.phase).toBe("after_response");
   });
 
   it("does not mark writeback as submitted when storage dependency is unavailable", async () => {
@@ -642,6 +662,7 @@ describe("retrieval-runtime service", () => {
         user_id: ids.user,
         session_id: ids.session,
         task_id: ids.task,
+        turn_id: "http-turn-1",
         phase: "before_response",
         current_input: "上次定过的接口结构这轮继续沿用。",
       },
@@ -655,6 +676,7 @@ describe("retrieval-runtime service", () => {
         workspace_id: ids.workspace,
         user_id: ids.user,
         session_id: ids.session,
+        turn_id: "http-turn-2",
         current_input: "我偏好: 默认中文输出",
         assistant_output: "已确认: 后续都用中文。",
       },
@@ -680,6 +702,25 @@ describe("retrieval-runtime service", () => {
     expect(dependenciesResponse.json()).toHaveProperty("read_model");
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();
     expect(finalizeResponse.json().write_back_candidates.length).toBeGreaterThan(0);
+  });
+
+  it("returns structured injection data from session start context", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.sessionStartContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "恢复当前会话",
+      turn_id: "session-start-turn",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.injection_block).not.toBeNull();
+    expect(response.additional_context).toContain("恢复");
+    expect(response.injection_block?.memory_summary).toContain("偏好与约束");
   });
 
   it("returns validation errors for missing host identity boundaries instead of accepting fake namespaces", async () => {

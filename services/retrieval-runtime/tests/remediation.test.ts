@@ -12,7 +12,7 @@ import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtim
 import { PostgresRuntimeRepository } from "../src/observability/postgres-runtime-repository.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
 import { PostgresReadModelRepository } from "../src/query/postgres-read-model-repository.js";
-import { QueryEngine } from "../src/query/query-engine.js";
+import { buildRetrievalQuery, QueryEngine } from "../src/query/query-engine.js";
 import type { CandidateMemory } from "../src/shared/types.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
 import { renderMigrationTemplate } from "../src/db/migration-runner.js";
@@ -96,8 +96,10 @@ const config: AppConfig = {
   PACKET_RECORD_LIMIT: 10,
   INJECTION_RECORD_LIMIT: 3,
   INJECTION_TOKEN_BUDGET: 120,
-  TRIGGER_COOLDOWN_MS: 1000,
-  SEMANTIC_TRIGGER_THRESHOLD: 0.85,
+  SEMANTIC_TRIGGER_THRESHOLD: 0.72,
+  IMPORTANCE_THRESHOLD_SESSION_START: 4,
+  IMPORTANCE_THRESHOLD_DEFAULT: 3,
+  IMPORTANCE_THRESHOLD_SEMANTIC: 4,
 };
 
 const ids = {
@@ -225,6 +227,7 @@ describe("retrieval-runtime remediation", () => {
     });
     await repository.recordTriggerRun({
       trace_id: "trace-1",
+      phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
@@ -240,6 +243,7 @@ describe("retrieval-runtime remediation", () => {
     });
     await repository.recordWritebackSubmission({
       trace_id: "trace-1",
+      phase: "after_response",
       candidate_count: 2,
       submitted_count: 1,
       memory_mode: "workspace_plus_global",
@@ -320,6 +324,7 @@ describe("retrieval-runtime remediation", () => {
     });
     await repository.recordTriggerRun({
       trace_id: "trace-2",
+      phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
@@ -334,6 +339,7 @@ describe("retrieval-runtime remediation", () => {
     });
     await repository.recordRecallRun({
       trace_id: "trace-2",
+      phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
       trigger_reason: "current input explicitly references prior context or preferences",
@@ -353,6 +359,7 @@ describe("retrieval-runtime remediation", () => {
     });
     await repository.recordWritebackSubmission({
       trace_id: "trace-2",
+      phase: "after_response",
       candidate_count: 1,
       submitted_count: 0,
       memory_mode: "workspace_plus_global",
@@ -443,6 +450,38 @@ describe("retrieval-runtime remediation", () => {
     expect(pageOne.page_size).toBe(5);
     expect(pageOne.turns).toHaveLength(5);
     expect(pageTwo.turns).toHaveLength(1);
+  });
+
+  it("truncates semantic query text from the tail and keeps total length bounded", () => {
+    const query = buildRetrievalQuery(
+      {
+        host: "claude_code_plugin",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        phase: "before_response",
+        task_id: ids.task,
+        current_input: `前缀 ${"A".repeat(800)} 结尾意图`,
+        recent_context_summary: `旧上下文 ${"B".repeat(1200)} 最新摘要`,
+        memory_mode: "workspace_plus_global",
+      },
+      {
+        hit: true,
+        trigger_type: "history_reference",
+        trigger_reason: "当前输入明确引用了历史上下文或既有偏好。",
+        requested_memory_types: ["fact_preference", "task_state"],
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["workspace", "task", "session", "user"],
+        scope_reason: "回应前可综合使用工作区、任务、会话和全局用户记忆。",
+        importance_threshold: 3,
+        cooldown_applied: false,
+      },
+      config,
+    );
+
+    expect(query.semantic_query_text.length).toBeLessThanOrEqual(1024);
+    expect(query.semantic_query_text).toContain("结尾意图");
+    expect(query.semantic_query_text).toContain("最新摘要");
   });
 
   it("degrades semantic fallback explicitly when trigger-stage dependencies fail", async () => {

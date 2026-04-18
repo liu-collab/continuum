@@ -25,10 +25,12 @@ const envSchema = z.object({
   EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
   QUERY_CANDIDATE_LIMIT: z.coerce.number().int().positive().max(100).default(30),
   PACKET_RECORD_LIMIT: z.coerce.number().int().positive().max(20).default(10),
-  INJECTION_RECORD_LIMIT: z.coerce.number().int().positive().max(10).default(3),
-  INJECTION_TOKEN_BUDGET: z.coerce.number().int().positive().default(450),
-  TRIGGER_COOLDOWN_MS: z.coerce.number().int().positive().default(120000),
-  SEMANTIC_TRIGGER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  INJECTION_RECORD_LIMIT: z.coerce.number().int().positive().max(10).default(5),
+  INJECTION_TOKEN_BUDGET: z.coerce.number().int().positive().default(1500),
+  SEMANTIC_TRIGGER_THRESHOLD: z.coerce.number().min(0).max(1).default(0.72),
+  IMPORTANCE_THRESHOLD_SESSION_START: z.coerce.number().int().min(1).max(5).default(4),
+  IMPORTANCE_THRESHOLD_DEFAULT: z.coerce.number().int().min(1).max(5).default(3),
+  IMPORTANCE_THRESHOLD_SEMANTIC: z.coerce.number().int().min(1).max(5).default(4),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

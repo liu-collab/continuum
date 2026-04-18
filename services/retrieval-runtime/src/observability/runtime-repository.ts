@@ -18,11 +18,9 @@ export interface RuntimeRepository {
   recordRecallRun(run: RecallRunRecord): Promise<void>;
   recordInjectionRun(run: InjectionRunRecord): Promise<void>;
   recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void>;
-  findTraceIdForFinalize(input: {
+  findTraceIdByTurn(input: {
     session_id: string;
-    turn_id?: string;
-    thread_id?: string;
-    current_input?: string;
+    turn_id: string;
   }): Promise<string | null>;
   updateDependencyStatus(status: DependencyStatus): Promise<void>;
   getDependencyStatus(): Promise<DependencyStatusSnapshot>;

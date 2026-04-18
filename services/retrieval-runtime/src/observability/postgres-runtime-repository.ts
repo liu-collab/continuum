@@ -34,6 +34,7 @@ interface RuntimeTurnRow extends RuntimeRowBase {
 }
 
 interface TriggerRunRow extends RuntimeRowBase {
+  phase: string;
   trigger_hit: boolean;
   trigger_type: TriggerRunRecord["trigger_type"];
   trigger_reason: string;
@@ -50,6 +51,7 @@ interface TriggerRunRow extends RuntimeRowBase {
 }
 
 interface RecallRunRow extends RuntimeRowBase {
+  phase: string;
   trigger_hit: boolean;
   trigger_type: RecallRunRecord["trigger_type"];
   trigger_reason: string;
@@ -69,6 +71,7 @@ interface RecallRunRow extends RuntimeRowBase {
 }
 
 interface InjectionRunRow extends RuntimeRowBase {
+  phase: string;
   injected: boolean;
   injected_count: number;
   token_estimate: number;
@@ -82,6 +85,7 @@ interface InjectionRunRow extends RuntimeRowBase {
 }
 
 interface WritebackRunRow extends RuntimeRowBase {
+  phase: string;
   candidate_count: number;
   submitted_count: number;
   memory_mode: string;
@@ -129,7 +133,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_turns (
-        trace_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
         host TEXT NOT NULL,
         workspace_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
@@ -140,12 +144,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         turn_id TEXT NULL,
         current_input TEXT NOT NULL,
         assistant_output TEXT NULL,
-        created_at TIMESTAMPTZ NOT NULL
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase)
       )
     `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_trigger_runs (
-        trace_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
         trigger_hit BOOLEAN NOT NULL,
         trigger_type TEXT NOT NULL,
         trigger_reason TEXT NOT NULL,
@@ -159,12 +165,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         degraded BOOLEAN NULL,
         degradation_reason TEXT NULL,
         duration_ms INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase)
       )
     `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_recall_runs (
-        trace_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
         trigger_hit BOOLEAN NOT NULL,
         trigger_type TEXT NOT NULL,
         trigger_reason TEXT NOT NULL,
@@ -181,12 +189,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         degraded BOOLEAN NOT NULL,
         degradation_reason TEXT NULL,
         duration_ms INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase)
       )
     `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_injection_runs (
-        trace_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
         injected BOOLEAN NOT NULL,
         injected_count INTEGER NOT NULL,
         token_estimate INTEGER NOT NULL,
@@ -197,12 +207,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trim_reasons JSONB NOT NULL,
         result_state TEXT NOT NULL,
         duration_ms INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase)
       )
     `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_writeback_submissions (
-        trace_id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
         candidate_count INTEGER NOT NULL,
         submitted_count INTEGER NOT NULL,
         memory_mode TEXT NOT NULL,
@@ -214,7 +226,8 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         degraded BOOLEAN NOT NULL,
         degradation_reason TEXT NULL,
         duration_ms INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase)
       )
     `);
     await this.pool.query(`
@@ -233,15 +246,18 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_turns (
         trace_id, host, workspace_id, user_id, session_id, phase, task_id, thread_id, turn_id, current_input, assistant_output, created_at
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      ON CONFLICT (trace_id) DO UPDATE
+      ON CONFLICT (trace_id, phase) DO UPDATE
       SET host = EXCLUDED.host,
           workspace_id = EXCLUDED.workspace_id,
           user_id = EXCLUDED.user_id,
           session_id = EXCLUDED.session_id,
+          phase = EXCLUDED.phase,
+          current_input = EXCLUDED.current_input,
           task_id = COALESCE(EXCLUDED.task_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.task_id),
           thread_id = COALESCE(EXCLUDED.thread_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.thread_id),
           turn_id = COALESCE(EXCLUDED.turn_id, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.turn_id),
-          assistant_output = COALESCE(EXCLUDED.assistant_output, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.assistant_output)
+          assistant_output = COALESCE(EXCLUDED.assistant_output, ${quoteIdentifier(this.runtimeSchema)}.runtime_turns.assistant_output),
+          created_at = EXCLUDED.created_at
       `,
       [
         turn.trace_id,
@@ -264,12 +280,28 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs (
-        trace_id, trigger_hit, trigger_type, trigger_reason, requested_memory_types, memory_mode, requested_scopes, scope_reason,
+        trace_id, phase, trigger_hit, trigger_type, trigger_reason, requested_memory_types, memory_mode, requested_scopes, scope_reason,
         importance_threshold, cooldown_applied, semantic_score, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14,$15)
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11,$12,$13,$14,$15,$16)
+      ON CONFLICT (trace_id, phase) DO UPDATE
+      SET trigger_hit = EXCLUDED.trigger_hit,
+          trigger_type = EXCLUDED.trigger_type,
+          trigger_reason = EXCLUDED.trigger_reason,
+          requested_memory_types = EXCLUDED.requested_memory_types,
+          memory_mode = EXCLUDED.memory_mode,
+          requested_scopes = EXCLUDED.requested_scopes,
+          scope_reason = EXCLUDED.scope_reason,
+          importance_threshold = EXCLUDED.importance_threshold,
+          cooldown_applied = EXCLUDED.cooldown_applied,
+          semantic_score = EXCLUDED.semantic_score,
+          degraded = EXCLUDED.degraded,
+          degradation_reason = EXCLUDED.degradation_reason,
+          duration_ms = EXCLUDED.duration_ms,
+          created_at = EXCLUDED.created_at
       `,
       [
         run.trace_id,
+        run.phase,
         run.trigger_hit,
         run.trigger_type,
         run.trigger_reason,
@@ -292,12 +324,31 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs (
-        trace_id, trigger_hit, trigger_type, trigger_reason, memory_mode, requested_scopes, matched_scopes, scope_hit_counts, scope_reason, query_scope, requested_memory_types,
+        trace_id, phase, trigger_hit, trigger_type, trigger_reason, memory_mode, requested_scopes, matched_scopes, scope_hit_counts, scope_reason, query_scope, requested_memory_types,
         candidate_count, selected_count, result_state, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19)
+      ON CONFLICT (trace_id, phase) DO UPDATE
+      SET trigger_hit = EXCLUDED.trigger_hit,
+          trigger_type = EXCLUDED.trigger_type,
+          trigger_reason = EXCLUDED.trigger_reason,
+          memory_mode = EXCLUDED.memory_mode,
+          requested_scopes = EXCLUDED.requested_scopes,
+          matched_scopes = EXCLUDED.matched_scopes,
+          scope_hit_counts = EXCLUDED.scope_hit_counts,
+          scope_reason = EXCLUDED.scope_reason,
+          query_scope = EXCLUDED.query_scope,
+          requested_memory_types = EXCLUDED.requested_memory_types,
+          candidate_count = EXCLUDED.candidate_count,
+          selected_count = EXCLUDED.selected_count,
+          result_state = EXCLUDED.result_state,
+          degraded = EXCLUDED.degraded,
+          degradation_reason = EXCLUDED.degradation_reason,
+          duration_ms = EXCLUDED.duration_ms,
+          created_at = EXCLUDED.created_at
       `,
       [
         run.trace_id,
+        run.phase,
         run.trigger_hit,
         run.trigger_type,
         run.trigger_reason,
@@ -323,11 +374,24 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs (
-        trace_id, injected, injected_count, token_estimate, memory_mode, requested_scopes, selected_scopes, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12)
+        trace_id, phase, injected, injected_count, token_estimate, memory_mode, requested_scopes, selected_scopes, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13)
+      ON CONFLICT (trace_id, phase) DO UPDATE
+      SET injected = EXCLUDED.injected,
+          injected_count = EXCLUDED.injected_count,
+          token_estimate = EXCLUDED.token_estimate,
+          memory_mode = EXCLUDED.memory_mode,
+          requested_scopes = EXCLUDED.requested_scopes,
+          selected_scopes = EXCLUDED.selected_scopes,
+          trimmed_record_ids = EXCLUDED.trimmed_record_ids,
+          trim_reasons = EXCLUDED.trim_reasons,
+          result_state = EXCLUDED.result_state,
+          duration_ms = EXCLUDED.duration_ms,
+          created_at = EXCLUDED.created_at
       `,
       [
         run.trace_id,
+        run.phase,
         run.injected,
         run.injected_count,
         run.token_estimate,
@@ -347,11 +411,25 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions (
-        trace_id, candidate_count, submitted_count, memory_mode, final_scopes, filtered_count, filtered_reasons, scope_reasons, result_state, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13)
+        trace_id, phase, candidate_count, submitted_count, memory_mode, final_scopes, filtered_count, filtered_reasons, scope_reasons, result_state, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)
+      ON CONFLICT (trace_id, phase) DO UPDATE
+      SET candidate_count = EXCLUDED.candidate_count,
+          submitted_count = EXCLUDED.submitted_count,
+          memory_mode = EXCLUDED.memory_mode,
+          final_scopes = EXCLUDED.final_scopes,
+          filtered_count = EXCLUDED.filtered_count,
+          filtered_reasons = EXCLUDED.filtered_reasons,
+          scope_reasons = EXCLUDED.scope_reasons,
+          result_state = EXCLUDED.result_state,
+          degraded = EXCLUDED.degraded,
+          degradation_reason = EXCLUDED.degradation_reason,
+          duration_ms = EXCLUDED.duration_ms,
+          created_at = EXCLUDED.created_at
       `,
       [
         run.trace_id,
+        run.phase,
         run.candidate_count,
         run.submitted_count,
         run.memory_mode,
@@ -368,37 +446,21 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     );
   }
 
-  async findTraceIdForFinalize(input: {
+  async findTraceIdByTurn(input: {
     session_id: string;
-    turn_id?: string;
-    thread_id?: string;
-    current_input?: string;
+    turn_id: string;
   }): Promise<string | null> {
-    const whereClauses = ["session_id = $1", "phase <> 'after_response'"];
-    const values: unknown[] = [input.session_id];
-
-    if (input.turn_id) {
-      values.push(input.turn_id);
-      whereClauses.push(`turn_id = $${values.length}`);
-    } else if (input.thread_id) {
-      values.push(input.thread_id);
-      whereClauses.push(`thread_id = $${values.length}`);
-    } else if (input.current_input) {
-      values.push(input.current_input);
-      whereClauses.push(`current_input = $${values.length}`);
-    } else {
-      return null;
-    }
-
     const result = await this.pool.query<{ trace_id: string }>(
       `
       SELECT trace_id
       FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
-      WHERE ${whereClauses.join(" AND ")}
+      WHERE session_id = $1
+        AND turn_id = $2
+        AND phase <> 'after_response'
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      values,
+      [input.session_id, input.turn_id],
     );
 
     return result.rows[0]?.trace_id ?? null;
@@ -461,7 +523,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
     const countResult = await this.pool.query<{ total: string }>(
       `
-      SELECT COUNT(*)::text AS total
+      SELECT COUNT(DISTINCT trace_id)::text AS total
       FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
       ${whereSql}
       `,
@@ -471,13 +533,24 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
 
     const pagedValues = [...values, pageSize, offset];
     const turnQuery = `
-      SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
-      ${whereSql}
-      ORDER BY created_at DESC
-      LIMIT $${pagedValues.length - 1} OFFSET $${pagedValues.length}
+      WITH latest_traces AS (
+        SELECT DISTINCT ON (trace_id) trace_id, created_at
+        FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
+        ${whereSql}
+        ORDER BY trace_id, created_at DESC
+      )
+      SELECT turns.*
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns turns
+      INNER JOIN (
+        SELECT trace_id
+        FROM latest_traces
+        ORDER BY created_at DESC
+        LIMIT $${pagedValues.length - 1} OFFSET $${pagedValues.length}
+      ) paged ON paged.trace_id = turns.trace_id
+      ORDER BY turns.created_at DESC
     `;
     const turnResult = await this.pool.query<RuntimeTurnRow>(turnQuery, pagedValues);
-    const traceIds = turnResult.rows.map((row) => row.trace_id);
+    const traceIds = [...new Set(turnResult.rows.map((row) => row.trace_id))];
 
     if (traceIds.length === 0) {
       return {
@@ -529,6 +602,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       })),
       trigger_runs: triggerRows.rows.map((row) => ({
         trace_id: row.trace_id,
+        phase: row.phase as TriggerRunRecord["phase"],
         trigger_hit: row.trigger_hit,
         trigger_type: row.trigger_type,
         trigger_reason: row.trigger_reason,
@@ -546,6 +620,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       })),
       recall_runs: recallRows.rows.map((row) => ({
         trace_id: row.trace_id,
+        phase: row.phase as RecallRunRecord["phase"],
         trigger_hit: row.trigger_hit,
         trigger_type: row.trigger_type,
         trigger_reason: row.trigger_reason,
@@ -566,6 +641,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       })),
       injection_runs: injectionRows.rows.map((row) => ({
         trace_id: row.trace_id,
+        phase: row.phase as InjectionRunRecord["phase"],
         injected: row.injected,
         injected_count: Number(row.injected_count),
         token_estimate: Number(row.token_estimate),
@@ -580,6 +656,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       })),
       writeback_submissions: writebackRows.rows.map((row) => ({
         trace_id: row.trace_id,
+        phase: row.phase as WritebackSubmissionRecord["phase"],
         candidate_count: Number(row.candidate_count),
         submitted_count: Number(row.submitted_count),
         memory_mode: row.memory_mode as WritebackSubmissionRecord["memory_mode"],

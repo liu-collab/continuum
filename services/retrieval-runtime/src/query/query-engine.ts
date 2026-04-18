@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { CandidateMemory, RetrievalQuery, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
-import { clamp, cosineSimilarity, normalizeText } from "../shared/utils.js";
+import { clamp, cosineSimilarity, normalizeText, truncateFromTail } from "../shared/utils.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
 
@@ -21,6 +21,9 @@ function recencyScore(updatedAt: string): number {
 }
 
 function scopeBoost(scope: ScopeType, context: TriggerContext): number {
+  if (scope === "session") {
+    return 0.95;
+  }
   if (scope === "workspace") {
     return 0.9;
   }
@@ -31,6 +34,15 @@ function scopeBoost(scope: ScopeType, context: TriggerContext): number {
     return 0.8;
   }
   return 0.6;
+}
+
+function buildSemanticQueryText(context: TriggerContext): string {
+  const currentInput = truncateFromTail(context.current_input, 512);
+  const recentContextSummary = truncateFromTail(context.recent_context_summary, 512);
+  return truncateFromTail(
+    normalizeText([currentInput, recentContextSummary].filter(Boolean).join("\n")),
+    1024,
+  );
 }
 
 export function buildRetrievalQuery(
@@ -49,9 +61,7 @@ export function buildRetrievalQuery(
     memory_type_filter: decision.requested_memory_types,
     status_filter: ["active"],
     importance_threshold: decision.importance_threshold,
-    semantic_query_text: normalizeText(
-      [context.current_input, context.recent_context_summary].filter(Boolean).join("\n"),
-    ),
+    semantic_query_text: buildSemanticQueryText(context),
     candidate_limit: config.QUERY_CANDIDATE_LIMIT,
   };
 }

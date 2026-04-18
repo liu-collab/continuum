@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import type { CandidateMemory, MemoryPacket, MemoryType, RetrievalQuery, ScopeType, TriggerDecision } from "../shared/types.js";
+import { injectionHintLabel, memoryTypeLabels, runtimeMessages } from "../shared/messages.js";
 import { textToLines } from "../shared/utils.js";
 
 function summarizeRecords(records: CandidateMemory[]): string {
   if (records.length === 0) {
-    return "No active memory matched this trigger.";
+    return runtimeMessages.noMatchedMemory;
   }
 
   const groups = new Map<MemoryType, CandidateMemory[]>();
@@ -24,19 +25,13 @@ function summarizeRecords(records: CandidateMemory[]): string {
         .slice(0, 2)
         .map((entry) => textToLines(entry.summary)[0] ?? entry.summary)
         .join("; ");
-      return `${type}: ${snippets}`;
+      return `${memoryTypeLabels[type]}：${snippets}`;
     })
     .join(" | ");
 }
 
 function injectionHint(decision: TriggerDecision): string {
-  if (decision.requested_memory_types.includes("task_state")) {
-    return "current task continuation";
-  }
-  if (decision.requested_memory_types.includes("fact_preference")) {
-    return "background constraints";
-  }
-  return "historical reference";
+  return injectionHintLabel(decision);
 }
 
 export function buildMemoryPacket(

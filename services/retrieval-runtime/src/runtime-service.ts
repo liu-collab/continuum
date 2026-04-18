@@ -44,7 +44,13 @@ export class RetrievalRuntimeService {
       ...context,
       memory_mode: resolveMemoryMode(context.memory_mode),
     };
-    const traceId = randomUUID();
+    const traceId =
+      normalizedContext.turn_id
+        ? (await this.repository.findTraceIdByTurn({
+            session_id: normalizedContext.session_id,
+            turn_id: normalizedContext.turn_id,
+          })) ?? randomUUID()
+        : randomUUID();
     const turnStartedAt = Date.now();
     await this.repository.recordTurn({
       trace_id: traceId,
@@ -64,6 +70,7 @@ export class RetrievalRuntimeService {
     const decision = await this.triggerEngine.decide(normalizedContext);
     await this.repository.recordTriggerRun({
       trace_id: traceId,
+      phase: normalizedContext.phase,
       trigger_hit: decision.hit,
       trigger_type: decision.trigger_type,
       trigger_reason: decision.trigger_reason,
@@ -83,6 +90,7 @@ export class RetrievalRuntimeService {
     if (!decision.hit) {
       await this.repository.recordRecallRun({
         trace_id: traceId,
+        phase: normalizedContext.phase,
         trigger_hit: false,
         trigger_type: decision.trigger_type,
         trigger_reason: decision.trigger_reason,
@@ -104,6 +112,7 @@ export class RetrievalRuntimeService {
 
       await this.repository.recordInjectionRun({
         trace_id: traceId,
+        phase: normalizedContext.phase,
         injected: false,
         injected_count: 0,
         token_estimate: 0,
@@ -140,6 +149,7 @@ export class RetrievalRuntimeService {
 
     await this.repository.recordRecallRun({
       trace_id: traceId,
+      phase: normalizedContext.phase,
       trigger_hit: true,
       trigger_type: decision.trigger_type,
       trigger_reason: decision.trigger_reason,
@@ -169,6 +179,7 @@ export class RetrievalRuntimeService {
 
     await this.repository.recordInjectionRun({
       trace_id: traceId,
+      phase: normalizedContext.phase,
       injected: Boolean(injectionBlock),
       injected_count: injectionBlock?.memory_records.length ?? 0,
       token_estimate: injectionBlock?.token_estimate ?? 0,
@@ -212,6 +223,7 @@ export class RetrievalRuntimeService {
       trace_id: prepared.trace_id,
       additional_context: additionalContext,
       active_task_summary: activeTaskSummary,
+      injection_block: prepared.injection_block,
       memory_mode: context.memory_mode ?? "workspace_plus_global",
       dependency_status: prepared.dependency_status,
       degraded: prepared.degraded,
@@ -224,12 +236,12 @@ export class RetrievalRuntimeService {
       memory_mode: resolveMemoryMode(input.memory_mode),
     };
     const traceId =
-      (await this.repository.findTraceIdForFinalize({
-        session_id: normalizedInput.session_id,
-        turn_id: normalizedInput.turn_id,
-        thread_id: normalizedInput.thread_id,
-        current_input: normalizedInput.current_input,
-      })) ?? randomUUID();
+      normalizedInput.turn_id
+        ? (await this.repository.findTraceIdByTurn({
+            session_id: normalizedInput.session_id,
+            turn_id: normalizedInput.turn_id,
+          })) ?? randomUUID()
+        : randomUUID();
     const startedAt = Date.now();
 
     await this.repository.recordTurn({
@@ -251,6 +263,7 @@ export class RetrievalRuntimeService {
 
     await this.repository.recordWritebackSubmission({
       trace_id: traceId,
+      phase: "after_response",
       candidate_count: result.candidates.length,
       submitted_count: result.submitted_jobs.filter((job) => job.status !== "dependency_unavailable" && job.status !== "rejected").length,
       memory_mode: normalizedInput.memory_mode,
