@@ -46,6 +46,8 @@ describe("config loader", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
     expect(config.cli.systemPrompt).toBeNull();
+    expect(config.streaming.flushChars).toBe(32);
+    expect(config.streaming.flushIntervalMs).toBe(30);
   });
 
   it("merges global and local config by field precedence", () => {

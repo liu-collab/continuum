@@ -35,5 +35,7 @@ describe("memory-native-agent smoke", () => {
         retrieval_runtime: "unknown",
       },
     });
+    expect(app.mnaToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(app.mnaTokenPath).toContain(".mna");
   });
 });

@@ -1,2 +1,14 @@
 export const DEFAULT_PROVIDER_MAX_RETRIES = 2;
 export const DEFAULT_PROVIDER_FIRST_TOKEN_TIMEOUT_MS = 30_000;
+export const DEFAULT_MNA_HOST = "127.0.0.1";
+export const DEFAULT_MNA_PORT = 4193;
+export const DEFAULT_STORAGE_PORT = 4000;
+export const DEFAULT_RUNTIME_PORT = 4100;
+export const DEFAULT_VISUALIZATION_PORT = 3000;
+export const DEFAULT_POSTGRES_PORT = 5432;
+export const DEFAULT_REDIS_PORT = 6379;
+export const DEFAULT_STREAM_FLUSH_CHARS = 32;
+export const DEFAULT_STREAM_FLUSH_INTERVAL_MS = 30;
+export const DEFAULT_TOKEN_FILENAME = "token.txt";
+export const DEFAULT_ARTIFACTS_DIRNAME = "artifacts";
+export const DEFAULT_FIXTURE_DIR = "tests/fixtures/model-record-replay";

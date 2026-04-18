@@ -83,6 +83,13 @@ const partialCliSchema = z
   })
   .strict();
 
+const partialStreamingSchema = z
+  .object({
+    flush_chars: z.coerce.number().int().min(1).max(1024).optional(),
+    flush_interval_ms: z.coerce.number().int().min(1).max(5000).optional(),
+  })
+  .strict();
+
 export const configFileSchema = z
   .object({
     runtime: partialRuntimeSchema.optional(),
@@ -91,6 +98,7 @@ export const configFileSchema = z
     mcp: z.object({ servers: z.array(partialMcpServerSchema).optional() }).strict().optional(),
     tools: partialToolsSchema.optional(),
     cli: partialCliSchema.optional(),
+    streaming: partialStreamingSchema.optional(),
     locale: localeSchema.optional(),
   })
   .strict();
@@ -155,6 +163,13 @@ const mergedCliSchema = z
   })
   .strict();
 
+const mergedStreamingSchema = z
+  .object({
+    flush_chars: z.coerce.number().int().min(1).max(1024),
+    flush_interval_ms: z.coerce.number().int().min(1).max(5000),
+  })
+  .strict();
+
 export const mergedConfigSchema = z
   .object({
     runtime: mergedRuntimeSchema,
@@ -163,6 +178,7 @@ export const mergedConfigSchema = z
     mcp: mergedMcpSchema,
     tools: mergedToolsSchema,
     cli: mergedCliSchema,
+    streaming: mergedStreamingSchema,
     locale: localeSchema.optional(),
   })
   .strict();

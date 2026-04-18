@@ -70,6 +70,10 @@ export interface AgentConfig {
   cli: {
     systemPrompt: string | null;
   };
+  streaming: {
+    flushChars: number;
+    flushIntervalMs: number;
+  };
   locale: Locale;
 }
 
@@ -297,6 +301,10 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         filePath: parsed.data.cli.system_prompt_file,
         sourceConfigPath: systemPromptSourcePath,
       }),
+    },
+    streaming: {
+      flushChars: parsed.data.streaming.flush_chars,
+      flushIntervalMs: parsed.data.streaming.flush_interval_ms,
     },
     locale: resolveLocale(parsed.data.locale, env),
   };

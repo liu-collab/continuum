@@ -1,3 +1,5 @@
+import { DEFAULT_STREAM_FLUSH_CHARS, DEFAULT_STREAM_FLUSH_INTERVAL_MS } from "../shared/constants.js";
+
 export const MNA_HOME_DIRNAME = ".mna";
 export const IDENTITY_FILENAME = "identity.json";
 export const WORKSPACE_MAP_FILENAME = "workspaces.json";
@@ -54,6 +56,10 @@ export const DEFAULT_RAW_CONFIG = {
   },
   cli: {
     system_prompt_file: null as string | null,
+  },
+  streaming: {
+    flush_chars: DEFAULT_STREAM_FLUSH_CHARS,
+    flush_interval_ms: DEFAULT_STREAM_FLUSH_INTERVAL_MS,
   },
   locale: undefined as "zh-CN" | "en-US" | undefined,
 };
