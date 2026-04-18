@@ -536,9 +536,9 @@ T12 本身没有独立代码产出，但下列文件必须存在并被引用：
   - `config` 已补 `streaming.flush_chars / flush_interval_ms` 默认值与解析
 - 待后续任务继续收口：
   - Artifact 存储与清理：在 `T05/T08/T14`
-  - shell 跨平台执行与黑名单：在 `T05`
-  - 工具输出信任边界与 `tool_results_summary` 前置说明：在 `T07`
-  - `stream-bridge` 与 WS 事件顺序：在 `T07/T08`
+  - shell 跨平台执行与黑名单：已在 `T05` 落地
+  - 工具输出信任边界与 `tool_results_summary` 前置说明：已在 `T07` 落地
+  - `stream-bridge` 基础合批与 abort 丢弃计数：已在 `T07` 落地；WS 事件顺序与 metrics 暴露在 `T08`
   - 前端 i18n 资源与 confirm 文案：在 `T11`
 - 已验证：
   - `npm run check`

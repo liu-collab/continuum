@@ -1,5 +1,8 @@
 # T07 — agent 主循环与生命周期钩子
 
+- 状态：已完成
+- 验证结果：runner 主循环、trigger-detector、conversation、stream-bridge、writeback-decider 与测试已落地；`npm run check`、`npm test`、`npm run build` 已通过
+
 ## 1. 目标
 
 实现 `AgentRunner`：一个对上承接 HTTP/WebSocket 服务层（T08），对下编排 `MemoryClient`（T02）、`IModelProvider`（T04）、`ToolDispatcher`（T05）的协调层。
@@ -307,3 +310,23 @@ async submit(userInput: string) {
 - 基于 LLM 的意图识别（首版用关键词 + 相似度）
 - 长期 memory 摘要算法
 - Token 预算自适应裁剪（首版仅固定窗口）
+
+## 8. 当前落地说明
+
+- 已新增 `src/runner/` 目录核心文件：
+  - `agent-runner / conversation / stream-bridge / trigger-detector / task-state / ids / writeback-decider / turn-context`
+- 已落地能力：
+  - `session_start / task_start / task_switch / before_plan / before_response` 触发检测与顺序编排
+  - `Conversation` 的 `memory_injection` 拼装与 `tool_output` 信任边界包裹
+  - `StreamBridge` 的文本合批、tool_call flush、abort 后丢弃计数
+  - `TaskState` 的创建、最近任务维护与相似度恢复
+  - `finalize-turn` 发起与 `tool_results_summary` 生成
+  - `SessionStore` 写入点接入，失败时转成 `session_store_unavailable` session error
+- 当前 runner 仍保持首版简化：
+  - token 预算裁剪先保留为轻量 `shortSummary`
+  - tool loop 先支持单轮内顺序执行，不做复杂多轮 re-dispatch
+- 已补测试覆盖：
+  - trigger 检测
+  - stream bridge 映射
+  - tool output 包裹与 writeback summary
+  - runner 的 plain-text happy path
