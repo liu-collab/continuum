@@ -358,10 +358,40 @@ export class AgentRunner {
         memory_mode: this.deps.config.memory.mode,
       });
     } catch (error) {
+      const fallback: PrepareContextResult = {
+        trace_id: "dependency_unavailable",
+        trigger: false,
+        trigger_reason: "dependency_unavailable",
+        memory_packet: null,
+        injection_block: null,
+        degraded: true,
+        dependency_status: {
+          read_model: {
+            name: "read_model",
+            status: "unknown",
+            detail: error instanceof Error ? error.message : "memory unavailable",
+            last_checked_at: new Date().toISOString(),
+          },
+          embeddings: {
+            name: "embeddings",
+            status: "unknown",
+            detail: error instanceof Error ? error.message : "memory unavailable",
+            last_checked_at: new Date().toISOString(),
+          },
+          storage_writeback: {
+            name: "storage_writeback",
+            status: "unknown",
+            detail: error instanceof Error ? error.message : "memory unavailable",
+            last_checked_at: new Date().toISOString(),
+          },
+        },
+        budget_used: 0,
+        memory_packet_ids: [],
+      };
       this.deps.io.emitError("session", Object.assign(error instanceof Error ? error : new Error(String(error)), {
         code: (error as Error & { code?: string }).code ?? "memory_unavailable",
       }));
-      return null;
+      return fallback;
     }
   }
 

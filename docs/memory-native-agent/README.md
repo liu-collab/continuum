@@ -149,7 +149,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T08` 已完成：HTTP/WS 路由装配、token 鉴权、session CRUD、文件与 artifact 读取、MCP 管理、OpenAPI 输出、事件缓冲回放与 HTTP/WS 测试已落地。
 - `T11` 已完成：`/agent` 与 `/agent/[sessionId]` 页面、会话列表、文件树、聊天流、Prompt Inspector、工具确认弹窗、MCP 面板、基础 cost bar、Monaco 文件预览、前端 reducer 测试和浏览器直连 mna 所需的 loopback CORS 已落地。
 - `T13` 已完成：`continuum start/status/stop` 已接入 mna，`continuum mna install/start/stop/logs/token` 已落地，vendor 打包和交付文档已同步。
-- `T10` 进行中：人工验收清单已补齐；真实跨服务 e2e 与浏览器 Playwright 仍待继续补齐。
+- `T10` 进行中：人工验收清单已补齐；`mna + runtime + storage` 的真实后端 e2e 已补 `happy path / runtime down / memory_mode switch` 三条并跑通；`storage down`、治理闭环和 Playwright 仍待继续补齐。
 - `T12` 进行中：`token` 引导、默认 `system prompt`、流式常量、`record-replay provider` 已落地；artifact、工具信任边界、stream-bridge 和 i18n 相关收口将在 `T05/T07/T08/T11/T14` 继续完成。
 - `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
 - `T14` 已完成：`SQLite session-store`、启动 migration、会话/轮次/消息/工具审计/`prompt snapshot` 持久化、`crashed` 恢复标记与 purge 测试已落地。
