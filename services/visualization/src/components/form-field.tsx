@@ -24,7 +24,7 @@ export function FormField({
           defaultValue={defaultValue ?? ""}
           className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
         >
-          <option value="">All</option>
+          <option value="">全部</option>
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

@@ -31,7 +31,7 @@ describe("run trace narrative", () => {
     const narrative = buildNarrative(baseDetail);
 
     expect(narrative.outcomeCode).toBe("no_trigger");
-    expect(narrative.explanation).toContain("skipped retrieval");
+    expect(narrative.explanation).toContain("跳过了检索");
   });
 
   it("explains empty recall", () => {
@@ -200,11 +200,13 @@ describe("run trace empty state", () => {
         lastOkAt: null,
         lastError: "timeout",
         responseTimeMs: 2000,
-        detail: "Timed out after 2000 ms."
+        detail: "Timed out after 2000 ms.",
+        activeConnections: null,
+        connectionLimit: null
       }
     } satisfies RunTraceResponse;
 
     const state = describeRunTraceEmptyState(response);
-    expect(state.title).toContain("Runtime source unavailable");
+    expect(state.title).toContain("运行时数据源暂不可用");
   });
 });

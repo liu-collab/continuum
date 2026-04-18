@@ -52,6 +52,7 @@ type QueryOptions = {
 
 declare global {
   var __AGENT_MEMORY_VIZ_PG_POOL__: Pool | undefined;
+  var __AGENT_MEMORY_VIZ_PG_POOL_LOGGED__: boolean | undefined;
 }
 
 function getPool() {
@@ -66,13 +67,28 @@ function getPool() {
       connectionString: values.STORAGE_READ_MODEL_DSN,
       connectionTimeoutMillis: values.STORAGE_READ_MODEL_TIMEOUT_MS,
       idleTimeoutMillis: 30_000,
-      max: 5,
+      max: values.DATABASE_POOL_MAX,
       query_timeout: values.STORAGE_READ_MODEL_TIMEOUT_MS,
       statement_timeout: values.STORAGE_READ_MODEL_TIMEOUT_MS
     });
   }
 
+  if (!globalThis.__AGENT_MEMORY_VIZ_PG_POOL_LOGGED__) {
+    console.info(`[visualization] database pool max=${values.DATABASE_POOL_MAX}`);
+    globalThis.__AGENT_MEMORY_VIZ_PG_POOL_LOGGED__ = true;
+  }
+
   return globalThis.__AGENT_MEMORY_VIZ_PG_POOL__;
+}
+
+export function getReadModelPoolStats() {
+  const pool = globalThis.__AGENT_MEMORY_VIZ_PG_POOL__;
+  const { values } = getAppConfig();
+
+  return {
+    activeConnections: pool ? pool.totalCount : 0,
+    connectionLimit: values.DATABASE_POOL_MAX
+  };
 }
 
 function qualifiedReadModelTable() {
@@ -98,7 +114,8 @@ function unavailableStatus(
     lastOkAt,
     lastError: detail,
     responseTimeMs,
-    detail
+    detail,
+    ...getReadModelPoolStats()
   };
 }
 
@@ -208,7 +225,8 @@ function healthyStatus(responseTimeMs: number, warnings: string[] = []): SourceS
     lastOkAt: checkedAt,
     lastError: warnings.length > 0 ? warnings.join(" ") : null,
     responseTimeMs,
-    detail: warnings.length > 0 ? warnings.join(" ") : null
+    detail: warnings.length > 0 ? warnings.join(" ") : null,
+    ...getReadModelPoolStats()
   };
 }
 
@@ -326,12 +344,12 @@ export async function queryCatalogView(
 
   if (!filters.workspaceId) {
     warnings.push(
-      "Current workspace is missing. Workspace, task, and session records cannot be resolved without workspace_id."
+      "当前缺少 workspace_id，无法正确解析工作区、任务和会话级别的记录。"
     );
   }
 
   if (filters.memoryViewMode === "workspace_plus_global" && !filters.userId) {
-    warnings.push("Current user is missing. Global memories cannot be included without user_id.");
+    warnings.push("当前缺少 user_id，无法在工作区 + 全局视图里包含全局记忆。");
   }
 
   try {

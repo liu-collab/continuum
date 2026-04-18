@@ -52,20 +52,32 @@ function DependencyCards({ sources }: { sources: SourceStatus[] }) {
           </div>
           <dl className="mt-4 space-y-2 text-sm text-slate-600">
             <div>
-              <dt className="font-medium text-slate-900">Checked</dt>
+              <dt className="font-medium text-slate-900">最近检查</dt>
               <dd>{formatTimestamp(source.lastCheckedAt || source.checkedAt)}</dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-900">Last success</dt>
+              <dt className="font-medium text-slate-900">最近成功</dt>
               <dd>{formatLastSuccess(source.lastOkAt)}</dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-900">Response time</dt>
-              <dd>{source.responseTimeMs === null ? "Unavailable" : `${source.responseTimeMs} ms`}</dd>
+              <dt className="font-medium text-slate-900">响应时间</dt>
+              <dd>{source.responseTimeMs === null ? "不可用" : `${source.responseTimeMs} ms`}</dd>
+            </div>
+            {source.connectionLimit !== null ? (
+              <div>
+                <dt className="font-medium text-slate-900">连接池</dt>
+                <dd>
+                  {source.activeConnections ?? 0} / {source.connectionLimit}
+                </dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="font-medium text-slate-900">最近错误</dt>
+              <dd>{source.lastError ?? "无"}</dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-900">Last error</dt>
-              <dd>{source.lastError ?? "None"}</dd>
+              <dt className="font-medium text-slate-900">说明</dt>
+              <dd>{source.detail ?? "无"}</dd>
             </div>
           </dl>
         </div>
@@ -75,7 +87,7 @@ function DependencyCards({ sources }: { sources: SourceStatus[] }) {
 }
 
 export function SourceHealthPanel(props: SourceHealthPanelProps) {
-  const title = props.title ?? "Health";
+  const title = props.title ?? "健康状态";
 
   if ("health" in props && props.health) {
     const health = props.health;
@@ -84,7 +96,7 @@ export function SourceHealthPanel(props: SourceHealthPanelProps) {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Health</p>
+            <p className="eyebrow">健康状态</p>
             <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">{title}</h2>
           </div>
         </div>
@@ -93,23 +105,23 @@ export function SourceHealthPanel(props: SourceHealthPanelProps) {
             <div className="rounded-xl border bg-white/80 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Service liveness</div>
+                  <div className="text-sm font-semibold text-slate-900">服务存活</div>
                   <div className="mt-1 text-xs text-slate-500">{health.service.name}</div>
                 </div>
                 <StatusBadge tone="success">{health.liveness.status}</StatusBadge>
               </div>
               <p className="mt-4 text-sm leading-6 text-slate-600">
-                Process health only. Upstream failures must never flip liveness.
+                这里只反映当前进程是否存活。上游依赖异常不应该影响 `liveness`。
               </p>
               <div className="mt-3 text-sm text-slate-500">
-                Checked {formatTimestamp(health.liveness.checkedAt)}
+                检查时间：{formatTimestamp(health.liveness.checkedAt)}
               </div>
             </div>
             <div className="rounded-xl border bg-white/80 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Service readiness</div>
-                  <div className="mt-1 text-xs text-slate-500">Can the service still respond?</div>
+                  <div className="text-sm font-semibold text-slate-900">服务就绪</div>
+                  <div className="mt-1 text-xs text-slate-500">当前服务是否还能继续响应</div>
                 </div>
                 <StatusBadge tone={toneFor(health.readiness.status)}>
                   {health.readiness.status}
@@ -119,7 +131,7 @@ export function SourceHealthPanel(props: SourceHealthPanelProps) {
                 {health.readiness.summary}
               </p>
               <div className="mt-3 text-sm text-slate-500">
-                Checked {formatTimestamp(health.readiness.checkedAt)}
+                检查时间：{formatTimestamp(health.readiness.checkedAt)}
               </div>
             </div>
           </div>
@@ -129,7 +141,7 @@ export function SourceHealthPanel(props: SourceHealthPanelProps) {
           </div>
 
           <div>
-            <div className="mb-4 text-sm font-semibold text-slate-900">External dependencies</div>
+            <div className="mb-4 text-sm font-semibold text-slate-900">外部依赖</div>
             <DependencyCards sources={health.dependencies} />
           </div>
         </div>
@@ -141,7 +153,7 @@ export function SourceHealthPanel(props: SourceHealthPanelProps) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Health</p>
+          <p className="eyebrow">健康状态</p>
           <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">{title}</h2>
         </div>
       </div>

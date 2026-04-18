@@ -44,12 +44,12 @@ function toCatalogItem(
     importance: row.importance,
     confidence: row.confidence,
     originWorkspaceId,
-    originWorkspaceLabel: originWorkspaceId ? `Origin workspace ${originWorkspaceId}` : "No origin workspace recorded",
+    originWorkspaceLabel: originWorkspaceId ? `来源工作区 ${originWorkspaceId}` : "未记录来源工作区",
     visibilitySummary: visibilitySummary(scope, filters.memoryViewMode, originWorkspaceId),
     sourceType: source.sourceType,
     sourceRef: source.sourceRef,
     sourceServiceName: source.sourceServiceName,
-    sourceSummary: [source.sourceType ?? "unknown source", source.sourceRef ?? "no source ref"].join(
+    sourceSummary: [source.sourceType ?? "未知来源", source.sourceRef ?? "未记录来源引用"].join(
       " · "
     ),
     lastConfirmedAt: row.last_confirmed_at,
@@ -62,13 +62,13 @@ function buildViewSummary(filters: MemoryCatalogFilters) {
 
   if (filters.memoryViewMode === "workspace_only") {
     return filters.workspaceId
-      ? `${base} Current workspace: ${filters.workspaceId}.`
-      : `${base} Workspace id is missing, so only explicit filters can narrow the result.`;
+      ? `${base} 当前工作区：${filters.workspaceId}。`
+      : `${base} 当前缺少 workspace_id，所以只能依赖显式筛选条件进一步收窄结果。`;
   }
 
   return filters.workspaceId && filters.userId
-    ? `${base} Current workspace: ${filters.workspaceId}. Global memory owner: ${filters.userId}.`
-    : `${base} One or more identity fields are missing, so the view may be partial.`;
+    ? `${base} 当前工作区：${filters.workspaceId}。全局记忆归属用户：${filters.userId}。`
+    : `${base} 当前缺少部分身份字段，所以页面结果可能不完整。`;
 }
 
 export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<MemoryCatalogResponse> {
@@ -89,28 +89,28 @@ export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<M
 export function describeCatalogEmptyState(response: MemoryCatalogResponse) {
   if (response.sourceStatus.status === "unavailable" || response.sourceStatus.status === "timeout") {
     return {
-      title: "Memory source unavailable",
+      title: "记忆数据源暂不可用",
       description:
         response.sourceStatus.detail ??
-        "The shared read model could not be queried, so the memory catalog is temporarily degraded."
+        "共享读模型当前不可查询，所以记忆目录暂时处于降级状态。"
     };
   }
 
   if (response.sourceStatus.status === "misconfigured") {
     return {
-      title: "Memory source misconfigured",
+      title: "记忆数据源配置不完整",
       description:
         response.sourceStatus.detail ??
-        "The shared read model connection is not configured, so the catalog cannot load yet."
+        "共享读模型连接尚未配置完成，所以目录暂时无法加载。"
     };
   }
 
   return {
-    title: "No memories matched this view",
+    title: "当前视图下没有匹配的记忆",
     description:
       response.appliedFilters.memoryViewMode === "workspace_only"
-        ? "The workspace-only view is active. No workspace, task, or session memories matched the current workspace and filters."
-        : "The workspace + global view is active. No current workspace or global memories matched the selected filters."
+        ? "当前是仅工作区视图，没有任何工作区、任务或会话记忆命中当前工作区和筛选条件。"
+        : "当前是工作区加全局视图，没有任何当前工作区或全局记忆命中所选筛选条件。"
   };
 }
 
@@ -141,7 +141,7 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     ...base,
     details: record.details,
     detailsFormatted: JSON.stringify(record.details ?? {}, null, 2),
-    sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : "Unknown",
+    sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : "未知",
     createdAt: record.created_at
   };
 }

@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
     lastOkAt: null,
     lastError: "database offline",
     responseTimeMs: 120,
-    detail: "database offline"
+    detail: "database offline",
+    activeConnections: 1,
+    connectionLimit: 5
   })),
   fetchStorageMetrics: vi.fn<() => Promise<{ status: SourceStatus }>>(async () => ({
     status: {
@@ -26,7 +28,9 @@ const mocks = vi.hoisted(() => ({
       lastOkAt: "2026-04-15T12:00:00.000Z",
       lastError: null,
       responseTimeMs: 40,
-      detail: null
+      detail: null,
+      activeConnections: null,
+      connectionLimit: null
     }
   })),
   fetchRuntimeMetrics: vi.fn<() => Promise<{ status: SourceStatus }>>(async () => ({
@@ -40,7 +44,9 @@ const mocks = vi.hoisted(() => ({
       lastOkAt: null,
       lastError: "timeout",
       responseTimeMs: 2000,
-      detail: "timeout"
+      detail: "timeout",
+      activeConnections: null,
+      connectionLimit: null
     }
   }))
 }));
@@ -98,7 +104,9 @@ describe("source health separation", () => {
         lastOkAt: "2026-04-16T00:05:00.000Z",
         lastError: "timeout",
         responseTimeMs: 2000,
-        detail: "timeout"
+        detail: "timeout",
+        activeConnections: null,
+        connectionLimit: null
       }
     });
 

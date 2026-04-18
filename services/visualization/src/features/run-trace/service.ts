@@ -30,7 +30,7 @@ function uniqueScopes(scopes: Scope[]) {
 
 function formatScopeList(scopes: Scope[]) {
   if (scopes.length === 0) {
-    return "none recorded";
+    return "未记录";
   }
 
   return uniqueScopes(scopes)
@@ -40,14 +40,14 @@ function formatScopeList(scopes: Scope[]) {
 
 function summarizeRecall(run?: RuntimeRecallRecord) {
   if (!run) {
-    return "No recall record";
+    return "未记录召回阶段";
   }
 
   if (run.resultState === "empty" || run.selectedCount === 0) {
-    return run.emptyReason ? `Triggered but empty: ${run.emptyReason}` : "Triggered but empty";
+    return run.emptyReason ? `已触发但为空：${run.emptyReason}` : "已触发但为空";
   }
 
-  return `${run.selectedCount} records selected from ${formatScopeList(run.selectedScopes)}`;
+  return `从 ${formatScopeList(run.selectedScopes)} 中选中了 ${run.selectedCount} 条记录`;
 }
 
 function summarizeScopes(detail: RunAggregate) {
@@ -59,10 +59,10 @@ function summarizeScopes(detail: RunAggregate) {
   const selected = injectionRun?.selectedScopes ?? recallRun?.selectedScopes ?? [];
 
   if (requested.length === 0 && selected.length === 0) {
-    return "Scope decision not recorded";
+    return "未记录作用域决策";
   }
 
-  return `Requested ${formatScopeList(requested)}; selected ${formatScopeList(selected)}.`;
+  return `请求作用域：${formatScopeList(requested)}；最终选择：${formatScopeList(selected)}。`;
 }
 
 function groupByTrace(data: RuntimeObserveRunsSnapshot) {
@@ -117,8 +117,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (!triggerRun || !triggerRun.triggerHit) {
     return {
       outcomeCode: "no_trigger",
-      outcomeLabel: "No trigger",
-      explanation: "This turn did not hit a recall trigger, so the memory system skipped retrieval.",
+      outcomeLabel: "未触发",
+      explanation: "这一轮没有命中召回触发条件，所以记忆系统跳过了检索。",
       incomplete
     };
   }
@@ -126,9 +126,9 @@ export function buildNarrative(detail: RunAggregate) {
   if (!recallRun || recallRun.resultState === "empty" || recallRun.selectedCount === 0) {
     return {
       outcomeCode: "empty_recall",
-      outcomeLabel: "Empty recall",
+      outcomeLabel: "空召回",
       explanation:
-        "A trigger fired, but the recall stage returned no eligible memory records for the requested scopes and memory types.",
+        "虽然已经触发召回，但在请求的作用域和记忆类型下，没有找到可用的记忆记录。",
       incomplete
     };
   }
@@ -140,9 +140,9 @@ export function buildNarrative(detail: RunAggregate) {
   ) {
     return {
       outcomeCode: "found_but_not_injected",
-      outcomeLabel: "Found but not injected",
+      outcomeLabel: "找到了但未注入",
       explanation:
-        "Relevant memories were found, but they were trimmed away before prompt injection because of the active budget or trim rules.",
+        "虽然找到了相关记忆，但在提示词注入前被预算或裁剪规则全部裁掉了。",
       incomplete
     };
   }
@@ -150,9 +150,9 @@ export function buildNarrative(detail: RunAggregate) {
   if (injectionRun && injectionRun.trimmedRecordIds.length > 0) {
     return {
       outcomeCode: "injection_trimmed",
-      outcomeLabel: "Injection trimmed",
+      outcomeLabel: "注入被裁剪",
       explanation:
-        "Relevant memories were found and injected, but part of the candidate set was trimmed before final injection.",
+        "相关记忆已经找到并部分注入，但候选集里有一部分在最终注入前被裁剪掉了。",
       incomplete
     };
   }
@@ -160,9 +160,9 @@ export function buildNarrative(detail: RunAggregate) {
   if (writeBackRun?.resultState === "failed") {
     return {
       outcomeCode: "writeback_failed",
-      outcomeLabel: "Write-back failed",
+      outcomeLabel: "写回失败",
       explanation:
-        "This turn produced write-back work, but submission or dependency handling failed before storage could accept it.",
+        "这一轮生成了写回内容，但在存储真正接收之前，提交或依赖处理失败了。",
       incomplete
     };
   }
@@ -170,9 +170,9 @@ export function buildNarrative(detail: RunAggregate) {
   if (writeBackRun?.resultState === "no_candidates") {
     return {
       outcomeCode: "no_writeback",
-      outcomeLabel: "No write-back candidate",
+      outcomeLabel: "没有写回候选",
       explanation:
-        "This turn completed recall and injection, but no candidate met the threshold for structured write-back.",
+        "这一轮已经完成召回和注入，但没有候选内容达到结构化写回阈值。",
       incomplete
     };
   }
@@ -180,18 +180,18 @@ export function buildNarrative(detail: RunAggregate) {
   if (recallRun?.degraded || writeBackRun?.degraded) {
     return {
       outcomeCode: "dependency_unavailable",
-      outcomeLabel: "Dependency degraded",
+      outcomeLabel: "依赖降级",
       explanation:
-        "The runtime completed this trace in degraded mode because one of its dependencies was unavailable or slow.",
+        "运行时以降级模式完成了这条轨迹，因为至少有一个依赖不可用或过慢。",
       incomplete
     };
   }
 
   return {
     outcomeCode: "completed",
-    outcomeLabel: "Trace completed",
+    outcomeLabel: "轨迹完成",
     explanation:
-      "This trace completed turn, trigger, recall, injection, and write-back stages without a dominant anomaly.",
+      "这条轨迹完成了 turn、trigger、recall、injection 和 write-back 阶段，没有出现明显主导异常。",
     incomplete
   };
 }
@@ -207,23 +207,23 @@ function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
     {
       key: "turn",
       title: "Turn",
-      summary: `Turn ${turn.turnId ?? turn.traceId} ran in phase ${turn.phase ?? "unknown"}.`,
+      summary: `Turn ${turn.turnId ?? turn.traceId} 运行在 ${turn.phase ?? "未知阶段"}。`,
       details: [
-        `Session: ${turn.sessionId ?? "not recorded"}`,
-        `Current input: ${turn.currentInput ?? "not recorded"}`,
-        `Assistant output: ${turn.assistantOutput ?? "not recorded"}`
+        `Session：${turn.sessionId ?? "未记录"}`,
+        `当前输入：${turn.currentInput ?? "未记录"}`,
+        `助手输出：${turn.assistantOutput ?? "未记录"}`
       ]
     },
     {
       key: "trigger",
       title: "Trigger",
       summary: triggerRun?.triggerHit
-        ? `${memoryModeSummary(triggerRun.memoryMode)} Trigger fired because ${triggerRun.triggerReason ?? "the runtime recorded a trigger hit"}.`
-        : `Trigger did not fire. ${triggerRun?.triggerReason ?? "No trigger reason recorded."}`,
+        ? `${memoryModeSummary(triggerRun.memoryMode)} 触发条件已命中。原因：${triggerRun.triggerReason ?? "运行时记录到了触发命中"}。`
+        : `这一轮没有触发。${triggerRun?.triggerReason ?? "未记录触发原因。"} `,
       details: [
-        `Requested scopes: ${formatScopeList(triggerRun?.requestedScopes ?? [])}`,
-        `Selected scopes: ${formatScopeList(triggerRun?.selectedScopes ?? [])}`,
-        triggerRun?.scopeDecision ?? "No scope decision explanation recorded."
+        `请求作用域：${formatScopeList(triggerRun?.requestedScopes ?? [])}`,
+        `选中作用域：${formatScopeList(triggerRun?.selectedScopes ?? [])}`,
+        triggerRun?.scopeDecision ?? "未记录作用域决策说明。"
       ]
     },
     {
@@ -231,41 +231,41 @@ function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
       title: "Recall",
       summary: summarizeRecall(recallRun),
       details: [
-        `Memory mode: ${memoryModeSummary(recallRun?.memoryMode)}`,
-        `Requested scopes: ${formatScopeList(recallRun?.requestedScopes ?? [])}`,
-        `Selected scopes: ${formatScopeList(recallRun?.selectedScopes ?? [])}`,
+        `记忆模式：${memoryModeSummary(recallRun?.memoryMode)}`,
+        `请求作用域：${formatScopeList(recallRun?.requestedScopes ?? [])}`,
+        `选中作用域：${formatScopeList(recallRun?.selectedScopes ?? [])}`,
         ...(recallRun?.scopeHitCounts.map(
-          (item) => `${scopeLabel(item.scope)} hits: ${item.count}`
+          (item) => `${scopeLabel(item.scope)} 命中：${item.count}`
         ) ?? []),
-        recallRun?.emptyReason ?? "No empty-recall explanation recorded."
+        recallRun?.emptyReason ?? "未记录空召回说明。"
       ]
     },
     {
       key: "injection",
       title: "Injection",
       summary: injectionRun?.injected
-        ? injectionRun.memorySummary ?? "Injection completed."
-        : injectionRun?.resultState ?? "No injection record",
+        ? injectionRun.memorySummary ?? "注入已完成。"
+        : injectionRun?.resultState ?? "未记录注入阶段",
       details: [
-        `Selected scopes: ${formatScopeList(injectionRun?.selectedScopes ?? [])}`,
-        `Kept records: ${injectionRun?.keptRecordIds.join(", ") || "none recorded"}`,
-        `Dropped records: ${injectionRun?.trimmedRecordIds.join(", ") || "none recorded"}`,
-        `Trim reasons: ${injectionRun?.trimReasons.join(", ") || "none recorded"}`
+        `选中作用域：${formatScopeList(injectionRun?.selectedScopes ?? [])}`,
+        `保留记录：${injectionRun?.keptRecordIds.join(", ") || "未记录"}`,
+        `裁剪记录：${injectionRun?.trimmedRecordIds.join(", ") || "未记录"}`,
+        `裁剪原因：${injectionRun?.trimReasons.join(", ") || "未记录"}`
       ]
     },
     {
       key: "writeback",
       title: "Write-back",
       summary: writeBackRun
-        ? `Write-back ${writeBackRun.resultState}. ${memoryModeSummary(writeBackRun.memoryMode)}`
-        : "No write-back record.",
+        ? `写回状态：${writeBackRun.resultState}。${memoryModeSummary(writeBackRun.memoryMode)}`
+        : "未记录写回阶段。",
       details: [
-        `Submitted jobs: ${writeBackRun?.submittedJobIds.join(", ") || "none recorded"}`,
-        `Candidate summaries: ${writeBackRun?.candidateSummaries.join(" | ") || "none recorded"}`,
+        `已提交作业：${writeBackRun?.submittedJobIds.join(", ") || "未记录"}`,
+        `候选摘要：${writeBackRun?.candidateSummaries.join(" | ") || "未记录"}`,
         ...(writeBackRun?.scopeDecisions.map(
-          (item) => `${scopeLabel(item.scope)} x${item.count}: ${item.reason}`
+          (item) => `${scopeLabel(item.scope)} x${item.count}：${item.reason}`
         ) ?? []),
-        `Filtered reasons: ${writeBackRun?.filteredReasons.join(", ") || "none recorded"}`
+        `过滤原因：${writeBackRun?.filteredReasons.join(", ") || "未记录"}`
       ]
     }
   ];
@@ -291,7 +291,7 @@ function buildListItem(detail: RunAggregate) {
     scopeSummary: summarizeScopes(detail),
     triggerLabel: triggerRun?.triggerType
       ? `${triggerRun.triggerType}${triggerRun.triggerHit ? "" : " (miss)"}`
-      : "No trigger record",
+      : "未记录触发阶段",
     recallOutcome: summarizeRecall(recallRun),
     injectedCount: injectionRun?.injectedCount ?? 0,
     writeBackStatus: writeBackRun?.resultState ?? "not_recorded",
@@ -299,15 +299,15 @@ function buildListItem(detail: RunAggregate) {
     summary:
       detail.turn.currentInput ??
       detail.turn.assistantOutput ??
-      "No input or output summary was captured for this turn."
+      "这一轮没有记录输入或输出摘要。"
   };
 }
 
 function toDependencyStatus(dependencies: RuntimeDependencyRecord[]) {
   const labelByName: Record<string, string> = {
-    read_model: "Runtime read model",
-    embeddings: "Runtime embeddings",
-    storage_writeback: "Runtime storage writeback"
+    read_model: "运行时读模型",
+    embeddings: "运行时向量依赖",
+    storage_writeback: "运行时存储写回"
   };
 
   return dependencies.map((dependency) => ({
@@ -381,8 +381,8 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             scopeDecision:
               run.scopeDecision ??
               (run.selectedScopes.length > 0
-                ? `Selected ${formatScopeList(run.selectedScopes)}.`
-                : "No scope decision explanation recorded."),
+                ? `已选择 ${formatScopeList(run.selectedScopes)}。`
+                : "未记录作用域决策说明。"),
             scopeLimit: run.scopeLimit,
             importanceThreshold: run.importanceThreshold,
             cooldownApplied: run.cooldownApplied,
@@ -466,25 +466,25 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
 export function describeRunTraceEmptyState(response: RunTraceResponse) {
   if (response.sourceStatus.status !== "healthy") {
     return {
-      title: "Runtime source unavailable",
+      title: "运行时数据源暂不可用",
       description:
         response.sourceStatus.detail ??
-        "The runtime observe API could not be queried, so trace data is temporarily unavailable."
+        "运行时观测接口当前不可查询，所以轨迹数据暂时不可用。"
     };
   }
 
   if (response.appliedFilters.turnId || response.appliedFilters.traceId) {
     return {
-      title: "No trace found for this selector",
+      title: "当前筛选条件下没有找到轨迹",
       description:
-        "The runtime observe API is reachable, but it did not return a trace for the requested turn id or trace id."
+        "运行时观测接口可访问，但没有返回对应 turn id 或 trace id 的轨迹。"
     };
   }
 
   return {
-    title: "Enter a turn id or trace id to inspect a trace",
+    title: "请输入 turn id 或 trace id 查看轨迹",
     description:
-      "Recent traces can still be listed below, but the main detail view is keyed by turn id or trace id."
+      "下方仍然可以列出最近轨迹，但主详情视图仍然由 turn id 或 trace id 驱动。"
   };
 }
 

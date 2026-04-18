@@ -28,7 +28,7 @@ export default async function DashboardPage({
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Diagnosis</p>
+            <p className="eyebrow">诊断</p>
             <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
               {response.diagnosis.title}
             </h2>
@@ -69,7 +69,7 @@ export default async function DashboardPage({
         <div className="panel-header">
           <div>
             <p className="eyebrow">retrieval-runtime</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">Runtime metrics</h2>
+            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">运行时指标</h2>
           </div>
         </div>
         <div className="panel-body grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -83,7 +83,7 @@ export default async function DashboardPage({
         <div className="panel-header">
           <div>
             <p className="eyebrow">storage</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">Storage metrics</h2>
+            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">存储指标</h2>
           </div>
         </div>
         <div className="panel-body grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -96,13 +96,12 @@ export default async function DashboardPage({
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Recent change</p>
+            <p className="eyebrow">最近变化</p>
             <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
-              Trend and window comparison
+              趋势与窗口对比
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              These cards compare the current window with the previous half-window so you can tell
-              whether empties, backlog, conflicts, or latency changed recently.
+              这些卡片会把当前窗口和前一个半窗口放在一起对比，帮助判断空召回、积压、冲突或时延最近是否发生了变化。
             </p>
           </div>
         </div>
@@ -113,7 +112,7 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      <SourceHealthPanel title="Service and dependency health" health={health} />
+      <SourceHealthPanel title="服务与依赖健康" health={health} />
     </div>
   );
 }

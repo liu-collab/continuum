@@ -37,4 +37,21 @@ describe("fetchJsonFromSource", () => {
     expect(failure.status.lastOkAt).toBe(success.status.lastOkAt);
     expect(failure.status.lastCheckedAt).not.toBeNull();
   });
+
+  it("surfaces normalized upstream error details", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "down" })
+    } as Response);
+
+    const result = await fetchJsonFromSource({
+      sourceName: "storage_api_test",
+      sourceLabel: "Storage API test",
+      url: "http://example.test/storage",
+      timeoutMs: 50
+    });
+
+    expect(result.status.detail).toContain("上游服务返回 503");
+  });
 });

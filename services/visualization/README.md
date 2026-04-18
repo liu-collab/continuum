@@ -29,6 +29,17 @@ visualization/
     └── lib/
 ```
 
+## 当前新增约定
+
+- `src/app/agent/_lib/`
+  首版内置 `agent` 的浏览器端辅助代码统一先放这里。
+
+- `src/app/api/agent/token/route.ts`
+  只负责读取本机 `token` 文件并返回给浏览器，不代理 `mna` 主链路请求。
+
+- `next dev` 和 `next start`
+  当前默认绑定到 `127.0.0.1`，首版只支持本机访问。
+
 ## 各目录先放什么
 
 - `src/app/`

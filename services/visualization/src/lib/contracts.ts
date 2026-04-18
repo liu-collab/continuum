@@ -37,7 +37,9 @@ export const SourceStatusSchema = z.object({
   lastOkAt: z.string().nullable().default(null),
   lastError: z.string().nullable().default(null),
   responseTimeMs: z.number().nullable().default(null),
-  detail: z.string().nullable().default(null)
+  detail: z.string().nullable().default(null),
+  activeConnections: z.number().int().nonnegative().nullable().default(null),
+  connectionLimit: z.number().int().positive().nullable().default(null)
 });
 export type SourceStatus = z.infer<typeof SourceStatusSchema>;
 
@@ -358,6 +360,14 @@ export const MemoryGovernanceActionSchema = z.enum([
   "delete",
   "restore_version"
 ]);
+
+export const AgentTokenBootstrapResponseSchema = z.object({
+  status: z.enum(["ok", "mna_not_running", "token_missing", "token_invalid"]),
+  token: z.string().nullable().default(null),
+  reason: z.string().nullable().default(null),
+  mnaBaseUrl: z.string().nullable().default(null)
+});
+export type AgentTokenBootstrapResponse = z.infer<typeof AgentTokenBootstrapResponseSchema>;
 export type MemoryGovernanceAction = z.infer<typeof MemoryGovernanceActionSchema>;
 
 export const MemoryGovernanceActionRequestSchema = z.object({

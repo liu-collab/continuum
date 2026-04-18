@@ -16,13 +16,14 @@ vi.mock("@/lib/env", () => ({
       STORAGE_READ_MODEL_DSN: "postgres://test",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
-      STORAGE_READ_MODEL_TIMEOUT_MS: 1000
+      STORAGE_READ_MODEL_TIMEOUT_MS: 1000,
+      DATABASE_POOL_MAX: 5
     },
     issues: []
   })
 }));
 
-import { queryCatalogView } from "@/lib/server/storage-read-model-client";
+import { getReadModelPoolStats, queryCatalogView } from "@/lib/server/storage-read-model-client";
 
 describe("storage read model catalog view", () => {
   beforeEach(() => {
@@ -32,6 +33,11 @@ describe("storage read model catalog view", () => {
 
   afterEach(() => {
     globalThis.__AGENT_MEMORY_VIZ_PG_POOL__ = undefined;
+  });
+
+  it("exposes connection pool stats", () => {
+    const stats = getReadModelPoolStats();
+    expect(stats.connectionLimit).toBe(5);
   });
 
   it("workspace_only with scope=user returns no global rows", async () => {

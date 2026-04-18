@@ -11,7 +11,7 @@ import { formatTimestamp } from "@/lib/format";
 
 const columns: Array<ColumnDef<MemoryCatalogItem>> = [
   {
-    header: "Memory",
+    header: "记忆",
     cell: ({ row }) => (
       <div>
         <div className="font-semibold text-slate-900">{row.original.summary}</div>
@@ -21,17 +21,17 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
           href={`/memories/${encodeURIComponent(row.original.id)}` as Route}
           className="mt-2 inline-flex text-xs font-semibold text-accent hover:underline"
         >
-          View details
+          查看详情
         </Link>
       </div>
     )
   },
   {
-    header: "Type",
+    header: "类型",
     cell: ({ row }) => row.original.memoryTypeLabel
   },
   {
-    header: "Scope",
+    header: "作用域",
     cell: ({ row }) => (
       <div className="space-y-2">
         <StatusBadge tone={row.original.scope === "user" ? "warning" : "neutral"}>
@@ -42,7 +42,7 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
     )
   },
   {
-    header: "Status",
+    header: "状态",
     cell: ({ row }) => (
       <div className="space-y-2">
         <StatusBadge
@@ -63,7 +63,7 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
     )
   },
   {
-    header: "Origin",
+    header: "来源",
     cell: ({ row }) => (
       <div>
         <div>{row.original.originWorkspaceLabel}</div>
@@ -72,7 +72,7 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
     )
   },
   {
-    header: "Updated",
+    header: "更新时间",
     cell: ({ row }) => formatTimestamp(row.original.updatedAt)
   }
 ];

@@ -20,15 +20,15 @@ const serif = Newsreader({
 });
 
 const navigation = [
-  { href: "/" as Route, label: "Overview", icon: Activity },
-  { href: "/memories" as Route, label: "Memories", icon: BookText },
-  { href: "/runs" as Route, label: "Runs", icon: HeartPulse },
-  { href: "/dashboard" as Route, label: "Dashboard", icon: ChartSpline }
+  { href: "/" as Route, label: "概览", icon: Activity },
+  { href: "/memories" as Route, label: "记忆目录", icon: BookText },
+  { href: "/runs" as Route, label: "运行轨迹", icon: HeartPulse },
+  { href: "/dashboard" as Route, label: "指标看板", icon: ChartSpline }
 ];
 
 export const metadata: Metadata = {
   title: "Agent Memory Observatory",
-  description: "Structured memory catalog, run trace, and observability dashboard."
+  description: "结构化记忆目录、运行轨迹与可观测看板。"
 };
 
 export default function RootLayout({
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body className={cn(sans.variable, serif.variable, "font-[var(--font-sans)] antialiased")}>
         <Providers>
           <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-6 sm:px-6 lg:px-8">
@@ -47,19 +47,16 @@ export default function RootLayout({
                   <div className="max-w-2xl">
                     <p className="eyebrow">Agent Memory Observatory</p>
                     <h1 className="mt-2 font-[var(--font-serif)] text-4xl tracking-tight text-slate-900">
-                      Structured memory, run traces, and failure signals in one console.
+                      在一个控制台里查看结构化记忆、运行轨迹和故障信号。
                     </h1>
                     <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-                      Visualization stays online even when upstream sources fail. Each source is
-                      queried independently, and each page explains what happened instead of dumping
-                      raw JSON.
+                      即使上游依赖异常，可视化服务也应继续在线。每个数据源独立探测，每个页面都尽量解释发生了什么，而不是直接抛出原始 JSON。
                     </p>
                   </div>
                   <div className="rounded-xl border border-white/60 bg-white/70 px-4 py-3 text-sm text-slate-600">
-                    <div className="font-semibold text-slate-900">Independent service boundary</div>
+                    <div className="font-semibold text-slate-900">独立服务边界</div>
                     <div className="mt-1 max-w-sm">
-                      Reads only the published read model and observe APIs from `storage` and
-                      `retrieval-runtime`.
+                      这里只读取 `storage` 和 `retrieval-runtime` 已发布的共享读模型与观测接口。
                     </div>
                   </div>
                 </div>

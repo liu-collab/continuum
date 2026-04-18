@@ -12,10 +12,10 @@ type GovernancePanelProps = {
 };
 
 const actionLabels: Record<GovernanceAction, string> = {
-  confirm: "Confirm",
-  invalidate: "Invalidate",
-  archive: "Archive",
-  delete: "Delete"
+  confirm: "确认",
+  invalidate: "失效",
+  archive: "归档",
+  delete: "删除"
 };
 
 export function GovernancePanel({ detail }: GovernancePanelProps) {
@@ -27,11 +27,20 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
   const [versionId, setVersionId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingActionAt, setPendingActionAt] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function clearFeedback() {
     setMessage(null);
     setError(null);
+  }
+
+  function markRefreshPending() {
+    setPendingActionAt(new Date().toISOString());
+
+    window.setTimeout(() => {
+      startTransition(() => router.refresh());
+    }, 10_000);
   }
 
   async function requestJson(url: string, method: "POST" | "PATCH", body: Record<string, unknown>) {
@@ -47,7 +56,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       | null;
 
     if (!response.ok) {
-      throw new Error(payload?.error?.message ?? payload?.message ?? "Request failed.");
+      throw new Error(payload?.error?.message ?? payload?.message ?? "请求失败。");
     }
 
     return payload;
@@ -57,7 +66,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("Please provide a reason before submitting a governance action.");
+      setError("请先填写原因，再执行治理动作。");
       return;
     }
 
@@ -68,11 +77,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         { reason: reason.trim() }
       );
 
-      setMessage(payload?.message ?? `${actionLabels[action]} completed.`);
+      setMessage(payload?.message ?? `${actionLabels[action]} 已提交。`);
+      markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(
-        submissionError instanceof Error ? submissionError.message : `${actionLabels[action]} failed.`
+        submissionError instanceof Error ? submissionError.message : `${actionLabels[action]} 执行失败。`
       );
     }
   }
@@ -81,7 +91,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("Please provide a reason before editing this memory.");
+      setError("请先填写原因，再编辑这条记忆。");
       return;
     }
 
@@ -93,10 +103,11 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         status
       });
 
-      setMessage(payload?.message ?? "Edit completed.");
+      setMessage(payload?.message ?? "编辑已提交。");
+      markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Edit failed.");
+      setError(submissionError instanceof Error ? submissionError.message : "编辑失败。");
     }
   }
 
@@ -104,12 +115,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("Please provide a reason before restoring a version.");
+      setError("请先填写原因，再恢复版本。");
       return;
     }
 
     if (versionId.trim().length === 0) {
-      setError("Please provide a version number to restore.");
+      setError("请填写要恢复的版本号。");
       return;
     }
 
@@ -123,11 +134,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         }
       );
 
-      setMessage(payload?.message ?? "Version restore submitted.");
+      setMessage(payload?.message ?? "版本恢复已提交。");
+      markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(
-        submissionError instanceof Error ? submissionError.message : "Version restore failed."
+        submissionError instanceof Error ? submissionError.message : "版本恢复失败。"
       );
     }
   }
@@ -136,27 +148,32 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Governance</p>
-          <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">Minimum actions</h2>
+          <p className="eyebrow">治理</p>
+          <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">最小治理动作</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Provide a reason, then confirm, invalidate, archive, delete, edit, or restore a version for this memory.
+            先填写原因，再对这条记忆执行确认、失效、归档、删除、编辑或版本恢复。
           </p>
         </div>
       </div>
       <div className="panel-body space-y-6">
+        {pendingActionAt ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
+            治理请求已提交，读模型可能还在刷新。页面会在 10 秒内自动再刷新一次。
+          </div>
+        ) : null}
         <label className="grid gap-2">
-          <span className="text-sm font-medium text-slate-700">Reason</span>
+          <span className="text-sm font-medium text-slate-700">原因</span>
           <textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             rows={4}
             className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-            placeholder="Explain why this governance action is needed."
+            placeholder="说明为什么需要执行这次治理动作。"
           />
         </label>
 
         <div className="space-y-3">
-          <div className="text-sm font-semibold text-slate-900">Quick actions</div>
+          <div className="text-sm font-semibold text-slate-900">快捷动作</div>
           <div className="flex flex-wrap gap-3">
             {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
               <button
@@ -174,9 +191,9 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3 rounded-xl border bg-white/80 p-4">
-            <div className="text-sm font-semibold text-slate-900">Edit</div>
+            <div className="text-sm font-semibold text-slate-900">编辑</div>
             <label className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">Summary</span>
+              <span className="text-sm font-medium text-slate-700">摘要</span>
               <textarea
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
@@ -186,29 +203,29 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
             </label>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-2">
-                <span className="text-sm font-medium text-slate-700">Scope</span>
+                <span className="text-sm font-medium text-slate-700">作用域</span>
                 <select
                   value={scope}
                   onChange={(event) => setScope(event.target.value as Scope)}
                   className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                 >
-                  <option value="session">Session</option>
-                  <option value="task">Task</option>
-                  <option value="workspace">Workspace</option>
-                  <option value="user">Global</option>
+                  <option value="session">会话</option>
+                  <option value="task">任务</option>
+                  <option value="workspace">工作区</option>
+                  <option value="user">全局</option>
                 </select>
               </label>
               <label className="grid gap-2">
-                <span className="text-sm font-medium text-slate-700">Status</span>
+                <span className="text-sm font-medium text-slate-700">状态</span>
                 <select
                   value={status}
                   onChange={(event) => setStatus(event.target.value as MemoryStatus)}
                   className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                 >
-                  <option value="active">Active</option>
-                  <option value="pending_confirmation">Pending confirmation</option>
-                  <option value="superseded">Superseded</option>
-                  <option value="archived">Archived</option>
+                  <option value="active">生效中</option>
+                  <option value="pending_confirmation">待确认</option>
+                  <option value="superseded">已被替代</option>
+                  <option value="archived">已归档</option>
                 </select>
               </label>
             </div>
@@ -218,19 +235,19 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
               onClick={() => void submitEdit()}
               className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:opacity-60"
             >
-              Save edit
+              保存编辑
             </button>
           </div>
 
           <div className="space-y-3 rounded-xl border bg-white/80 p-4">
-            <div className="text-sm font-semibold text-slate-900">Restore version</div>
+            <div className="text-sm font-semibold text-slate-900">恢复版本</div>
             <label className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">Version number</span>
+              <span className="text-sm font-medium text-slate-700">版本号</span>
               <input
                 value={versionId}
                 onChange={(event) => setVersionId(event.target.value)}
                 className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                placeholder="e.g. 3"
+                placeholder="例如 3"
               />
             </label>
             <button
@@ -239,7 +256,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
               onClick={() => void submitRestoreVersion()}
               className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:opacity-60"
             >
-              Restore version
+              恢复版本
             </button>
           </div>
         </div>

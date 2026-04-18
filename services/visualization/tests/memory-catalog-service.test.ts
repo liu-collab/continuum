@@ -98,13 +98,15 @@ describe("memory catalog service", () => {
         lastOkAt: null,
         lastError: "connection failed",
         responseTimeMs: 200,
-        detail: "connection failed"
+        detail: "connection failed",
+        activeConnections: null,
+        connectionLimit: null
       }
     } satisfies MemoryCatalogResponse;
 
     const state = describeCatalogEmptyState(response);
 
-    expect(state.title).toContain("Memory source unavailable");
+    expect(state.title).toContain("记忆数据源暂不可用");
     expect(state.description).toContain("connection failed");
   });
 
@@ -112,8 +114,8 @@ describe("memory catalog service", () => {
     const detail = await getMemoryDetail("memory-1");
 
     expect(detail).not.toBeNull();
-    expect(detail?.scopeLabel).toBe("Global");
-    expect(detail?.scopeExplanation).toContain("Global memory");
+    expect(detail?.scopeLabel).toBe("全局");
+    expect(detail?.scopeExplanation).toContain("全局记忆");
     expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
@@ -152,7 +154,7 @@ describe("memory catalog service", () => {
       pageSize: 20
     });
 
-    expect(response.viewSummary).toContain("workspace");
+    expect(response.viewSummary).toContain("当前工作区");
     expect(response.appliedFilters.memoryViewMode).toBe("workspace_only");
   });
 

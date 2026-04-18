@@ -73,7 +73,7 @@ function buildPointLabels(window: string) {
 
 function deltaFormatted(current: number | null, previous: number | null, unit: DashboardMetric["unit"]) {
   if (current === null || previous === null) {
-    return "Unavailable";
+    return "不可用";
   }
 
   const delta = current - previous;
@@ -288,8 +288,8 @@ export function buildDashboardDiagnosis(
 ): DashboardDiagnosis {
   if (degradedSources.length > 0) {
     return {
-      title: "Dependency issue dominates",
-      summary: `One or more upstream sources are degraded: ${degradedSources.join(", ")}.`,
+      title: "当前主要问题来自依赖",
+      summary: `一个或多个上游数据源已经降级：${degradedSources.join("、")}。`,
       severity: "danger"
     };
   }
@@ -303,7 +303,7 @@ export function buildDashboardDiagnosis(
     return {
       title: "Recall strategy likely needs attention",
       summary:
-        "Empty recall rate is high while sources are healthy, which usually points to overly narrow trigger or scope selection.",
+        "依赖都健康，但空召回比例依然偏高，通常意味着触发条件或作用域选择过窄。",
       severity: "warning"
     };
   }
@@ -312,24 +312,24 @@ export function buildDashboardDiagnosis(
     return {
       title: "Stored memory quality is drifting",
       summary:
-        "Conflict rate is elevated, which usually indicates overlapping write-back candidates or missing merge rules.",
+        "冲突率正在升高，通常意味着写回候选重叠，或者缺少合并规则。",
       severity: "warning"
     };
   }
 
   if ((recallP95 ?? 0) >= 1200 || (writeP95 ?? 0) >= 1500) {
     return {
-      title: "Latency is the primary issue",
+      title: "延迟是当前主要问题",
       summary:
-        "P95 latency has moved above the target envelope, so the user-facing symptom is likely slowness rather than policy drift.",
+        "P95 延迟已经高于目标区间，所以用户更可能感知到的是变慢，而不是策略漂移。",
       severity: "warning"
     };
   }
 
   return {
-    title: "No dominant anomaly detected",
+    title: "当前没有明显主导异常",
     summary:
-      "Current metrics do not point to a single major failure mode. Check the trend section and source health for localized regressions.",
+      "当前指标没有指向单一主要故障模式。可以继续结合趋势区和依赖健康查看局部回退。",
     severity: "info"
   };
 }
@@ -351,41 +351,41 @@ function buildDiagnosisCards(
     diagnosisCard(
       "empty_recall_trend",
       "runtime",
-      "Empty recall trend",
+      "空召回趋势",
       degradedSources.length > 0
-        ? `Runtime source is degraded: ${degradedSources.join(", ")}.`
+        ? `运行时数据源已降级：${degradedSources.join("、")}。`
         : emptyRecall !== null && emptyRecall >= 0.35
-          ? "Recent recalls are frequently returning empty. Check current trigger rules and scope selection."
-          : "Empty recall remains within the current expected range.",
+          ? "最近召回经常返回空结果，需要检查当前触发规则和作用域选择。"
+          : "空召回仍然处在当前预期范围内。",
       degradedSources.length > 0 ? "danger" : emptyRecall !== null && emptyRecall >= 0.35 ? "warning" : "info"
     ),
     diagnosisCard(
       "scope_mix",
       "cross",
-      "Global / workspace usage",
+      "全局 / 工作区使用情况",
       workspaceOnlyRate === 1
-        ? "Recent turns stayed in workspace-only mode, so global memory should not appear."
+        ? "最近几轮一直停留在仅工作区模式，所以不应该出现全局记忆。"
         : globalShare !== null && workspaceShare !== null
-          ? `Recent selected scope share is global ${formatMetricValue(globalShare, "percent")} and workspace ${formatMetricValue(workspaceShare, "percent")}.`
-          : "Runtime has not yet exposed enough scope data, so this card is using partial scope signals.",
+          ? `最近选中作用域里，全局占 ${formatMetricValue(globalShare, "percent")}，工作区占 ${formatMetricValue(workspaceShare, "percent")}。`
+          : "运行时还没有暴露足够的作用域数据，所以这张卡片目前只能用部分信号。",
       workspaceOnlyRate === 1 ? "info" : globalShare !== null && globalShare > 0.6 ? "warning" : "info"
     ),
     diagnosisCard(
       "writeback_backlog",
       "storage",
-      "Write-back backlog",
+      "写回积压",
       storageTrend.backlog.current !== null && storageTrend.backlog.current > 5
-        ? "Queued and processing storage jobs are building up in the current half-window."
-        : "No obvious backlog growth is visible in recent write-back jobs.",
+        ? "当前半窗口内，排队和处理中作业正在积压。"
+        : "最近写回作业没有看到明显积压增长。",
       storageTrend.backlog.current !== null && storageTrend.backlog.current > 5 ? "warning" : "info"
     ),
     diagnosisCard(
       "conflict_pressure",
       "storage",
-      "Conflict pressure",
+      "冲突压力",
       conflictRate !== null && conflictRate >= 0.15
-        ? "Conflict rate is elevated. Governance or merge rules may need attention."
-        : "Conflict pressure is currently stable.",
+        ? "当前冲突率偏高，需要关注治理策略或合并规则。"
+        : "当前冲突压力比较稳定。",
       conflictRate !== null && conflictRate >= 0.15 ? "warning" : "info"
     )
   ];
@@ -420,178 +420,178 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
     const retrievalMetrics = [
       metric(
         "trigger_rate",
-        "Trigger rate",
+        "触发率",
         runtimeCurrent.metrics?.triggerRate ?? null,
         "percent",
         "runtime",
-        "Share of turns that triggered retrieval.",
+        "触发记忆检索的轮次占比。",
         0.7,
         0.9
       ),
       metric(
         "recall_hit_rate",
-        "Recall hit rate",
+        "召回命中率",
         runtimeCurrent.metrics?.recallHitRate ?? null,
         "percent",
         "runtime",
-        "Share of triggered recalls that found at least one record."
+        "已触发召回里，至少找到一条记录的占比。"
       ),
       metric(
         "empty_recall_rate",
-        "Empty recall rate",
+        "空召回率",
         runtimeCurrent.metrics?.emptyRecallRate ?? null,
         "percent",
         "runtime",
-        "Share of triggered recalls that returned zero eligible records.",
+        "已触发召回里，返回零条可用记录的占比。",
         0.2,
         0.35
       ),
       metric(
         "injection_rate",
-        "Actual injection rate",
+        "实际注入率",
         runtimeCurrent.metrics?.injectionRate ?? null,
         "percent",
         "runtime",
-        "Share of turns where a memory block actually entered the prompt."
+        "真正把记忆块注入到提示词中的轮次占比。"
       ),
       metric(
         "trim_rate",
-        "Injection trim rate",
+        "注入裁剪率",
         runtimeCurrent.metrics?.trimRate ?? null,
         "percent",
         "runtime",
-        "Share of injections that dropped records due to token budget.",
+        "因为 token 预算被裁掉记录的注入占比。",
         0.15,
         0.3
       ),
       metric(
         "recall_p95_ms",
-        "Recall P95",
+        "召回 P95",
         runtimeCurrent.metrics?.recallP95Ms ?? null,
         "ms",
         "runtime",
-        "P95 latency for runtime recall queries.",
+        "运行时召回查询的 P95 延迟。",
         800,
         1200
       ),
       metric(
         "injection_p95_ms",
-        "Injection P95",
+        "注入 P95",
         runtimeCurrent.metrics?.injectionP95Ms ?? null,
         "ms",
         "runtime",
-        "P95 latency for injection block generation.",
+        "生成注入块的 P95 延迟。",
         400,
         700
       ),
       metric(
         "writeback_submit_rate",
-        "Write-back submit rate",
+        "写回提交率",
         runtimeCurrent.metrics?.writeBackSubmitRate ?? null,
         "percent",
         "runtime",
-        "Share of turns that produced a submitted write-back candidate."
+        "产生并成功提交写回候选的轮次占比。"
       ),
       metric(
         "global_scope_share",
-        "Global memory share",
+        "全局记忆占比",
         totalSelectedScopeHits > 0 ? globalScopeHits / totalSelectedScopeHits : null,
         "percent",
         "runtime",
-        "Share of recent recall hits that came from global memory.",
+        "最近召回命中里来自全局记忆的占比。",
         0.5,
         0.7
       ),
       metric(
         "workspace_scope_share",
-        "Workspace memory share",
+        "工作区记忆占比",
         totalSelectedScopeHits > 0 ? workspaceScopeHits / totalSelectedScopeHits : null,
         "percent",
         "runtime",
-        "Share of recent recall hits that came from workspace memory."
+        "最近召回命中里来自工作区记忆的占比。"
       ),
       metric(
         "workspace_only_rate",
-        "Workspace-only mode rate",
+        "仅工作区模式占比",
         triggerRuns.length > 0 ? workspaceOnlyTurns / triggerRuns.length : null,
         "percent",
         "runtime",
-        "Share of recent turns that ran in workspace-only mode."
+        "最近以仅工作区模式运行的轮次占比。"
       )
     ];
 
     const storageMetrics = [
       metric(
         "write_accepted",
-        "Writes accepted",
+        "已接收写入",
         storageCurrent.metrics?.writeAccepted ?? null,
         "count",
         "storage",
-        "Accepted write-back jobs in the selected window."
+        "选定窗口内已接收的写回作业数量。"
       ),
       metric(
         "write_succeeded",
-        "Writes succeeded",
+        "写入成功数",
         storageCurrent.metrics?.writeSucceeded ?? null,
         "count",
         "storage",
-        "Write-back jobs that finished successfully."
+        "成功完成的写回作业数量。"
       ),
       metric(
         "duplicate_ignored_rate",
-        "Duplicate ignored rate",
+        "重复忽略率",
         storageCurrent.metrics?.duplicateIgnoredRate ?? null,
         "percent",
         "storage",
-        "Share of write-back candidates ignored as duplicates.",
+        "被判定为重复而忽略的写回候选占比。",
         0.25,
         0.45
       ),
       metric(
         "merge_rate",
-        "Merge rate",
+        "合并率",
         storageCurrent.metrics?.mergeRate ?? null,
         "percent",
         "storage",
-        "Share of writes merged into an existing record."
+        "被合并到已有记录中的写入占比。"
       ),
       metric(
         "conflict_rate",
-        "Conflict rate",
+        "冲突率",
         storageCurrent.metrics?.conflictRate ?? null,
         "percent",
         "storage",
-        "Share of writes that ended in pending confirmation or conflict.",
+        "最终进入待确认或冲突状态的写入占比。",
         0.08,
         0.15
       ),
       metric(
         "dead_letter_jobs",
-        "Dead-letter jobs",
+        "死信作业数",
         storageCurrent.metrics?.deadLetterJobs ?? jobs.jobs?.deadLetter ?? null,
         "count",
         "storage",
-        "Jobs that exhausted retries and moved to dead letter.",
+        "耗尽重试次数后进入死信队列的作业数。",
         1,
         5
       ),
       metric(
         "refresh_failure_rate",
-        "Read model refresh failure rate",
+        "读模型刷新失败率",
         storageCurrent.metrics?.refreshFailureRate ?? null,
         "percent",
         "storage",
-        "Share of read model refresh jobs that failed.",
+        "读模型刷新作业中失败的占比。",
         0.02,
         0.1
       ),
       metric(
         "write_p95_ms",
-        "Write P95",
+        "写入 P95",
         storageCurrent.metrics?.writeP95Ms ?? null,
         "ms",
         "storage",
-        "P95 latency for storage-side write processing.",
+        "存储侧写入处理的 P95 延迟。",
         1000,
         1500
       )
@@ -600,8 +600,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
     const trends = [
       buildTrend(
         "empty_recall_shift",
-        "Empty recalls over time",
-        "Use this to see whether recalls recently started returning empty more often.",
+        "空召回随时间变化",
+        "用来判断最近空召回是否开始变多。",
         "runtime",
         "percent",
         runtimeTrend.emptyRecall,
@@ -611,8 +611,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       ),
       buildTrend(
         "writeback_backlog",
-        "Write-back backlog",
-        "Compare queued and processing jobs across the current and previous half-window.",
+        "写回积压",
+        "对比当前半窗口和上一半窗口里的排队与处理中作业数量。",
         "storage",
         "count",
         storageTrend.backlog,
@@ -622,8 +622,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       ),
       buildTrend(
         "conflict_spike",
-        "Conflict pressure",
-        "Shows whether recent write-back work is opening more conflicts than the previous half-window.",
+        "冲突压力",
+        "判断最近写回工作是否比上一半窗口带来了更多冲突。",
         "storage",
         "count",
         storageTrend.conflict,
@@ -633,8 +633,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       ),
       buildTrend(
         "runtime_vs_storage_latency",
-        "Runtime recall latency",
-        "If runtime recall latency rises while storage write latency stays flat, the slowdown is more likely on retrieval strategy or retrieval dependencies.",
+        "运行时召回延迟",
+        "如果运行时召回延迟升高而存储写入延迟保持平稳，说明更可能是检索策略或检索依赖变慢。",
         "runtime",
         "ms",
         runtimeTrend.recallLatency,
@@ -644,8 +644,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
       ),
       buildTrend(
         "scope_mix_shift",
-        "Global memory share",
-        "Tracks whether recent recalls are leaning toward global memory or staying mostly inside the workspace boundary.",
+        "全局记忆占比",
+        "观察最近召回是更偏向全局记忆，还是大多仍停留在工作区边界内。",
         "runtime",
         "percent",
         runtimeTrend.globalScopeShare,

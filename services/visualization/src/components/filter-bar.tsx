@@ -11,7 +11,7 @@ export function FilterBar({ title, description, children }: FilterBarProps) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Filters</p>
+          <p className="eyebrow">筛选</p>
           <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">{title}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
         </div>

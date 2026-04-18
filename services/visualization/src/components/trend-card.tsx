@@ -26,11 +26,11 @@ export function TrendCard({ trend }: TrendCardProps) {
       </div>
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Current</div>
+          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">当前</div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{trend.currentFormatted}</div>
         </div>
         <div>
-          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">Previous</div>
+          <div className="text-xs uppercase tracking-[0.16em] text-slate-400">上一窗口</div>
           <div className="mt-1 text-2xl font-semibold text-slate-700">{trend.previousFormatted}</div>
         </div>
       </div>

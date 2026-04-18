@@ -33,17 +33,20 @@ describe("source health panel", () => {
               lastOkAt: null,
               lastError: "timeout",
               responseTimeMs: 2000,
-              detail: "timeout"
+              detail: "timeout",
+              activeConnections: 2,
+              connectionLimit: 5
             }
           ]
         }}
       />
     );
 
-    expect(screen.getByText("Service liveness")).toBeInTheDocument();
-    expect(screen.getByText("Service readiness")).toBeInTheDocument();
-    expect(screen.getByText("External dependencies")).toBeInTheDocument();
+    expect(screen.getByText("服务存活")).toBeInTheDocument();
+    expect(screen.getByText("服务就绪")).toBeInTheDocument();
+    expect(screen.getByText("外部依赖")).toBeInTheDocument();
     expect(screen.getByText("Runtime observe API")).toBeInTheDocument();
-    expect(screen.getByText("Never connected")).toBeInTheDocument();
+    expect(screen.getByText("从未成功连接")).toBeInTheDocument();
+    expect(screen.getByText("2 / 5")).toBeInTheDocument();
   });
 });

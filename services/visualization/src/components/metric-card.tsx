@@ -16,7 +16,9 @@ export function MetricCard({ metric }: MetricCardProps) {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold text-slate-900">{metric.label}</div>
-        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{metric.source}</div>
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
+          {metric.source === "runtime" ? "runtime" : metric.source === "storage" ? "storage" : metric.source}
+        </div>
       </div>
       <div className="mt-4 text-3xl font-semibold text-slate-900">{metric.formattedValue}</div>
       <p className="mt-3 text-sm leading-6 text-slate-600">{metric.description}</p>

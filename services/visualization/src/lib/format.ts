@@ -11,7 +11,7 @@ import {
 
 export function formatTimestamp(value: string | null | undefined) {
   if (!value) {
-    return "Not available";
+    return "未记录";
   }
 
   const date = new Date(value);
@@ -25,7 +25,7 @@ export function formatTimestamp(value: string | null | undefined) {
 
 export function formatLastSuccess(value: string | null | undefined) {
   if (!value) {
-    return "Never connected";
+    return "从未成功连接";
   }
 
   const date = new Date(value);
@@ -39,7 +39,7 @@ export function formatLastSuccess(value: string | null | undefined) {
 
 export function formatMetricValue(value: number | null, unit: DashboardMetric["unit"]) {
   if (value === null || Number.isNaN(value)) {
-    return "Unavailable";
+    return "不可用";
   }
 
   if (unit === "percent") {
@@ -50,59 +50,59 @@ export function formatMetricValue(value: number | null, unit: DashboardMetric["u
     return `${Math.round(value)} ms`;
   }
 
-  return new Intl.NumberFormat("en-US").format(value);
+  return new Intl.NumberFormat("zh-CN").format(value);
 }
 
 export function memoryTypeLabel(value: MemoryType) {
   switch (value) {
     case "fact_preference":
-      return "Facts & preferences";
+      return "事实与偏好";
     case "task_state":
-      return "Task state";
+      return "任务状态";
     case "episodic":
-      return "Episodic";
+      return "情景记忆";
   }
 }
 
 export function scopeLabel(value: Scope) {
   switch (value) {
     case "session":
-      return "Session";
+      return "会话";
     case "task":
-      return "Task";
+      return "任务";
     case "user":
-      return "Global";
+      return "全局";
     case "workspace":
-      return "Workspace";
+      return "工作区";
   }
 }
 
 export function scopeExplanation(value: Scope, originWorkspaceId?: string | null) {
   if (value === "user") {
     return originWorkspaceId
-      ? `Global memory. It can appear in the current workspace because global memory is shared across workspaces. Origin workspace: ${originWorkspaceId}.`
-      : "Global memory. It can appear in the current workspace because global memory is shared across workspaces.";
+      ? `这是全局记忆。因为全局记忆在工作区之间共享，所以它会出现在当前工作区。来源工作区：${originWorkspaceId}。`
+      : "这是全局记忆。因为全局记忆在工作区之间共享，所以它会出现在当前工作区。";
   }
 
   if (value === "workspace") {
-    return "Workspace memory. It is only meant to be reused inside the current workspace boundary.";
+    return "这是工作区记忆，只会在当前工作区范围内复用。";
   }
 
   if (value === "task") {
-    return "Task memory. It stays tied to the current task chain.";
+    return "这是任务记忆，会绑定在当前任务链路上。";
   }
 
-  return "Session memory. It belongs to the current session context only.";
+  return "这是会话记忆，只属于当前会话上下文。";
 }
 
 export function memoryViewModeLabel(value: MemoryViewMode) {
-  return value === "workspace_only" ? "Workspace only" : "Workspace + global";
+  return value === "workspace_only" ? "仅工作区" : "工作区 + 全局";
 }
 
 export function memoryViewModeExplanation(value: MemoryViewMode) {
   return value === "workspace_only"
-    ? "Only workspace, task, and session memories from the current workspace are shown."
-    : "Workspace, task, and session memories from the current workspace are shown together with global memories.";
+    ? "只显示当前工作区内的工作区、任务和会话记忆。"
+    : "显示当前工作区内的工作区、任务和会话记忆，同时包含全局记忆。";
 }
 
 export function visibilitySummary(
@@ -112,63 +112,63 @@ export function visibilitySummary(
 ) {
   if (scope === "user") {
     return memoryViewMode === "workspace_only"
-      ? "This global memory is hidden in workspace-only mode."
+      ? "当前是仅工作区模式，所以这条全局记忆会被隐藏。"
       : originWorkspaceId
-        ? `Visible because the current view includes global memory. Origin workspace: ${originWorkspaceId}.`
-        : "Visible because the current view includes global memory.";
+        ? `当前视图包含全局记忆，所以它会显示。来源工作区：${originWorkspaceId}。`
+        : "当前视图包含全局记忆，所以它会显示。";
   }
 
   if (scope === "workspace") {
-    return "Visible because it belongs to the current workspace.";
+    return "它属于当前工作区，所以会显示。";
   }
 
   if (scope === "task") {
-    return "Visible because task memory is retained for the current workspace context.";
+    return "它作为当前工作区上下文中的任务记忆被保留，所以会显示。";
   }
 
-  return "Visible because session memory is retained for the current workspace context.";
+  return "它作为当前工作区上下文中的会话记忆被保留，所以会显示。";
 }
 
 export function memoryStatusLabel(value: MemoryStatus) {
   switch (value) {
     case "active":
-      return "Active";
+      return "生效中";
     case "superseded":
-      return "Superseded";
+      return "已被替代";
     case "archived":
-      return "Archived";
+      return "已归档";
     case "pending_confirmation":
-      return "Pending confirmation";
+      return "待确认";
     case "deleted":
-      return "Deleted";
+      return "已删除";
   }
 }
 
 export function memoryStatusExplanation(value: MemoryStatus) {
   switch (value) {
     case "active":
-      return "Currently eligible for automatic recall.";
+      return "当前可参与自动召回。";
     case "pending_confirmation":
-      return "Held back from default recall until the conflict or confirmation issue is resolved.";
+      return "在冲突或确认问题解决前，默认不会参与召回。";
     case "superseded":
-      return "Replaced by a newer version and kept for traceability.";
+      return "已被更新版本替代，但仍保留用于追踪。";
     case "archived":
-      return "Historical record kept for review, not part of default recall.";
+      return "作为历史记录保留用于查看，不再参与默认召回。";
     case "deleted":
-      return "Removed from normal views and recall.";
+      return "已从常规视图和召回中移除。";
   }
 }
 
 export function memoryModeSummary(value: MemoryViewMode | null | undefined) {
   if (value === "workspace_only") {
-    return "Current mode is workspace only.";
+    return "当前模式是仅工作区。";
   }
 
   if (value === "workspace_plus_global") {
-    return "Current mode includes workspace and global memory.";
+    return "当前模式包含工作区和全局记忆。";
   }
 
-  return "Memory mode was not recorded.";
+  return "未记录记忆模式。";
 }
 
 export function sourceStatusTone(status: SourceHealthStatus) {

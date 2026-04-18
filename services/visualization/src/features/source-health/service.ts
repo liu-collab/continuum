@@ -31,15 +31,15 @@ export async function getSourceHealth(): Promise<ServiceHealthResponse> {
         checkedAt,
         summary:
           degradedDependencies.length > 0
-            ? "Visualization is ready and serving degraded responses while some dependencies are unhealthy."
-            : "Visualization is ready and dependencies are healthy."
+            ? "可视化服务仍可用，但当前有部分依赖处于降级状态。"
+            : "可视化服务已就绪，依赖状态正常。"
       },
       service: {
         name: "visualization",
         summary:
           degradedDependencies.length > 0
-            ? "The service is healthy; the current issue is isolated to upstream dependencies."
-            : "The service is healthy and no dependency issue is currently visible."
+            ? "当前问题被限制在上游依赖，可视化服务本身仍然健康。"
+            : "可视化服务和依赖都处于健康状态。"
       },
       dependencies
     };

@@ -57,14 +57,14 @@ export function SearchForm({ action, initialValues = {}, children }: SearchFormP
           type="submit"
           className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
         >
-          Apply filters
+          应用筛选
         </button>
         <button
           type="button"
           onClick={() => router.push(action)}
           className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
         >
-          Clear
+          清空
         </button>
       </div>
     </form>

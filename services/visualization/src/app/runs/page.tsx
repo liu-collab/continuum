@@ -43,8 +43,8 @@ export default async function RunsPage({
   return (
     <div className="space-y-6">
       <FilterBar
-        title="Run trace"
-        description="Trace one turn across turn, trigger, recall, injection, and write-back. Current phase only keeps formal runtime filters: turn id, session id, trace id, and pagination."
+        title="运行轨迹"
+        description="查看单轮在 turn、trigger、recall、injection 和 write-back 之间发生了什么。当前阶段只保留正式支持的运行时筛选项：turn id、session id、trace id 和分页。"
       >
         <SearchForm
           action="/runs"
@@ -64,8 +64,8 @@ export default async function RunsPage({
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Recent runs</p>
-              <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">Run list</h2>
+              <p className="eyebrow">最近运行</p>
+              <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">轨迹列表</h2>
             </div>
           </div>
           <div className="panel-body space-y-3">
@@ -83,19 +83,19 @@ export default async function RunsPage({
                       <div className="mt-1 text-xs text-slate-500">{formatTimestamp(item.createdAt)}</div>
                     </div>
                     <StatusBadge tone={item.degraded ? "warning" : "success"}>
-                      {item.degraded ? "degraded" : "healthy"}
+                      {item.degraded ? "已降级" : "健康"}
                     </StatusBadge>
                   </div>
                   <div className="mt-3 text-sm text-slate-700">{item.summary}</div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span>{item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "Mode unknown"}</span>
+                    <span>{item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "模式未知"}</span>
                     <span>{item.scopeSummary}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
                     <span>{item.triggerLabel}</span>
                     <span>{item.recallOutcome}</span>
-                    <span>Injected {item.injectedCount}</span>
-                    <span>Write-back {item.writeBackStatus}</span>
+                    <span>注入 {item.injectedCount}</span>
+                    <span>写回 {item.writeBackStatus}</span>
                   </div>
                 </Link>
               ))
@@ -108,9 +108,9 @@ export default async function RunsPage({
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Selected trace</p>
+              <p className="eyebrow">当前轨迹</p>
               <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
-                {response.selectedTurn?.turn.turnId ?? "No turn selected"}
+                {response.selectedTurn?.turn.turnId ?? "尚未选择 turn"}
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 {response.selectedTurn?.narrative.explanation ?? emptyState.description}
@@ -150,31 +150,31 @@ export default async function RunsPage({
                     </div>
                     <div>
                       <dt className="font-medium text-slate-900">Workspace id</dt>
-                      <dd>{response.selectedTurn.turn.workspaceId ?? "Not recorded"}</dd>
+                      <dd>{response.selectedTurn.turn.workspaceId ?? "未记录"}</dd>
                     </div>
                     <div>
                       <dt className="font-medium text-slate-900">User id</dt>
-                      <dd>{response.selectedTurn.turn.userId ?? "Not recorded"}</dd>
+                      <dd>{response.selectedTurn.turn.userId ?? "未记录"}</dd>
                     </div>
                     <div>
                       <dt className="font-medium text-slate-900">Task id</dt>
-                      <dd>{response.selectedTurn.turn.taskId ?? "Not recorded"}</dd>
+                      <dd>{response.selectedTurn.turn.taskId ?? "未记录"}</dd>
                     </div>
                     <div>
                       <dt className="font-medium text-slate-900">Thread id</dt>
-                      <dd>{response.selectedTurn.turn.threadId ?? "Not recorded"}</dd>
+                      <dd>{response.selectedTurn.turn.threadId ?? "未记录"}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-slate-900">Created</dt>
+                      <dt className="font-medium text-slate-900">创建时间</dt>
                       <dd>{formatTimestamp(response.selectedTurn.turn.createdAt)}</dd>
                     </div>
                     <div className="md:col-span-2">
-                      <dt className="font-medium text-slate-900">Current input</dt>
-                      <dd>{response.selectedTurn.turn.inputSummary ?? "Not recorded"}</dd>
+                      <dt className="font-medium text-slate-900">当前输入</dt>
+                      <dd>{response.selectedTurn.turn.inputSummary ?? "未记录"}</dd>
                     </div>
                     <div className="md:col-span-2">
-                      <dt className="font-medium text-slate-900">Assistant output</dt>
-                      <dd>{response.selectedTurn.turn.assistantOutputSummary ?? "Not recorded"}</dd>
+                      <dt className="font-medium text-slate-900">助手输出</dt>
+                      <dd>{response.selectedTurn.turn.assistantOutputSummary ?? "未记录"}</dd>
                     </div>
                   </dl>
                 </div>
@@ -199,7 +199,7 @@ export default async function RunsPage({
                 </div>
 
                 <div className="rounded-xl border bg-white/80 p-4">
-                  <div className="text-sm font-semibold text-slate-900">Dependency snapshot</div>
+                  <div className="text-sm font-semibold text-slate-900">依赖快照</div>
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     {response.selectedTurn.dependencyStatus.map((dependency) => (
                       <div key={dependency.name} className="rounded-xl border bg-slate-50/70 p-3">
@@ -211,7 +211,7 @@ export default async function RunsPage({
                         </div>
                         <div className="mt-2 text-sm leading-6 text-slate-600">{dependency.detail}</div>
                         <div className="mt-2 text-xs text-slate-500">
-                          Checked {formatTimestamp(dependency.checkedAt)}
+                          检查时间：{formatTimestamp(dependency.checkedAt)}
                         </div>
                       </div>
                     ))}
@@ -225,7 +225,7 @@ export default async function RunsPage({
         </section>
       </div>
 
-      <SourceHealthPanel title="Service and dependency health" health={health} />
+      <SourceHealthPanel title="服务与依赖健康" health={health} />
     </div>
   );
 }

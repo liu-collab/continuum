@@ -22,8 +22,8 @@ export default async function MemoriesPage({
   return (
     <div className="space-y-6">
       <FilterBar
-        title="Memory catalog"
-        description="Inspect published storage read-model records by current workspace view. This page now explains whether a record is global memory or workspace memory, and why it appears in the current workspace."
+        title="记忆目录"
+        description="按当前工作区视图查看已发布的存储读模型记录。这个页面会解释一条记录为什么会出现在当前工作区，以及它属于全局记忆还是工作区记忆。"
       >
         <SearchForm
           action="/memories"
@@ -39,62 +39,62 @@ export default async function MemoriesPage({
             updated_to: filters.updatedTo
           }}
         >
-          <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
-          <FormField label="User" name="user_id" placeholder="user id" defaultValue={filters.userId} />
-          <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
+          <FormField label="工作区" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
+          <FormField label="用户" name="user_id" placeholder="user id" defaultValue={filters.userId} />
+          <FormField label="任务" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
           <FormField
-            label="View mode"
+            label="视图模式"
             name="memory_view_mode"
             defaultValue={filters.memoryViewMode}
             options={[
-              { label: "Workspace + global", value: "workspace_plus_global" },
-              { label: "Workspace only", value: "workspace_only" }
+              { label: "工作区 + 全局", value: "workspace_plus_global" },
+              { label: "仅工作区", value: "workspace_only" }
             ]}
           />
           <FormField
-            label="Memory type"
+            label="记忆类型"
             name="memory_type"
             defaultValue={filters.memoryType}
             options={[
-              { label: "Facts & preferences", value: "fact_preference" },
-              { label: "Task state", value: "task_state" },
-              { label: "Episodic", value: "episodic" }
+              { label: "事实与偏好", value: "fact_preference" },
+              { label: "任务状态", value: "task_state" },
+              { label: "情景记忆", value: "episodic" }
             ]}
           />
           <FormField
-            label="Scope"
+            label="作用域"
             name="scope"
             defaultValue={filters.scope}
             options={[
-              { label: "Session", value: "session" },
-              { label: "Task", value: "task" },
-              { label: "Global", value: "user" },
-              { label: "Workspace", value: "workspace" }
+              { label: "会话", value: "session" },
+              { label: "任务", value: "task" },
+              { label: "全局", value: "user" },
+              { label: "工作区", value: "workspace" }
             ]}
           />
           <FormField
-            label="Status"
+            label="状态"
             name="status"
             defaultValue={filters.status}
             options={[
-              { label: "Active", value: "active" },
-              { label: "Pending confirmation", value: "pending_confirmation" },
-              { label: "Superseded", value: "superseded" },
-              { label: "Archived", value: "archived" },
-              { label: "Deleted", value: "deleted" }
+              { label: "生效中", value: "active" },
+              { label: "待确认", value: "pending_confirmation" },
+              { label: "已被替代", value: "superseded" },
+              { label: "已归档", value: "archived" },
+              { label: "已删除", value: "deleted" }
             ]}
           />
-          <FormField label="Updated from" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
-          <FormField label="Updated to" name="updated_to" type="date" defaultValue={filters.updatedTo} />
+          <FormField label="起始更新时间" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
+          <FormField label="结束更新时间" name="updated_to" type="date" defaultValue={filters.updatedTo} />
         </SearchForm>
       </FilterBar>
 
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Catalog results</p>
+            <p className="eyebrow">目录结果</p>
             <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
-              {response.total} records visible
+              当前可见 {response.total} 条记录
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{response.viewSummary}</p>
           </div>
@@ -123,7 +123,7 @@ export default async function MemoriesPage({
         </div>
       </section>
 
-      <SourceHealthPanel title="Catalog source health" sources={[response.sourceStatus]} />
+      <SourceHealthPanel title="目录数据源健康" sources={[response.sourceStatus]} />
     </div>
   );
 }
