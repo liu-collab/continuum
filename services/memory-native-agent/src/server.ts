@@ -1,32 +1,40 @@
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 
+import { type AgentConfig } from "./config/index.js";
+import { registerHttpRoutes } from "./http/index.js";
+import { createRuntimeState } from "./http/state.js";
+import type { RuntimeFastifyInstance } from "./http/types.js";
 import { loadOrCreateToken } from "./shared/token.js";
-import { MNA_VERSION, type HealthzPayload } from "./shared/types.js";
 
-export interface MnaServerInstance extends FastifyInstance {
+export interface MnaServerInstance extends RuntimeFastifyInstance, FastifyInstance {
   mnaToken: string;
   mnaTokenPath: string;
 }
 
-export function createServer(): MnaServerInstance {
+export interface CreateServerOptions {
+  homeDirectory?: string;
+}
+
+export function createServer(config: AgentConfig, options: CreateServerOptions = {}): MnaServerInstance {
   const app = Fastify({
     logger: false,
   }) as unknown as MnaServerInstance;
 
-  const tokenBootstrap = loadOrCreateToken();
+  const tokenBootstrap = loadOrCreateToken(options.homeDirectory);
+  const runtimeState = createRuntimeState(config, options);
   app.decorate("mnaToken", tokenBootstrap.token);
   app.decorate("mnaTokenPath", tokenBootstrap.tokenPath);
+  app.decorate("runtimeState", runtimeState);
+  app.addHook("onClose", async () => {
+    await runtimeState.mcpRegistry.shutdown().catch(() => undefined);
+    runtimeState.store.close();
+  });
 
   void app.register(websocket);
-
-  app.get("/healthz", async (): Promise<HealthzPayload> => ({
-    status: "ok",
-    version: MNA_VERSION,
-    dependencies: {
-      retrieval_runtime: "unknown",
-    },
-  }));
+  app.after(() => {
+    registerHttpRoutes(app);
+  });
 
   return app;
 }

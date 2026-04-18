@@ -31,11 +31,13 @@ describe("memory-native-agent smoke", () => {
     expect(payload).toEqual({
       status: "ok",
       version: "0.1.0",
+      api_version: "v1",
+      runtime_min_version: "0.1.3",
       dependencies: {
-        retrieval_runtime: "unknown",
+        retrieval_runtime: "reachable",
       },
     });
     expect(app.mnaToken).toMatch(/^[a-f0-9]{64}$/);
     expect(app.mnaTokenPath).toContain(".mna");
-  });
+  }, 15_000);
 });

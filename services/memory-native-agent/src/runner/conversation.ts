@@ -22,6 +22,10 @@ export interface BuildMessagesInput {
 export class Conversation {
   readonly messages: ChatMessage[] = [];
 
+  seed(messages: ChatMessage[]) {
+    this.messages.push(...messages);
+  }
+
   addMessage(message: ChatMessage) {
     this.messages.push(message);
   }

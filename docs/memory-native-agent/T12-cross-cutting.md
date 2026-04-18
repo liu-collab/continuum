@@ -143,6 +143,15 @@ T08 补一条路由：
 - 读取接口：T08 `http/routes/artifacts.ts`
 - 清理：T01 的 `src/server.ts` 启动钩子
 
+### 4.6 当前落地状态
+
+- 已完成：
+  - 工具超长输出已写入 session 目录 artifact，并通过 `artifact_ref` 回传
+  - T08 已提供 `GET /v1/agent/artifacts/:session_id/:call_id` 对应的 artifact 读取能力
+  - session `purge=all` 已联动清理 artifact 目录
+- 未完成：
+  - 启动时按 TTL 主动清理旧 artifact 目录，这一条仍待补
+
 ## 5. 跨平台 shell 适配
 
 ### 5.1 规则

@@ -34,6 +34,7 @@ export interface ToolResult {
 }
 
 export interface ConfirmPayload {
+  call_id?: string;
   tool: string;
   params_preview: string;
   risk_hint?: RiskHint;

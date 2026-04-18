@@ -14,7 +14,7 @@ import { detectTriggers, type DetectedTriggers } from "./trigger-detector.js";
 import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
 import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
-import type { ChatChunk, IModelProvider, ToolCall } from "../providers/index.js";
+import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
 import type { SessionStore } from "../session-store/index.js";
 import type { ToolCallEnvelope, ToolDispatcher, ToolResult } from "../tools/index.js";
 
@@ -44,6 +44,7 @@ export interface RunnerIO {
   emitTurnEnd(turnId: string, finishReason: string): void;
   emitError(scope: "turn" | "session", err: Error & { code?: string }): void;
   requestConfirm(payload: {
+    call_id: string;
     tool: string;
     params_preview: string;
     risk_hint?: "write" | "shell" | "mcp";
@@ -58,6 +59,7 @@ export interface RunnerDeps {
   io: RunnerIO;
   store?: SessionStore;
   sessionId?: string;
+  initialMessages?: ChatMessage[];
 }
 
 export class AgentRunner {
@@ -70,6 +72,9 @@ export class AgentRunner {
 
   constructor(private readonly deps: RunnerDeps) {
     this.sessionId = deps.sessionId ?? createSessionId();
+    if (deps.initialMessages && deps.initialMessages.length > 0) {
+      this.conversation.seed(deps.initialMessages);
+    }
   }
 
   async start(): Promise<void> {

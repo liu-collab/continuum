@@ -33,9 +33,13 @@ export class PermissionGate {
       };
     }
 
-    const payload = tool.buildConfirmPayload?.(call.args) ?? {
-      tool: call.name,
-      params_preview: previewArgs(call.args),
+    const customPayload = tool.buildConfirmPayload?.(call.args);
+    const payload = {
+      call_id: call.id,
+      ...(customPayload ?? {
+        tool: call.name,
+        params_preview: previewArgs(call.args),
+      }),
     };
 
     const timeoutPromise = new Promise<"__timeout__">((resolve) => {

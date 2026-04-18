@@ -10,6 +10,21 @@
 
 - T07 AgentRunner 完成（主循环与事件发射能力）。
 
+## 2.1 当前状态
+
+- 状态：已完成
+- 完成时间：当前阶段收口
+- 已落地范围：
+  - `server.ts` 已接入 `loadConfig`、`runtimeState`、HTTP 路由装配与关闭清理
+  - `health / ready / dependency-status / metrics / openapi` 已对外暴露
+  - `sessions / mode / provider / dispatched-messages / fs / artifacts / mcp` 已落地
+  - WebSocket 已支持 `session_started`、turn 事件推送、confirm 回传、事件缓冲与 `last_event_id` 回放
+  - `sessions.test.ts`、`session-ws.test.ts`、`smoke.test.ts` 已覆盖主链路
+- 当前已知保留项：
+  - 仍未单独拆出 `turns.ts / files.ts / tools.ts` 物理文件，当前实现集中在 `sessions.ts` 与 `ws/session-ws.ts`
+  - `provider` 切换仍是单 provider 注册下的下一轮占位返回，真正多 provider 运行时切换留待后续阶段
+  - 尚未补 CORS 配置与 Prometheus 文本格式，当前仍按本地回环单机场景收口
+
 ## 3. 交付物
 
 ### 3.1 文件清单

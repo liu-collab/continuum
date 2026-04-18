@@ -1,0 +1,261 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createServer } from "../../server.js";
+import type { AgentConfig } from "../../config/index.js";
+
+const runtimeCalls = {
+  healthz: vi.fn(async () => ({
+    liveness: { status: "alive" as const },
+    readiness: { status: "ready" as const },
+    dependencies: {
+      read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    },
+  })),
+  dependencyStatus: vi.fn(async () => ({
+    read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+  })),
+  sessionStartContext: vi.fn(async () => ({
+    trace_id: "trace-session",
+    additional_context: "",
+    active_task_summary: null,
+    injection_block: null,
+    memory_mode: "workspace_plus_global" as const,
+    dependency_status: {
+      read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    },
+    degraded: false,
+  })),
+  prepareContext: vi.fn(async ({ phase }: { phase: string }) => ({
+    trace_id: `trace-${phase}`,
+    trigger: true,
+    trigger_reason: phase,
+    memory_packet: null,
+    injection_block: null,
+    degraded: false,
+    dependency_status: {
+      read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    },
+    budget_used: 0,
+    memory_packet_ids: [],
+  })),
+  finalizeTurn: vi.fn(async () => ({
+    trace_id: "trace-finalize",
+    write_back_candidates: [],
+    submitted_jobs: [],
+    memory_mode: "workspace_plus_global" as const,
+    candidate_count: 0,
+    filtered_count: 0,
+    filtered_reasons: [],
+    writeback_submitted: false,
+    degraded: false,
+    dependency_status: {
+      read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    },
+  })),
+};
+
+vi.mock("../../memory-client/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../memory-client/index.js")>();
+  return {
+    ...actual,
+    MemoryClient: vi.fn().mockImplementation(() => runtimeCalls),
+  };
+});
+
+vi.mock("../../providers/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../providers/index.js")>();
+  return {
+    ...actual,
+    createProvider: vi.fn(() => ({
+      id: () => "ollama",
+      model: () => "qwen2.5-coder",
+      chat: async function* () {
+        yield { type: "text_delta", text: "reply chunk" } as const;
+        yield {
+          type: "end",
+          finish_reason: "stop" as const,
+          usage: {
+            prompt_tokens: 3,
+            completion_tokens: 5,
+          },
+        };
+      },
+    })),
+  };
+});
+
+function createTempHome() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "mna-ws-"));
+}
+
+function createConfig(workspaceRoot: string): AgentConfig {
+  return {
+    runtime: {
+      baseUrl: "http://127.0.0.1:4100",
+      requestTimeoutMs: 800,
+      finalizeTimeoutMs: 1_500,
+    },
+    provider: {
+      kind: "ollama",
+      model: "qwen2.5-coder",
+      baseUrl: "http://127.0.0.1:11434",
+      temperature: 0.2,
+    },
+    memory: {
+      mode: "workspace_plus_global",
+      userId: "550e8400-e29b-41d4-a716-446655440001",
+      workspaceId: "550e8400-e29b-41d4-a716-446655440000",
+      cwd: workspaceRoot,
+    },
+    mcp: {
+      servers: [],
+    },
+    tools: {
+      shellExec: {
+        enabled: true,
+        timeoutMs: 30_000,
+        denyPatterns: [],
+      },
+    },
+    cli: {
+      systemPrompt: null,
+    },
+    streaming: {
+      flushChars: 4,
+      flushIntervalMs: 1,
+    },
+    locale: "zh-CN",
+  };
+}
+
+function waitForMessages(target: string[], count: number) {
+  return new Promise<void>((resolve, reject) => {
+    const deadline = Date.now() + 5_000;
+    const timer = setInterval(() => {
+      if (target.length >= count) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (Date.now() > deadline) {
+        clearInterval(timer);
+        reject(new Error(`Timed out waiting for ${count} websocket messages.`));
+      }
+    }, 10);
+  });
+}
+
+describe("session websocket routes", () => {
+  const apps: Array<ReturnType<typeof createServer>> = [];
+  const homes: string[] = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+    for (const home of homes.splice(0)) {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("streams turn events and replays buffered events on reconnect", async () => {
+    const home = createTempHome();
+    homes.push(home);
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), {
+      homeDirectory: home,
+    });
+    apps.push(app);
+    await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const address = app.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("server address is not available");
+    }
+
+    const createResponse = await fetch(`http://127.0.0.1:${address.port}/v1/agent/sessions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "project-alpha",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { session_id: string };
+
+    const wsUrl = `ws://127.0.0.1:${address.port}/v1/agent/sessions/${created.session_id}/ws?token=${app.mnaToken}`;
+    const messages: string[] = [];
+    const ws = new WebSocket(wsUrl);
+    ws.addEventListener("message", (event) => {
+      messages.push(String(event.data));
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => resolve(), { once: true });
+      ws.addEventListener("error", () => reject(new Error("websocket open failed")), { once: true });
+    });
+
+    ws.send(JSON.stringify({
+      kind: "user_input",
+      turn_id: "turn-1",
+      text: "hello",
+    }));
+
+    await waitForMessages(messages, 5);
+    const parsed = messages.map((item) => JSON.parse(item) as Record<string, unknown>);
+    expect(parsed[0]).toMatchObject({
+      kind: "session_started",
+      session_id: created.session_id,
+      workspace_id: "project-alpha",
+    });
+    expect(parsed.some((item) => item.kind === "assistant_delta")).toBe(true);
+    expect(parsed.some((item) => item.kind === "turn_end")).toBe(true);
+
+    const lastEventId = Number(parsed.at(-1)?.event_id ?? 0);
+    ws.close();
+
+    const replayMessages: string[] = [];
+    const replayWs = new WebSocket(`${wsUrl}&last_event_id=${lastEventId - 2}`);
+    replayWs.addEventListener("message", (event) => {
+      replayMessages.push(String(event.data));
+    });
+    await new Promise<void>((resolve, reject) => {
+      replayWs.addEventListener("open", () => resolve(), { once: true });
+      replayWs.addEventListener("error", () => reject(new Error("websocket replay open failed")), { once: true });
+    });
+
+    await waitForMessages(replayMessages, 3);
+    const replayParsed = replayMessages.map((item) => JSON.parse(item) as Record<string, unknown>);
+    expect(replayParsed[0]).toMatchObject({
+      kind: "session_started",
+      session_id: created.session_id,
+    });
+    expect(replayParsed.some((item) => item.kind === "assistant_delta")).toBe(true);
+    expect(replayParsed.some((item) => item.kind === "turn_end")).toBe(true);
+    replayWs.close();
+  }, 15_000);
+});
