@@ -57,6 +57,7 @@ export interface RunnerDeps {
   tools: ToolDispatcher;
   config: AgentConfig;
   io: RunnerIO;
+  artifactsRoot?: string;
   store?: SessionStore;
   sessionId?: string;
   initialMessages?: ChatMessage[];
@@ -404,7 +405,7 @@ export class AgentRunner {
         turnId,
         cwd: this.deps.config.memory.cwd,
         workspaceRoot: this.deps.config.memory.cwd,
-        artifactsRoot: requireArtifactsRoot(this.deps.config.memory.cwd),
+        artifactsRoot: requireArtifactsRoot(this.deps),
         abort: abortSignal,
         confirm: this.deps.io.requestConfirm.bind(this.deps.io),
       },
@@ -492,6 +493,13 @@ function mergeInjections(injections: InjectionBlock[]): InjectionBlock {
   };
 }
 
-function requireArtifactsRoot(cwd: string): string {
-  return `${cwd}/.mna-artifacts`;
+function requireArtifactsRoot(deps: RunnerDeps): string {
+  if (deps.artifactsRoot) {
+    return deps.artifactsRoot;
+  }
+  const sharedRoot = deps.tools.getArtifactsRoot?.();
+  if (sharedRoot) {
+    return sharedRoot;
+  }
+  return `${deps.config.memory.cwd}/.mna-artifacts`;
 }

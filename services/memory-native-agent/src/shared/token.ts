@@ -19,6 +19,10 @@ export function resolveTokenPath(homeDirectory = os.homedir()): string {
   return path.join(resolveMnaHomeDirectory(homeDirectory), DEFAULT_TOKEN_FILENAME);
 }
 
+export function resolveArtifactsRoot(homeDirectory = os.homedir()): string {
+  return path.join(resolveMnaHomeDirectory(homeDirectory), "artifacts");
+}
+
 export function loadOrCreateToken(homeDirectory = os.homedir()): TokenBootstrapResult {
   const tokenPath = resolveTokenPath(homeDirectory);
   mkdirSync(path.dirname(tokenPath), { recursive: true });

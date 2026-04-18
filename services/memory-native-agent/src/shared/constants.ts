@@ -11,4 +11,5 @@ export const DEFAULT_STREAM_FLUSH_CHARS = 32;
 export const DEFAULT_STREAM_FLUSH_INTERVAL_MS = 30;
 export const DEFAULT_TOKEN_FILENAME = "token.txt";
 export const DEFAULT_ARTIFACTS_DIRNAME = "artifacts";
+export const DEFAULT_ARTIFACT_RETENTION_DAYS = 7;
 export const DEFAULT_FIXTURE_DIR = "tests/fixtures/model-record-replay";

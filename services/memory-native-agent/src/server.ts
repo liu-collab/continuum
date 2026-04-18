@@ -5,6 +5,7 @@ import { type AgentConfig } from "./config/index.js";
 import { registerHttpRoutes } from "./http/index.js";
 import { createRuntimeState } from "./http/state.js";
 import type { RuntimeFastifyInstance } from "./http/types.js";
+import { cleanupExpiredArtifacts } from "./shared/artifacts.js";
 import { loadOrCreateToken } from "./shared/token.js";
 
 export interface MnaServerInstance extends RuntimeFastifyInstance, FastifyInstance {
@@ -22,6 +23,9 @@ export function createServer(config: AgentConfig, options: CreateServerOptions =
   }) as unknown as MnaServerInstance;
 
   const tokenBootstrap = loadOrCreateToken(options.homeDirectory);
+  cleanupExpiredArtifacts({
+    homeDirectory: options.homeDirectory,
+  });
   const runtimeState = createRuntimeState(config, options);
   app.decorate("mnaToken", tokenBootstrap.token);
   app.decorate("mnaTokenPath", tokenBootstrap.tokenPath);

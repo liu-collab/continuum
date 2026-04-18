@@ -295,4 +295,61 @@ describe("http session routes", () => {
       },
     });
   }, 15_000);
+
+  it("serves stored artifacts from the shared artifact root", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+    const token = app.mnaToken;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/agent/sessions",
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+    const created = createResponse.json() as { session_id: string };
+
+    const artifactDir = path.join(home, ".mna", "artifacts", created.session_id);
+    fs.mkdirSync(artifactDir, { recursive: true });
+    fs.writeFileSync(path.join(artifactDir, "call-1.txt"), "artifact body", "utf8");
+
+    const artifactResponse = await app.inject({
+      method: "GET",
+      url: `/v1/agent/artifacts/${created.session_id}/call-1.txt`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(artifactResponse.statusCode).toBe(200);
+    expect(artifactResponse.body).toBe("artifact body");
+  });
+
+  it("cleans expired artifact directories on startup", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    const artifactsRoot = path.join(home, ".mna", "artifacts");
+    const expiredDir = path.join(artifactsRoot, "expired-session");
+    const freshDir = path.join(artifactsRoot, "fresh-session");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(expiredDir, { recursive: true });
+    fs.mkdirSync(freshDir, { recursive: true });
+    fs.writeFileSync(path.join(expiredDir, "call-1.txt"), "expired", "utf8");
+    fs.writeFileSync(path.join(freshDir, "call-2.txt"), "fresh", "utf8");
+
+    const expiredAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(expiredDir, expiredAt, expiredAt);
+    fs.utimesSync(path.join(expiredDir, "call-1.txt"), expiredAt, expiredAt);
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+
+    expect(fs.existsSync(expiredDir)).toBe(false);
+    expect(fs.existsSync(freshDir)).toBe(true);
+  });
 });

@@ -38,6 +38,7 @@ export function createDefaultToolDispatcher(options: {
   config: AgentConfig;
   mcpRegistry: McpRegistry;
   sessionStore?: SessionStore;
+  artifactsRoot?: string;
 }) {
   return new ToolDispatcher({
     registry: createDefaultToolRegistry({
@@ -45,5 +46,6 @@ export function createDefaultToolDispatcher(options: {
       mcpRegistry: options.mcpRegistry,
     }),
     sessionStore: options.sessionStore,
+    artifactsRoot: options.artifactsRoot,
   });
 }

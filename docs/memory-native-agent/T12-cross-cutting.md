@@ -149,8 +149,9 @@ T08 补一条路由：
   - 工具超长输出已写入 session 目录 artifact，并通过 `artifact_ref` 回传
   - T08 已提供 `GET /v1/agent/artifacts/:session_id/:call_id` 对应的 artifact 读取能力
   - session `purge=all` 已联动清理 artifact 目录
-- 未完成：
-  - 启动时按 TTL 主动清理旧 artifact 目录，这一条仍待补
+- 已完成补充：
+  - mna 启动时已按 TTL 主动清理旧 artifact 目录
+  - artifact 写入、HTTP 读取、session purge 已统一到 `~/.mna/artifacts`
 
 ## 5. 跨平台 shell 适配
 
@@ -542,13 +543,14 @@ T12 本身没有独立代码产出，但下列文件必须存在并被引用：
   - `src/runner/prompts/default-system.ts` 已落地中英文默认 prompt 模板与变量替换
   - `src/shared/constants.ts` 已补齐 mna 端口、流式 flush 常量、fixture 路径等横切默认值
   - `src/providers/record-replay.ts` 已落地，支持 `live / record / replay` 三种模式
+  - `src/shared/artifacts.ts` 已落地，启动时会按 TTL 清理 `~/.mna/artifacts/*`
   - `config` 已补 `streaming.flush_chars / flush_interval_ms` 默认值与解析
 - 待后续任务继续收口：
-  - Artifact 存储与清理：在 `T05/T08/T14`
   - shell 跨平台执行与黑名单：已在 `T05` 落地
   - 工具输出信任边界与 `tool_results_summary` 前置说明：已在 `T07` 落地
   - `stream-bridge` 基础合批与 abort 丢弃计数：已在 `T07` 落地；WS 事件顺序与 metrics 暴露在 `T08`
   - 前端 i18n 资源与 confirm 文案：在 `T11`
+  - Playwright UI e2e 与 record/replay 浏览器验收：`T10` 已落测试装配与首条用例，本机还缺浏览器安装与 record/replay 收口
 - 已验证：
   - `npm run check`
   - `npm test`

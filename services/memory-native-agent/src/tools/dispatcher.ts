@@ -20,6 +20,7 @@ export interface ToolDispatcherOptions {
   gate?: PermissionGate;
   sessionStore?: SessionStore;
   logger?: ToolLogger;
+  artifactsRoot?: string;
 }
 
 export class ToolDispatcher {
@@ -27,6 +28,7 @@ export class ToolDispatcher {
   private readonly gate: PermissionGate;
   private readonly auditSink: ToolAuditSink | null;
   private readonly logger: ToolLogger;
+  private readonly artifactsRoot: string | null;
 
   constructor(options: ToolDispatcherOptions) {
     this.registry = options.registry;
@@ -44,10 +46,15 @@ export class ToolDispatcher {
         }
       : null;
     this.logger = options.logger ?? {};
+    this.artifactsRoot = options.artifactsRoot ?? null;
   }
 
   listTools() {
     return this.registry.listTools();
+  }
+
+  getArtifactsRoot(): string | null {
+    return this.artifactsRoot;
   }
 
   async invoke(call: ToolCallEnvelope, context: ToolContext): Promise<ToolResult> {

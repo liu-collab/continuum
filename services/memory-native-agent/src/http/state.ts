@@ -9,9 +9,8 @@ import { createProvider, type ChatMessage, type IModelProvider } from "../provid
 import { AgentRunner, type RunnerIO } from "../runner/index.js";
 import { SqliteSessionStore, type SessionStore } from "../session-store/index.js";
 import { createDefaultToolDispatcher, type ToolDispatcher, type ToolResult } from "../tools/index.js";
-import { DEFAULT_ARTIFACTS_DIRNAME } from "../shared/constants.js";
 import type { MemoryMode } from "../config/schema.js";
-import { resolveMnaHomeDirectory } from "../shared/token.js";
+import { resolveArtifactsRoot, resolveMnaHomeDirectory } from "../shared/token.js";
 
 export interface ServerEventEnvelope {
   id: number;
@@ -64,7 +63,7 @@ const SESSION_EVENT_BUFFER_LIMIT = 200;
 const SESSION_EVENT_TTL_MS = 10 * 60 * 1000;
 
 export function createRuntimeState(config: AgentConfig, options: RuntimeStateOptions = {}): MnaRuntimeState {
-  const artifactsRoot = path.join(config.memory.cwd, ".mna", DEFAULT_ARTIFACTS_DIRNAME);
+  const artifactsRoot = resolveArtifactsRoot(options.homeDirectory);
   fs.mkdirSync(artifactsRoot, { recursive: true });
 
   const store = new SqliteSessionStore({
@@ -92,6 +91,7 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
       config,
       mcpRegistry,
       sessionStore: store,
+      artifactsRoot,
     }),
     sessions: new Map(),
     metrics: {
@@ -215,7 +215,7 @@ export function updateSessionMode(state: MnaRuntimeState, sessionId: string, mem
   session.runner = new AgentRunner({
     memoryClient: state.memoryClient,
     provider: state.provider,
-    tools: state.tools,
+      tools: state.tools,
     config: {
       ...state.config,
       memory: {

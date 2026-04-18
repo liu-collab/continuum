@@ -13,7 +13,7 @@
 
 当前阶段还没有补齐：
 
-- Playwright UI e2e
+- Playwright UI e2e 的本机实跑验收（当前缺浏览器安装）
 - record/replay provider 驱动的端到端 fixture
 
 后续继续补时，按 `docs/memory-native-agent/T10-e2e-acceptance.md` 的场景清单推进即可。
