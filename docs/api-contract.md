@@ -260,7 +260,7 @@
 
 ```json
 {
-  "host": "claude_code_plugin | codex_app_server | custom_agent",
+  "host": "claude_code_plugin | codex_app_server | custom_agent | memory_native_agent",
   "session_id": "string",
   "cwd": "string，可选",
   "source": "string，可选",
@@ -291,6 +291,7 @@
 
 ```json
 {
+  "host": "claude_code_plugin | codex_app_server | custom_agent | memory_native_agent",
   "workspace_id": "UUID",
   "user_id": "UUID",
   "task_id": "UUID，可选",
@@ -343,6 +344,7 @@
 
 ```json
 {
+  "host": "claude_code_plugin | codex_app_server | custom_agent | memory_native_agent",
   "workspace_id": "UUID",
   "user_id": "UUID",
   "task_id": "UUID，可选",

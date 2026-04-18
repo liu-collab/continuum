@@ -47,7 +47,7 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
   app.post("/v1/runtime/session-start-context", async (request) => {
     const payloadSchema = z
       .object({
-        host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent"]),
+        host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent", "memory_native_agent"]),
         session_id: z.string().min(1),
         cwd: z.string().optional(),
         source: z.string().optional(),

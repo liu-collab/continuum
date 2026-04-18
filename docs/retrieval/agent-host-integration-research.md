@@ -458,17 +458,19 @@
 
 - 把主动注入做成真正稳定的主链路
 
-## 6. 两个宿主的推荐路径对比
+## 6. 三类宿主的接入定位对比
 
-| 维度 | Claude Code | Codex |
-| :--- | :--- | :--- |
-| 会话启动接入 | 有，`SessionStart hook` | 没看到公开对等 hook |
-| 用户当前轮前接入 | 有，`UserPromptSubmit hook` | 没看到公开对等 hook |
-| 一轮结束后写回 | 有，`Stop hook` | 有弱能力，`notify hook` / wrapper |
-| MCP 支持 | 有 | 有 |
-| 插件打包能力 | 有，而且适合本产品 | 当前没看到同等级公开插件体系证据 |
-| 启动即接入难度 | 低 | 中 |
-| 主动注入适配度 | 高 | 中，需 wrapper |
+这里补一行当前仓库内的 `memory-native-agent`，方便和另外两类宿主统一理解。
+
+| 维度 | Claude Code | Codex | memory-native-agent |
+| :--- | :--- | :--- | :--- |
+| 会话启动接入 | 有，`SessionStart hook` | 没看到公开对等 hook | 有，宿主自身直接调用 `session-start-context` |
+| 用户当前轮前接入 | 有，`UserPromptSubmit hook` | 没看到公开对等 hook | 有，runner 直接调用 `prepare-context` |
+| 一轮结束后写回 | 有，`Stop hook` | 有弱能力，`notify hook` / wrapper | 有，runner 直接调用 `finalize-turn` |
+| MCP 支持 | 有 | 有 | 有，作为工具补充面 |
+| 插件打包能力 | 有，而且适合本产品 | 当前没看到同等级公开插件体系证据 | 不需要插件，直接是独立宿主服务 |
+| 启动即接入难度 | 低 | 中 | 低 |
+| 主动注入适配度 | 高 | 中，需 wrapper | 高 |
 
 ## 7. 我们产品的推荐实施策略
 

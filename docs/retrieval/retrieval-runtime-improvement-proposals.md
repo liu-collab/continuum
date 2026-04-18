@@ -13,9 +13,7 @@
 - 代码位置：`services/retrieval-runtime/src/`（当前版本）
 - 对齐契约：`docs/memory-module-contract.md`、`docs/architecture-independence.md`、`docs/current-phase-closure-plan.md`
 - 使用场景：三个宿主按 `memory-module-contract.md` 第 6.1 节调用所有 6 个触发点
-  - 产品命名：`claude_code_plugin` / `codex_app_server` / `memory_native_agent`
-  - 当前接口取值（`HostKind`）：`claude_code_plugin` / `codex_app_server` / `custom_agent`
-  - `memory_native_agent` 是产品名，现阶段在代码里的枚举值仍是 `custom_agent`（见 `services/retrieval-runtime/src/shared/types.ts:1`、`src/host-adapters/types.ts`）。两者映射关系要等 mna 正式并入契约后再决定是否改枚举值。
+  - 当前接口取值（`HostKind`）：`claude_code_plugin` / `codex_app_server` / `custom_agent` / `memory_native_agent`
 
 ## 3. 优先级总览
 

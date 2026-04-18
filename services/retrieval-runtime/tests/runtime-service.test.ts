@@ -740,4 +740,58 @@ describe("retrieval-runtime service", () => {
 
     expect(response.statusCode).toBe(400);
   });
+
+  it("accepts memory_native_agent across prepare and finalize runtime endpoints", async () => {
+    const { service } = createRuntime();
+    const app = createApp(service);
+
+    const prepareResponse = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/prepare-context",
+      payload: {
+        host: "memory_native_agent",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        turn_id: "mna-turn-1",
+        phase: "before_response",
+        current_input: "延续上次已经确认的约束。",
+      },
+    });
+
+    const finalizeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/finalize-turn",
+      payload: {
+        host: "memory_native_agent",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        turn_id: "mna-turn-1",
+        current_input: "我偏好默认中文输出",
+        assistant_output: "收到，后续都会保持中文输出。",
+      },
+    });
+
+    const sessionStartResponse = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/session-start-context",
+      payload: {
+        host: "memory_native_agent",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        recent_context_summary: "恢复当前工作区的上下文。",
+      },
+    });
+
+    expect(prepareResponse.statusCode).toBe(200);
+    expect(prepareResponse.json().trigger).toBe(true);
+    expect(finalizeResponse.statusCode).toBe(200);
+    expect(finalizeResponse.json().candidate_count).toBeGreaterThanOrEqual(0);
+    expect(sessionStartResponse.statusCode).toBe(200);
+    expect(sessionStartResponse.json().memory_mode).toBe("workspace_plus_global");
+  });
 });

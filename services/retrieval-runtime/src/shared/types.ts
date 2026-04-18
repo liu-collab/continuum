@@ -1,4 +1,4 @@
-export type HostKind = "claude_code_plugin" | "codex_app_server" | "custom_agent";
+export type HostKind = "claude_code_plugin" | "codex_app_server" | "custom_agent" | "memory_native_agent";
 
 export type RuntimePhase =
   | "session_start"

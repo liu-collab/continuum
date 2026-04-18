@@ -20,7 +20,6 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  宿主（host）                                                 │
 │  claude_code_plugin │ codex_app_server │ memory_native_agent │
-│                                         （代码枚举值 custom_agent） │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / JSON
                            ▼
@@ -51,7 +50,7 @@ runtime 只做"查"和"整理"，不做"写表"。它：
 - **写回**：从一轮对话里抽取候选，交给 `storage` 的写回入口
 - **观测**：把每一步写入 `runtime_private` 的运行轨迹表（供 `visualization` 消费）
 
-> **宿主命名**：文档全篇用产品名 `memory_native_agent` 指代未来的 mna 宿主，但当前代码里的 `HostKind` 枚举值仍是 `custom_agent`（见 `src/shared/types.ts:1`）。两者是同一个宿主的"产品名 / 接口值"映射，首版契约里暂不改枚举值。
+> 当前 `retrieval-runtime` 已正式支持 `memory_native_agent` 作为宿主枚举值，和 `claude_code_plugin`、`codex_app_server`、`custom_agent` 并列。
 
 ## 3. 核心数据对象
 

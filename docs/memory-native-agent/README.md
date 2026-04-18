@@ -124,7 +124,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | [T01](./T01-scaffold.md) | mna 包骨架与 HTTP 服务初始化 | 已完成 | mna | — | 无 |
 | [T02](./T02-memory-client.md) | retrieval-runtime HTTP 客户端 | 未开始 | mna | T01, T03 | 无 |
-| [T03](./T03-runtime-adapter.md) | runtime 新增 adapter 与 host 枚举 | 未开始 | retrieval-runtime | — | `retrieval-runtime` |
+| [T03](./T03-runtime-adapter.md) | runtime 新增 adapter 与 host 枚举 | 已完成 | retrieval-runtime | — | `retrieval-runtime` |
 | [T04](./T04-model-providers.md) | 模型 provider 抽象与三实现 | 未开始 | mna | T01 | 无 |
 | [T05](./T05-tools.md) | 内置工具层（fs / shell / mcp 分发） | 未开始 | mna | T01, T06, T12 | 无 |
 | [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | 未开始 | mna | T01 | 无 |
@@ -140,7 +140,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 ## 6.1 当前进度
 
 - `T01` 已完成：工程骨架、最小 `Fastify` HTTP 服务、`/healthz`、启动脚本、smoke test 已落地。
-- `T02` 起依赖 `T03`，下一步先补 `retrieval-runtime` 的 `memory_native_agent` adapter。
+- `T02` 起依赖 `T03`，当前前置已经就绪，可以进入 `memory-client` 开发。
 
 ## 7. 推荐实施顺序与并行度
 

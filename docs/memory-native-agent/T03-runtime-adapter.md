@@ -1,5 +1,12 @@
 # T03 — retrieval-runtime 新增 memory_native_agent adapter
 
+## 当前状态
+
+- 状态：已完成
+- 完成时间：2026-04-18
+- 验证结果：已补 `memory_native_agent` adapter、HTTP schema、宿主注册与运行时测试；`npm run check`、`npm test` 已通过
+- 代码位置：`services/retrieval-runtime/`
+
 ## 1. 目标
 
 在 `services/retrieval-runtime/` 里新增 `MemoryNativeAgentAdapter`，并把 host 枚举 `memory_native_agent` 正式加入 API schema 与适配器注册表。

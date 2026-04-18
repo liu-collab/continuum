@@ -5,7 +5,7 @@ import type { FinalizeTurnInput, HostKind, TriggerContext } from "../shared/type
 const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
 
 export const prepareContextInputSchema = z.object({
-  host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent"]),
+  host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent", "memory_native_agent"]),
   workspace_id: z.string().uuid(),
   user_id: z.string().uuid(),
   task_id: z.string().uuid().optional(),
@@ -21,7 +21,7 @@ export const prepareContextInputSchema = z.object({
 });
 
 export const finalizeTurnInputSchema = z.object({
-  host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent"]),
+  host: z.enum(["claude_code_plugin", "codex_app_server", "custom_agent", "memory_native_agent"]),
   workspace_id: z.string().uuid(),
   user_id: z.string().uuid(),
   task_id: z.string().uuid().optional(),

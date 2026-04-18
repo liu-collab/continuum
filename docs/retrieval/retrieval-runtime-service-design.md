@@ -326,6 +326,7 @@ agent 的处理：
 
 请求体关键字段：
 
+- `host`（支持 `claude_code_plugin`、`codex_app_server`、`custom_agent`、`memory_native_agent`）
 - `workspace_id`
 - `user_id`
 - `task_id`
@@ -353,6 +354,7 @@ agent 的处理：
 
 请求体关键字段：
 
+- `host`（支持 `claude_code_plugin`、`codex_app_server`、`custom_agent`、`memory_native_agent`）
 - `workspace_id`
 - `user_id`
 - `task_id`
@@ -467,6 +469,13 @@ agent 的处理：
 - agent 引入 SDK
 - 在生命周期节点调用 SDK
 - SDK 调 `retrieval-runtime`
+
+当前支持的宿主枚举已经统一为：
+
+- `claude_code_plugin`
+- `codex_app_server`
+- `custom_agent`
+- `memory_native_agent`
 
 这里把调用链写成最直白的形式：
 
