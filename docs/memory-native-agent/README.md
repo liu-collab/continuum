@@ -127,7 +127,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | [T03](./T03-runtime-adapter.md) | runtime 新增 adapter 与 host 枚举 | 已完成 | retrieval-runtime | — | `retrieval-runtime` |
 | [T04](./T04-model-providers.md) | 模型 provider 抽象与三实现 | 已完成 | mna | T01 | 无 |
 | [T05](./T05-tools.md) | 内置工具层（fs / shell / mcp 分发） | 未开始 | mna | T01, T06, T12 | 无 |
-| [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | 未开始 | mna | T01 | 无 |
+| [T06](./T06-mcp-client.md) | MCP 客户端（stdio + http） | 已完成 | mna | T01 | 无 |
 | [T07](./T07-agent-runner.md) | agent 主循环与生命周期钩子 | 未开始 | mna | T02, T04, T05, T09, T12 | 无 |
 | [T08](./T08-http-api.md) | HTTP + WebSocket API 服务端 | 未开始 | mna | T07, T12 | 无 |
 | [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | 已完成 | mna | T01 | 无 |
@@ -143,6 +143,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T02` 已完成：`memory-client` 已提供 `sessionStartContext / prepareContext / finalizeTurn / dependencyStatus / healthz`，并补齐超时、错误分类、降级回退和契约校验测试。
 - `T03` 已完成：`retrieval-runtime` 已正式支持 `memory_native_agent` 宿主枚举和独立 adapter。
 - `T04` 已完成：`OpenAI-compatible / Anthropic / Ollama` 三个 provider 已落地统一接口、流式解析、工具调用映射、错误分类与回退测试。
+- `T06` 已完成：`stdio / streamable-http` 两种 MCP client 已落地，支持工具发现、工具调用、运行时状态、单 server 重启/禁用，以及 mock server 集成测试。
 - `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
 
 ## 7. 推荐实施顺序与并行度

@@ -4,6 +4,7 @@ import { createServer } from "./server.js";
 import { DEFAULT_MNA_HOST, DEFAULT_MNA_PORT } from "./shared/types.js";
 
 export * from "./memory-client/index.js";
+export * from "./mcp-client/index.js";
 
 export interface StartOptions {
   host?: string;

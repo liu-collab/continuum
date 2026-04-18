@@ -151,3 +151,17 @@ export interface McpServerStatus {
 - agent 作为 MCP **server** 对外暴露工具（现有 `services/retrieval-runtime` 已经有 MCP server）
 - MCP authorization / OAuth
 - 工具调用结果的持久化
+
+## 8. 当前状态
+
+- 当前状态：已完成
+- 已落地内容：
+  - `src/mcp-client/registry.ts` 已实现 `addServer / listTools / callTool / restartServer / disableServer / getServerStatus / shutdown`
+  - `src/mcp-client/stdio-transport.ts` 与 `src/mcp-client/http-transport.ts` 已基于官方 SDK 落地
+  - 工具列表按 `server + name` 聚合缓存，返回结构保持 `input_schema` 形式，供后续 `T05` 直接消费
+  - 连接失败不会阻塞整体启动，server 状态会落为 `unavailable` 或 `dead`
+  - 已补 `stdio` 与 `http` 两组真实 SDK mock server 集成测试
+- 已验证：
+  - `npm run check`
+  - `npm test`
+  - `npm run build`
