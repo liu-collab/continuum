@@ -135,7 +135,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | 未开始 | visualization | T08, T12 | `visualization` |
 | [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | 进行中 | mna | T01 | 无 |
 | [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | 未开始 | continuum-cli | T01, T12 | `continuum-cli` |
-| [T14](./T14-session-store.md) | 会话持久化、工具审计与清理 | 未开始 | mna | T01 | 无 |
+| [T14](./T14-session-store.md) | 会话持久化、工具审计与清理 | 已完成 | mna | T01 | 无 |
 
 ## 6.1 当前进度
 
@@ -146,6 +146,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T06` 已完成：`stdio / streamable-http` 两种 MCP client 已落地，支持工具发现、工具调用、运行时状态、单 server 重启/禁用，以及 mock server 集成测试。
 - `T12` 进行中：`token` 引导、默认 `system prompt`、流式常量、`record-replay provider` 已落地；artifact、工具信任边界、stream-bridge 和 i18n 相关收口将在 `T05/T07/T08/T11/T14` 继续完成。
 - `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
+- `T14` 已完成：`SQLite session-store`、启动 migration、会话/轮次/消息/工具审计/`prompt snapshot` 持久化、`crashed` 恢复标记与 purge 测试已落地。
 
 ## 7. 推荐实施顺序与并行度
 

@@ -1,5 +1,8 @@
 # T14 — 会话持久化、工具审计与清理
 
+- 状态：已完成
+- 验证结果：`SQLite session-store`、migration、恢复标记、purge、消息与工具审计测试已落地；`npm run check`、`npm test`、`npm run build` 已通过
+
 ## 1. 目标
 
 给 mna 提供**本地落盘的 session store**，承载三件"后端主链路之外、但首版必须"的数据：
@@ -202,3 +205,15 @@ mna 启动时：
 - 加密存储（首版 `~/.mna/sessions.db` 为明文；依靠 OS 文件权限）
 - 对 runtime/storage 的级联删除（treated as TODO，需要 storage 侧先开 per-session 治理接口）
 - 历史数据压缩 / 归档策略
+
+## 8. 当前落地说明
+
+- 已新增 `src/session-store/` 目录，提供 `SqliteSessionStore` 与统一类型导出。
+- 已用 `better-sqlite3` 落地 `sessions / turns / messages / tool_invocations / dispatched_messages` 五张核心表，并在启动时自动执行 `0001-init.sql`。
+- 已补 `markInterruptedTurnsAsCrashed()`，用于进程重启后把未完成 turn 批量标记为 `crashed`。
+- 已补 4 组单测，覆盖：
+  - session 的创建、更新、查询、列表、删除
+  - turn / message / dispatched payload 写入与读取
+  - tool audit 的 preview 截断与 artifact 引用
+  - `purgeArtifacts` 清理与 crashed 恢复
+- Windows 下 migration 路径已改为 `fileURLToPath(import.meta.url)` 解析，避免 `C:\\C:\\...` 路径错误。
