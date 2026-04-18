@@ -19,6 +19,18 @@
 - 这个产品文档里的“自动恢复上下文”和“结束后写回检查”已经完成主体落地。
 - 还未完成的是宿主工具辅助面，不影响自动注入主链路，但影响完整产品体验。
 
+### 当前收口补充
+
+当前阶段继续开发时，再补下面几条正式边界：
+
+- 默认模式先收成 `single_local_user`
+- 当前正式开放的作用范围是 `session`、`task`、`workspace`、`user`
+- `workspace` 表示工作区记忆，`user` 表示全局记忆
+- runtime 需要支持 `workspace_only` 和 `workspace_plus_global`
+- 运行轨迹需要能解释 `memory_mode`、实际查询 scope 和最终写回 scope
+
+具体方案见 `../current-phase-closure-plan.md`。
+
 ## 1. 文档目的
 
 这份文档只讨论 `记忆注入` 这一侧的产品定义。
@@ -365,9 +377,11 @@
 
 主要接口包括：
 
-- `/memory/query`：接收检索请求，返回记忆包
-- `/memory/write-back`：接收写回候选，返回处理结果
-- `/memory/observe`：输出可观测数据，供第三部分消费
+- `POST /v1/runtime/session-start-context`：会话开始时恢复上下文
+- `POST /v1/runtime/prepare-context`：当前轮开始前做检索与注入准备
+- `POST /v1/runtime/finalize-turn`：当前轮结束后做写回检查
+- `GET /v1/runtime/observe/runs`：输出运行轨迹，供第三部分消费
+- `GET /v1/runtime/observe/metrics`：输出运行指标，供第三部分消费
 
 这里的服务边界固定成下面这样：
 
@@ -394,6 +408,12 @@ SDK 不做业务判断。agent 框架只需要在关键生命周期节点调用 
 - `on_before_plan`：规划前
 - `on_before_response`：响应前（包含语义兜底检查）
 - `on_after_response`：响应结束后（写回检查）
+
+当前阶段再补一条正式约定：
+
+- 宿主可以显式传入 `memory_mode`
+- 可用值固定为 `workspace_only` 或 `workspace_plus_global`
+- 未传时默认按 `workspace_plus_global`
 
 ### 15.3 集成约束
 

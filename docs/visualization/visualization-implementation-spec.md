@@ -17,6 +17,24 @@
 - `memory-observability-product.md`
 - `visualization-service-design.md`
 
+## 1.1 当前验收状态
+
+基于当前仓库实现和现有校验，这一层已经不是“待落地设计”，而是“主页面和聚合主链路已完成，少数页面闭环和契约口径还待补齐”的状态。
+
+当前已经确认的结果：
+
+- 目录页、详情页、轨迹页、看板页、健康面板：`已完成`
+- runtime 五段轨迹聚合、看板趋势计算、健康状态分离：`已完成`
+- 详情页最小治理动作 `confirm / invalidate / archive / delete`：`已完成`
+- `lint / typecheck / build / test`：`已完成`
+
+当前还没有完全收口的点：
+
+- 目录页双视图在 `memory_view_mode + scope` 组合筛选下还存在串视图和重复风险
+- 页面级治理入口还没有覆盖 `edit / restore_version`
+- API 错误响应还没有对齐统一错误契约
+- 轨迹页 `Turn` 段还没有把文档承诺的部分原始字段展示完整
+
 ## 2. 这一层真正要解决的问题
 
 `visualization` 首版固定解决 5 类问题。
@@ -113,20 +131,22 @@
 - `id`
 - `memory_type`
 - `scope`
+- `scope_explanation`
 - `status`
 - `summary`
 - `importance`
 - `confidence`
 - `source_type`
 - `source_ref`
+- `origin_workspace_id`
 - `last_confirmed_at`
 - `updated_at`
 
 ### 页面必须支持的筛选
 
-- 按 `workspace_id`
-- 按 `user_id`
-- 按 `task_id`
+- 按当前目录视图模式（`workspace_only` / `workspace_plus_global`）
+- 按当前工作区上下文
+- 按当前用户上下文
 - 按 `memory_type`
 - 按 `scope`
 - 按 `status`
@@ -137,6 +157,8 @@
 - 为什么这条记忆还在 `active`
 - 为什么这条记忆是 `pending_confirmation`
 - 为什么这条任务状态没有被归档
+- 这条全局记忆是从哪个工作区沉淀来的
+- 为什么它会在当前工作区视图里出现
 
 ## 4.2 运行轨迹页
 
@@ -153,16 +175,26 @@
 
 - `turn_id`
 
-兼容筛选：
+正式筛选：
 
 - `session_id`
-- `thread_id`
-- `workspace_id`
-- `task_id`
+- `trace_id`
+- `page`
+- `page_size`
 
-### 页面结构固定四段
+### 页面结构固定五段
 
-#### 第一段：Trigger
+#### 第一段：Turn
+
+展示：
+
+- `turn_id`
+- `session_id`
+- `phase`
+- `host`
+- 当前输入摘要
+
+#### 第二段：Trigger
 
 展示：
 
@@ -170,8 +202,10 @@
 - `trigger_type`
 - `trigger_hit`
 - `trigger_reason`
+- `memory_mode`
+- 请求 scope
 
-#### 第二段：Recall
+#### 第三段：Recall
 
 展示：
 
@@ -179,26 +213,29 @@
 - 查询范围
 - 候选数
 - 命中数
+- 各 scope 命中数
 - 选中的 `record_ids`
 - 查询耗时
 - 是否降级
 
-#### 第三段：Injection
+#### 第四段：Injection
 
 展示：
 
 - 最终 `memory_summary`
 - 实际注入记录
+- 最终保留的 scope
 - 被裁掉记录
 - 裁剪原因
 - token 预算估算
 
-#### 第四段：WriteBack
+#### 第五段：WriteBack
 
 展示：
 
 - 是否生成写回候选
 - 候选数量
+- 每条候选最终 scope
 - `storage_job_id`
 - 提交状态
 - 错误信息
@@ -209,6 +246,8 @@
 - 这轮是不是查空了
 - 这轮是不是查到了但被裁了
 - 这轮是不是写回失败了
+- 这轮当前是不是 `workspace_only`
+- 这轮为什么用了全局记忆，或者为什么没用全局记忆
 
 ## 4.3 指标看板页
 
@@ -298,6 +337,12 @@
 - 统一转换成页面字段
 - 补状态解释字段
 
+当前实现边界：
+
+- 默认 `workspace_only` 和 `workspace_plus_global` 两种视图已经成立
+- 但当目录页同时带 `memory_view_mode` 和显式 `scope` 时，当前聚合还没有完全收住
+- 特别是 `workspace_plus_global + scope=user` 可能出现重复，全局视图和工作区视图的边界也可能被错误打穿
+
 ### 5.4 `run-trace-service`
 
 解决的问题：
@@ -308,9 +353,15 @@
 
 - 用 `turn_id` 聚合：
   - `runtime_turns`
+  - `runtime_trigger_runs`
   - `runtime_recall_runs`
   - `runtime_injection_runs`
   - `runtime_writeback_submissions`
+
+当前实现边界：
+
+- 五段聚合和叙事解释已经成立
+- 但页面当前更偏“解释型展示”，还没有把 `Turn` 段承诺的所有原始字段完整展开
 
 ### 5.5 `dashboard-service`
 
@@ -382,12 +433,19 @@
 - `id`
 - `memory_type`
 - `scope`
+- `scope_explanation`
 - `status`
 - `summary`
 - `importance`
 - `confidence`
+- `origin_workspace_id`
 - `updated_at`
 - `status_explanation`
+
+当前实现说明：
+
+- 接口和页面已经可用
+- 但如果请求里同时带 `memory_view_mode` 和显式 `scope`，当前聚合结果还不能算完全可靠
 
 ### 7.2 运行轨迹接口
 
@@ -401,10 +459,16 @@
 返回字段：
 
 - `turn`
+- `trigger_runs[]`
 - `recall_runs[]`
 - `injection_runs[]`
 - `writeback_runs[]`
 - `dependency_status`
+
+当前实现说明：
+
+- 五段数据已经能返回
+- 但页面最终展示还没有把 `Turn` 段的全部承诺字段完整露出
 
 ### 7.3 看板接口
 
@@ -430,6 +494,11 @@
 - `runtime.last_ok_at`
 - `runtime.last_error`
 
+当前实现说明：
+
+- 本服务 `liveness / readiness` 与外部 `dependencies` 已经分开
+- 页面也已经能显示最近成功时间，不再只是显示当前检查结果
+
 ## 8. 页面加载流程怎么定
 
 ### 8.1 记忆目录页
@@ -443,7 +512,7 @@
 
 1. 前端按 `turn_id` 调 `/api/runs`
 2. 后端调 `run-trace-service`
-3. service 聚合 runtime 多张表
+3. service 聚合 runtime 五段记录
 4. 返回一条完整轨迹
 
 ### 8.3 看板页

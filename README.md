@@ -151,11 +151,12 @@ continuum start
 这条命令当前会做这些事情：
 
 - 启动或拉起 Continuum 自己的单一 Docker 容器
-- 容器内部统一运行 `PostgreSQL + pgvector`、embedding、`storage`、`storage worker`、`retrieval-runtime`、`visualization`
+- 容器内部统一运行 `PostgreSQL + pgvector`、`storage`、`storage worker`、`retrieval-runtime`、`visualization`
 - 容器内部会自己安装并构建各个服务，不依赖用户机器上的本地构建产物
 - 使用 Continuum 自己的固定容器名和独立端口，不占用用户现有数据库实例
 - 所有服务端口绑定到 `127.0.0.1`，仅本机可访问，避免局域网暴露
 - 容器启动时自动执行 `storage` 和 `retrieval-runtime` 的数据库迁移
+- 向量能力直接连接用户提供的第三方 `OpenAI-compatible embeddings API`，不会在本地再起一个伪向量服务
 
 默认约定：
 
@@ -163,7 +164,21 @@ continuum start
 - storage：`3001`（默认绑定 127.0.0.1）
 - retrieval-runtime：`3002`（默认绑定 127.0.0.1）
 - visualization：`3003`（默认绑定 127.0.0.1）
-- embeddings：`31434`（默认绑定 127.0.0.1）
+
+启动前需要提供第三方向量配置：
+
+```bash
+$env:EMBEDDING_BASE_URL="https://api.openai.com/v1"
+$env:EMBEDDING_MODEL="text-embedding-3-small"
+$env:EMBEDDING_API_KEY="your-key"
+continuum start
+```
+
+也可以直接写在命令参数里：
+
+```bash
+continuum start --embedding-base-url https://api.openai.com/v1 --embedding-model text-embedding-3-small
+```
 
 如需局域网访问（如手机测试），可使用：
 
@@ -215,10 +230,11 @@ continuum ui
 
 如果要继续看详细文档，建议从这里开始：
 
-1. `docs/product-baseline.md`
-2. `docs/architecture-independence.md`
-3. `docs/memory-module-contract.md`
-4. `docs/README.md`
+1. `docs/current-phase-closure-plan.md`
+2. `docs/product-baseline.md`
+3. `docs/architecture-independence.md`
+4. `docs/memory-module-contract.md`
+5. `docs/README.md`
 
 如果要看具体模块：
 

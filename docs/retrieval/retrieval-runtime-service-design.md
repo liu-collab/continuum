@@ -8,16 +8,12 @@
 - 对 agent 进程的处理方式已经落地成生命周期接入，而不是侵入模型推理本身。
 - 依赖失败时的降级行为已经接好，`storage`、读模型或 embedding 失败不会拖挂宿主进程。
 - 运行时观测已经能分段记录 `turn / trigger / recall / injection / writeback`，可以回看每轮发生了什么。
-
-### 未完成
-
-- 设计文档里约定的宿主工具面还没有全部兑现，尤其是 `memory_explain_hit` 还未补齐。
-- `Codex` 侧的 `memory_search` 还没有接成正式查询工具，当前仍是桥接占位。
+- 同一轮 `prepare-context / finalize-turn` 现在会复用同一条 `trace_id`，运行轨迹详情已经能真实按五段聚合。
+- `Codex` 宿主工具面已经包含正式可用的 `memory_search` 和 `memory_explain_hit`。
 
 ### 当前结论
 
-- 这份服务设计文档对应的核心服务能力已经基本落地。
-- 还未完全收口的是宿主工具层，不影响主运行链路上线验证，但会影响完整体验验收。
+- 这份服务设计文档对应的核心服务能力已经落地完成，当前阶段可以按正式能力验收。
 
 ## 1. 文档目标
 
@@ -240,6 +236,15 @@ agent 的处理：
 - `status`
 - `importance`
 
+固定过滤规则：
+
+- `scope=workspace` 时必须落在当前 `workspace_id`
+- `scope=user` 时只按当前 `user_id` 过滤，`workspace_id` 只保留为来源工作区解释
+- `scope=task` 时要求 `workspace_id + task_id`
+- `scope=session` 时要求 `workspace_id + session_id`
+- `memory_mode=workspace_only` 时默认不查 `scope=user`
+- `memory_mode=workspace_plus_global` 时允许同时查 `scope=workspace + scope=user`
+
 软排序字段：
 
 - `summary_embedding`
@@ -325,6 +330,8 @@ agent 的处理：
 - `user_id`
 - `task_id`
 - `session_id`
+- `thread_id`
+- `memory_mode`
 - `phase`
 - `current_input`
 
@@ -350,6 +357,8 @@ agent 的处理：
 - `user_id`
 - `task_id`
 - `session_id`
+- `thread_id`
+- `memory_mode`
 - `current_input`
 - `assistant_output`
 - `tool_results_summary`
@@ -367,6 +376,14 @@ agent 的处理：
 作用：
 
 - 给 `visualization` 查看每一轮触发、查询、注入、写回轨迹
+
+正式筛选参数只保留：
+
+- `turn_id`
+- `session_id`
+- `trace_id`
+- `page`
+- `page_size`
 
 ### 11.4 运行指标接口
 

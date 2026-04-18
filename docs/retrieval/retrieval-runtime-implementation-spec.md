@@ -9,18 +9,14 @@
 - 查询阶段的超时与连接释放已完成，读模型查询具备 `statement_timeout`、取消和连接回收闭环。
 - 写回正式契约已完成，候选类型已经收敛到 `fact_preference`、`task_state`、`episodic`，来源字段也已经按正式结构输出。
 - 运行轨迹持久化已完成，`turn / trigger / recall / injection / writeback` 五段记录已经能落到运行时仓储。
+- 同一轮 `prepare-context / finalize-turn` 已经能复用同一条 `trace_id`，五段轨迹现在可以真实闭合。
 - 宿主生命周期接线已完成，`Claude Code` 和 `Codex` 两侧都已经能把宿主事件转进运行时服务。
+- `Codex` MCP 工具已经补齐 `memory_search` 和 `memory_explain_hit`，不再使用伪造 identity fallback。
 - 当前实现已通过 `npm run check`、`npm run build`、`npm test`。
-
-### 未完成
-
-- 宿主工具面还没有全部交齐。`memory-mcp-server` 目前还缺 `memory_explain_hit`。
-- `memory_search` 目前仍是桥接说明返回，还不是正式的直接检索能力，因此这部分还不能按实施方案标记为完成。
 
 ### 当前结论
 
-- `retrieval-runtime` 主运行链路可以标记为已完成。
-- 如果按完整实施方案验收，宿主工具层只能标记为部分完成，当前还差 `memory_explain_hit` 和正式版 `memory_search`。
+- `retrieval-runtime` 当前阶段主运行链路和宿主工具面都可以标记为已完成。
 
 ## 1. 文档定位
 
@@ -135,16 +131,17 @@
 解决方案：
 
 - 运行时过程统一写入 `runtime_private`
-- 一轮至少留下 turn、recall、injection、writeback 四层记录
+- 一轮至少留下 `turn`、`trigger`、`recall`、`injection`、`writeback` 五层记录
 
 ## 3. 这一层的设计结论
 
-基于上面的问题，`retrieval-runtime` 首版固定设计成四段链路：
+基于上面的问题，`retrieval-runtime` 首版固定设计成五段运行链路，并且对外观测、页面解释和测试验收都按同一套五段口径收：
 
-1. 触发判断
-2. 查询排序
-3. 注入生成
-4. 写回检查
+1. `turn`
+2. `trigger`
+3. `recall`
+4. `injection`
+5. `writeback`
 
 一句话说：
 
@@ -173,6 +170,7 @@
 - `thread_id`
 - `turn_id`
 - `recent_context_summary`
+- `memory_mode`
 
 ### 4.2 `RetrievalQuery`
 
@@ -214,6 +212,9 @@
 
 - `packet_id`
 - `trigger_reason`
+- `memory_mode`
+- `requested_scopes`
+- `selected_scopes`
 - `packet_summary`
 - `records[]`
 - `priority_breakdown`
@@ -228,6 +229,11 @@
 - `memory_summary`
 - `memory_records[]`
 - `token_estimate`
+- `memory_mode`
+- `requested_scopes`
+- `selected_scopes`
+- `trimmed_record_ids`
+- `trim_reasons`
 
 ### 4.6 `WriteBackCandidate`
 
@@ -470,15 +476,20 @@
 
 ### 8.2 硬过滤字段
 
-固定按下面顺序收窄：
+固定按下面规则收窄：
 
-1. `workspace_id`
-2. `user_id`
-3. `status=active`
-4. `scope`
-5. `memory_type`
-6. `task_id`
-7. `importance >= threshold`
+1. 先固定 `status=active`
+2. 再按 `memory_mode` 决定本轮允许的 scope
+3. `scope=workspace` 时要求 `workspace_id = 当前工作区`
+4. `scope=user` 时要求 `user_id = 当前用户`，不再要求 `workspace_id = 当前工作区`
+5. `scope=task` 时要求 `workspace_id = 当前工作区` 且 `task_id = 当前任务`
+6. `scope=session` 时要求 `workspace_id = 当前工作区` 且 `session_id = 当前会话`
+7. 最后再按 `memory_type` 和 `importance >= threshold` 收窄
+
+当前阶段再补两条正式规则：
+
+- `memory_mode=workspace_only` 时默认不读取 `scope=user`
+- `memory_mode=workspace_plus_global` 时允许同时读取 `scope=workspace` 和 `scope=user`
 
 ### 8.3 软排序字段
 
@@ -693,6 +704,7 @@
 - `session_id`
 - `thread_id`
 - `turn_id`
+- `memory_mode`
 - `phase`
 - `current_input`
 - `recent_context_summary`
@@ -722,6 +734,7 @@
 - `session_id`
 - `thread_id`
 - `turn_id`
+- `memory_mode`
 - `current_input`
 - `assistant_output`
 - `tool_results_summary`

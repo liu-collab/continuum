@@ -29,6 +29,13 @@
 
 ## 3. 环境变量汇总
 
+当前首版部署口径补充如下：
+
+- 默认运行模式是 `single_local_user`
+- 当前本地安装实例只有一个用户
+- 启动时需要确定当前工作区标识和默认 `memory_mode`
+- 当前阶段正式支持 `workspace_only` 和 `workspace_plus_global`
+
 ### 3.1 storage
 
 | 变量 | 默认值 | 必填 | 说明 |

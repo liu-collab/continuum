@@ -12,6 +12,23 @@
 - 它自己要暴露什么接口
 - 页面在上游不可用时怎么处理
 
+## 1.1 当前验收状态
+
+当前代码已经把 `visualization` 的主服务能力大部分落地，不再停留在设计阶段。
+
+已经落地：
+
+- 目录页、详情页、轨迹页、看板页、健康面板
+- runtime 五段聚合、看板趋势计算、局部降级和健康状态分离
+- 详情页最小治理动作 `confirm / invalidate / archive / delete`
+
+还没有完全收口：
+
+- 目录页双视图在 `memory_view_mode + scope` 组合筛选下仍有边界问题
+- 页面还没有提供 `edit / restore_version` 的正式治理入口
+- API 错误响应还没有统一到正式错误结构
+- 轨迹页还没有把文档承诺的部分 Turn 原始字段展示完整
+
 ## 2. 这个服务要解决什么问题
 
 `visualization` 要解决下面这些问题：
@@ -34,6 +51,7 @@
 - 展示核心指标
 - 展示数据源状态
 - 提供统一筛选和查看能力
+- 提供最小治理入口
 
 ## 4. 服务边界
 
@@ -66,14 +84,25 @@
 职责：
 
 - 渲染记忆库页面
-- 支持筛选类型、范围、状态
+- 支持按正式视图模式查看 `workspace_only` 或 `workspace_plus_global`
+- 支持筛选类型、范围、状态，并解释全局记忆与工作区记忆
+
+当前实现边界：
+
+- 两种视图都已经有实现
+- 但显式 `scope` 和视图模式叠加时，当前查询聚合仍需继续收口
 
 ### 5.4 `run-trace-page`
 
 职责：
 
 - 渲染单轮运行轨迹
-- 把触发、查询、注入、写回按顺序展示
+- 按 `turn / trigger / recall / injection / writeback` 五段顺序展示
+
+当前实现边界：
+
+- 五段结构已经成立
+- 但页面还没有把 Turn 原始字段完全展开
 
 ### 5.5 `metrics-dashboard-page`
 
@@ -117,6 +146,10 @@
 
 - `storage` 发布的共享读模型
 
+当前未完全闭环：
+
+- 当 `memory_view_mode` 和显式 `scope` 同时存在时，结果集边界还没有完全可靠
+
 ### 6.2 运行轨迹页面
 
 要解决的问题：
@@ -129,11 +162,16 @@
 页面展示字段：
 
 - `turn_id`
+- `session_id`
+- `trace_id`
 - `trigger_type`
+- `memory_mode`
 - `requested_types`
+- `selected_scopes`
 - `selected_record_ids`
 - `injected_summary`
 - `write_back_candidates`
+- `write_back_scopes`
 - `storage_job_id`
 - `degraded`
 - `dependency_status`
@@ -142,6 +180,14 @@
 数据来源：
 
 - `retrieval-runtime` 的运行轨迹接口
+
+正式筛选项只保留：
+
+- `turn_id`
+- `session_id`
+- `trace_id`
+- `page`
+- `page_size`
 
 ### 6.3 指标看板页面
 
@@ -268,7 +314,7 @@
 
 - 不允许直接读取 `storage` 私有写表
 - 不允许直接读取 `retrieval-runtime` 私有运行内存
-- 不允许直接改记忆
+- 不允许绕过 `storage` 正式治理接口直接改记忆
 - 不允许调用 agent 主链路控制接口
 - 不允许因为上游未启动就让页面服务自己不可运行
 
@@ -294,16 +340,24 @@
 
 ## 12. 首批落地任务
 
-1. 实现 `datasource-adapter`
-2. 接共享读模型
-3. 接 `storage` 指标接口
-4. 接 `retrieval-runtime` 运行轨迹接口
-5. 接 `retrieval-runtime` 指标接口
-6. 实现记忆库页面
-7. 实现运行轨迹页面
-8. 实现指标看板页面
-9. 实现数据源状态面板
-10. 实现无数据源时的空态和错误态
+已完成：
+
+1. `datasource-adapter`
+2. 共享读模型接入
+3. `storage` 指标接口接入
+4. `retrieval-runtime` 运行轨迹接口接入
+5. `retrieval-runtime` 指标接口接入
+6. 记忆库页面
+7. 运行轨迹页面
+8. 指标看板页面
+9. 数据源状态面板
+10. 无数据源时的空态和错误态
+
+未完全闭环：
+
+1. 目录页双视图的边界筛选语义
+2. 页面级 `edit / restore_version` 治理入口
+3. API 错误响应正式契约一致性
 
 ## 13. 一句话方案
 

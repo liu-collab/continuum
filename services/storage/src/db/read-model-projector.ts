@@ -35,10 +35,13 @@ export class ReadModelProjector {
       source: {
         source_type: record.source_type,
         source_ref: record.source_ref,
-        created_by_service: record.created_by_service,
+        service_name: record.created_by_service,
+        origin_workspace_id: record.workspace_id,
+        confirmed_by_user: Boolean(record.last_confirmed_at),
       },
       last_confirmed_at: record.last_confirmed_at,
       last_used_at: null,
+      created_at: record.created_at,
       updated_at: record.updated_at,
       summary_embedding: embeddingResult.embedding,
     };

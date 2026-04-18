@@ -18,6 +18,18 @@
 - 这个产品文档里的“运行时检索能力”已经进入可验收状态。
 - 如果把“宿主工具化查询面”也算进产品范围，目前应标记为部分完成。
 
+### 当前收口补充
+
+当前阶段继续开发时，再补下面几条正式边界：
+
+- 默认模式先收成 `single_local_user`
+- 当前正式开放的作用范围是 `session`、`task`、`workspace`、`user`
+- `workspace` 表示工作区记忆，`user` 表示全局记忆
+- runtime 需要支持“只用工作区记忆”或“工作区 + 全局记忆”
+- 运行轨迹和可视化页只保留 runtime 端已经正式支持的筛选项
+
+具体方案见 `../current-phase-closure-plan.md`。
+
 ## 1. 文档目的
 
 这份文档只讨论 `记忆检索` 这一侧的产品定义。
@@ -132,11 +144,14 @@
 注入模块发起检索时，至少应提供：
 
 - `trigger`（触发原因）
+- `workspace_id`（当前工作区上下文）
+- `user_id`（当前本地用户标识）
 - `current_input`（当前输入摘要）
 - `task_id`（当前任务标识）
 - `session_id`（当前会话标识）
+- `thread_id`（宿主线程标识，可选）
+- `memory_mode`（`workspace_only` 或 `workspace_plus_global`）
 - `requested_types`（希望召回的记忆类型）
-- `scope_limit`（检索范围限制）
 - `result_limit`（结果数量上限）
 
 约束如下：
@@ -144,6 +159,8 @@
 - 不允许无限制召回
 - 必须说明触发原因
 - 必须有结果上限
+- 外部正式契约不再直接传一个泛化的 `scope_limit`
+- runtime 要根据 `memory_mode` 决定当前轮是否同时查询工作区记忆和全局记忆
 - 查询接口必须默认走快路径
 
 ## 8. 记忆包要求

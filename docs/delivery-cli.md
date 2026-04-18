@@ -58,12 +58,23 @@
 - 安装 Claude 插件
 - 启动接好 Continuum 的 Codex
 - 做健康检查和数据库探测
+- 在当前首版默认模式下传入工作区标识和默认 `memory_mode`
 
 ### `@jiankarlin/continuum` 不负责
 
 - 改写 `storage` 的业务逻辑
 - 改写 `retrieval-runtime` 的触发、检索、写回逻辑
 - 改写 `visualization` 的页面逻辑
+- 代替业务服务决定授权规则本身
+
+## 当前首版补充
+
+当前阶段交付层再补下面几条正式边界：
+
+- 默认运行模式是 `single_local_user`
+- 交付层负责给宿主和服务传入当前工作区标识
+- 交付层负责设置默认 `memory_mode`
+- `workspace` 级记忆是当前正式能力，不再视为默认关闭
 
 ## 一句话约定
 

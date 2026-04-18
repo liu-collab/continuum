@@ -10,14 +10,17 @@
 
 - `delivery-cli.md`：统一命令入口、安装与启动编排说明
 
-另外，`docs` 根目录保留六篇公共文档：
+另外，`docs` 根目录保留七篇公共文档：
 
+- `current-phase-closure-plan.md`：当前首版收口开发方案，统一说明主要问题、阶段解法和正式边界
 - `product-baseline.md`：整体产品基线
 - `memory-module-contract.md`：跨模块契约
 - `product-readiness.md`：产品补全层，覆盖场景边界、治理闭环、验收机制
 - `architecture-independence.md`：架构独立性约束，要求三部分可独立拆出、独立治理、独立运行
 - `api-contract.md`：统一 API 契约，三个服务所有对外接口的正式定义
 - `deployment-guide.md`：部署与运维指南，含依赖清单、环境变量汇总、本地开发步骤
+
+当前首版正式边界和收口顺序，统一以 `current-phase-closure-plan.md` 为准。
 当前整体架构口径是：
 
 - 三部分是独立服务
@@ -40,6 +43,7 @@
 当前文档：
 
 - `storage/memory-storage-product.md`
+- `storage/storage-current-phase-agent-prompt.md`
 - `storage/database-schema-design.md`
 - `storage/storage-service-design.md`
 - `storage/storage-implementation-spec.md`
@@ -58,6 +62,7 @@
 
 当前文档：
 
+- `retrieval/memory-injection-current-phase-agent-prompt.md`
 - `retrieval/memory-retrieval-product.md`
 - `retrieval/memory-injection-product.md`
 - `retrieval/retrieval-runtime-service-design.md`
@@ -84,6 +89,7 @@
 当前文档：
 
 - `visualization/memory-observability-product.md`
+- `visualization/visualization-current-phase-agent-prompt.md`
 - `visualization/visualization-service-design.md`
 - `visualization/visualization-implementation-spec.md`
 - `visualization/visualization-development-agent-prompt.md`

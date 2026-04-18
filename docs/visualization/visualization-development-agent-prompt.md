@@ -113,9 +113,9 @@
 
 页面至少要支持：
 
-- 按 `workspace_id`
-- 按 `user_id`
-- 按 `task_id`
+- 按正式视图模式切换：
+  - `workspace_only`
+  - `workspace_plus_global`
 - 按 `memory_type`
 - 按 `scope`
 - 按 `status`
@@ -132,6 +132,7 @@
 
 页面主入口按 `turn_id` 查看，并能展示：
 
+- Turn
 - Trigger
 - Recall
 - Injection

@@ -102,4 +102,36 @@ describe("storage domain rules", () => {
     expect(decision.decision).toBe("open_conflict");
     expect(conflict.should_mark_pending_confirmation).toBe(true);
   });
+
+  it("keeps user scope dedupe stable across workspaces", () => {
+    const normalizedA = normalizeCandidate(buildCandidate());
+    const normalizedB = normalizeCandidate(
+      buildCandidate({
+        workspace_id: "aaaaaaaa-1111-4111-8111-111111111111",
+      }),
+    );
+
+    expect(normalizedA.scope).toBe("user");
+    expect(normalizedB.scope).toBe("user");
+    expect(normalizedA.dedupe_key).toBe(normalizedB.dedupe_key);
+    expect(normalizedB.source.origin_workspace_id).toBe("aaaaaaaa-1111-4111-8111-111111111111");
+  });
+
+  it("keeps project rules in workspace scope instead of user scope", () => {
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        scope: "user",
+        details: {
+          rule_kind: "repo_constraint",
+          rule_value: "use pnpm in this repository",
+          repo_path: "services/storage",
+          evidence: "repository guide",
+        },
+        summary: "This repository uses pnpm",
+        write_reason: "repo rule extracted from workspace docs",
+      }),
+    );
+
+    expect(normalized.scope).toBe("workspace");
+  });
 });

@@ -196,6 +196,7 @@ export const memoryReadModel = sharedSchema.table(
     source: jsonb("source").$type<Record<string, unknown> | null>(),
     lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
     summaryEmbedding: vector("summary_embedding"),
   },

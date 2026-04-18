@@ -150,13 +150,14 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
           from information_schema.columns
           where table_schema = $1
             and table_name = 'memory_read_model_v1'
-            and column_name in ('details', 'source', 'summary_embedding')
+            and column_name in ('details', 'source', 'summary_embedding', 'created_at')
           order by column_name
         `,
         [context.sharedSchema],
       );
 
       expect(readModelColumns.rows.map((row) => row.column_name)).toEqual([
+        "created_at",
         "details",
         "source",
         "summary_embedding",
@@ -193,6 +194,23 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
       );
 
       expect(refreshConstraint.rows[0]?.check_clause).toContain("dead_letter");
+
+      const governanceConstraint = await context.database.session().query<{
+        check_clause: string;
+      }>(
+        `
+          select cc.check_clause
+          from information_schema.table_constraints tc
+          join information_schema.check_constraints cc
+            on tc.constraint_name = cc.constraint_name
+          where tc.table_schema = $1
+            and tc.table_name = 'memory_governance_actions'
+            and tc.constraint_name = 'memory_governance_actions_action_type_check'
+        `,
+        [context.privateSchema],
+      );
+
+      expect(governanceConstraint.rows[0]?.check_clause).toContain("invalidate");
     } finally {
       await context.cleanup();
     }

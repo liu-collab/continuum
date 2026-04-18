@@ -61,6 +61,12 @@ npm run dev:worker
   编辑正式记录并写版本
 - `POST /v1/storage/records/:recordId/archive`
   归档记录
+- `POST /v1/storage/records/:recordId/confirm`
+  确认记录并更新 `last_confirmed_at`（最近确认时间）
+- `POST /v1/storage/records/:recordId/invalidate`
+  失效记录；当前阶段会转成 `archived`（归档）并保留治理审计
+- `POST /v1/storage/records/:recordId/delete`
+  软删除记录，并从共享读模型移除
 - `POST /v1/storage/records/:recordId/restore-version`
   从历史版本恢复
 - `GET /v1/storage/conflicts`
@@ -85,6 +91,7 @@ npm run dev:worker
 - 不接收完整对话原文；`details`（结构化详情）会拒绝 `transcript`（完整对话）一类 payload
 - 同步接口只做校验和入队，不做重处理
 - 共享读模型固定发布字段：`summary`、`details`、`source`、`summary_embedding` 等正式 DTO
+- 共享读模型正式发布 `created_at`，并在 `source.origin_workspace_id` 中保留来源工作区
 - 读模型刷新失败会单独记录并重试，超限后进入 `dead_letter`（最终失败），不回滚正式写入
 - embedding 生成属于读模型刷新的一部分，失败时共享读模型仍会发布，只是 `summary_embedding` 为空
 - `storage` 可单独启动；`readiness`（就绪状态）只受数据库影响，可选依赖异常只体现在 `dependencies`（依赖状态）里
