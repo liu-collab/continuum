@@ -1,5 +1,12 @@
 # T02 — retrieval-runtime HTTP 客户端
 
+## 当前状态
+
+- 状态：已完成
+- 完成时间：2026-04-18
+- 验证结果：`npm run check`、`npm run build`、`npm test` 已通过
+- 代码位置：`services/memory-native-agent/src/memory-client/`
+
 ## 1. 目标
 
 在 `services/memory-native-agent/src/memory-client/` 下封装一个**专用的 runtime HTTP 客户端**，
