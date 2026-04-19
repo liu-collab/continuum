@@ -4,6 +4,7 @@ import { ChevronRight, FileText, Folder } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { MnaFileTreeEntry } from "../_lib/openapi-types";
 
 type FileTreeProps = {
@@ -21,10 +22,12 @@ export function FileTree({
   onOpenDirectory,
   onOpenFile
 }: FileTreeProps) {
+  const { t } = useAgentI18n();
+
   return (
     <div className="rounded-2xl border bg-white/75">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-semibold text-slate-900">文件树</div>
+        <div className="text-sm font-semibold text-slate-900">{t("fileTree.title")}</div>
         <div className="mt-1 truncate text-xs text-slate-500">{path}</div>
       </div>
       <div className="max-h-[24rem] overflow-auto px-2 py-2">

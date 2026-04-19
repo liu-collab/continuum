@@ -4,6 +4,7 @@ import { TerminalSquare } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { AgentTurnState } from "../_lib/event-reducer";
 import { UntrustedBadge } from "./untrusted-badge";
 
@@ -12,6 +13,7 @@ type ToolConsoleProps = {
 };
 
 export function ToolConsole({ turns }: ToolConsoleProps) {
+  const { t } = useAgentI18n();
   const calls = turns.flatMap((turn) =>
     turn.toolCalls.map((call) => ({
       ...call,
@@ -24,13 +26,13 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
       <div className="flex items-center gap-2 border-b px-5 py-4">
         <TerminalSquare className="h-4 w-4 text-accent" />
         <div>
-          <div className="text-sm font-semibold text-slate-900">工具控制台</div>
-          <div className="text-xs text-slate-500">查看每次工具调用的状态、输出摘要和信任等级。</div>
+          <div className="text-sm font-semibold text-slate-900">{t("toolConsole.title")}</div>
+          <div className="text-xs text-slate-500">{t("toolConsole.description")}</div>
         </div>
       </div>
       <div className="max-h-72 overflow-auto px-4 py-3">
         {calls.length === 0 ? (
-          <EmptyState title="还没有工具调用" description="当 agent 触发文件、shell 或 MCP 工具时，这里会显示执行日志。" />
+          <EmptyState title={t("toolConsole.emptyTitle")} description={t("toolConsole.emptyDescription")} />
         ) : (
           <div className="space-y-3">
             {calls.map((call) => (
@@ -40,12 +42,12 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-slate-900">{call.name}</span>
-                  <span className="text-xs text-slate-500">turn {call.turnId.slice(0, 8)}</span>
+                  <span className="text-xs text-slate-500">{t("toolConsole.turnLabel", { id: call.turnId.slice(0, 8) })}</span>
                   <UntrustedBadge trustLevel={call.trustLevel} />
                 </div>
                 <div className="mt-2 text-xs text-slate-500">{call.argsPreview}</div>
                 <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs leading-6 text-slate-700">
-                  {call.outputPreview || "等待工具返回..."}
+                  {call.outputPreview || t("toolConsole.waiting")}
                 </div>
               </div>
             ))}

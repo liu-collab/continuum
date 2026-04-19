@@ -3,25 +3,20 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { getAppConfig } from "@/lib/env";
-
-import { resolveBrowserLocale } from "../_lib/config";
 import { initialAgentState, reduceAgentEvent } from "../_lib/event-reducer";
-import type { AgentMemoryMode, MnaPromptInspectorResponse } from "../_lib/openapi-types";
+import type { AgentLocale, AgentMemoryMode, MnaPromptInspectorResponse } from "../_lib/openapi-types";
 import { MnaUnavailableError } from "../_lib/mna-client";
 import { useAgentClient } from "./use-agent-client";
 
 type UseAgentWorkspaceOptions = {
   sessionId?: string;
+  uiLocale: AgentLocale;
 };
 
-export function useAgentWorkspace(options: UseAgentWorkspaceOptions = {}) {
+export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();
   const client = useAgentClient();
-  const [state, dispatch] = useReducer(reduceAgentEvent, {
-    ...initialAgentState,
-    locale: resolveBrowserLocale(getAppConfig().values.NEXT_PUBLIC_MNA_DEFAULT_LOCALE)
-  });
+  const [state, dispatch] = useReducer(reduceAgentEvent, initialAgentState);
   const [treePath, setTreePath] = useState(".");
   const [fileTree, setFileTree] = useState<{ path: string; entries: Array<{ name: string; type: "directory" | "file" | "other" }> }>({
     path: ".",
@@ -162,7 +157,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions = {}) {
 
   async function createNewSession() {
     const created = await client.createSession({
-      locale: state.locale
+      locale: options.uiLocale
     });
 
     const list = await client.listSessions();

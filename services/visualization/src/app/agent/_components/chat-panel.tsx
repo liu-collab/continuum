@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { AgentConnectionState } from "../_lib/openapi-types";
 import type { AgentTurnState } from "../_lib/event-reducer";
 
@@ -30,6 +31,7 @@ export function ChatPanel({
   onOpenPrompt
 }: ChatPanelProps) {
   const [draft, setDraft] = useState("");
+  const { formatConnection, formatFinishReasonLabel, formatPhaseLabel, t } = useAgentI18n();
   const isBusy = turns.some((turn) => turn.status === "streaming");
   const latestTurn = turns.at(-1) ?? null;
 
@@ -37,7 +39,7 @@ export function ChatPanel({
     <div className="flex min-h-[40rem] flex-col rounded-3xl border bg-white/88 shadow-soft">
       <div className="border-b px-6 py-5">
         <div className="flex flex-wrap items-center gap-3">
-          <p className="eyebrow">Agent</p>
+          <p className="eyebrow">{t("chatPanel.eyebrow")}</p>
           <StatusBadge
             tone={
               connection === "open"
@@ -47,32 +49,32 @@ export function ChatPanel({
                   : "danger"
             }
           >
-            <span data-testid="agent-connection-state">{connection}</span>
+            <span data-testid="agent-connection-state">{formatConnection(connection)}</span>
           </StatusBadge>
-          {degraded ? <StatusBadge tone="warning"><span data-testid="agent-degraded-banner">memory degraded</span></StatusBadge> : null}
+          {degraded ? <StatusBadge tone="warning"><span data-testid="agent-degraded-banner">{t("chatPanel.memoryDegraded")}</span></StatusBadge> : null}
           {activeTaskLabel ? <StatusBadge tone="neutral">{activeTaskLabel}</StatusBadge> : null}
         </div>
         <h2 className="mt-3 font-[var(--font-serif)] text-3xl text-slate-900">
-          直接在页面里和 `memory-native-agent` 对话。
+          {t("chatPanel.title")}
         </h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          这里直接消费 mna 的 HTTP 和 WebSocket 接口。visualization 只负责渲染，不承接 agent 业务逻辑。
+          {t("chatPanel.description")}
         </p>
       </div>
 
       <div className="flex-1 space-y-5 overflow-auto px-6 py-5">
         {turns.length === 0 ? (
           <EmptyState
-            title="还没有对话"
-            description="输入第一条消息后，这里会展示注入横幅、phase 轨迹、assistant 流式输出和工具调用日志。"
+            title={t("chatPanel.emptyTitle")}
+            description={t("chatPanel.emptyDescription")}
           />
         ) : (
           turns.map((turn) => (
             <div key={turn.turnId} className="space-y-4 rounded-3xl border bg-slate-50/70 px-5 py-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="neutral">turn {turn.turnId.slice(0, 8)}</StatusBadge>
-                {turn.injection ? <StatusBadge tone="success">injection ready</StatusBadge> : null}
-                {turn.finishReason ? <StatusBadge tone="neutral">{turn.finishReason}</StatusBadge> : null}
+                <StatusBadge tone="neutral">{t("chatPanel.turnLabel", { id: turn.turnId.slice(0, 8) })}</StatusBadge>
+                {turn.injection ? <StatusBadge tone="success">{t("chatPanel.injectionReady")}</StatusBadge> : null}
+                {turn.finishReason ? <StatusBadge tone="neutral">{formatFinishReasonLabel(turn.finishReason)}</StatusBadge> : null}
                 {turn.promptAvailable ? (
                   <button
                     type="button"
@@ -80,14 +82,14 @@ export function ChatPanel({
                     className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white"
                   >
                     <WandSparkles className="h-3.5 w-3.5" />
-                    查看 prompt
+                    {t("chatPanel.viewPrompt")}
                   </button>
                 ) : null}
               </div>
 
               {turn.injection ? (
                 <div className="rounded-2xl border bg-white px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-900">Injection Banner</div>
+                  <div className="text-sm font-semibold text-slate-900">{t("chatPanel.injectionTitle")}</div>
                   <div className="mt-2 text-sm leading-6 text-slate-700" data-testid={`injection-summary-${turn.turnId}`}>{turn.injection.memory_summary}</div>
                 </div>
               ) : null}
@@ -96,23 +98,23 @@ export function ChatPanel({
                 <div className="flex flex-wrap gap-2">
                   {turn.phases.map((phase) => (
                     <StatusBadge key={`${turn.turnId}:${phase.phase}:${phase.traceId ?? ""}`} tone="neutral">
-                      {phase.phase}
+                      {formatPhaseLabel(phase.phase)}
                     </StatusBadge>
                   ))}
                 </div>
               ) : null}
 
-              <MessageBubble title="You" content={turn.userInput || "等待用户输入..."} tone="user" testId={`user-message-${turn.turnId}`} />
+              <MessageBubble title={t("chatPanel.you")} content={turn.userInput || t("chatPanel.waitingForInput")} tone="user" testId={`user-message-${turn.turnId}`} />
               <MessageBubble
-                title="Assistant"
-                content={turn.assistantOutput || (turn.status === "streaming" ? "正在生成..." : "还没有输出。")}
+                title={t("chatPanel.assistant")}
+                content={turn.assistantOutput || (turn.status === "streaming" ? t("chatPanel.streaming") : t("chatPanel.noOutput"))}
                 tone="assistant"
                 testId={`assistant-message-${turn.turnId}`}
               />
 
               {turn.errors.length > 0 ? (
                 <ErrorState
-                  title="本轮出现错误"
+                  title={t("chatPanel.turnErrorTitle")}
                   description={turn.errors.map((item) => `${item.code}: ${item.message}`).join("；")}
                 />
               ) : null}
@@ -123,7 +125,7 @@ export function ChatPanel({
 
       <div className="border-t px-6 py-5">
         {connection === "closed" ? (
-          <ErrorState title="连接已关闭" description="请先恢复 `memory-native-agent`，然后再继续发送消息。" />
+          <ErrorState title={t("chatPanel.connectionClosedTitle")} description={t("chatPanel.connectionClosedDescription")} />
         ) : null}
         <form
           className="mt-3 flex flex-col gap-3"
@@ -141,7 +143,7 @@ export function ChatPanel({
             data-testid="agent-input"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="输入消息，Enter 发送，Shift+Enter 换行"
+            placeholder={t("chatPanel.placeholder")}
             rows={4}
             disabled={connection !== "open"}
             className="min-h-28 rounded-3xl border bg-slate-50/70 px-4 py-4 text-sm leading-6 text-slate-900 outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-60"
@@ -171,7 +173,7 @@ export function ChatPanel({
               className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Square className="h-4 w-4" />
-              中止
+              {t("chatPanel.abort")}
             </button>
             <button
               type="submit"
@@ -180,7 +182,7 @@ export function ChatPanel({
               className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-              发送
+              {t("chatPanel.send")}
             </button>
           </div>
         </form>

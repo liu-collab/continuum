@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { AgentPendingConfirm } from "../_lib/event-reducer";
 
 type ConfirmDialogProps = {
@@ -10,6 +11,8 @@ type ConfirmDialogProps = {
 };
 
 export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps) {
+  const { t } = useAgentI18n();
+
   if (!pendingConfirm) {
     return null;
   }
@@ -22,10 +25,9 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             <AlertTriangle className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <div className="text-lg font-semibold text-slate-900">需要权限确认</div>
+            <div className="text-lg font-semibold text-slate-900">{t("confirmDialog.title")}</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              工具 <span className="font-semibold text-slate-900">{pendingConfirm.tool}</span> 请求执行。
-              这一步需要你确认后才会继续。
+              {t("confirmDialog.description", { tool: pendingConfirm.tool })}
             </p>
             <div className="mt-4 rounded-2xl border bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-700">
               {pendingConfirm.paramsPreview}
@@ -39,7 +41,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             data-testid="confirm-deny"
             className="rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            拒绝
+            {t("confirmDialog.deny")}
           </button>
           <button
             type="button"
@@ -47,7 +49,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             data-testid="confirm-allow"
             className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/5"
           >
-            允许
+            {t("confirmDialog.allow")}
           </button>
           <button
             type="button"
@@ -55,7 +57,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             data-testid="confirm-allow-session"
             className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
           >
-            本会话始终允许
+            {t("confirmDialog.allowSession")}
           </button>
         </div>
       </div>

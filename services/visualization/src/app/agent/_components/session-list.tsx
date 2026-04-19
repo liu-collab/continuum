@@ -6,6 +6,7 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { MnaSessionSummary } from "../_lib/openapi-types";
 
 type SessionListProps = {
@@ -25,11 +26,12 @@ export function SessionList({
 }: SessionListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
+  const { formatMemoryModeLabel, formatSessionTitle, t } = useAgentI18n();
 
   if (sessions.length === 0) {
     return (
       <div className="rounded-xl border border-dashed bg-white/70 px-4 py-6 text-sm text-slate-500">
-        还没有会话。发送第一条消息后，这里会保留最近会话。
+        {t("sessionList.emptyTitle")}
       </div>
     );
   }
@@ -74,15 +76,15 @@ export function SessionList({
                   </form>
                 ) : (
                   <div className="truncate text-sm font-semibold text-slate-900">
-                    {session.title ?? `会话 ${session.id.slice(0, 8)}`}
+                    {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
                   </div>
                 )}
-                <div className="mt-2 text-xs text-slate-500">工作区：{session.workspace_id}</div>
+                <div className="mt-2 text-xs text-slate-500">{t("sessionList.workspace", { id: session.workspace_id })}</div>
                 <div className="mt-1 flex flex-wrap gap-2">
                   <StatusBadge tone={session.closed_at ? "warning" : "success"}>
-                    {session.closed_at ? "已关闭" : "活跃"}
+                    {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
                   </StatusBadge>
-                  <StatusBadge tone="neutral">{session.memory_mode}</StatusBadge>
+                  <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -94,7 +96,7 @@ export function SessionList({
                     setDraftTitle(session.title ?? "");
                   }}
                   className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-                  aria-label="rename session"
+                  aria-label={t("sessionList.renameAria")}
                 >
                   <PencilLine className="h-4 w-4" />
                 </button>
@@ -105,7 +107,7 @@ export function SessionList({
                     onDelete(session);
                   }}
                   className="rounded-full p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"
-                  aria-label="delete session"
+                  aria-label={t("sessionList.deleteAria")}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

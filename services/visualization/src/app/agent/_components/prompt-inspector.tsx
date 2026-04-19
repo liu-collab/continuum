@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { X } from "lucide-react";
 
+import { useAgentI18n } from "../_i18n/provider";
 import type { MnaPromptInspectorResponse } from "../_lib/openapi-types";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((mod) => mod.default), {
@@ -16,6 +17,8 @@ type PromptInspectorProps = {
 };
 
 export function PromptInspector({ open, payload, onClose }: PromptInspectorProps) {
+  const { t } = useAgentI18n();
+
   if (!open) {
     return null;
   }
@@ -25,8 +28,8 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <div className="text-sm font-semibold text-slate-900">Prompt Inspector</div>
-            <div className="text-xs text-slate-500">查看当前轮次发给 provider 的 messages 和 tools。</div>
+            <div className="text-sm font-semibold text-slate-900">{t("promptInspector.title")}</div>
+            <div className="text-xs text-slate-500">{t("promptInspector.description")}</div>
           </div>
           <button
             type="button"
@@ -51,20 +54,20 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
             />
           </div>
           <div className="min-h-[24rem] overflow-auto px-6 py-5">
-            <div className="text-sm font-semibold text-slate-900">元信息</div>
+            <div className="text-sm font-semibold text-slate-900">{t("promptInspector.meta")}</div>
             <dl className="mt-4 space-y-4 text-sm">
               <div>
-                <dt className="text-slate-500">turn</dt>
-                <dd className="mt-1 text-slate-900">{payload?.turn_id ?? "未加载"}</dd>
+                <dt className="text-slate-500">{t("promptInspector.turn")}</dt>
+                <dd className="mt-1 text-slate-900">{payload?.turn_id ?? t("promptInspector.notLoaded")}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">provider</dt>
+                <dt className="text-slate-500">{t("promptInspector.provider")}</dt>
                 <dd className="mt-1 text-slate-900">
-                  {payload ? `${payload.provider_id} / ${payload.model}` : "未加载"}
+                  {payload ? `${payload.provider_id} / ${payload.model}` : t("promptInspector.notLoaded")}
                 </dd>
               </div>
               <div>
-                <dt className="text-slate-500">tools</dt>
+                <dt className="text-slate-500">{t("promptInspector.tools")}</dt>
                 <dd className="mt-1 text-slate-900">{payload?.tools.length ?? 0}</dd>
               </div>
             </dl>

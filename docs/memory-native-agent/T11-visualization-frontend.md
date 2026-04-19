@@ -22,7 +22,7 @@
 
 当前仍保留但不阻塞本阶段收口的点：
 
-- 还没有做 T11 文档里要求的完整 i18n 资源层和 locale 切换控件
+- 已补 agent 页面专属 `_i18n` 资源、轻量 provider 和顶部 locale 切换控件，UI 语言与 session locale 已解耦
 - 还没有补完整的 React 组件测试、MSW REST mock 和 fake WebSocket 测试
 - 还没有把 Prompt Inspector / 文件预览的 Monaco 做更细的懒加载指标验证
 - `provider-switch` 当前支持“同 provider 下切 model”，还没有做多 provider 注册与选择
@@ -250,8 +250,8 @@ visualization 读两个环境变量：
 
 ### 9.1 技术选型
 
-- 使用 **next-intl**（与 visualization 现有 Next.js 15 + RSC 兼容）
-- 若 visualization 自身已引入 i18n 库，复用之
+- 首版实际落地为 agent 页面局部 `AgentI18nProvider`
+- 不改全局 app router 结构，只在 `services/visualization/src/app/agent/*` 范围内生效
 
 ### 9.2 资源文件
 
@@ -271,7 +271,8 @@ visualization 读两个环境变量：
 - 切换后：
   - 前端 UI 立即切换
   - 已有 session 的对话历史不变
-  - 新建 session 时将当前 locale 传给 `POST /v1/agent/sessions` 的 `locale` 字段
+  - 新建 session 时将当前 UI locale 传给 `POST /v1/agent/sessions` 的 `locale` 字段
+  - 已恢复 session 返回的 `locale` 仅保留给 session 元数据使用，不再反向覆盖当前 UI 语言
 
 ### 9.4 工具确认对话框
 
