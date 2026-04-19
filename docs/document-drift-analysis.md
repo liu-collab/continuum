@@ -7,12 +7,14 @@
 
 ## 执行摘要
 
-基于最近两周的提交记录和当前代码实现，对核心产品文档进行了系统性漂移检查。发现 **3 处明确的文档-代码漂移**，以及 **2 处潜在的契约不一致风险**。
+基于最近两周的提交记录和当前代码实现，对核心产品文档进行了系统性漂移检查。发现 **2 处明确的文档-代码漂移**（均为文档滞后），以及 **2 处潜在的契约不一致风险**。
 
 ### 漂移严重程度分类
-- 🔴 **严重漂移**（P0）：1 处 - 影响产品核心契约
-- 🟡 **中度漂移**（P1）：2 处 - 影响用户体验和可观测性
+- 🔴 **严重漂移**（P0）：0 处 - 无严重契约不一致
+- 🟡 **中度漂移**（P1）：2 处 - 文档滞后但不影响功能（已修正）
 - 🟢 **轻度漂移**（P2）：2 处 - 文档滞后但不影响功能
+
+**重要发现**：原本标记为 P0 的"运行轨迹页筛选参数不一致"问题经详细验证为**误判**，前后端接口完全一致。
 
 ---
 
@@ -34,7 +36,7 @@
 
 ## 二、发现的文档漂移
 
-### 🔴 P0 严重漂移
+### ✅ P0 严重漂移（已验证为误判）
 
 #### 2.1 运行轨迹页筛选参数不一致
 
@@ -50,20 +52,20 @@
 thread_id、workspace_id、task_id 不再在首版里假装是正式筛选项。
 ```
 
-**实际代码**:
-- ✅ `services/visualization/src/app/memories/page.tsx` - 记忆页面已移除 `thread_id` 筛选
-- ❌ `services/visualization/src/lib/query-params.ts` - 仍包含 `workspace_id` 解析逻辑
-- ❌ `services/visualization/src/lib/server/runtime-observe-client.ts` - 可能仍传递未支持的参数
+**实际代码验证**:
+- ✅ `services/retrieval-runtime/src/api/schemas.ts` - 后端只支持 `session_id`、`turn_id`、`trace_id`、`page`、`page_size`
+- ✅ `services/visualization/src/lib/query-params.ts` - 前端只发送支持的参数
+- ✅ `services/visualization/src/app/runs/page.tsx` - 页面只展示 `turn_id`、`session_id`、`trace_id` 筛选框
+- ✅ `services/visualization/src/lib/server/runtime-observe-client.ts` - 客户端正确传递参数
 
-**影响**:
-- 用户可能尝试使用 `workspace_id` / `task_id` 筛选轨迹，但后端不支持
-- 页面展示与实际能力不符，造成误导
+**结论**:
+- ✅ **前后端完全一致**，没有漂移问题
+- ✅ `workspaceId`、`taskId`、`threadId` 只作为返回数据的展示字段，不作为筛选参数
+- ✅ 文档、后端接口、前端实现三者保持一致
 
-**建议**:
-1. 审查 `runtime-observe-client.ts` 的查询参数构造逻辑
-2. 确认 retrieval-runtime 的观测接口实际支持的参数
-3. 移除前端所有未支持的筛选项
-4. 补充跨服务测试验证筛选参数一致性
+**误判原因**:
+- 混淆了"返回数据中的字段"和"查询筛选参数"
+- `RuntimeTurnRecord` 类型包含这些字段用于展示，但不用于筛选
 
 ---
 
@@ -331,18 +333,19 @@ runtime 和 storage 的分类规则应统一
 
 ### 整体评估
 
-当前文档质量：**良好**
+当前文档质量：**优秀**
 
 - 核心产品文档（product-baseline, memory-module-contract, architecture-independence）与代码**高度一致**
 - 主要漂移集中在**实现进度更新滞后**，而非设计方向偏离
-- 没有发现严重的"文档说有但代码没做"的情况
+- **没有发现严重的契约不一致或功能缺失**
 - 发现的漂移主要是"代码已做但文档未更新"
+- 原本标记为 P0 的筛选参数问题经验证为误判，前后端完全一致
 
 ### 关键发现
 
-1. **好消息**：核心架构契约稳定，代码严格遵守
-2. **需要关注**：round2 改进已实现但文档未更新
-3. **潜在风险**：scope 分类和 recent_context_summary 的跨服务一致性
+1. **好消息**：核心架构契约稳定，代码严格遵守，前后端接口完全一致
+2. **需要关注**：round2 改进已实现但文档未更新（已修正）
+3. **潜在风险**：scope 分类和 recent_context_summary 的跨服务一致性（需要长期关注）
 
 ### 下一步行动
 
