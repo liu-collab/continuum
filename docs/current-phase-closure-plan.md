@@ -296,6 +296,16 @@ runtime 要把“读哪类记忆”收成正式规则，而不是临时实现。
 - 冲突新候选和旧记录都会落成正式可治理对象
 - 冲突单会稳定记录 `pending_record_id` 和 `existing_record_id`
 
+**✅ 页面治理入口已完成（2026-04-19）**：
+
+- `visualization/src/features/memory-catalog/governance-panel.tsx` - 治理面板组件
+- `visualization/src/app/memories/[id]/page.tsx` - 记忆详情页集成治理面板
+- 支持的治理动作：`confirm`（确认）、`invalidate`（失效）、`archive`（归档）、`delete`（删除）
+- 用户可在 `/memories/[id]` 页面执行治理动作并填写原因
+
+**待确认**：
+- `edit`（修正）和 `restore_version`（恢复历史版本）的页面入口是否已实现
+
 ### 7.2 正式状态语义
 
 这次收口固定下面几种状态语义：

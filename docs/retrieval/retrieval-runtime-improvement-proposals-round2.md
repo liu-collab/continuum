@@ -25,11 +25,11 @@
 | 编号 | 标题 | 当前状态 | 优先级 | 类别 | 跨服务 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | R01 | `scope` 分类仲裁权统一 + 规则词表单一来源 | 待推进 | **P0** | 契约正确性 | ✓ storage |
-| R02 | 写回候选引入本地 `outbox`（待发送队列）与重试 | 待推进 | **P0** | 数据不丢失 | — |
+| R02 | 写回候选引入本地 `outbox`（待发送队列）与重试 | ✅ 已完成 | **P0** | 数据不丢失 | — |
 | R03 | `embedding`（向量）补刷机制的调度与观测收敛 | 已部分落地，仍可优化 | P2 | 召回质量 | ✓ storage |
 | R04 | `recent_context_summary`（最近上下文摘要）的契约约束 | 待推进 | P1 | 召回稳定性 | ✓ 所有宿主 |
-| R05 | 打分权重按 `phase`（阶段）配置 | 待推进 | P1 | 召回质量 | — |
-| R06 | `LLM extractor`（大模型抽取器）质量门 + `finalize` 幂等 | 待推进 | P2 | 成本 / 抗抖动 | — |
+| R05 | 打分权重按 `phase`（阶段）配置 | ✅ 已完成 | P1 | 召回质量 | — |
+| R06 | `LLM extractor`（大模型抽取器）质量门 + `finalize` 幂等 | ✅ 已完成（幂等部分） | P2 | 成本 / 抗抖动 | — |
 | R07 | 轨迹页的多 `phase` 叙事与字段映射收敛 | 待推进 | P2 | 可观测性 | ✓ visualization |
 
 补充说明：
@@ -68,33 +68,23 @@
 
 ### R02 - 写回候选引入本地 `outbox`（待发送队列）与重试
 
-**当前现状**：
+**✅ 已完成（2026-04-19）**
 
-- `finalizeTurn` 现在还是同步调用 storage 写回接口。
-- 如果 storage 超时、网络异常或返回错误，runtime 会给宿主返回 `dependency_unavailable`（依赖不可用），并把整次结果标记为 `degraded=true`。
-- 但这些候选不会在 runtime 本地持久化，也没有后续重试，所以这批候选会直接丢失。
+**实现位置**：
+- `migrations/0004_runtime_writeback_outbox.sql` - outbox 表结构
+- `src/writeback/writeback-outbox-flusher.ts` - 后台刷新器
+- `src/observability/postgres-runtime-repository.ts` - outbox CRUD 操作
 
-**为什么不合理**：
+**实现方案**：
+- ✅ `runtime_writeback_outbox` 表已创建，包含 `idempotency_key` 去重
+- ✅ `WritebackOutboxFlusher` 后台刷新器已实现
+- ✅ 支持 `pending` / `submitted` / `failed` 状态流转
+- ✅ 包含重试计数和错误记录
 
-- 这属于“瞬时依赖故障导致永久数据丢失”。
-- 对记忆系统来说，这个损失比一次响应慢更严重。
-
-**建议改动**：
-
-1. 在 `runtime_private` 增加 `writeback_outbox` 表，按 `idempotency_key` 去重存候选。
-2. `finalizeTurn` 改成两段：
-   - 先把候选写入本地 `outbox`
-   - 再走一次同步快路径提交 storage
-3. 快路径成功后把本地项标为 `submitted`；失败则保持 `pending`，由后台 `flusher`（刷新器）重试。
-4. 暴露最少三项指标：
-   - `outbox_pending_count`
-   - `outbox_dead_letter_count`
-   - `outbox_submit_latency_ms`
-
-**更稳的设计取向**：
-
-- 这里建议先做“本地表 + 同进程后台轮询”的朴素方案，不要一上来拆独立 worker。
-- 当前吞吐不高，先把“不丢数据”解决，比追求编排复杂度更重要。
+**设计选择**：
+- 采用”本地表 + 同进程后台轮询”的朴素方案
+- 快路径成功后标记为 `submitted`
+- 失败则保持 `pending`，由 flusher 定期重试
 
 ## 5. P1：召回质量与契约收敛
 
@@ -167,61 +157,47 @@
 
 ### R05 - 打分权重按 `phase`（阶段）配置
 
-**当前现状**：
+**✅ 已完成（2026-04-19）**
 
-- `query-engine.ts` 仍然使用固定权重：
+**实现位置**：
+- `src/query/query-engine.ts:39-53` - `weightsByPhase()` 函数
 
-```text
-semantic_score * 0.45
-+ importance     * 0.25
-+ confidence     * 0.15
-+ recency        * 0.10
-+ scope_boost    * 0.05
-```
+**实现方案**：
+- ✅ 已实现按 phase 的固定权重表
+- ✅ 权重配置如下：
+  - `session_start`: semantic 0.1 / importance 0.35 / confidence 0.2 / recency 0.05 / scope 0.3
+  - `task_start` / `task_switch`: semantic 0.3 / importance 0.3 / confidence 0.15 / recency 0.1 / scope 0.15
+  - `before_plan`: semantic 0.35 / importance 0.25 / confidence 0.15 / recency 0.15 / scope 0.1
+  - `before_response`: semantic 0.5 / importance 0.2 / confidence 0.15 / recency 0.1 / scope 0.05
+  - `after_response`: semantic 0.45 / importance 0.25 / confidence 0.15 / recency 0.1 / scope 0.05
 
-- 现在只有 `session` 的 `scopeBoost` 已经在第一轮里提升到了 `0.95`，但整套权重还没有按阶段区分。
-
-**为什么不合理**：
-
-- `session_start` 和 `before_response` 的信号强度根本不同，用同一组权重不够合理。
-
-**建议改动**：
-
-1. 先在代码里引入一份**固定的按阶段权重表**，种子值先明确写死，后续再按轨迹验证：
-
-```text
-session_start:   semantic 0.10 / importance 0.35 / confidence 0.20 / recency 0.05 / scope 0.30
-task_start:      semantic 0.30 / importance 0.30 / confidence 0.15 / recency 0.10 / scope 0.15
-task_switch:     semantic 0.30 / importance 0.30 / confidence 0.15 / recency 0.10 / scope 0.15
-before_plan:     semantic 0.35 / importance 0.25 / confidence 0.15 / recency 0.15 / scope 0.10
-before_response: semantic 0.50 / importance 0.20 / confidence 0.15 / recency 0.10 / scope 0.05
-```
-
-2. 默认值先放代码常量，不要一开始就做成环境变量里的大 JSON。
-3. 等线上轨迹积累后，再决定是否开放外部配置。
-
-**更稳的设计取向**：
-
-- 这里我更倾向于“代码常量 + 单测锁定”。
-- 不建议第一版就把任意浮点权重直接暴露成自由配置，否则排障成本会很高。
+**设计选择**：
+- 采用代码常量方式，不暴露为环境变量
+- 等线上轨迹积累后再决定是否开放外部配置
 
 ## 6. P2：质量、成本与可观测性
 
 ### R06 - `LLM extractor`（大模型抽取器）质量门 + `finalize` 幂等
 
-**当前现状**：
+**✅ 已完成（幂等部分，2026-04-19）**
 
-- `writeback-engine.ts` 现在是：
-  - 有 LLM 就先走 LLM 抽取
-  - LLM 失败再回退规则抽取
-- 但“LLM 成功返回了不靠谱内容”这条路径，还没有质量门。
-- `finalizeTurn` 也没有按 `turn_id` 做幂等缓存，所以同一轮重复提交时，LLM 调用成本会重复发生。
+**实现位置**：
+- `src/writeback/finalize-idempotency-cache.ts` - 幂等缓存实现
+- `src/runtime-service.ts` - 集成幂等缓存
 
-**为什么不合理**：
+**实现方案**：
+- ✅ `FinalizeIdempotencyCache` 已实现（进程内 LRU + TTL）
+- ✅ 基于 `session_id + turn_id + user_input hash` 的缓存键
+- ✅ 默认 TTL 和最大条目数可配置
+- ✅ 自动过期清理和容量控制
 
-- 这会同时带来两种损失：
-  - 伪记忆入库
-  - 弱网重放下的重复计费
+**设计选择**：
+- 采用进程内 LRU 缓存，避免引入 Redis 等新依赖
+- 适用于单实例部署场景
+- 如果未来进入多实例部署，再评估迁移到共享存储
+
+**待完成部分**：
+- ❌ LLM 抽取结果的质量门（校验候选摘要与输入上下文的重叠度）
 
 **建议改动**：
 

@@ -11,8 +11,8 @@
 
 ## 1. 基础启动
 
-- [未开始] `continuum start` 后，`storage`、`retrieval-runtime`、`visualization`、`memory-native-agent` 都能启动
-- [未开始] `continuum status` 能看到 `memory-native-agent` 状态
+- [人工复核] `continuum start` 后，`storage`、`retrieval-runtime`、`visualization`、`memory-native-agent` 都能启动
+- [人工复核] `continuum status` 能看到 `memory-native-agent` 状态
 - [自动化通过] `GET http://127.0.0.1:4193/healthz` 返回 200
 - [自动化通过] `GET http://127.0.0.1:4193/v1/agent/dependency-status` 能返回 runtime / provider / mcp 状态
 
