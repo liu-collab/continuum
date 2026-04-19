@@ -46,6 +46,7 @@ export class ReadModelProjector {
       summary_embedding: embeddingResult.embedding,
       embedding_status: embeddingResult.embedding ? "ok" : "pending",
       embedding_attempted_at: new Date().toISOString(),
+      embedding_attempt_count: 1,
     };
 
     await this.repository.upsert(entry);
@@ -74,6 +75,7 @@ export class ReadModelProjector {
             summary_embedding: embeddings[index] ?? null,
             embedding_status: embeddings[index] ? "ok" : "failed",
             embedding_attempted_at: new Date().toISOString(),
+            embedding_attempt_count: (entry.embedding_attempt_count ?? 0) + 1,
           }),
         ),
       );
@@ -85,6 +87,7 @@ export class ReadModelProjector {
             ...entry,
             embedding_status: "pending",
             embedding_attempted_at: new Date().toISOString(),
+            embedding_attempt_count: (entry.embedding_attempt_count ?? 0) + 1,
           }),
         ),
       );

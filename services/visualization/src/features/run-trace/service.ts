@@ -24,6 +24,17 @@ type RunAggregate = {
   dependencyStatus: RuntimeDependencyRecord[];
 };
 
+type PhaseAggregate = {
+  phase: string;
+  turn?: RuntimeTurnRecord;
+  triggerRun?: RuntimeTriggerRecord;
+  recallRun?: RuntimeRecallRecord;
+  injectionRun?: RuntimeInjectionRecord;
+  writeBackRun?: RuntimeWritebackRecord;
+};
+
+const phasePriority = ["before_response", "before_plan", "task_switch", "task_start", "session_start", "after_response"];
+
 function uniqueScopes(scopes: Scope[]) {
   return Array.from(new Set(scopes));
 }
@@ -51,9 +62,10 @@ function summarizeRecall(run?: RuntimeRecallRecord) {
 }
 
 function summarizeScopes(detail: RunAggregate) {
-  const triggerRun = detail.triggerRuns[0];
-  const recallRun = detail.recallRuns[0];
-  const injectionRun = detail.injectionRuns[0];
+  const primary = pickPrimaryPhase(detail);
+  const triggerRun = primary?.triggerRun;
+  const recallRun = primary?.recallRun;
+  const injectionRun = primary?.injectionRun;
 
   const requested = triggerRun?.requestedScopes ?? recallRun?.requestedScopes ?? [];
   const selected = injectionRun?.selectedScopes ?? recallRun?.selectedScopes ?? [];
@@ -63,6 +75,46 @@ function summarizeScopes(detail: RunAggregate) {
   }
 
   return `请求作用域：${formatScopeList(requested)}；最终选择：${formatScopeList(selected)}。`;
+}
+
+function groupByPhase(detail: RunAggregate): PhaseAggregate[] {
+  const phases = new Set(
+    [
+      ...detail.turns.map((item) => item.phase),
+      ...detail.triggerRuns.map((item) => item.phase),
+      ...detail.recallRuns.map((item) => item.phase),
+      ...detail.injectionRuns.map((item) => item.phase),
+      ...detail.writeBackRuns.map((item) => item.phase)
+    ].filter((item): item is string => Boolean(item))
+  );
+
+  return Array.from(phases)
+    .map((phase) => ({
+      phase,
+      turn: detail.turns.find((item) => item.phase === phase),
+      triggerRun: detail.triggerRuns.find((item) => item.phase === phase),
+      recallRun: detail.recallRuns.find((item) => item.phase === phase),
+      injectionRun: detail.injectionRuns.find((item) => item.phase === phase),
+      writeBackRun: detail.writeBackRuns.find((item) => item.phase === phase)
+    }))
+    .sort((left, right) => {
+      const leftIndex = phasePriority.indexOf(left.phase);
+      const rightIndex = phasePriority.indexOf(right.phase);
+      if (leftIndex === -1 && rightIndex === -1) {
+        return right.phase.localeCompare(left.phase);
+      }
+      if (leftIndex === -1) {
+        return 1;
+      }
+      if (rightIndex === -1) {
+        return -1;
+      }
+      return leftIndex - rightIndex;
+    });
+}
+
+function pickPrimaryPhase(detail: RunAggregate) {
+  return groupByPhase(detail)[0];
 }
 
 function groupByTrace(data: RuntimeObserveRunsSnapshot) {
@@ -104,10 +156,11 @@ function groupByTrace(data: RuntimeObserveRunsSnapshot) {
 }
 
 export function buildNarrative(detail: RunAggregate) {
-  const triggerRun = detail.triggerRuns[0];
-  const recallRun = detail.recallRuns[0];
-  const injectionRun = detail.injectionRuns[0];
-  const writeBackRun = detail.writeBackRuns[0];
+  const primary = pickPrimaryPhase(detail);
+  const triggerRun = primary?.triggerRun;
+  const recallRun = primary?.recallRun;
+  const injectionRun = primary?.injectionRun;
+  const writeBackRun = primary?.writeBackRun;
   const incomplete =
     detail.triggerRuns.length === 0 ||
     detail.recallRuns.length === 0 ||
@@ -197,91 +250,92 @@ export function buildNarrative(detail: RunAggregate) {
 }
 
 function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
-  const turn = detail.turn;
-  const triggerRun = detail.triggerRuns[0];
-  const recallRun = detail.recallRuns[0];
-  const injectionRun = detail.injectionRuns[0];
-  const writeBackRun = detail.writeBackRuns[0];
+  const phases = groupByPhase(detail);
 
-  return [
-    {
-      key: "turn",
-      title: "Turn",
-      summary: `Turn ${turn.turnId ?? turn.traceId} 运行在 ${turn.phase ?? "未知阶段"}。`,
-      details: [
-        `Session：${turn.sessionId ?? "未记录"}`,
-        `当前输入：${turn.currentInput ?? "未记录"}`,
-        `助手输出：${turn.assistantOutput ?? "未记录"}`
-      ]
-    },
-    {
-      key: "trigger",
-      title: "Trigger",
-      summary: triggerRun?.triggerHit
-        ? `${memoryModeSummary(triggerRun.memoryMode)} 触发条件已命中。原因：${triggerRun.triggerReason ?? "运行时记录到了触发命中"}。`
-        : `这一轮没有触发。${triggerRun?.triggerReason ?? "未记录触发原因。"} `,
-      details: [
-        `请求作用域：${formatScopeList(triggerRun?.requestedScopes ?? [])}`,
-        `选中作用域：${formatScopeList(triggerRun?.selectedScopes ?? [])}`,
-        triggerRun?.scopeDecision ?? "未记录作用域决策说明。"
-      ]
-    },
-    {
-      key: "recall",
-      title: "Recall",
-      summary: summarizeRecall(recallRun),
-      details: [
-        `记忆模式：${memoryModeSummary(recallRun?.memoryMode)}`,
-        `请求作用域：${formatScopeList(recallRun?.requestedScopes ?? [])}`,
-        `选中作用域：${formatScopeList(recallRun?.selectedScopes ?? [])}`,
-        ...(recallRun?.scopeHitCounts.map(
-          (item) => `${scopeLabel(item.scope)} 命中：${item.count}`
-        ) ?? []),
-        recallRun?.emptyReason ?? "未记录空召回说明。"
-      ]
-    },
-    {
-      key: "injection",
-      title: "Injection",
-      summary: injectionRun?.injected
-        ? injectionRun.memorySummary ?? "注入已完成。"
-        : injectionRun?.resultState ?? "未记录注入阶段",
-      details: [
-        `选中作用域：${formatScopeList(injectionRun?.selectedScopes ?? [])}`,
-        `保留记录：${injectionRun?.keptRecordIds.join(", ") || "未记录"}`,
-        `裁剪记录：${injectionRun?.trimmedRecordIds.join(", ") || "未记录"}`,
-        `裁剪原因：${injectionRun?.trimReasons.join(", ") || "未记录"}`
-      ]
-    },
-    {
-      key: "writeback",
-      title: "Write-back",
-      summary: writeBackRun
-        ? `写回状态：${writeBackRun.resultState}。${memoryModeSummary(writeBackRun.memoryMode)}`
-        : "未记录写回阶段。",
-      details: [
-        `已提交作业：${writeBackRun?.submittedJobIds.join(", ") || "未记录"}`,
-        `候选摘要：${writeBackRun?.candidateSummaries.join(" | ") || "未记录"}`,
-        ...(writeBackRun?.scopeDecisions.map(
-          (item) => `${scopeLabel(item.scope)} x${item.count}：${item.reason}`
-        ) ?? []),
-        `过滤原因：${writeBackRun?.filteredReasons.join(", ") || "未记录"}`
-      ]
-    }
-  ];
+  return phases.flatMap((phase) => {
+    const turn = phase.turn ?? detail.turn;
+    return [
+      {
+        key: "turn" as const,
+        title: `Turn / ${phase.phase}`,
+        summary: `Turn ${turn.turnId ?? turn.traceId} 运行在 ${phase.phase}。`,
+        details: [
+          `Session：${turn.sessionId ?? "未记录"}`,
+          `当前输入：${turn.currentInput ?? "未记录"}`,
+          `助手输出：${turn.assistantOutput ?? "未记录"}`
+        ]
+      },
+      {
+        key: "trigger" as const,
+        title: `Trigger / ${phase.phase}`,
+        summary: phase.triggerRun?.triggerHit
+          ? `${memoryModeSummary(phase.triggerRun.memoryMode)} 触发条件已命中。原因：${phase.triggerRun.triggerReason ?? "运行时记录到了触发命中"}。`
+          : `这一阶段没有触发。${phase.triggerRun?.triggerReason ?? "未记录触发原因。"} `,
+        details: [
+          `请求作用域：${formatScopeList(phase.triggerRun?.requestedScopes ?? [])}`,
+          `选中作用域：${formatScopeList(phase.triggerRun?.selectedScopes ?? [])}`,
+          phase.triggerRun?.scopeDecision ?? "未记录作用域决策说明。"
+        ]
+      },
+      {
+        key: "recall" as const,
+        title: `Recall / ${phase.phase}`,
+        summary: summarizeRecall(phase.recallRun),
+        details: [
+          `记忆模式：${memoryModeSummary(phase.recallRun?.memoryMode)}`,
+          `请求作用域：${formatScopeList(phase.recallRun?.requestedScopes ?? [])}`,
+          `命中作用域：${formatScopeList(phase.recallRun?.selectedScopes ?? [])}`,
+          ...(phase.recallRun?.scopeHitCounts.map(
+            (item) => `${scopeLabel(item.scope)} 命中：${item.count}`
+          ) ?? []),
+          phase.recallRun?.emptyReason ?? "未记录空召回说明。"
+        ]
+      },
+      {
+        key: "injection" as const,
+        title: `Injection / ${phase.phase}`,
+        summary: phase.injectionRun?.injected
+          ? phase.injectionRun.memorySummary ?? "注入已完成。"
+          : phase.injectionRun?.resultState ?? "未记录注入阶段",
+        details: [
+          `选中作用域：${formatScopeList(phase.injectionRun?.selectedScopes ?? [])}`,
+          `保留记录：${phase.injectionRun?.keptRecordIds.join(", ") || "未记录"}`,
+          `裁剪记录：${phase.injectionRun?.trimmedRecordIds.join(", ") || "未记录"}`,
+          `裁剪原因：${phase.injectionRun?.trimReasons.join(", ") || "未记录"}`
+        ]
+      },
+      {
+        key: "writeback" as const,
+        title: `Write-back / ${phase.phase}`,
+        summary: phase.writeBackRun
+          ? `写回状态：${phase.writeBackRun.resultState}。${memoryModeSummary(phase.writeBackRun.memoryMode)}`
+          : "未记录写回阶段。",
+        details: [
+          `已提交作业：${phase.writeBackRun?.submittedJobIds.join(", ") || "未记录"}`,
+          `候选摘要：${phase.writeBackRun?.candidateSummaries.join(" | ") || "未记录"}`,
+          ...(phase.writeBackRun?.scopeDecisions.map(
+            (item) => `${scopeLabel(item.scope)} x${item.count}：${item.reason}`
+          ) ?? []),
+          `过滤原因：${phase.writeBackRun?.filteredReasons.join(", ") || "未记录"}`
+        ]
+      }
+    ];
+  });
 }
 
 function buildListItem(detail: RunAggregate) {
-  const triggerRun = detail.triggerRuns[0];
-  const recallRun = detail.recallRuns[0];
-  const injectionRun = detail.injectionRuns[0];
-  const writeBackRun = detail.writeBackRuns[0];
+  const primary = pickPrimaryPhase(detail);
+  const triggerRun = primary?.triggerRun;
+  const recallRun = primary?.recallRun;
+  const injectionRun = primary?.injectionRun;
+  const writeBackRun = primary?.writeBackRun;
+  const turn = primary?.turn ?? detail.turn;
 
   return {
-    turnId: detail.turn.turnId ?? detail.turn.traceId,
+    turnId: turn.turnId ?? detail.turn.traceId,
     traceId: detail.turn.traceId,
-    phase: detail.turn.phase,
-    createdAt: detail.turn.createdAt,
+    phase: primary?.phase ?? turn.phase,
+    createdAt: turn.createdAt,
     memoryMode:
       triggerRun?.memoryMode ??
       recallRun?.memoryMode ??
@@ -297,8 +351,8 @@ function buildListItem(detail: RunAggregate) {
     writeBackStatus: writeBackRun?.resultState ?? "not_recorded",
     degraded: recallRun?.degraded ?? writeBackRun?.degraded ?? false,
     summary:
-      detail.turn.currentInput ??
-      detail.turn.assistantOutput ??
+      turn.currentInput ??
+      turn.assistantOutput ??
       "这一轮没有记录输入或输出摘要。"
   };
 }

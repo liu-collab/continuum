@@ -175,4 +175,21 @@ describe("storage domain rules", () => {
 
     expect(normalized.scope).toBe("workspace");
   });
+
+  it("treats chinese workspace signals as workspace scope during final arbitration", () => {
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        scope: "user",
+        details: {
+          rule_kind: "repo_constraint",
+          rule_value: "这个仓库提交前要跑接口测试",
+          repo_path: "services/storage",
+        },
+        summary: "这个仓库提交前要跑接口测试",
+        write_reason: "项目规则来自仓库文档",
+      }),
+    );
+
+    expect(normalized.scope).toBe("workspace");
+  });
 });

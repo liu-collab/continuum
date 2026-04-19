@@ -22,6 +22,7 @@ describe("runtime observe contract parsing", () => {
         trigger_runs: [
           {
             trace_id: "trace-1",
+            phase: "before_response",
             trigger_hit: true,
             trigger_type: "history_reference",
             trigger_reason: "current input explicitly references prior context or preferences",
@@ -36,9 +37,14 @@ describe("runtime observe contract parsing", () => {
         recall_runs: [
           {
             trace_id: "trace-1",
+            phase: "before_response",
             trigger_hit: true,
             trigger_type: "history_reference",
             trigger_reason: "reason",
+            matched_scopes: ["user"],
+            scope_hit_counts: {
+              user: 1
+            },
             query_scope: "scope=user",
             requested_memory_types: ["fact_preference"],
             candidate_count: 2,
@@ -52,6 +58,7 @@ describe("runtime observe contract parsing", () => {
         injection_runs: [
           {
             trace_id: "trace-1",
+            phase: "before_response",
             injected: true,
             injected_count: 1,
             token_estimate: 90,
@@ -65,6 +72,7 @@ describe("runtime observe contract parsing", () => {
         writeback_submissions: [
           {
             trace_id: "trace-1",
+            phase: "after_response",
             candidate_count: 1,
             submitted_count: 1,
             filtered_count: 0,
@@ -88,6 +96,8 @@ describe("runtime observe contract parsing", () => {
     expect(snapshot.turns[0]?.turnId).toBe("turn-1");
     expect(snapshot.triggerRuns[0]?.requestedTypes).toEqual(["fact_preference"]);
     expect(snapshot.recallRuns[0]?.selectedCount).toBe(1);
+    expect(snapshot.recallRuns[0]?.selectedScopes).toEqual(["user"]);
+    expect(snapshot.recallRuns[0]?.scopeHitCounts).toEqual([{ scope: "user", count: 1 }]);
     expect(snapshot.injectionRuns[0]?.trimmedRecordIds).toEqual(["memory-2"]);
     expect(snapshot.writeBackRuns[0]?.resultState).toBe("submitted");
     expect(snapshot.dependencyStatus[0]?.name).toBe("read_model");
@@ -114,6 +124,7 @@ describe("runtime observe contract parsing", () => {
       trigger_runs: [
         {
           trace_id: "t1",
+          phase: "before_response",
           trigger_hit: true,
           trigger_type: "phase",
           trigger_reason: "before_response is mandatory",
@@ -131,9 +142,12 @@ describe("runtime observe contract parsing", () => {
       recall_runs: [
         {
           trace_id: "t1",
+          phase: "before_response",
           trigger_hit: true,
           trigger_type: "phase",
           trigger_reason: "before_response is mandatory",
+          matched_scopes: ["user", "workspace"],
+          scope_hit_counts: { user: 1, workspace: 1 },
           query_scope: "user",
           requested_memory_types: ["fact_preference"],
           candidate_count: 5,
@@ -148,6 +162,7 @@ describe("runtime observe contract parsing", () => {
       injection_runs: [
         {
           trace_id: "t1",
+          phase: "before_response",
           injected: true,
           injected_count: 2,
           token_estimate: 120,
@@ -161,6 +176,7 @@ describe("runtime observe contract parsing", () => {
       writeback_submissions: [
         {
           trace_id: "t1",
+          phase: "after_response",
           candidate_count: 1,
           submitted_count: 1,
           filtered_count: 0,
@@ -217,7 +233,8 @@ describe("runtime observe contract parsing", () => {
     expect(snapshot.recallRuns[0]).toMatchObject({
       selectedCount: 2,
       candidateCount: 5,
-      queryScope: "user"
+      queryScope: "user",
+      selectedScopes: ["user", "workspace"]
     });
     expect(snapshot.injectionRuns[0]).toMatchObject({
       injected: true,

@@ -277,6 +277,7 @@ describe("governance flow", () => {
           summary_embedding: null,
           embedding_status: "pending",
           embedding_attempted_at: null,
+          embedding_attempt_count: 1,
         },
       ],
     });

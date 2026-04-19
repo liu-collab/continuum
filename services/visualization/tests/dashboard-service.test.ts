@@ -43,7 +43,10 @@ fetchRuntimeMetricsMock.mockImplementation(async () => ({
     trimRate: 0.1,
     recallP95Ms: 200,
     injectionP95Ms: 50,
-    writeBackSubmitRate: 0.4
+    writeBackSubmitRate: 0.4,
+    outboxPendingCount: 1,
+    outboxDeadLetterCount: 0,
+    outboxSubmitLatencyMs: 25
   }
 }));
 
@@ -91,7 +94,10 @@ fetchStorageMetricsMock.mockImplementation(async () => ({
     conflictRate: 0.05,
     deadLetterJobs: 0,
     refreshFailureRate: 0.01,
-    writeP95Ms: 220
+    writeP95Ms: 220,
+    newPendingEmbeddingRecords: 1,
+    retryPendingEmbeddingRecords: 2,
+    oldestPendingEmbeddingAgeSeconds: 180
   }
 }));
 
@@ -328,6 +334,14 @@ describe("dashboard window selection", () => {
   it("keeps the requested 24h trend window", async () => {
     const result = await getDashboard("24h");
     expect(result.trendWindow).toBe("24h");
+  });
+
+  it("includes runtime outbox and storage pending embedding metrics", async () => {
+    const result = await getDashboard("30m");
+
+    expect(result.retrievalMetrics.some((item) => item.key === "runtime_outbox_pending_count")).toBe(true);
+    expect(result.storageMetrics.some((item) => item.key === "new_pending_embedding_records")).toBe(true);
+    expect(result.storageMetrics.some((item) => item.key === "oldest_pending_embedding_age_seconds")).toBe(true);
   });
 
   it("does not fetch runtime or storage metrics twice for trend comparison", async () => {

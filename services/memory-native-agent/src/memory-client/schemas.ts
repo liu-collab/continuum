@@ -148,6 +148,7 @@ export const writeBackCandidateSchema = z.object({
     source_ref: z.string(),
     service_name: z.string(),
     confirmed_by_user: z.boolean().optional(),
+    extraction_method: z.string().optional(),
   }),
   idempotency_key: z.string(),
 });

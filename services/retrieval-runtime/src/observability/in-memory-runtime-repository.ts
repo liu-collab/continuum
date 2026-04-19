@@ -8,6 +8,7 @@ import type {
   RecallRunRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
 import { nowIso, percentile } from "../shared/utils.js";
@@ -28,6 +29,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly recallRuns: RecallRunRecord[] = [];
   private readonly injectionRuns: InjectionRunRecord[] = [];
   private readonly writebackSubmissions: WritebackSubmissionRecord[] = [];
+  private readonly writebackOutbox: WritebackOutboxRecord[] = [];
   private readonly dependencies: Map<DependencyStatus["name"], DependencyStatus> = new Map([
     ["read_model", defaultDependencyStatus("read_model")],
     ["embeddings", defaultDependencyStatus("embeddings")],
@@ -69,6 +71,102 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
 
   async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {
     this.upsertByTraceAndPhase(this.writebackSubmissions, run);
+  }
+
+  async enqueueWritebackOutbox(records: Array<{
+    trace_id: string;
+    session_id: string;
+    turn_id?: string;
+    candidate: WritebackOutboxRecord["candidate"];
+    idempotency_key: string;
+    next_retry_at: string;
+  }>): Promise<WritebackOutboxRecord[]> {
+    const created: WritebackOutboxRecord[] = [];
+    for (const record of records) {
+      const existing = this.writebackOutbox.find((entry) => entry.idempotency_key === record.idempotency_key);
+      if (existing) {
+        created.push(existing);
+        continue;
+      }
+
+      const next: WritebackOutboxRecord = {
+        id: `outbox-${this.writebackOutbox.length + 1}`,
+        trace_id: record.trace_id,
+        session_id: record.session_id,
+        turn_id: record.turn_id,
+        candidate: record.candidate,
+        idempotency_key: record.idempotency_key,
+        status: "pending",
+        retry_count: 0,
+        next_retry_at: record.next_retry_at,
+        created_at: nowIso(),
+        updated_at: nowIso(),
+      };
+      this.writebackOutbox.unshift(next);
+      created.push(next);
+    }
+    return created;
+  }
+
+  async markWritebackOutboxSubmitted(ids: string[], submittedAt: string): Promise<void> {
+    const idSet = new Set(ids);
+    for (const record of this.writebackOutbox) {
+      if (idSet.has(record.id)) {
+        record.status = "submitted";
+        record.submitted_at = submittedAt;
+        record.updated_at = submittedAt;
+      }
+    }
+  }
+
+  async claimPendingWritebackOutbox(limit: number, now: string): Promise<WritebackOutboxRecord[]> {
+    return this.writebackOutbox
+      .filter((record) => record.status === "pending" && Date.parse(record.next_retry_at) <= Date.parse(now))
+      .sort((left, right) => Date.parse(left.created_at) - Date.parse(right.created_at))
+      .slice(0, limit);
+  }
+
+  async requeueWritebackOutbox(id: string, nextRetryAt: string, lastError: string): Promise<void> {
+    const record = this.writebackOutbox.find((entry) => entry.id === id);
+    if (!record) {
+      return;
+    }
+    record.retry_count += 1;
+    record.last_error = lastError;
+    record.next_retry_at = nextRetryAt;
+    record.updated_at = nowIso();
+  }
+
+  async markWritebackOutboxDeadLetter(id: string, lastError: string): Promise<void> {
+    const record = this.writebackOutbox.find((entry) => entry.id === id);
+    if (!record) {
+      return;
+    }
+    record.retry_count += 1;
+    record.last_error = lastError;
+    record.status = "dead_letter";
+    record.updated_at = nowIso();
+  }
+
+  async getWritebackOutboxMetrics(now: string): Promise<{
+    pending_count: number;
+    dead_letter_count: number;
+    submit_latency_ms: number;
+  }> {
+    const submitted = this.writebackOutbox.filter((record) => record.status === "submitted" && record.submitted_at);
+    const submitLatencyMs =
+      submitted.length === 0
+        ? 0
+        : Math.round(
+            submitted.reduce((sum, record) => {
+              return sum + (Date.parse(record.submitted_at!) - Date.parse(record.created_at));
+            }, 0) / submitted.length,
+          );
+    return {
+      pending_count: this.writebackOutbox.filter((record) => record.status === "pending" && Date.parse(record.next_retry_at) <= Date.parse(now)).length,
+      dead_letter_count: this.writebackOutbox.filter((record) => record.status === "dead_letter").length,
+      submit_latency_ms: submitLatencyMs,
+    };
   }
 
   async findTraceIdByTurn(input: {
@@ -165,6 +263,18 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       writeback_submission_rate: writebackCount === 0 ? 0 : submitted / writebackCount,
       query_p95_ms: percentile(this.recallRuns.map((run) => run.duration_ms), 0.95),
       injection_p95_ms: percentile(this.injectionRuns.map((run) => run.duration_ms), 0.95),
+      outbox_pending_count: this.writebackOutbox.filter((record) => record.status === "pending").length,
+      outbox_dead_letter_count: this.writebackOutbox.filter((record) => record.status === "dead_letter").length,
+      outbox_submit_latency_ms: (() => {
+        const submittedOutbox = this.writebackOutbox.filter((record) => record.status === "submitted" && record.submitted_at);
+        if (submittedOutbox.length === 0) {
+          return 0;
+        }
+        return Math.round(
+          submittedOutbox.reduce((sum, record) => sum + (Date.parse(record.submitted_at!) - Date.parse(record.created_at)), 0) /
+            submittedOutbox.length,
+        );
+      })(),
     };
   }
 

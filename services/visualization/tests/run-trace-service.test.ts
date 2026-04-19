@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNarrative, describeRunTraceEmptyState } from "@/features/run-trace/service";
+import { buildNarrative, buildPhaseNarratives, describeRunTraceEmptyState } from "@/features/run-trace/service";
 import { RunTraceResponse } from "@/lib/contracts";
 
 describe("run trace narrative", () => {
@@ -40,6 +40,7 @@ describe("run trace narrative", () => {
       triggerRuns: [
         {
           traceId: "trace-1",
+          phase: "before_response",
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",
@@ -59,6 +60,7 @@ describe("run trace narrative", () => {
       recallRuns: [
         {
           traceId: "trace-1",
+          phase: "before_response",
           triggerType: "history_reference",
           triggerHit: true,
           triggerReason: "reason",
@@ -90,6 +92,7 @@ describe("run trace narrative", () => {
       triggerRuns: [
         {
           traceId: "trace-1",
+          phase: "before_response",
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",
@@ -109,6 +112,7 @@ describe("run trace narrative", () => {
       recallRuns: [
         {
           traceId: "trace-1",
+          phase: "before_response",
           triggerType: "history_reference",
           triggerHit: true,
           triggerReason: "reason",
@@ -135,6 +139,7 @@ describe("run trace narrative", () => {
       injectionRuns: [
         {
           traceId: "trace-1",
+          phase: "before_response",
           injected: false,
           injectedCount: 0,
           memoryMode: "workspace_plus_global" as const,
@@ -154,6 +159,7 @@ describe("run trace narrative", () => {
       writeBackRuns: [
         {
           traceId: "trace-1",
+          phase: "after_response",
           memoryMode: "workspace_plus_global" as const,
           resultState: "submitted",
           candidateCount: 1,
@@ -174,6 +180,92 @@ describe("run trace narrative", () => {
     });
 
     expect(narrative.outcomeCode).toBe("found_but_not_injected");
+  });
+
+  it("builds phase narratives for each recorded phase instead of collapsing to the first item", () => {
+    const narratives = buildPhaseNarratives({
+      ...baseDetail,
+      turns: [
+        {
+          ...baseDetail.turn,
+          phase: "task_start",
+          currentInput: "开始任务"
+        },
+        {
+          ...baseDetail.turn,
+          phase: "before_response",
+          currentInput: "继续回答"
+        }
+      ],
+      triggerRuns: [
+        {
+          traceId: "trace-1",
+          phase: "task_start",
+          triggerHit: true,
+          triggerType: "phase",
+          triggerReason: "task_start is mandatory",
+          memoryMode: "workspace_plus_global",
+          requestedTypes: ["fact_preference"],
+          requestedScopes: ["workspace"],
+          selectedScopes: [],
+          scopeDecision: "phase trigger",
+          scopeLimit: [],
+          importanceThreshold: 3,
+          cooldownApplied: false,
+          semanticScore: null,
+          durationMs: 10,
+          createdAt: null
+        },
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          triggerHit: true,
+          triggerType: "history_reference",
+          triggerReason: "history reference",
+          memoryMode: "workspace_plus_global",
+          requestedTypes: ["fact_preference"],
+          requestedScopes: ["workspace", "user"],
+          selectedScopes: [],
+          scopeDecision: "history trigger",
+          scopeLimit: [],
+          importanceThreshold: 3,
+          cooldownApplied: false,
+          semanticScore: null,
+          durationMs: 10,
+          createdAt: null
+        }
+      ],
+      recallRuns: [
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          triggerType: "history_reference",
+          triggerHit: true,
+          triggerReason: "reason",
+          memoryMode: "workspace_plus_global",
+          requestedTypes: ["fact_preference"],
+          requestedScopes: ["workspace", "user"],
+          selectedScopes: ["user"],
+          scopeHitCounts: [{ scope: "user", count: 1 }],
+          selectedRecordIds: ["memory-1"],
+          queryScope: "scope=user",
+          candidateCount: 1,
+          selectedCount: 1,
+          resultState: "matched",
+          emptyReason: null,
+          durationMs: 12,
+          degraded: false,
+          degradationReason: null,
+          createdAt: null
+        }
+      ],
+      injectionRuns: [],
+      writeBackRuns: [],
+      dependencyStatus: []
+    });
+
+    expect(narratives.some((item) => item.title === "Turn / task_start")).toBe(true);
+    expect(narratives.some((item) => item.title === "Recall / before_response")).toBe(true);
   });
 });
 

@@ -8,6 +8,7 @@ import type {
   RecallRunRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
 import type { RuntimeRepository } from "./runtime-repository.js";
@@ -46,6 +47,41 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
 
   async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {
     await this.tryPrimaryOrFallback((repository) => repository.recordWritebackSubmission(run));
+  }
+
+  async enqueueWritebackOutbox(records: Array<{
+    trace_id: string;
+    session_id: string;
+    turn_id?: string;
+    candidate: WritebackOutboxRecord["candidate"];
+    idempotency_key: string;
+    next_retry_at: string;
+  }>): Promise<WritebackOutboxRecord[]> {
+    return this.tryRead((repository) => repository.enqueueWritebackOutbox(records));
+  }
+
+  async markWritebackOutboxSubmitted(ids: string[], submittedAt: string): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.markWritebackOutboxSubmitted(ids, submittedAt));
+  }
+
+  async claimPendingWritebackOutbox(limit: number, now: string): Promise<WritebackOutboxRecord[]> {
+    return this.tryRead((repository) => repository.claimPendingWritebackOutbox(limit, now));
+  }
+
+  async requeueWritebackOutbox(id: string, nextRetryAt: string, lastError: string): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.requeueWritebackOutbox(id, nextRetryAt, lastError));
+  }
+
+  async markWritebackOutboxDeadLetter(id: string, lastError: string): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.markWritebackOutboxDeadLetter(id, lastError));
+  }
+
+  async getWritebackOutboxMetrics(now: string): Promise<{
+    pending_count: number;
+    dead_letter_count: number;
+    submit_latency_ms: number;
+  }> {
+    return this.tryRead((repository) => repository.getWritebackOutboxMetrics(now));
   }
 
   async findTraceIdByTurn(input: {

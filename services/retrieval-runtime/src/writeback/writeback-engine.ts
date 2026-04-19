@@ -3,18 +3,15 @@ import { createHash } from "node:crypto";
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { FinalizeTurnInput, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
-import { normalizeText } from "../shared/utils.js";
+import { jaccardOverlap, normalizeText } from "../shared/utils.js";
 import type { LlmExtractionCandidate, LlmExtractor } from "./llm-extractor.js";
 import type { StorageWritebackClient } from "./storage-client.js";
 
 export interface WritebackEngineResult {
   candidates: WriteBackCandidate[];
-  submitted_jobs: SubmittedWriteBackJob[];
   filtered_count: number;
   filtered_reasons: string[];
   scope_reasons: string[];
-  degraded: boolean;
-  degradation_reason?: string;
 }
 
 interface CandidateDraft {
@@ -28,6 +25,7 @@ interface CandidateDraft {
   source_type: string;
   source_ref: string;
   confirmed_by_user?: boolean;
+  extraction_method: "rules" | "llm";
 }
 
 interface ClassifiedDraft extends CandidateDraft {
@@ -67,6 +65,7 @@ function buildCandidate(
       source_ref: draft.source_ref,
       service_name: "retrieval-runtime",
       ...(draft.confirmed_by_user !== undefined ? { confirmed_by_user: draft.confirmed_by_user } : {}),
+      extraction_method: draft.extraction_method,
     },
     idempotency_key: idempotencyKey,
   };
@@ -136,6 +135,7 @@ export class WritebackEngine {
         source_type: "host_user_input",
         source_ref: input.turn_id ?? input.session_id,
         confirmed_by_user: true,
+        extraction_method: "rules",
       });
     } else if (normalizedUser.length > 0) {
       filteredReasons.push("no_stable_preference_detected");
@@ -153,6 +153,7 @@ export class WritebackEngine {
         write_reason: "assistant produced a confirmed durable fact",
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
+        extraction_method: "rules",
       });
     } else {
       filteredReasons.push("no_confirmed_fact_detected");
@@ -170,6 +171,7 @@ export class WritebackEngine {
         write_reason: "assistant updated task progress or next-step state",
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
+        extraction_method: "rules",
       });
     } else if (input.task_id) {
       filteredReasons.push("no_task_state_update_detected");
@@ -190,6 +192,7 @@ export class WritebackEngine {
         write_reason: "assistant made a concrete commitment that may matter later",
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
+        extraction_method: "rules",
       });
     } else {
       filteredReasons.push("no_commitment_detected");
@@ -210,6 +213,7 @@ export class WritebackEngine {
         write_reason: "tool summary indicates an externally observable event",
         source_type: "tool_trace_summary",
         source_ref: input.turn_id ?? input.session_id,
+        extraction_method: "rules",
       });
     } else if (normalizedTools.length > 0) {
       filteredReasons.push("tool_summary_below_threshold");
@@ -237,6 +241,18 @@ export class WritebackEngine {
       .filter((candidate): candidate is WriteBackCandidate => {
         if (!candidate) {
           return false;
+        }
+
+        const extractionMethod = candidate.source.extraction_method;
+        if (extractionMethod === "llm") {
+          const overlap = jaccardOverlap(
+            candidate.summary,
+            [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" "),
+          );
+          if (overlap < this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD) {
+            filteredReasons.push(`low_input_overlap:${candidate.candidate_type}`);
+            return false;
+          }
         }
 
         if (candidate.summary.length < 4) {
@@ -300,6 +316,7 @@ export class WritebackEngine {
       source_type: "writeback_llm",
       source_ref: input.turn_id ?? input.session_id,
       confirmed_by_user: candidate.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
+      extraction_method: "llm",
     };
   }
 
@@ -318,10 +335,42 @@ export class WritebackEngine {
     if (draft.candidate_type === "task_state") {
       return {
         ...draft,
-        scope: input.task_id ? "task" : "workspace",
+        scope: draft.scope === "task" && input.task_id ? "task" : input.task_id ? "task" : "workspace",
         scope_reason: input.task_id
           ? "task_state candidates are stored as task memory when task_id is available"
           : "task_state without task_id falls back to workspace memory",
+      };
+    }
+
+    if (draft.scope === "user") {
+      return {
+        ...draft,
+        scope: "user",
+        scope_reason: "upstream explicitly marked this candidate as user scope",
+      };
+    }
+
+    if (draft.scope === "session") {
+      return {
+        ...draft,
+        scope: "session",
+        scope_reason: "upstream explicitly marked this candidate as session scope",
+      };
+    }
+
+    if (draft.scope === "task" && input.task_id) {
+      return {
+        ...draft,
+        scope: "task",
+        scope_reason: "upstream explicitly marked this candidate as task scope",
+      };
+    }
+
+    if (draft.scope === "workspace") {
+      return {
+        ...draft,
+        scope: "workspace",
+        scope_reason: "upstream explicitly marked this candidate as workspace scope",
       };
     }
 
@@ -361,22 +410,30 @@ export class WritebackEngine {
 
     return {
       ...draft,
-      scope: "workspace",
-      scope_reason: "uncertain candidates default to workspace memory to avoid leaking project context into global memory",
+      scope: draft.scope,
+      scope_reason: "runtime keeps the suggested scope when no stronger local hint is available",
     };
   }
 
   async submit(input: FinalizeTurnInput): Promise<WritebackEngineResult> {
     const extraction = await this.extractCandidates(input);
     const { candidates, filtered_count, filtered_reasons, scope_reasons } = extraction;
+    return {
+      candidates,
+      filtered_count,
+      filtered_reasons,
+      scope_reasons,
+    };
+  }
+
+  async submitCandidates(candidates: WriteBackCandidate[]): Promise<
+    | { ok: true; submitted_jobs: SubmittedWriteBackJob[] }
+    | { ok: false; submitted_jobs: SubmittedWriteBackJob[]; degradation_reason: string }
+  > {
     if (candidates.length === 0) {
       return {
-        candidates: [],
+        ok: true,
         submitted_jobs: [],
-        filtered_count,
-        filtered_reasons,
-        scope_reasons: [],
-        degraded: false,
       };
     }
 
@@ -388,27 +445,19 @@ export class WritebackEngine {
 
     if (!writebackResult.ok) {
       return {
-        candidates,
+        ok: false,
         submitted_jobs: candidates.map((candidate) => ({
           candidate_summary: candidate.summary,
           status: "dependency_unavailable",
           reason: writebackResult.error?.message,
         })),
-        filtered_count,
-        filtered_reasons,
-        scope_reasons,
-        degraded: true,
         degradation_reason: writebackResult.error?.code ?? "dependency_unavailable",
       };
     }
 
     return {
-      candidates,
+      ok: true,
       submitted_jobs: writebackResult.value ?? [],
-      filtered_count,
-      filtered_reasons,
-      scope_reasons,
-      degraded: false,
     };
   }
 }

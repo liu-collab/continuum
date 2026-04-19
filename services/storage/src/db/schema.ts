@@ -199,6 +199,9 @@ export const memoryReadModel = sharedSchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
     summaryEmbedding: vector("summary_embedding"),
+    embeddingStatus: text("embedding_status").default("ok").notNull(),
+    embeddingAttemptedAt: timestamp("embedding_attempted_at", { withTimezone: true }),
+    embeddingAttemptCount: integer("embedding_attempt_count").default(0).notNull(),
   },
   (table) => [
     index("memory_read_model_scope_idx").on(

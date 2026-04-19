@@ -63,3 +63,50 @@ export function percentile(values: number[], ratio: number): number {
   const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
   return sorted[index] ?? 0;
 }
+
+export function tokenizeForOverlap(text: string): string[] {
+  const normalized = normalizeText(text).toLowerCase();
+  const tokens: string[] = [];
+
+  for (const rawToken of normalized.split(/[^a-z0-9\u4e00-\u9fff]+/i)) {
+    const token = rawToken.trim();
+    if (!token) {
+      continue;
+    }
+
+    if (/^[\u4e00-\u9fff]+$/u.test(token)) {
+      if (token.length >= 2) {
+        tokens.push(token);
+      }
+      for (let index = 0; index < token.length - 1; index += 1) {
+        tokens.push(token.slice(index, index + 2));
+      }
+      continue;
+    }
+
+    if (token.length >= 2) {
+      tokens.push(token);
+    }
+  }
+
+  return tokens;
+}
+
+export function jaccardOverlap(left: string, right: string): number {
+  const leftTokens = new Set(tokenizeForOverlap(left));
+  const rightTokens = new Set(tokenizeForOverlap(right));
+
+  if (leftTokens.size === 0 || rightTokens.size === 0) {
+    return 0;
+  }
+
+  let intersection = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union === 0 ? 0 : intersection / union;
+}

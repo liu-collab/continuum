@@ -44,6 +44,14 @@ export interface RetrievalQuery {
   candidate_limit: number;
 }
 
+export interface PhaseScoringWeights {
+  semantic: number;
+  importance: number;
+  confidence: number;
+  recency: number;
+  scope: number;
+}
+
 export interface CandidateMemory {
   id: string;
   workspace_id: string;
@@ -135,8 +143,25 @@ export interface WriteBackCandidate {
     source_ref: string;
     service_name: string;
     confirmed_by_user?: boolean;
+    extraction_method?: string;
   };
   idempotency_key: string;
+}
+
+export interface WritebackOutboxRecord {
+  id: string;
+  trace_id: string;
+  session_id: string;
+  turn_id?: string;
+  candidate: WriteBackCandidate;
+  idempotency_key: string;
+  status: "pending" | "submitted" | "dead_letter";
+  retry_count: number;
+  last_error?: string;
+  next_retry_at: string;
+  created_at: string;
+  updated_at: string;
+  submitted_at?: string;
 }
 
 export interface SubmittedWriteBackJob {
@@ -328,4 +353,7 @@ export interface ObserveMetricsResponse {
   writeback_submission_rate: number;
   query_p95_ms: number;
   injection_p95_ms: number;
+  outbox_pending_count: number;
+  outbox_dead_letter_count: number;
+  outbox_submit_latency_ms: number;
 }

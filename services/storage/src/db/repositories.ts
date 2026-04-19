@@ -664,13 +664,13 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
               id, workspace_id, user_id, task_id, session_id, memory_type, scope, status,
               summary, details, importance, confidence, source,
               last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding,
-              embedding_status, embedding_attempted_at
+              embedding_status, embedding_attempted_at, embedding_attempt_count
             )
           values
             (
               $1, $2, $3, $4, $5, $6, $7, $8,
               $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-              $15, $16, $17, $18, $19::vector, $20, $21
+              $15, $16, $17, $18, $19::vector, $20, $21, $22
             )
           on conflict (id) do update
           set workspace_id = excluded.workspace_id,
@@ -691,7 +691,8 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
               updated_at = excluded.updated_at,
               summary_embedding = excluded.summary_embedding,
               embedding_status = excluded.embedding_status,
-              embedding_attempted_at = excluded.embedding_attempted_at
+              embedding_attempted_at = excluded.embedding_attempted_at,
+              embedding_attempt_count = excluded.embedding_attempt_count
         `,
         [
           entry.id,
@@ -714,6 +715,7 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
           entry.summary_embedding ? `[${entry.summary_embedding.join(",")}]` : null,
           entry.embedding_status ?? "ok",
           entry.embedding_attempted_at ?? null,
+          entry.embedding_attempt_count ?? 0,
         ],
       );
     },
@@ -877,7 +879,25 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
         `),
         session.query(`
           select
-            count(*) filter (where embedding_status = 'pending')::int as pending_embedding_records
+            count(*) filter (where embedding_status = 'pending')::int as pending_embedding_records,
+            count(*) filter (
+              where embedding_status = 'pending'
+                and coalesce(embedding_attempt_count, 0) <= 1
+            )::int as new_pending_embedding_records,
+            count(*) filter (
+              where embedding_status = 'pending'
+                and coalesce(embedding_attempt_count, 0) > 1
+            )::int as retry_pending_embedding_records,
+            coalesce(
+              max(
+                extract(
+                  epoch from (
+                    now() - coalesce(embedding_attempted_at, updated_at, created_at)
+                  )
+                )
+              ) filter (where embedding_status = 'pending'),
+              0
+            )::int as oldest_pending_embedding_age_seconds
           from ${tableName(session.sharedSchema, "memory_read_model_v1")}
         `),
       ]);
@@ -1001,6 +1021,7 @@ function mapReadModel(row: Record<string, unknown>): ReadModelEntry {
     summary_embedding: parseVector(row.summary_embedding),
     embedding_status: nullableString(row.embedding_status) as ReadModelEntry["embedding_status"],
     embedding_attempted_at: nullableIsoString(row.embedding_attempted_at),
+    embedding_attempt_count: Number(row.embedding_attempt_count ?? 0),
   };
 }
 

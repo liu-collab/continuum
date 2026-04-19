@@ -11,7 +11,9 @@ import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
 import { TriggerEngine } from "./trigger/trigger-engine.js";
 import { HttpLlmExtractor } from "./writeback/llm-extractor.js";
+import { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
+import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js";
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
 
@@ -28,6 +30,8 @@ async function main() {
   const embeddingsClient = new HttpEmbeddingsClient(config);
   const storageClient = new HttpStorageWritebackClient(config);
   const llmExtractor = config.WRITEBACK_LLM_BASE_URL ? new HttpLlmExtractor(config) : undefined;
+  const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
+  const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
 
   const runtimeService = new RetrievalRuntimeService(
     new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
@@ -37,11 +41,16 @@ async function main() {
     repository,
     dependencyGuard,
     logger,
+    finalizeIdempotencyCache,
   );
 
   const app = createApp(runtimeService);
+  app.addHook("onClose", async () => {
+    outboxFlusher.stop();
+  });
 
   try {
+    outboxFlusher.start();
     await app.listen({ host: config.HOST, port: config.PORT });
     logger.info({ host: config.HOST, port: config.PORT }, "retrieval-runtime listening");
   } catch (error) {

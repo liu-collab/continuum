@@ -2,7 +2,7 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { CandidateMemory, RetrievalQuery, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
+import type { CandidateMemory, PhaseScoringWeights, RetrievalQuery, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import { clamp, cosineSimilarity, normalizeText, truncateFromTail } from "../shared/utils.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
@@ -34,6 +34,22 @@ function scopeBoost(scope: ScopeType, context: TriggerContext): number {
     return 0.8;
   }
   return 0.6;
+}
+
+function weightsByPhase(phase: TriggerContext["phase"]): PhaseScoringWeights {
+  switch (phase) {
+    case "session_start":
+      return { semantic: 0.1, importance: 0.35, confidence: 0.2, recency: 0.05, scope: 0.3 };
+    case "task_start":
+    case "task_switch":
+      return { semantic: 0.3, importance: 0.3, confidence: 0.15, recency: 0.1, scope: 0.15 };
+    case "before_plan":
+      return { semantic: 0.35, importance: 0.25, confidence: 0.15, recency: 0.15, scope: 0.1 };
+    case "before_response":
+      return { semantic: 0.5, importance: 0.2, confidence: 0.15, recency: 0.1, scope: 0.05 };
+    case "after_response":
+      return { semantic: 0.45, importance: 0.25, confidence: 0.15, recency: 0.1, scope: 0.05 };
+  }
 }
 
 function buildSemanticQueryText(context: TriggerContext): string {
@@ -120,12 +136,13 @@ export class QueryEngine {
           queryEmbedding && candidate.summary_embedding
             ? clamp(cosineSimilarity(queryEmbedding, candidate.summary_embedding), 0, 1)
             : 0;
+        const weights = weightsByPhase(context.phase);
         const score =
-          semanticScore * 0.45 +
-          clamp(candidate.importance / 5, 0, 1) * 0.25 +
-          clamp(candidate.confidence, 0, 1) * 0.15 +
-          recencyScore(candidate.updated_at) * 0.1 +
-          scopeBoost(candidate.scope, context) * 0.05;
+          semanticScore * weights.semantic +
+          clamp(candidate.importance / 5, 0, 1) * weights.importance +
+          clamp(candidate.confidence, 0, 1) * weights.confidence +
+          recencyScore(candidate.updated_at) * weights.recency +
+          scopeBoost(candidate.scope, context) * weights.scope;
 
         return {
           ...candidate,

@@ -493,6 +493,26 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "产生并成功提交写回候选的轮次占比。"
       ),
       metric(
+        "runtime_outbox_pending_count",
+        "运行时待补提交",
+        runtimeCurrent.metrics?.outboxPendingCount ?? null,
+        "count",
+        "runtime",
+        "同步快路径失败后仍留在 runtime 本地 outbox 的候选数。",
+        1,
+        5
+      ),
+      metric(
+        "runtime_outbox_dead_letter_count",
+        "运行时死信候选",
+        runtimeCurrent.metrics?.outboxDeadLetterCount ?? null,
+        "count",
+        "runtime",
+        "runtime outbox 重试耗尽后进入死信的候选数。",
+        1,
+        3
+      ),
+      metric(
         "global_scope_share",
         "全局记忆占比",
         totalSelectedScopeHits > 0 ? globalScopeHits / totalSelectedScopeHits : null,
@@ -594,6 +614,36 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "存储侧写入处理的 P95 延迟。",
         1000,
         1500
+      ),
+      metric(
+        "new_pending_embedding_records",
+        "新待补向量数",
+        storageCurrent.metrics?.newPendingEmbeddingRecords ?? null,
+        "count",
+        "storage",
+        "首次 embedding 失败后进入 pending 的读模型记录数。",
+        1,
+        10
+      ),
+      metric(
+        "retry_pending_embedding_records",
+        "重试待补向量数",
+        storageCurrent.metrics?.retryPendingEmbeddingRecords ?? null,
+        "count",
+        "storage",
+        "多次补刷后仍停留在 pending 的读模型记录数。",
+        1,
+        5
+      ),
+      metric(
+        "oldest_pending_embedding_age_seconds",
+        "最老待补向量时长",
+        storageCurrent.metrics?.oldestPendingEmbeddingAgeSeconds ?? null,
+        "count",
+        "storage",
+        "当前最老一条 pending 向量记录已经等待的秒数。",
+        60,
+        300
       )
     ];
 

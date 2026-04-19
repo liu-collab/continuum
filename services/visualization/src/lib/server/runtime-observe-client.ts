@@ -21,6 +21,9 @@ export type RuntimeMetricsSnapshot = {
   recallP95Ms: number | null;
   injectionP95Ms: number | null;
   writeBackSubmitRate: number | null;
+  outboxPendingCount: number | null;
+  outboxDeadLetterCount: number | null;
+  outboxSubmitLatencyMs: number | null;
 };
 
 export type RuntimeObserveRunsSnapshot = {
@@ -49,6 +52,7 @@ export type RuntimeTurnRecord = {
 
 export type RuntimeTriggerRecord = {
   traceId: string;
+  phase: string | null;
   triggerHit: boolean;
   triggerType: string | null;
   triggerReason: string | null;
@@ -67,6 +71,7 @@ export type RuntimeTriggerRecord = {
 
 export type RuntimeRecallRecord = {
   traceId: string;
+  phase: string | null;
   triggerHit: boolean;
   triggerType: string | null;
   triggerReason: string | null;
@@ -92,6 +97,7 @@ export type RuntimeRecallRecord = {
 
 export type RuntimeInjectionRecord = {
   traceId: string;
+  phase: string | null;
   injected: boolean;
   injectedCount: number;
   memoryMode: "workspace_only" | "workspace_plus_global" | null;
@@ -110,6 +116,7 @@ export type RuntimeInjectionRecord = {
 
 export type RuntimeWritebackRecord = {
   traceId: string;
+  phase: string | null;
   memoryMode: "workspace_only" | "workspace_plus_global" | null;
   candidateCount: number;
   submittedCount: number;
@@ -196,6 +203,58 @@ function toScopes(values: string[]) {
   );
 }
 
+function toScopeHitCounts(record: Record<string, unknown>) {
+  const arrayValue = pickArray(record, "scope_hit_counts", "scopeHitCounts");
+
+  if (arrayValue.length > 0) {
+    return arrayValue
+      .map((item) => {
+        const scopeRecord = asRecord(item);
+
+        if (!scopeRecord) {
+          return null;
+        }
+
+        const scope = toScopes([pickString(scopeRecord, "scope") ?? ""])[0];
+
+        if (!scope) {
+          return null;
+        }
+
+        return {
+          scope,
+          count: pickNumber(scopeRecord, "count") ?? 0
+        };
+      })
+      .filter(
+        (item): item is { scope: "session" | "task" | "user" | "workspace"; count: number } =>
+          Boolean(item)
+      );
+  }
+
+  const objectValue = asRecord(record.scope_hit_counts ?? record.scopeHitCounts);
+  if (!objectValue) {
+    return [];
+  }
+
+  return Object.entries(objectValue)
+    .map(([scopeKey, countValue]) => {
+      const scope = toScopes([scopeKey])[0];
+      if (!scope) {
+        return null;
+      }
+
+      return {
+        scope,
+        count: typeof countValue === "number" ? countValue : Number(countValue ?? 0)
+      };
+    })
+    .filter(
+      (item): item is { scope: "session" | "task" | "user" | "workspace"; count: number } =>
+        Boolean(item)
+    );
+}
+
 function toMemoryMode(
   value: string | null
 ): "workspace_only" | "workspace_plus_global" | null {
@@ -238,6 +297,7 @@ function mapTriggerRun(value: unknown): RuntimeTriggerRecord | null {
 
   return {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    phase: pickNullableString(record, "phase"),
     triggerHit: pickBoolean(record, "trigger_hit", "triggerHit") ?? false,
     triggerType: pickNullableString(record, "trigger_type", "triggerType"),
     triggerReason: pickNullableString(record, "trigger_reason", "triggerReason"),
@@ -269,6 +329,7 @@ function mapRecallRun(value: unknown): RuntimeRecallRecord | null {
 
   return {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    phase: pickNullableString(record, "phase"),
     triggerHit: pickBoolean(record, "trigger_hit", "triggerHit") ?? false,
     triggerType: pickNullableString(record, "trigger_type", "triggerType"),
     triggerReason: pickNullableString(record, "trigger_reason", "triggerReason"),
@@ -277,29 +338,10 @@ function mapRecallRun(value: unknown): RuntimeRecallRecord | null {
       pickStringArray(record, "requested_memory_types", "requestedTypes")
     ),
     requestedScopes: toScopes(pickStringArray(record, "requested_scopes", "requestedScopes")),
-    selectedScopes: toScopes(pickStringArray(record, "selected_scopes", "selectedScopes")),
-    scopeHitCounts: pickArray(record, "scope_hit_counts", "scopeHitCounts")
-      .map((item) => {
-        const scopeRecord = asRecord(item);
-
-        if (!scopeRecord) {
-          return null;
-        }
-
-        const scope = toScopes([
-          pickString(scopeRecord, "scope") ?? ""
-        ])[0];
-
-        if (!scope) {
-          return null;
-        }
-
-        return {
-          scope,
-          count: pickNumber(scopeRecord, "count") ?? 0
-        };
-      })
-      .filter((item): item is { scope: "session" | "task" | "user" | "workspace"; count: number } => Boolean(item)),
+    selectedScopes: toScopes(
+      pickStringArray(record, "matched_scopes", "matchedScopes", "selected_scopes", "selectedScopes")
+    ),
+    scopeHitCounts: toScopeHitCounts(record),
     selectedRecordIds: pickStringArray(record, "selected_record_ids", "selectedRecordIds"),
     queryScope: pickNullableString(record, "query_scope", "queryScope"),
     candidateCount: pickNumber(record, "candidate_count", "candidateCount") ?? 0,
@@ -322,6 +364,7 @@ function mapInjectionRun(value: unknown): RuntimeInjectionRecord | null {
 
   return {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    phase: pickNullableString(record, "phase"),
     injected: pickBoolean(record, "injected") ?? false,
     injectedCount: pickNumber(record, "injected_count", "injectedCount") ?? 0,
     memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
@@ -348,6 +391,7 @@ function mapWriteBackRun(value: unknown): RuntimeWritebackRecord | null {
 
   return {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    phase: pickNullableString(record, "phase"),
     memoryMode: toMemoryMode(pickNullableString(record, "memory_mode", "memoryMode")),
     candidateCount: pickNumber(record, "candidate_count", "candidateCount") ?? 0,
     submittedCount: pickNumber(record, "submitted_count", "submittedCount") ?? 0,
@@ -456,7 +500,10 @@ export async function fetchRuntimeMetrics() {
         "writeback_submission_rate",
         "write_back_submit_rate",
         "writeBackSubmitRate"
-      ])
+      ]),
+      outboxPendingCount: readMetric(record, ["outbox_pending_count", "outboxPendingCount"]),
+      outboxDeadLetterCount: readMetric(record, ["outbox_dead_letter_count", "outboxDeadLetterCount"]),
+      outboxSubmitLatencyMs: readMetric(record, ["outbox_submit_latency_ms", "outboxSubmitLatencyMs"])
     }
   };
 }

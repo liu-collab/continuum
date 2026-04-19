@@ -142,9 +142,15 @@ export function classifyCandidateScope(
       "repository",
       "project",
       "workspace",
+      "仓库",
+      "项目",
+      "工作区",
+      "目录",
       "toolchain",
       "directory",
       "constraint",
+      "约束",
+      "规则",
       "rule",
     ])
   ) {
@@ -153,7 +159,7 @@ export function classifyCandidateScope(
 
   if (
     explicitSessionSignals ||
-    containsAny(signalText, ["temporary", "session", "current turn", "expires"])
+    containsAny(signalText, ["temporary", "session", "current turn", "expires", "临时", "本轮", "当前会话"])
   ) {
     return candidate.session_id ? "session" : "workspace";
   }
@@ -169,6 +175,12 @@ export function classifyCandidateScope(
       "constraint",
       "response",
       "user",
+      "偏好",
+      "习惯",
+      "风格",
+      "长期",
+      "用户",
+      "默认",
     ])
   ) {
     return "user";

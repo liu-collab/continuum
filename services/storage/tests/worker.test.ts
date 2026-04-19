@@ -242,6 +242,7 @@ describe("job worker", () => {
           summary_embedding: null,
           embedding_status: "pending",
           embedding_attempted_at: new Date().toISOString(),
+          embedding_attempt_count: 1,
         },
       ],
     });
@@ -269,6 +270,67 @@ describe("job worker", () => {
     const projected = await repositories.readModel.findById("pending-embedding-record");
     expect(projected?.summary_embedding).toEqual([0.1, 0.2, 0.3]);
     expect(projected?.embedding_status).toBe("ok");
+  });
+
+  it("splits pending embedding metrics into new and retry buckets", async () => {
+    const now = Date.now();
+    const repositories = createMemoryRepositories({
+      readModel: [
+        {
+          id: "pending-new",
+          workspace_id: "11111111-1111-4111-8111-111111111111",
+          user_id: "22222222-2222-4222-8222-222222222222",
+          task_id: null,
+          session_id: null,
+          memory_type: "fact_preference",
+          scope: "user",
+          status: "active",
+          summary: "新待补刷记录",
+          details: { subject: "user" },
+          importance: 5,
+          confidence: 0.9,
+          source: null,
+          last_confirmed_at: null,
+          last_used_at: null,
+          created_at: new Date(now - 30_000).toISOString(),
+          updated_at: new Date(now - 30_000).toISOString(),
+          summary_embedding: null,
+          embedding_status: "pending",
+          embedding_attempted_at: new Date(now - 20_000).toISOString(),
+          embedding_attempt_count: 1,
+        },
+        {
+          id: "pending-retry",
+          workspace_id: "11111111-1111-4111-8111-111111111111",
+          user_id: "22222222-2222-4222-8222-222222222222",
+          task_id: null,
+          session_id: null,
+          memory_type: "fact_preference",
+          scope: "user",
+          status: "active",
+          summary: "重试后仍待补刷记录",
+          details: { subject: "user" },
+          importance: 5,
+          confidence: 0.9,
+          source: null,
+          last_confirmed_at: null,
+          last_used_at: null,
+          created_at: new Date(now - 120_000).toISOString(),
+          updated_at: new Date(now - 120_000).toISOString(),
+          summary_embedding: null,
+          embedding_status: "pending",
+          embedding_attempted_at: new Date(now - 90_000).toISOString(),
+          embedding_attempt_count: 3,
+        },
+      ],
+    });
+
+    const metrics = await repositories.metrics.collect();
+
+    expect(metrics.pending_embedding_records).toBe(2);
+    expect(metrics.new_pending_embedding_records).toBe(1);
+    expect(metrics.retry_pending_embedding_records).toBe(1);
+    expect(metrics.oldest_pending_embedding_age_seconds).toBeGreaterThanOrEqual(80);
   });
 
   it("does not duplicate a user memory when written from another workspace", async () => {

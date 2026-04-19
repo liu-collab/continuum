@@ -13,6 +13,7 @@ import { RetrievalRuntimeService } from "../src/runtime-service.js";
 import type { CandidateMemory, SubmittedWriteBackJob, WriteBackCandidate } from "../src/shared/types.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
 import type { LlmExtractionResult, LlmExtractor } from "../src/writeback/llm-extractor.js";
+import { FinalizeIdempotencyCache } from "../src/writeback/finalize-idempotency-cache.js";
 import type { StorageWritebackClient } from "../src/writeback/storage-client.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
 
@@ -32,6 +33,12 @@ const baseConfig: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_TIMEOUT_MS: 5000,
   WRITEBACK_MAX_CANDIDATES: 3,
+  WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5_000,
+  WRITEBACK_OUTBOX_BATCH_SIZE: 50,
+  WRITEBACK_OUTBOX_MAX_RETRIES: 5,
+  FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
+  FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
+  WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
   QUERY_TIMEOUT_MS: 50,
   STORAGE_TIMEOUT_MS: 50,
   EMBEDDING_TIMEOUT_MS: 50,
@@ -139,9 +146,12 @@ class StubEmbeddingsClient implements EmbeddingsClient {
 }
 
 class StubStorageClient implements StorageWritebackClient {
+  public callCount = 0;
+
   constructor(private readonly jobs: SubmittedWriteBackJob[] = [], private readonly shouldFail = false) {}
 
   async submitCandidates(candidates: WriteBackCandidate[]): Promise<SubmittedWriteBackJob[]> {
+    this.callCount += 1;
     if (this.shouldFail) {
       throw new Error("storage unavailable");
     }
@@ -182,6 +192,7 @@ function createRuntime(overrides?: {
   const embeddingsClient = overrides?.embeddingsClient ?? new StubEmbeddingsClient();
   const storageClient = overrides?.storageClient ?? new StubStorageClient();
   const config = { ...baseConfig, ...overrides?.config };
+  const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
 
   const service = new RetrievalRuntimeService(
     new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
@@ -191,9 +202,10 @@ function createRuntime(overrides?: {
     repository,
     dependencyGuard,
     logger,
+    finalizeIdempotencyCache,
   );
 
-  return { service, repository };
+  return { service, repository, storageClient };
 }
 
 describe("retrieval-runtime service", () => {
@@ -328,7 +340,7 @@ describe("retrieval-runtime service", () => {
       workspace_id: ids.workspace,
       user_id: ids.user,
       session_id: ids.session,
-      current_input: "后续都用中文",
+      current_input: "后续都用中文输出",
       assistant_output: "收到，我会统一改成中文输出。",
     });
 
@@ -396,8 +408,8 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: ids.session,
       task_id: ids.task,
-      current_input: "继续",
-      assistant_output: "好的",
+      current_input: "继续补齐运行时分页接口，默认使用中文输出，并记录上一轮已经确认桥接脚本可用",
+      assistant_output: "好的，我会继续补齐运行时分页接口，默认使用中文输出。",
     });
 
     expect(response.write_back_candidates).toHaveLength(2);
@@ -405,7 +417,7 @@ describe("retrieval-runtime service", () => {
   });
 
   it("returns degraded writeback result when storage dependency is unavailable", async () => {
-    const { service } = createRuntime({
+    const { service, repository } = createRuntime({
       storageClient: new StubStorageClient([], true),
     });
 
@@ -420,6 +432,7 @@ describe("retrieval-runtime service", () => {
 
     expect(response.degraded).toBe(true);
     expect(response.submitted_jobs[0]?.status).toBe("dependency_unavailable");
+    expect((await repository.getMetrics()).outbox_pending_count).toBeGreaterThan(0);
   });
 
   it("does not read global user memory in workspace_only mode", async () => {
@@ -596,7 +609,7 @@ describe("retrieval-runtime service", () => {
   });
 
   it("does not mark writeback as submitted when storage dependency is unavailable", async () => {
-    const { service } = createRuntime({
+    const { service, repository } = createRuntime({
       storageClient: new StubStorageClient([], true),
     });
 
@@ -611,9 +624,51 @@ describe("retrieval-runtime service", () => {
 
     expect(response.degraded).toBe(true);
     expect(response.writeback_submitted).toBe(false);
+    expect((await repository.getMetrics()).outbox_pending_count).toBeGreaterThan(0);
   });
 
-  it("classifies stable preferences as user scope and project rules as workspace scope", async () => {
+  it("marks outbox entries as submitted after fast-path writeback succeeds", async () => {
+    const { service, repository } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    });
+
+    expect(response.writeback_submitted).toBe(true);
+    const metrics = await repository.getMetrics();
+    expect(metrics.outbox_pending_count).toBe(0);
+    expect(metrics.outbox_submit_latency_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  it("reuses finalize response from short-lived idempotency cache", async () => {
+    const storageClient = new StubStorageClient();
+    const { service } = createRuntime({
+      storageClient,
+    });
+
+    const request = {
+      host: "claude_code_plugin" as const,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-idempotent",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    };
+
+    const first = await service.finalizeTurn(request);
+    const second = await service.finalizeTurn(request);
+
+    expect(first).toEqual(second);
+    expect(storageClient.callCount).toBe(1);
+  });
+
+  it("keeps upstream scope suggestions for llm candidates and leaves final arbitration to storage", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({
         candidates: [
@@ -642,11 +697,11 @@ describe("retrieval-runtime service", () => {
       workspace_id: ids.workspace,
       user_id: ids.user,
       session_id: ids.session,
-      current_input: "继续",
-      assistant_output: "好的",
+      current_input: "默认使用中文输出，仓库规则是提交前必须跑接口测试",
+      assistant_output: "好的，我会按这个约定继续处理。",
     });
 
-    expect(response.write_back_candidates.map((candidate) => candidate.scope)).toEqual(["user", "workspace"]);
+    expect(response.write_back_candidates.map((candidate) => candidate.scope)).toEqual(["workspace", "workspace"]);
   });
 
   it("serves public HTTP endpoints with stable response shapes", async () => {

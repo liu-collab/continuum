@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
@@ -19,6 +19,7 @@ import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
+import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
@@ -37,6 +38,7 @@ export class RetrievalRuntimeService {
     private readonly repository: RuntimeRepository,
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
+    private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
   ) {}
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
@@ -235,6 +237,19 @@ export class RetrievalRuntimeService {
       ...input,
       memory_mode: resolveMemoryMode(input.memory_mode),
     };
+    const finalizeCacheKey = createHash("sha256")
+      .update(
+        JSON.stringify({
+          session_id: normalizedInput.session_id,
+          turn_id: normalizedInput.turn_id ?? null,
+          current_input: normalizedInput.current_input,
+        }),
+      )
+      .digest("hex");
+    const cached = await this.finalizeIdempotencyCache?.get(finalizeCacheKey);
+    if (cached) {
+      return cached;
+    }
     const traceId =
       normalizedInput.turn_id
         ? (await this.repository.findTraceIdByTurn({
@@ -259,42 +274,79 @@ export class RetrievalRuntimeService {
       created_at: nowIso(),
     });
 
-    const result = await this.writebackEngine.submit(normalizedInput);
+    const extraction = await this.writebackEngine.submit(normalizedInput);
+
+    let submittedJobs = extraction.candidates.map((candidate) => ({
+      candidate_summary: candidate.summary,
+      status: "accepted_async",
+    })) as FinalizeTurnResponse["submitted_jobs"];
+    let degraded = false;
+    let degradationReason: string | undefined;
+
+    if (extraction.candidates.length > 0) {
+      const now = nowIso();
+      const outboxRows = await this.repository.enqueueWritebackOutbox(
+        extraction.candidates.map((candidate) => ({
+          trace_id: traceId,
+          session_id: normalizedInput.session_id,
+          turn_id: normalizedInput.turn_id,
+          candidate,
+          idempotency_key: candidate.idempotency_key,
+          next_retry_at: now,
+        })),
+      );
+
+      const writebackResult = await this.writebackEngine.submitCandidates(extraction.candidates);
+
+      if (writebackResult.ok) {
+        submittedJobs = writebackResult.submitted_jobs;
+        await this.repository.markWritebackOutboxSubmitted(
+          outboxRows.map((row) => row.id),
+          now,
+        );
+      } else {
+        degraded = true;
+        degradationReason = writebackResult.degradation_reason;
+        submittedJobs = writebackResult.submitted_jobs;
+      }
+    }
 
     await this.repository.recordWritebackSubmission({
       trace_id: traceId,
       phase: "after_response",
-      candidate_count: result.candidates.length,
-      submitted_count: result.submitted_jobs.filter((job) => job.status !== "dependency_unavailable" && job.status !== "rejected").length,
+      candidate_count: extraction.candidates.length,
+      submitted_count: submittedJobs.filter((job) => job.status !== "dependency_unavailable" && job.status !== "rejected").length,
       memory_mode: normalizedInput.memory_mode,
-      final_scopes: [...new Set(result.candidates.map((candidate) => candidate.scope))],
-      filtered_count: result.filtered_count,
-      filtered_reasons: result.filtered_reasons,
-      scope_reasons: result.scope_reasons,
+      final_scopes: [...new Set(extraction.candidates.map((candidate) => candidate.scope))],
+      filtered_count: extraction.filtered_count,
+      filtered_reasons: extraction.filtered_reasons,
+      scope_reasons: extraction.scope_reasons,
       result_state:
-        result.candidates.length === 0
+        extraction.candidates.length === 0
           ? "no_candidates"
-          : result.degraded
+          : degraded
             ? "failed"
             : "submitted",
-      degraded: result.degraded,
-      degradation_reason: result.degradation_reason,
+      degraded,
+      degradation_reason: degradationReason,
       duration_ms: Date.now() - startedAt,
       created_at: nowIso(),
     });
 
-    return {
+    const response = {
       trace_id: traceId,
-      write_back_candidates: result.candidates,
-      submitted_jobs: result.submitted_jobs,
+      write_back_candidates: extraction.candidates,
+      submitted_jobs: submittedJobs,
       memory_mode: normalizedInput.memory_mode,
-      candidate_count: result.candidates.length,
-      filtered_count: result.filtered_count,
-      filtered_reasons: result.filtered_reasons,
-      writeback_submitted: result.submitted_jobs.some((job) => isWritebackAccepted(job.status)),
-      degraded: result.degraded,
+      candidate_count: extraction.candidates.length,
+      filtered_count: extraction.filtered_count,
+      filtered_reasons: extraction.filtered_reasons,
+      writeback_submitted: submittedJobs.some((job) => isWritebackAccepted(job.status)),
+      degraded,
       dependency_status: await this.dependencyGuard.snapshot(),
     };
+    await this.finalizeIdempotencyCache?.set(finalizeCacheKey, response);
+    return response;
   }
 
   async getLiveness(): Promise<{ status: "alive" }> {

@@ -406,6 +406,19 @@ export function createMemoryRepositories(
           (job) => job.job_status === "succeeded" && job.error_message === "embedding_unavailable",
         ).length,
         pending_embedding_records: state.readModel.filter((record) => record.embedding_status === "pending").length,
+        new_pending_embedding_records: state.readModel.filter(
+          (record) => record.embedding_status === "pending" && (record.embedding_attempt_count ?? 0) <= 1,
+        ).length,
+        retry_pending_embedding_records: state.readModel.filter(
+          (record) => record.embedding_status === "pending" && (record.embedding_attempt_count ?? 0) > 1,
+        ).length,
+        oldest_pending_embedding_age_seconds: state.readModel
+          .filter((record) => record.embedding_status === "pending")
+          .reduce((maxAge, record) => {
+            const baseTime = record.embedding_attempted_at ?? record.updated_at ?? record.created_at;
+            const ageSeconds = Math.max(0, Math.floor((Date.now() - new Date(baseTime).getTime()) / 1000));
+            return Math.max(maxAge, ageSeconds);
+          }, 0),
       };
     },
   };
@@ -455,5 +468,6 @@ export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBa
       ...baseSource,
       ...overrides?.source,
     },
+    idempotency_key: overrides?.idempotency_key ?? "fact-pref-user-prefers-concise-answers",
   };
 }

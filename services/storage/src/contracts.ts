@@ -363,6 +363,7 @@ export interface ReadModelEntry {
   summary_embedding: number[] | null;
   embedding_status: "ok" | "pending" | "failed";
   embedding_attempted_at: string | null;
+  embedding_attempt_count: number;
 }
 
 export interface StorageMetrics {
@@ -384,6 +385,9 @@ export interface StorageMetrics {
   projector_dead_letter_jobs: number;
   projector_embedding_degraded_jobs: number;
   pending_embedding_records: number;
+  new_pending_embedding_records: number;
+  retry_pending_embedding_records: number;
+  oldest_pending_embedding_age_seconds: number;
 }
 
 export interface GovernanceAction {

@@ -54,13 +54,14 @@ export class Conversation {
   }
 
   shortSummary(): string {
-    const recent = this.messages
-      .filter((message) => message.role === "user" || message.role === "assistant")
-      .slice(-2)
-      .map((message) => `${message.role}: ${message.content}`)
+    const recentUserMessages = this.messages
+      .filter((message) => message.role === "user")
+      .slice(-4)
+      .map((message) => message.content.trim())
+      .filter(Boolean)
       .join("\n");
 
-    return recent.slice(0, 500);
+    return recentUserMessages.slice(0, 1024);
   }
 
   wrapToolOutput(toolName: string, callId: string, trustLevel: ToolTrustLevel, rawOutput: string): string {

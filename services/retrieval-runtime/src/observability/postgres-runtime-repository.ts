@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type {
   DependencyStatus,
   DependencyStatusSnapshot,
@@ -8,6 +10,7 @@ import type {
   RecallRunRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
 import { percentile } from "../shared/utils.js";
@@ -104,6 +107,22 @@ interface DependencyStatusRow {
   status: DependencyStatus["status"];
   detail: string;
   last_checked_at: Date | string;
+}
+
+interface WritebackOutboxRow {
+  id: string;
+  trace_id: string;
+  session_id: string;
+  turn_id: string | null;
+  candidate_json: unknown;
+  idempotency_key: string;
+  status: WritebackOutboxRecord["status"];
+  retry_count: number;
+  last_error: string | null;
+  next_retry_at: Date | string;
+  created_at: Date | string;
+  updated_at: Date | string;
+  submitted_at: Date | string | null;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -236,6 +255,23 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         status TEXT NOT NULL,
         detail TEXT NOT NULL,
         last_checked_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_writeback_outbox (
+        id TEXT PRIMARY KEY,
+        trace_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        turn_id TEXT NULL,
+        candidate_json JSONB NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT NULL,
+        next_retry_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL,
+        submitted_at TIMESTAMPTZ NULL
       )
     `);
   }
@@ -444,6 +480,145 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         run.created_at,
       ],
     );
+  }
+
+  async enqueueWritebackOutbox(records: Array<{
+    trace_id: string;
+    session_id: string;
+    turn_id?: string;
+    candidate: WritebackOutboxRecord["candidate"];
+    idempotency_key: string;
+    next_retry_at: string;
+  }>): Promise<WritebackOutboxRecord[]> {
+    const rows: WritebackOutboxRecord[] = [];
+    for (const record of records) {
+      const existing = await this.pool.query<WritebackOutboxRow>(
+        `
+        SELECT *
+        FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+        WHERE idempotency_key = $1
+        `,
+        [record.idempotency_key],
+      );
+      if (existing.rows[0]) {
+        rows.push(this.mapWritebackOutbox(existing.rows[0]));
+        continue;
+      }
+
+      const id = randomUUID();
+      const createdAt = new Date().toISOString();
+      const inserted = await this.pool.query<WritebackOutboxRow>(
+        `
+        INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox (
+          id, trace_id, session_id, turn_id, candidate_json, idempotency_key, status,
+          retry_count, last_error, next_retry_at, created_at, updated_at, submitted_at
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13)
+        RETURNING *
+        `,
+        [
+          id,
+          record.trace_id,
+          record.session_id,
+          record.turn_id ?? null,
+          JSON.stringify(record.candidate),
+          record.idempotency_key,
+          "pending",
+          0,
+          null,
+          record.next_retry_at,
+          createdAt,
+          createdAt,
+          null,
+        ],
+      );
+      rows.push(this.mapWritebackOutbox(inserted.rows[0]!));
+    }
+    return rows;
+  }
+
+  async markWritebackOutboxSubmitted(ids: string[], submittedAt: string): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    await this.pool.query(
+      `
+      UPDATE ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+      SET status = 'submitted',
+          submitted_at = $2,
+          updated_at = $2
+      WHERE id = ANY($1::text[])
+      `,
+      [ids, submittedAt],
+    );
+  }
+
+  async claimPendingWritebackOutbox(limit: number, now: string): Promise<WritebackOutboxRecord[]> {
+    const result = await this.pool.query<WritebackOutboxRow>(
+      `
+      SELECT *
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+      WHERE status = 'pending'
+        AND next_retry_at <= $1
+      ORDER BY created_at ASC
+      LIMIT $2
+      `,
+      [now, limit],
+    );
+    return result.rows.map((row) => this.mapWritebackOutbox(row));
+  }
+
+  async requeueWritebackOutbox(id: string, nextRetryAt: string, lastError: string): Promise<void> {
+    await this.pool.query(
+      `
+      UPDATE ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+      SET retry_count = retry_count + 1,
+          last_error = $2,
+          next_retry_at = $3,
+          updated_at = $4
+      WHERE id = $1
+      `,
+      [id, lastError, nextRetryAt, new Date().toISOString()],
+    );
+  }
+
+  async markWritebackOutboxDeadLetter(id: string, lastError: string): Promise<void> {
+    await this.pool.query(
+      `
+      UPDATE ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+      SET retry_count = retry_count + 1,
+          last_error = $2,
+          status = 'dead_letter',
+          updated_at = $3
+      WHERE id = $1
+      `,
+      [id, lastError, new Date().toISOString()],
+    );
+  }
+
+  async getWritebackOutboxMetrics(now: string): Promise<{
+    pending_count: number;
+    dead_letter_count: number;
+    submit_latency_ms: number;
+  }> {
+    const result = await this.pool.query<{
+      pending_count: string;
+      dead_letter_count: string;
+      submit_latency_ms: string;
+    }>(
+      `
+      SELECT
+        count(*) FILTER (WHERE status = 'pending' AND next_retry_at <= $1)::text AS pending_count,
+        count(*) FILTER (WHERE status = 'dead_letter')::text AS dead_letter_count,
+        coalesce(avg(extract(epoch from (submitted_at - created_at)) * 1000) FILTER (WHERE status = 'submitted'), 0)::text AS submit_latency_ms
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_outbox
+      `,
+      [now],
+    );
+    return {
+      pending_count: Number(result.rows[0]?.pending_count ?? 0),
+      dead_letter_count: Number(result.rows[0]?.dead_letter_count ?? 0),
+      submit_latency_ms: Math.round(Number(result.rows[0]?.submit_latency_ms ?? 0)),
+    };
   }
 
   async findTraceIdByTurn(input: {
@@ -690,6 +865,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         `SELECT submitted_count FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_writeback_submissions`,
       ),
     ]);
+    const outboxMetrics = await this.getWritebackOutboxMetrics(new Date().toISOString());
 
     const triggerCount = triggerRows.rows.length;
     const recallCount = recallRows.rows.length;
@@ -715,6 +891,27 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         writebackCount === 0 ? 0 : writebackRows.rows.filter((row) => Number(row.submitted_count) > 0).length / writebackCount,
       query_p95_ms: percentile(recallRows.rows.map((row) => Number(row.duration_ms)), 0.95),
       injection_p95_ms: percentile(injectionRows.rows.map((row) => Number(row.duration_ms)), 0.95),
+      outbox_pending_count: outboxMetrics.pending_count,
+      outbox_dead_letter_count: outboxMetrics.dead_letter_count,
+      outbox_submit_latency_ms: outboxMetrics.submit_latency_ms,
+    };
+  }
+
+  private mapWritebackOutbox(row: WritebackOutboxRow): WritebackOutboxRecord {
+    return {
+      id: row.id,
+      trace_id: row.trace_id,
+      session_id: row.session_id,
+      turn_id: row.turn_id ?? undefined,
+      candidate: row.candidate_json as WritebackOutboxRecord["candidate"],
+      idempotency_key: row.idempotency_key,
+      status: row.status,
+      retry_count: Number(row.retry_count),
+      last_error: row.last_error ?? undefined,
+      next_retry_at: toIso(row.next_retry_at),
+      created_at: toIso(row.created_at),
+      updated_at: toIso(row.updated_at),
+      submitted_at: row.submitted_at ? toIso(row.submitted_at) : undefined,
     };
   }
 }

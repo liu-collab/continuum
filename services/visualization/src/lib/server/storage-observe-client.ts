@@ -13,6 +13,9 @@ export type StorageMetricsSnapshot = {
   deadLetterJobs: number | null;
   refreshFailureRate: number | null;
   writeP95Ms: number | null;
+  newPendingEmbeddingRecords: number | null;
+  retryPendingEmbeddingRecords: number | null;
+  oldestPendingEmbeddingAgeSeconds: number | null;
 };
 
 export type StorageWriteJobRecord = {
@@ -127,7 +130,19 @@ export async function fetchStorageMetrics() {
       conflictRate: safeRate(conflictsOpen, writeJobsTotal),
       deadLetterJobs: readMetric(record, ["dead_letter_jobs", "deadLetterJobs"]),
       refreshFailureRate: safeRate(projectorFailedJobs, writeJobsTotal),
-      writeP95Ms: readMetric(record, ["write_p95_ms", "writeP95Ms", "latency_p95_ms"])
+      writeP95Ms: readMetric(record, ["write_p95_ms", "writeP95Ms", "latency_p95_ms"]),
+      newPendingEmbeddingRecords: readMetric(record, [
+        "new_pending_embedding_records",
+        "newPendingEmbeddingRecords"
+      ]),
+      retryPendingEmbeddingRecords: readMetric(record, [
+        "retry_pending_embedding_records",
+        "retryPendingEmbeddingRecords"
+      ]),
+      oldestPendingEmbeddingAgeSeconds: readMetric(record, [
+        "oldest_pending_embedding_age_seconds",
+        "oldestPendingEmbeddingAgeSeconds"
+      ])
     }
   };
 }
