@@ -15,6 +15,7 @@ import {
 } from "./utils.js";
 import {
   continuumHomeDir,
+  continuumManagedDir,
   DEFAULT_MANAGED_DATABASE_NAME,
   DEFAULT_MANAGED_DATABASE_PASSWORD,
   DEFAULT_MANAGED_DATABASE_USER,
@@ -22,13 +23,14 @@ import {
   DEFAULT_MANAGED_POSTGRES_PORT,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
+  readManagedState,
   writeManagedState,
 } from "./managed-state.js";
 import {
   buildEmbeddingsEndpoint,
   resolveThirdPartyEmbeddingConfig,
 } from "./embedding-config.js";
-import { startManagedMna } from "./mna-command.js";
+import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -212,6 +214,8 @@ async function startStackContainer(
   },
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
+  const managedMnaDir = path.join(continuumManagedDir(), "mna");
+  await mkdir(managedMnaDir, { recursive: true });
 
   // Container-internal loopback: all services run in same container
   const dockerArgs = [
@@ -227,6 +231,8 @@ async function startStackContainer(
     `${bindHost}:3002:3002`,
     "-p",
     `${bindHost}:3003:3003`,
+    "-v",
+    `${managedMnaDir}:/opt/continuum/mna-host:ro`,
     "-e",
     `POSTGRES_DB=${DEFAULT_MANAGED_DATABASE_NAME}`,
     "-e",
@@ -261,6 +267,10 @@ async function startStackContainer(
     `STORAGE_API_BASE_URL=${DEFAULT_STORAGE_URL}`,
     "-e",
     `RUNTIME_API_BASE_URL=${DEFAULT_RUNTIME_URL}`,
+    "-e",
+    `NEXT_PUBLIC_MNA_BASE_URL=http://host.docker.internal:${DEFAULT_MNA_PORT}`,
+    "-e",
+    "MNA_TOKEN_PATH=/opt/continuum/mna-host/token.txt",
   ];
 
   if (embeddingConfig.apiKey) {
@@ -325,7 +335,7 @@ export async function runStartCommand(
       database: DEFAULT_MANAGED_DATABASE_NAME,
       username: DEFAULT_MANAGED_DATABASE_USER,
     },
-    services: [],
+    services: (await readManagedState()).services,
   });
 
   process.stdout.write("Continuum 已启动。\n");

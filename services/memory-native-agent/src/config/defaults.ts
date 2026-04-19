@@ -9,6 +9,7 @@ export const DEFAULT_RUNTIME_BASE_URL = "http://127.0.0.1:3002";
 export const DEFAULT_RUNTIME_REQUEST_TIMEOUT_MS = 800;
 export const DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS = 1500;
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
+export const DEFAULT_DEMO_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
 
 export const DEFAULT_SHELL_DENY_PATTERNS = [
   "rm -rf /",
@@ -27,9 +28,9 @@ export const DEFAULT_RAW_CONFIG = {
     finalize_timeout_ms: DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS,
   },
   provider: {
-    kind: "ollama",
-    model: "qwen2.5-coder",
-    base_url: DEFAULT_OLLAMA_BASE_URL,
+    kind: "demo",
+    model: "continuum-demo",
+    base_url: DEFAULT_DEMO_PROVIDER_BASE_URL,
     temperature: 0.2,
   },
   memory: {

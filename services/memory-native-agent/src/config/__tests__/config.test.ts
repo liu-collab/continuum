@@ -40,7 +40,8 @@ describe("config loader", () => {
     });
 
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3002");
-    expect(config.provider.kind).toBe("ollama");
+    expect(config.provider.kind).toBe("demo");
+    expect(config.provider.model).toBe("continuum-demo");
     expect(config.memory.mode).toBe("workspace_plus_global");
     expect(config.memory.userId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
@@ -323,5 +324,57 @@ locale: en-US
     });
 
     expect(config.locale).toBe("en-US");
+  });
+
+  it("prefers MNA_HOME over HOME and USERPROFILE", () => {
+    const managedHome = createTempDir("mna-managed-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    const unusedHome = createTempDir("mna-unused-home-");
+    const unusedUserProfile = createTempDir("mna-unused-userprofile-");
+    createdRoots.push(managedHome, workspaceDir, unusedHome, unusedUserProfile);
+
+    writeYaml(
+      path.join(managedHome, "config.yaml"),
+      `
+provider:
+  kind: demo
+  model: qwen-from-managed-home
+  base_url: http://127.0.0.1:11434
+`,
+    );
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: unusedHome,
+        USERPROFILE: unusedUserProfile,
+        MNA_HOME: managedHome,
+      },
+    });
+
+    expect(config.provider.model).toBe("qwen-from-managed-home");
+  });
+
+  it("allows provider env overrides for managed startup", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        MNA_PROVIDER_KIND: "openai-compatible",
+        MNA_PROVIDER_MODEL: "deepseek-chat",
+        MNA_PROVIDER_BASE_URL: "https://api.deepseek.com",
+        MNA_PROVIDER_API_KEY_ENV: "DEEPSEEK_API_KEY",
+        DEEPSEEK_API_KEY: "demo-key",
+      },
+    });
+
+    expect(config.provider.kind).toBe("openai-compatible");
+    expect(config.provider.model).toBe("deepseek-chat");
+    expect(config.provider.baseUrl).toBe("https://api.deepseek.com");
+    expect(config.provider.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
   });
 });

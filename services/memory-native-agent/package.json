@@ -17,7 +17,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ./scripts/copy-assets.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch bin/mna-server.mjs",
     "start": "node bin/mna-server.mjs",

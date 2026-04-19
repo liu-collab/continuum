@@ -1,10 +1,17 @@
 import type { ProviderConfig } from "../config/index.js";
 import { AnthropicProvider } from "./anthropic.js";
+import { DemoProvider } from "./demo.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
 import { ProviderAuthError, type IModelProvider } from "./types.js";
 
 export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = process.env): IModelProvider {
+  if (config.kind === "demo") {
+    return new DemoProvider({
+      model: config.model,
+    });
+  }
+
   if (config.kind === "openai-compatible") {
     const apiKey = resolveApiKey(config.apiKeyEnv, env, config.kind);
     return new OpenAICompatibleProvider({

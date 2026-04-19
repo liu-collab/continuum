@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,7 +103,13 @@ async function copyVisualizationBundle() {
 
 async function copyMemoryNativeAgentBundle() {
   const targetDir = path.join(vendorStageDir, "memory-native-agent");
-  await copyEntries(memoryNativeAgentDir, targetDir, ["bin", "dist", "package.json"]);
+  await copyEntries(memoryNativeAgentDir, targetDir, [
+    "bin",
+    "dist",
+    "node_modules",
+    "package.json",
+    "README.md",
+  ]);
 }
 
 async function copyStackTemplate() {
@@ -145,31 +151,47 @@ async function copyStackSources() {
 }
 
 async function replaceVendorDir() {
-  const previousVendorDir = path.join(packageDir, "vendor-previous");
-  await removeWithRetry(previousVendorDir).catch(() => undefined);
+  await mkdir(vendorDir, { recursive: true });
+  const entries = await cpList(vendorStageDir);
 
-  try {
-    await rename(vendorDir, previousVendorDir);
-  } catch {
-    await removeWithRetry(vendorDir).catch(() => undefined);
+  for (const entry of entries) {
+    const source = path.join(vendorStageDir, entry);
+    const target = path.join(vendorDir, entry);
+    await removeWithRetry(target).catch(() => undefined);
+    await cp(source, target, { recursive: true, force: true });
   }
 
-  try {
-    await rename(vendorStageDir, vendorDir);
-  } catch (error) {
-    await removeWithRetry(vendorDir).catch(() => undefined);
-    await cp(vendorStageDir, vendorDir, { recursive: true, force: true });
-    await removeWithRetry(vendorStageDir).catch(() => undefined);
+  await removeWithRetry(vendorStageDir).catch(() => undefined);
+}
 
-    if (error instanceof Error) {
-      process.stderr.write(`vendor rename fallback: ${error.message}\n`);
-    }
+async function cpList(dir) {
+  const entries = await import("node:fs/promises").then(({ readdir }) => readdir(dir));
+  return entries;
+}
+
+async function stopRunningVendorProcesses() {
+  if (process.platform !== "win32") {
+    return;
   }
 
-  await removeWithRetry(previousVendorDir).catch(() => undefined);
+  await new Promise((resolve) => {
+    const child = spawn("powershell", [
+      "-NoLogo",
+      "-NoProfile",
+      "-Command",
+      `Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.CommandLine -like '*packages\\\\continuum-cli\\\\vendor\\\\*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
+    ], {
+      stdio: "ignore",
+      env: process.env,
+    });
+
+    child.on("exit", () => resolve(undefined));
+    child.on("error", () => resolve(undefined));
+  });
 }
 
 async function main() {
+  await stopRunningVendorProcesses();
   await removeWithRetry(vendorStageDir);
   await removeWithRetry(visualizationBuildDir);
   await mkdir(vendorStageDir, { recursive: true });

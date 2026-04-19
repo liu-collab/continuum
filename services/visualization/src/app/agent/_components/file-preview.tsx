@@ -17,7 +17,7 @@ export function FilePreview({ path, content }: FilePreviewProps) {
   const { t } = useAgentI18n();
 
   return (
-    <section className="rounded-3xl border bg-white/88 shadow-soft">
+    <section data-testid="file-preview" className="rounded-3xl border bg-white/88 shadow-soft">
       <div className="border-b px-5 py-4">
         <div className="text-sm font-semibold text-slate-900">{t("filePreview.title")}</div>
         <div className="mt-1 truncate text-xs text-slate-500">{path}</div>

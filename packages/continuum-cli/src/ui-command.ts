@@ -13,6 +13,7 @@ import {
   pathExists,
   vendorPath,
 } from "./utils.js";
+import { DEFAULT_MNA_HOME_DIR, DEFAULT_MNA_URL } from "./mna-command.js";
 
 export async function runUiCommand(
   options: Record<string, string | boolean>,
@@ -72,6 +73,12 @@ export async function runUiCommand(
     typeof options["database-url"] === "string"
       ? options["database-url"]
       : process.env.STORAGE_READ_MODEL_DSN ?? process.env.DATABASE_URL ?? "";
+  const mnaBaseUrl =
+    typeof options["mna-url"] === "string" ? options["mna-url"] : process.env.NEXT_PUBLIC_MNA_BASE_URL ?? DEFAULT_MNA_URL;
+  const mnaTokenPath =
+    typeof options["mna-token-path"] === "string"
+      ? options["mna-token-path"]
+      : process.env.MNA_TOKEN_PATH ?? path.join(DEFAULT_MNA_HOME_DIR, "token.txt");
 
   const child = spawn(process.execPath, [serverEntry], {
     cwd: standaloneDir,
@@ -84,6 +91,8 @@ export async function runUiCommand(
       STORAGE_API_BASE_URL: storageUrl,
       RUNTIME_API_BASE_URL: runtimeUrl,
       STORAGE_READ_MODEL_DSN: readModelDsn,
+      NEXT_PUBLIC_MNA_BASE_URL: mnaBaseUrl,
+      MNA_TOKEN_PATH: mnaTokenPath,
     },
   });
 

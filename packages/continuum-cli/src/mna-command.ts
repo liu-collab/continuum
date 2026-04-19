@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 
 import {
   continuumLogsDir,
+  continuumManagedDir,
   readManagedState,
   type ManagedServiceRecord,
   writeManagedState
@@ -17,11 +18,12 @@ import {
   pathExists,
   vendorPath
 } from "./utils.js";
+import { resolveManagedMnaProviderConfig } from "./mna-provider-config.js";
 
 export const DEFAULT_MNA_URL = "http://127.0.0.1:4193";
 export const DEFAULT_MNA_HOST = "127.0.0.1";
 export const DEFAULT_MNA_PORT = 4193;
-export const DEFAULT_MNA_HOME_DIR = path.join(process.env.USERPROFILE ?? process.env.HOME ?? ".", ".mna");
+export const DEFAULT_MNA_HOME_DIR = path.join(continuumManagedDir(), "mna");
 
 type ManagedMnaInfo = {
   pid: number;
@@ -91,6 +93,42 @@ async function waitForHealthy(url: string, timeoutMs: number) {
   throw new Error(`memory-native-agent 未在预期时间内就绪: ${url}`);
 }
 
+async function fetchMnaDependency(url: string, tokenPath: string, timeoutMs: number) {
+  const token = (await readFile(tokenPath, "utf8").catch(() => "")).trim();
+  if (!token) {
+    return {
+      ok: false,
+      error: "missing token",
+    };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${url}/v1/agent/dependency-status`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      body: await response.json().catch(() => null),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function isProcessAlive(pid: number) {
   if (process.platform === "win32") {
     const child = spawn("powershell", [
@@ -145,11 +183,11 @@ export async function getManagedMnaStatus(options: Record<string, string | boole
   const managedState = await readManagedState();
   const record = getManagedMnaRecord(managedState.services);
   const url = record?.url ?? parseMnaBaseUrl(options);
-  const timeoutMs = typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
-  const health = await fetchJson(`${url}/healthz`, timeoutMs);
-  const dependency = await fetchJson(`${url}/v1/agent/dependency-status`, timeoutMs);
   const tokenPath = record?.tokenPath ?? path.join(parseMnaHome(options), "token.txt");
   const artifactsPath = record?.artifactsPath ?? path.join(parseMnaHome(options), "artifacts");
+  const timeoutMs = typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
+  const health = await fetchJson(`${url}/healthz`, timeoutMs);
+  const dependency = await fetchMnaDependency(url, tokenPath, timeoutMs);
 
   return {
     record,
@@ -174,7 +212,7 @@ export async function startManagedMna(
   }
 
   const existing = await getManagedMnaStatus(options);
-  if (existing.health.ok) {
+  if (existing.health.ok && existing.record) {
     return {
       url: existing.url,
       tokenPath: existing.tokenPath,
@@ -191,6 +229,7 @@ export async function startManagedMna(
   const port = parseMnaPort(options);
   const homeDir = parseMnaHome(options);
   const runtimeUrl = typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
+  const providerConfig = resolveManagedMnaProviderConfig(options, process.env);
   const url = `http://${host}:${port}`;
   const logPath = path.join(continuumLogsDir(), "mna.log");
   const tokenPath = path.join(homeDir, "token.txt");
@@ -212,7 +251,11 @@ export async function startManagedMna(
       MNA_HOST: host,
       MNA_PORT: String(port),
       MNA_HOME: homeDir,
-      RUNTIME_BASE_URL: runtimeUrl
+      RUNTIME_BASE_URL: runtimeUrl,
+      MNA_PROVIDER_KIND: providerConfig.kind,
+      MNA_PROVIDER_MODEL: providerConfig.model,
+      ...(providerConfig.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),
+      ...(providerConfig.apiKeyEnv ? { MNA_PROVIDER_API_KEY_ENV: providerConfig.apiKeyEnv } : {}),
     }
   });
   child.unref();

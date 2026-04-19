@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadOrCreateToken, resolveTokenPath } from "../token.js";
+import { loadOrCreateToken, resolveArtifactsRoot, resolveMnaHomeDirectory, resolveTokenPath } from "../token.js";
 
 const tempRoots: string[] = [];
 
@@ -38,5 +38,23 @@ describe("loadOrCreateToken", () => {
 
     const result = loadOrCreateToken(home);
     expect(result.token).toBe("persisted-token");
+  });
+
+  it("uses MNA_HOME when no explicit homeDirectory is passed", () => {
+    const home = createTempHome();
+    const previousHome = process.env.MNA_HOME;
+    process.env.MNA_HOME = home;
+
+    try {
+      expect(resolveMnaHomeDirectory()).toBe(home);
+      expect(resolveTokenPath()).toBe(path.join(home, "token.txt"));
+      expect(resolveArtifactsRoot()).toBe(path.join(home, "artifacts"));
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.MNA_HOME;
+      } else {
+        process.env.MNA_HOME = previousHome;
+      }
+    }
   });
 });

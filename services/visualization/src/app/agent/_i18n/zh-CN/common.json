@@ -138,6 +138,7 @@
   "promptInspector": {
     "title": "Prompt Inspector",
     "description": "查看当前轮次发给 provider 的 messages 和 tools。",
+    "close": "关闭 Prompt Inspector",
     "meta": "元信息",
     "turn": "轮次",
     "provider": "提供方",

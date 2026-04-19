@@ -66,11 +66,18 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
       const existingSessionId = sessionList.items[0]?.id;
       if (existingSessionId) {
-        await openSession(existingSessionId);
+        router.replace(`/agent/${existingSessionId}`);
         return;
       }
 
-      await createNewSession();
+      const created = await client.createSession({
+        locale: options.uiLocale
+      });
+      if (cancelled) {
+        return;
+      }
+
+      router.replace(`/agent/${created.session_id}`);
     };
 
     void bootstrap().catch((error) => {
@@ -90,7 +97,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       streamRef.current?.close();
       streamRef.current = null;
     };
-  }, [client, options.sessionId]);
+  }, [client, options.sessionId, options.uiLocale, router]);
 
   const activeTurn = useMemo(() => state.turns.at(-1) ?? null, [state.turns]);
 
@@ -159,14 +166,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     const created = await client.createSession({
       locale: options.uiLocale
     });
-
-    const list = await client.listSessions();
-    dispatch({
-      type: "session_list_loaded",
-      items: list.items
-    });
-
-    await openSession(created.session_id);
+    router.push(`/agent/${created.session_id}`);
   }
 
   function sendInput(text: string) {
@@ -223,15 +223,11 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
   }
 
-  async function renameSession(title: string) {
-    if (!state.sessionId) {
-      return;
-    }
-
-    await client.renameSession(state.sessionId, title);
+  async function renameSession(sessionId: string, title: string) {
+    await client.renameSession(sessionId, title);
     dispatch({
       type: "session_title_updated",
-      sessionId: state.sessionId,
+      sessionId,
       title
     });
   }
@@ -248,6 +244,13 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       type: "session_list_loaded",
       items: sessions.items
     });
+
+    if (state.sessionId && state.sessionId !== sessionId) {
+      const activeSessionStillExists = sessions.items.some((item) => item.id === state.sessionId);
+      if (activeSessionStillExists) {
+        return;
+      }
+    }
 
     const nextSessionId = sessions.items[0]?.id;
     if (nextSessionId) {

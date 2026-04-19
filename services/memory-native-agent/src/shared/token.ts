@@ -1,29 +1,32 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
-import { MNA_HOME_DIRNAME } from "../config/defaults.js";
 import { DEFAULT_TOKEN_FILENAME } from "./constants.js";
+import { resolveMnaHomeDirectory as resolveConfiguredMnaHomeDirectory } from "../config/resolver.js";
 
 export interface TokenBootstrapResult {
   token: string;
   tokenPath: string;
 }
 
-export function resolveMnaHomeDirectory(homeDirectory = os.homedir()): string {
-  return path.join(homeDirectory, MNA_HOME_DIRNAME);
+export function resolveMnaHomeDirectory(homeDirectory?: string): string {
+  if (homeDirectory) {
+    return path.join(homeDirectory, ".mna");
+  }
+
+  return resolveConfiguredMnaHomeDirectory();
 }
 
-export function resolveTokenPath(homeDirectory = os.homedir()): string {
+export function resolveTokenPath(homeDirectory?: string): string {
   return path.join(resolveMnaHomeDirectory(homeDirectory), DEFAULT_TOKEN_FILENAME);
 }
 
-export function resolveArtifactsRoot(homeDirectory = os.homedir()): string {
+export function resolveArtifactsRoot(homeDirectory?: string): string {
   return path.join(resolveMnaHomeDirectory(homeDirectory), "artifacts");
 }
 
-export function loadOrCreateToken(homeDirectory = os.homedir()): TokenBootstrapResult {
+export function loadOrCreateToken(homeDirectory?: string): TokenBootstrapResult {
   const tokenPath = resolveTokenPath(homeDirectory);
   mkdirSync(path.dirname(tokenPath), { recursive: true });
 

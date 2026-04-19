@@ -19,7 +19,7 @@ import {
   deriveWorkspaceId,
   normalizeWorkspacePath,
   persistWorkspaceMapping,
-  resolveHomeDirectory,
+  resolveMnaHomeDirectory,
   resolveLocale,
   resolveUserId,
 } from "./resolver.js";
@@ -147,12 +147,12 @@ function parseConfigFile(filePath: string): ConfigFileInput {
 function buildCandidateConfigFiles(options: {
   configPath?: string;
   cwd: string;
-  homeDirectory: string;
+  mnaHomeDirectory: string;
 }): LoadedConfigLayer[] {
   const globalCandidates = [
-    path.join(options.homeDirectory, ".mna", "config.yaml"),
-    path.join(options.homeDirectory, ".mna", "config.yml"),
-    path.join(options.homeDirectory, ".mna", "config.json"),
+    path.join(options.mnaHomeDirectory, "config.yaml"),
+    path.join(options.mnaHomeDirectory, "config.yml"),
+    path.join(options.mnaHomeDirectory, "config.json"),
   ];
   const localCandidates = [
     path.join(options.cwd, ".mna", "config.yaml"),
@@ -207,7 +207,7 @@ function validateProviderEnvironment(provider: {
   kind: ProviderKind;
   api_key_env?: string;
 }, env: NodeJS.ProcessEnv) {
-  if (provider.kind === "ollama") {
+  if (provider.kind === "ollama" || provider.kind === "demo") {
     return;
   }
 
@@ -223,13 +223,13 @@ function validateProviderEnvironment(provider: {
 
 export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
   const env = options.env ?? process.env;
-  const homeDirectory = resolveHomeDirectory(env);
+  const mnaHomeDirectory = resolveMnaHomeDirectory(env);
   const configuredCwd = options.cwdOverride ?? process.cwd();
   const normalizedCwd = normalizeWorkspacePath(configuredCwd);
   const layers = buildCandidateConfigFiles({
     configPath: options.configPath,
     cwd: normalizedCwd,
-    homeDirectory,
+    mnaHomeDirectory,
   });
 
   let merged = structuredClone(DEFAULT_RAW_CONFIG);
@@ -251,35 +251,54 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     throw new Error(formatValidationError("Invalid merged config", parsed.error));
   }
 
-  validateProviderEnvironment(parsed.data.provider, env);
+  let effectiveConfig = parsed.data;
 
-  const userId = resolveUserId(parsed.data.memory.user_id, homeDirectory);
+  if (env.MNA_PROVIDER_KIND || env.MNA_PROVIDER_MODEL || env.MNA_PROVIDER_BASE_URL || env.MNA_PROVIDER_API_KEY_ENV) {
+    const reparsed = mergedConfigSchema.safeParse({
+      ...parsed.data,
+      provider: {
+        ...parsed.data.provider,
+        kind: (env.MNA_PROVIDER_KIND as ProviderKind | undefined) ?? parsed.data.provider.kind,
+        model: env.MNA_PROVIDER_MODEL?.trim() || parsed.data.provider.model,
+        base_url: env.MNA_PROVIDER_BASE_URL?.trim() || parsed.data.provider.base_url,
+        api_key_env: env.MNA_PROVIDER_API_KEY_ENV?.trim() || parsed.data.provider.api_key_env,
+      },
+    });
+    if (!reparsed.success) {
+      throw new Error(formatValidationError("Invalid provider env override", reparsed.error));
+    }
+    effectiveConfig = reparsed.data;
+  }
+
+  validateProviderEnvironment(effectiveConfig.provider, env);
+
+  const userId = resolveUserId(effectiveConfig.memory.user_id, mnaHomeDirectory);
   const workspaceId = deriveWorkspaceId(normalizedCwd);
-  persistWorkspaceMapping(homeDirectory, normalizedCwd, workspaceId);
+  persistWorkspaceMapping(mnaHomeDirectory, normalizedCwd, workspaceId);
 
   return {
     runtime: {
-      baseUrl: parsed.data.runtime.base_url,
-      requestTimeoutMs: parsed.data.runtime.request_timeout_ms,
-      finalizeTimeoutMs: parsed.data.runtime.finalize_timeout_ms,
+      baseUrl: effectiveConfig.runtime.base_url,
+      requestTimeoutMs: effectiveConfig.runtime.request_timeout_ms,
+      finalizeTimeoutMs: effectiveConfig.runtime.finalize_timeout_ms,
     },
     provider: {
-      kind: parsed.data.provider.kind,
-      model: parsed.data.provider.model,
-      baseUrl: parsed.data.provider.base_url,
-      apiKeyEnv: parsed.data.provider.api_key_env,
-      temperature: parsed.data.provider.temperature,
-      organization: parsed.data.provider.organization,
-      keepAlive: parsed.data.provider.keep_alive,
+      kind: effectiveConfig.provider.kind,
+      model: effectiveConfig.provider.model,
+      baseUrl: effectiveConfig.provider.base_url,
+      apiKeyEnv: effectiveConfig.provider.api_key_env,
+      temperature: effectiveConfig.provider.temperature,
+      organization: effectiveConfig.provider.organization,
+      keepAlive: effectiveConfig.provider.keep_alive,
     },
     memory: {
-      mode: parsed.data.memory.mode,
+      mode: effectiveConfig.memory.mode,
       userId,
       workspaceId,
       cwd: normalizedCwd,
     },
     mcp: {
-      servers: parsed.data.mcp.servers.map((server) => ({
+      servers: effectiveConfig.mcp.servers.map((server) => ({
         name: server.name,
         transport: server.transport,
         command: server.command,
@@ -291,22 +310,22 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     },
     tools: {
       shellExec: {
-        enabled: parsed.data.tools.shell_exec.enabled,
-        timeoutMs: parsed.data.tools.shell_exec.timeout_ms,
-        denyPatterns: parsed.data.tools.shell_exec.deny_patterns,
+        enabled: effectiveConfig.tools.shell_exec.enabled,
+        timeoutMs: effectiveConfig.tools.shell_exec.timeout_ms,
+        denyPatterns: effectiveConfig.tools.shell_exec.deny_patterns,
       },
     },
     cli: {
       systemPrompt: resolveSystemPrompt({
-        filePath: parsed.data.cli.system_prompt_file,
+        filePath: effectiveConfig.cli.system_prompt_file,
         sourceConfigPath: systemPromptSourcePath,
       }),
     },
     streaming: {
-      flushChars: parsed.data.streaming.flush_chars,
-      flushIntervalMs: parsed.data.streaming.flush_interval_ms,
+      flushChars: effectiveConfig.streaming.flush_chars,
+      flushIntervalMs: effectiveConfig.streaming.flush_interval_ms,
     },
-    locale: resolveLocale(parsed.data.locale, env),
+    locale: resolveLocale(effectiveConfig.locale, env),
   };
 }
 

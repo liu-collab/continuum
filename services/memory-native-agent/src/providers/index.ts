@@ -1,3 +1,4 @@
+export { DemoProvider } from "./demo.js";
 export { AnthropicProvider } from "./anthropic.js";
 export { OllamaProvider } from "./ollama.js";
 export { OpenAICompatibleProvider } from "./openai-compatible.js";

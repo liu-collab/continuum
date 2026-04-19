@@ -11,9 +11,8 @@ import {
 import type { Locale } from "./schema.js";
 
 function ensureMnaHome(homeDirectory: string): string {
-  const mnaHome = path.join(homeDirectory, MNA_HOME_DIRNAME);
-  mkdirSync(mnaHome, { recursive: true });
-  return mnaHome;
+  mkdirSync(homeDirectory, { recursive: true });
+  return homeDirectory;
 }
 
 function normalizeDriveLetter(value: string): string {
@@ -67,6 +66,15 @@ export function resolveHomeDirectory(env: NodeJS.ProcessEnv = process.env): stri
   }
 
   return path.resolve(homeDirectory);
+}
+
+export function resolveMnaHomeDirectory(env: NodeJS.ProcessEnv = process.env): string {
+  const managedHome = env.MNA_HOME;
+  if (managedHome && managedHome.trim().length > 0) {
+    return path.resolve(managedHome);
+  }
+
+  return path.join(resolveHomeDirectory(env), MNA_HOME_DIRNAME);
 }
 
 export function normalizeWorkspacePath(cwd: string): string {

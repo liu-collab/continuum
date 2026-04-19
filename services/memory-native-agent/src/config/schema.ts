@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
 export const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
-export const providerKindSchema = z.enum(["openai-compatible", "anthropic", "ollama"]);
+export const providerKindSchema = z.enum(["openai-compatible", "anthropic", "ollama", "demo"]);
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const timeoutMsSchema = z.coerce.number().int().min(1);

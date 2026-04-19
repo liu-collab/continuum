@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { PencilLine, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -43,17 +44,19 @@ export function SessionList({
         const isEditing = editingId === session.id;
 
         return (
-          <button
+          <div
             key={session.id}
-            type="button"
-            onClick={() => onSelect(session.id)}
             className={cn(
               "w-full rounded-2xl border bg-white/80 p-4 text-left transition hover:border-accent hover:shadow-soft",
               isActive && "border-accent ring-2 ring-accent/15"
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => onSelect(session.id)}
+                className="min-w-0 flex-1 text-left"
+              >
                 {isEditing ? (
                   <form
                     onSubmit={(event) => {
@@ -70,7 +73,11 @@ export function SessionList({
                       autoFocus
                       value={draftTitle}
                       onChange={(event) => setDraftTitle(event.target.value)}
-                      onBlur={() => setEditingId(null)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setEditingId(null);
+                        }
+                      }}
                       className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0"
                     />
                   </form>
@@ -86,7 +93,7 @@ export function SessionList({
                   </StatusBadge>
                   <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
                 </div>
-              </div>
+              </button>
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
@@ -113,7 +120,7 @@ export function SessionList({
                 </button>
               </div>
             </div>
-          </button>
+          </div>
         );
       })}
     </div>

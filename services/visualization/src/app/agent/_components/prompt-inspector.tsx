@@ -34,6 +34,8 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
           <button
             type="button"
             onClick={onClose}
+            aria-label={t("promptInspector.close")}
+            data-testid="prompt-inspector-close"
             className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <X className="h-4 w-4" />

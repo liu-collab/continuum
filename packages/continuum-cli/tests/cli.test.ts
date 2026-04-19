@@ -6,6 +6,7 @@ import {
   resolveThirdPartyEmbeddingConfig,
 } from "../src/embedding-config.js";
 import { renderHelp } from "../src/help.js";
+import { resolveManagedMnaProviderConfig } from "../src/mna-provider-config.js";
 import { runStatusCommand } from "../src/status-command.js";
 
 describe("continuum cli", () => {
@@ -29,6 +30,10 @@ describe("continuum cli", () => {
       "https://api.openai.com/v1",
       "--embedding-model",
       "text-embedding-3-small",
+      "--provider-kind",
+      "openai-compatible",
+      "--provider-model",
+      "deepseek-chat",
     ]);
 
     expect(parsed.command).toEqual(["start"]);
@@ -37,9 +42,12 @@ describe("continuum cli", () => {
     expect(parsed.options["bind-host"]).toBe("0.0.0.0");
     expect(parsed.options["embedding-base-url"]).toBe("https://api.openai.com/v1");
     expect(parsed.options["embedding-model"]).toBe("text-embedding-3-small");
+    expect(parsed.options["provider-kind"]).toBe("openai-compatible");
+    expect(parsed.options["provider-model"]).toBe("deepseek-chat");
     expect(renderHelp()).toContain("continuum start");
     expect(renderHelp()).toContain("--bind-host HOST");
     expect(renderHelp()).toContain("--embedding-base-url URL");
+    expect(renderHelp()).toContain("--provider-kind KIND");
   });
 
   it("parses the stop command and exposes it in help", () => {
@@ -88,5 +96,28 @@ describe("continuum cli", () => {
 
     expect(config.baseUrl).toBe("https://api.openai.com/v1");
     expect(buildEmbeddingsEndpoint(config.baseUrl)).toBe("https://api.openai.com/v1/embeddings");
+  });
+
+  it("falls back to demo provider when no model credential is available", () => {
+    const config = resolveManagedMnaProviderConfig({}, {});
+
+    expect(config).toEqual({
+      kind: "demo",
+      model: "continuum-demo",
+      baseUrl: undefined,
+    });
+  });
+
+  it("prefers DeepSeek env as managed openai-compatible provider", () => {
+    const config = resolveManagedMnaProviderConfig({}, {
+      DEEPSEEK_API_KEY: "demo-key",
+    });
+
+    expect(config).toEqual({
+      kind: "openai-compatible",
+      model: "deepseek-chat",
+      baseUrl: "https://api.deepseek.com",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
   });
 });

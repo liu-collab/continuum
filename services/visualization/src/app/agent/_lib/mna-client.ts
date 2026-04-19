@@ -261,15 +261,17 @@ export class MnaClient {
       throw new MnaUnavailableError(bootstrap.reason ?? "memory-native-agent 不可用。", bootstrap.status);
     }
 
+    const headers = new Headers(init?.headers);
+    headers.set("Accept", "application/json");
+    headers.set("Authorization", `Bearer ${bootstrap.token}`);
+    if (init?.body !== undefined && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
     const response = await fetch(`${bootstrap.baseUrl}${pathname}`, {
       ...init,
       cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${bootstrap.token}`,
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {})
-      }
+      headers
     });
 
     if (response.status === 401 && retryOnUnauthorized) {

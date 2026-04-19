@@ -138,6 +138,7 @@
   "promptInspector": {
     "title": "Prompt Inspector",
     "description": "Inspect the messages and tools sent to the provider for the current turn.",
+    "close": "Close Prompt Inspector",
     "meta": "Meta",
     "turn": "Turn",
     "provider": "Provider",
