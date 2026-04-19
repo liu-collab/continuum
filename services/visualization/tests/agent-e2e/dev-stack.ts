@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -29,8 +30,23 @@ async function waitForUrl(url: string, timeoutMs = 30_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+async function getAvailablePort() {
+  const server = http.createServer();
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (!address || typeof address === "string") {
+    throw new Error("available port unavailable");
+  }
+  return address.port;
+}
+
 async function start() {
-  const stack = await createE2eStack();
+  const stack = await createE2eStack({
+    withMcp: true,
+  });
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "viz-agent-stack-"));
   const homeDir = path.join(workRoot, "home");
   const stateFile = process.env.PLAYWRIGHT_STACK_STATE_FILE
@@ -46,7 +62,7 @@ async function start() {
     throw new Error("mna address unavailable");
   }
 
-  const visualizationPort = 3000;
+  const visualizationPort = await getAvailablePort();
   const nextBin = path.resolve(process.cwd(), "node_modules/next/dist/bin/next");
   const visualization = spawn(process.execPath, [nextBin, "dev", "--hostname", "127.0.0.1", "--port", String(visualizationPort)], {
     cwd: path.resolve(process.cwd()),
@@ -71,6 +87,67 @@ async function start() {
 
   await waitForUrl(`http://127.0.0.1:${visualizationPort}/api/health/liveness`);
 
+  const control = http.createServer(async (request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const sendJson = (statusCode: number, payload: Record<string, unknown>) => {
+      response.statusCode = statusCode;
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(payload));
+    };
+
+    if (request.method === "POST" && url.pathname === "/runtime/stop") {
+      await stack.stopRuntime();
+      sendJson(200, { ok: true });
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/runtime/restart") {
+      await stack.restartRuntime();
+      sendJson(200, { ok: true });
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/mna/stop") {
+      await stack.stopMna();
+      sendJson(200, { ok: true });
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/mna/restart") {
+      await stack.restartMna();
+      sendJson(200, { ok: true });
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/state") {
+      const mnaAddress = stack.mna.server.address();
+      const runtimeAddress = stack.runtimeApp?.server.address();
+      sendJson(200, {
+        mnaPort: mnaAddress && typeof mnaAddress !== "string" ? mnaAddress.port : null,
+        runtimePort: runtimeAddress && typeof runtimeAddress !== "string" ? runtimeAddress.port : null,
+        tokenPath: stack.mna.mnaTokenPath,
+      });
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/runs/latest") {
+      const runs = await stack.runtimeRepository?.getRuns({ page: 1, page_size: 20 });
+      const turns = (runs?.turns as Array<Record<string, unknown>> | undefined) ?? [];
+      const latestTurn =
+        turns.find((turn) => typeof turn.trace_id === "string" && turn.trace_id.length > 0) ?? null;
+      sendJson(200, {
+        traceId: latestTurn?.trace_id ?? null,
+        turnId: latestTurn?.turn_id ?? null,
+        turns,
+      });
+      return;
+    }
+
+    sendJson(404, { error: "not_found" });
+  });
+  await new Promise<void>((resolve) => {
+    control.listen(0, "127.0.0.1", () => resolve());
+  });
+  const controlAddress = control.address();
+  if (!controlAddress || typeof controlAddress === "string") {
+    throw new Error("control address unavailable");
+  }
+
   const runningState: RunningState = {
     stack,
     visualization,
@@ -85,6 +162,7 @@ async function start() {
       workRoot,
       homeDir,
       visualizationPort,
+      controlPort: controlAddress.port,
     }),
     "utf8",
   );
@@ -93,6 +171,7 @@ async function start() {
     if (!visualization.killed) {
       visualization.kill("SIGTERM");
     }
+    await new Promise<void>((resolve) => control.close(() => resolve()));
     await stack.close();
     fs.rmSync(workRoot, { recursive: true, force: true });
   };

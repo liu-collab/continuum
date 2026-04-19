@@ -37,6 +37,24 @@ function json(payload: AgentTokenBootstrapResponse, status = 200) {
   return NextResponse.json(payload, { status });
 }
 
+async function probeMna(baseUrl: string) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TOKEN_READ_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(new URL("/healthz", `${baseUrl.replace(/\/+$/, "")}/`), {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function GET() {
   const { values } = getAppConfig();
   const tokenPath = resolveTokenPath(values.MNA_TOKEN_PATH);
@@ -58,6 +76,16 @@ export async function GET() {
         status: "token_invalid",
         token: null,
         reason: "token 文件格式不合法。",
+        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+      });
+    }
+
+    const mnaReachable = await probeMna(values.NEXT_PUBLIC_MNA_BASE_URL);
+    if (!mnaReachable) {
+      return json({
+        status: "mna_not_running",
+        token: null,
+        reason: "memory-native-agent 当前不可访问，请先确认服务已经启动。",
         mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
       });
     }

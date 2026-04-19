@@ -37,6 +37,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     return (
       <div className="space-y-6">
         <ErrorState
+          testId="agent-offline-state"
           title={t("workspace.offlineTitle")}
           description={bootstrapDescription}
         />
@@ -113,9 +114,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                     void workspace.openSession(nextSessionId);
                   }}
                   onRename={(session, title) => {
-                    if (session.id === workspace.state.sessionId) {
-                      void workspace.renameSession(title);
-                    }
+                    void workspace.renameSession(session.id, title);
                   }}
                   onDelete={(session) => {
                     void workspace.deleteSession(session.id);
@@ -157,7 +156,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           <div className="space-y-6">
             <MemoryPanel activeTurn={workspace.activeTurn} degraded={workspace.state.degraded} />
             {workspace.dependencyStatus ? (
-              <section className="rounded-3xl border bg-white/88 px-5 py-4 shadow-soft">
+              <section data-testid="agent-dependency-card" className="rounded-3xl border bg-white/88 px-5 py-4 shadow-soft">
                 <div className="text-sm font-semibold text-slate-900">{t("workspace.dependencyTitle")}</div>
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">

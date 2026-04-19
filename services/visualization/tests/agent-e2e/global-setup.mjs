@@ -38,6 +38,7 @@ export default async function globalSetup() {
   await waitForFile(stateFile);
   const raw = JSON.parse(fs.readFileSync(stateFile, "utf8"));
   process.env.PLAYWRIGHT_BASE_URL = `http://127.0.0.1:${raw.visualizationPort}`;
+  process.env.PLAYWRIGHT_STACK_CONTROL_PORT = String(raw.controlPort);
 
   return async () => {
     if (!child.killed) {

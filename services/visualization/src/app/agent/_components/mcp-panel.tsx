@@ -18,7 +18,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
   const { formatMcpStateLabel, t } = useAgentI18n();
 
   return (
-    <div className="rounded-3xl border bg-white/85 shadow-soft">
+    <div data-testid="mcp-panel" className="rounded-3xl border bg-white/85 shadow-soft">
       <div className="flex items-center gap-2 border-b px-5 py-4">
         <Cable className="h-4 w-4 text-accent" />
         <div>
@@ -33,7 +33,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
           </div>
         ) : (
           servers.map((server) => (
-            <div key={server.name} className="rounded-2xl border bg-slate-50/80 px-4 py-3">
+            <div key={server.name} data-testid={`mcp-server-${server.name}`} className="rounded-2xl border bg-slate-50/80 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">{server.name}</div>

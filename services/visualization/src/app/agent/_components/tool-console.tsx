@@ -22,7 +22,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
   );
 
   return (
-    <div className="rounded-3xl border bg-white/85 shadow-soft">
+    <div data-testid="tool-console" className="rounded-3xl border bg-white/85 shadow-soft">
       <div className="flex items-center gap-2 border-b px-5 py-4">
         <TerminalSquare className="h-4 w-4 text-accent" />
         <div>
@@ -38,6 +38,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
             {calls.map((call) => (
               <div
                 key={call.callId}
+                data-testid={`tool-call-${call.callId}`}
                 className="rounded-2xl border bg-slate-50/80 px-4 py-3 text-sm text-slate-700"
               >
                 <div className="flex flex-wrap items-center gap-2">

@@ -1,9 +1,14 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { FastifyInstance } from "fastify";
+import { z } from "zod/v4";
 
 import { createServer } from "../../src/server.js";
 import type { AgentConfig } from "../../src/config/index.js";
@@ -67,6 +72,10 @@ export interface RunningE2eStack {
   };
   stopStorage(): Promise<void>;
   restartStorage(): Promise<void>;
+  stopRuntime(): Promise<void>;
+  restartRuntime(): Promise<void>;
+  stopMna(): Promise<void>;
+  restartMna(): Promise<void>;
   invalidateRecord(recordId: string, input?: {
     actor_type?: "system" | "user" | "operator";
     actor_id?: string;
@@ -75,6 +84,22 @@ export interface RunningE2eStack {
   close(): Promise<void>;
   workerDrain(): Promise<void>;
 }
+
+type RunningHttpMcpServer = {
+  close(): Promise<void>;
+  url: string;
+};
+
+type TestRequest = http.IncomingMessage & {
+  body?: unknown;
+  headers: http.IncomingHttpHeaders;
+};
+
+type TestResponse = http.ServerResponse<http.IncomingMessage> & {
+  json(payload: unknown): void;
+  status(code: number): TestResponse;
+  send(payload: unknown): void;
+};
 
 const DEFAULT_IDS: TestIds = {
   workspace: "550e8400-e29b-41d4-a716-446655440000",
@@ -296,13 +321,76 @@ async function startStubProviderServer() {
     const body = request.body as {
       stream?: boolean;
       messages?: Array<{ role: string; content: string }>;
+      tools?: Array<{ function?: { name?: string } }>;
     };
     const messages = body.messages ?? [];
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
     const injectionMessage = messages.find(
       (message) => message.role === "system" && typeof message.content === "string" && message.content.includes("<memory_injection"),
     )?.content ?? "";
-    const replyText = buildProviderReply(lastUserMessage, injectionMessage);
+    const toolMessages = messages.filter((message) => message.role === "tool");
+    const normalizedInput = lastUserMessage.toLowerCase();
+    const availableToolNames = (body.tools ?? [])
+      .map((tool) => tool.function?.name)
+      .filter((name): name is string => typeof name === "string");
+
+    if (!toolMessages.length) {
+      const plannedTool = decideStubToolCall(normalizedInput, availableToolNames);
+      if (plannedTool) {
+        if (body.stream) {
+          reply.type("application/x-ndjson");
+          return [
+            JSON.stringify({
+              model: "test-model",
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [
+                  {
+                    id: plannedTool.id,
+                    function: {
+                      name: plannedTool.name,
+                      arguments: plannedTool.args,
+                    },
+                  },
+                ],
+              },
+              done: false,
+            }),
+            JSON.stringify({
+              model: "test-model",
+              done: true,
+              done_reason: "stop",
+              prompt_eval_count: 16,
+              eval_count: 8,
+            }),
+          ].join("\n");
+        }
+
+        return {
+          model: "test-model",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: plannedTool.id,
+                function: {
+                  name: plannedTool.name,
+                  arguments: plannedTool.args,
+                },
+              },
+            ],
+          },
+          done: true,
+          done_reason: "stop",
+          prompt_eval_count: 16,
+          eval_count: 8,
+        };
+      }
+    }
+
+    const replyText = buildProviderReply(lastUserMessage, injectionMessage, toolMessages.map((message) => message.content).join("\n"));
 
     if (body.stream) {
       reply.type("application/x-ndjson");
@@ -341,8 +429,189 @@ async function startStubProviderServer() {
   return startFastify(app);
 }
 
-function buildProviderReply(lastUserMessage: string, injectionMessage: string): string {
+function decideStubToolCall(
+  normalizedInput: string,
+  availableToolNames: string[],
+): {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+} | null {
+  if ((normalizedInput.includes("读取") || normalizedInput.includes("readme")) && availableToolNames.includes("fs_read")) {
+    return {
+      id: "stub-tool-read",
+      name: "fs_read",
+      args: {
+        path: "README.md",
+      },
+    };
+  }
+
+  if ((normalizedInput.includes("写入") || normalizedInput.includes("创建文件")) && availableToolNames.includes("fs_write")) {
+    return {
+      id: "stub-tool-write",
+      name: "fs_write",
+      args: {
+        path: "demo-note.txt",
+        content: "这是 e2e provider 写入的示例内容。\n",
+      },
+    };
+  }
+
+  if ((normalizedInput.includes("命令") || normalizedInput.includes("pwd") || normalizedInput.includes("目录")) && availableToolNames.includes("shell_exec")) {
+    return {
+      id: "stub-tool-shell",
+      name: "shell_exec",
+      args: {
+        command: process.platform === "win32" ? "cd" : "pwd",
+        description: "show current workspace path",
+      },
+    };
+  }
+
+  if ((normalizedInput.includes("mcp") || normalizedInput.includes("echo")) && availableToolNames.includes("mcp_call")) {
+    return {
+      id: "stub-tool-mcp",
+      name: "mcp_call",
+      args: {
+        server: "echo-http",
+        tool: "echo_text",
+        args: {
+          text: "hello-from-mcp",
+        },
+      },
+    };
+  }
+
+  return null;
+}
+
+async function startHttpMcpFixture(): Promise<RunningHttpMcpServer> {
+  const app = createMcpExpressApp();
+  const transports = new Map<string, StreamableHTTPServerTransport>();
+
+  app.post("/mcp", async (req: TestRequest, res: TestResponse) => {
+    const rawSessionId = req.headers["mcp-session-id"];
+    const sessionId = typeof rawSessionId === "string" ? rawSessionId : undefined;
+
+    try {
+      if (!sessionId) {
+        const server = new McpServer({
+          name: "e2e-http-server",
+          version: "1.0.0",
+        });
+
+        server.registerTool(
+          "echo_text",
+          {
+            description: "Echo tool for e2e MCP verification.",
+            inputSchema: {
+              text: z.string(),
+            },
+          },
+          async ({ text }) => ({
+            content: [
+              {
+                type: "text",
+                text: `mcp:${text}`,
+              },
+            ],
+          }),
+        );
+
+        const transport = new StreamableHTTPServerTransport({
+          onsessioninitialized(initializedSessionId) {
+            transports.set(initializedSessionId, transport);
+          },
+        });
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      const transport = transports.get(sessionId);
+      if (!transport) {
+        res.status(404).json({ error: "session not found" });
+        return;
+      }
+
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get("/mcp", async (req: TestRequest, res: TestResponse) => {
+    const sessionId = req.headers["mcp-session-id"];
+    const transport = typeof sessionId === "string" ? transports.get(sessionId) : undefined;
+    if (!transport) {
+      res.status(404).send("session not found");
+      return;
+    }
+
+    await transport.handleRequest(req, res);
+  });
+
+  app.delete("/mcp", async (req: TestRequest, res: TestResponse) => {
+    const rawSessionId = req.headers["mcp-session-id"];
+    const sessionId = typeof rawSessionId === "string" ? rawSessionId : undefined;
+    const transport = sessionId ? transports.get(sessionId) : undefined;
+    if (!transport) {
+      res.status(404).send("session not found");
+      return;
+    }
+
+    await transport.handleRequest(req, res);
+    if (sessionId) {
+      transports.delete(sessionId);
+    }
+  });
+
+  const server = await new Promise<http.Server>((resolve) => {
+    const startedServer = app.listen(0, "127.0.0.1", () => {
+      resolve(startedServer);
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("unable to resolve e2e MCP fixture address");
+  }
+
+  return {
+    url: `http://127.0.0.1:${address.port}/mcp`,
+    async close() {
+      await Promise.all([...transports.values()].map((transport) => transport.close().catch(() => undefined)));
+      await new Promise<void>((resolve, reject) => {
+        server.close((error?: Error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    },
+  };
+}
+
+function buildProviderReply(lastUserMessage: string, injectionMessage: string, toolSummary: string): string {
   const normalizedInjection = injectionMessage.toLowerCase();
+  if (toolSummary.includes('tool="fs_read"')) {
+    return "我已经读取了 README.md，内容已经返回。";
+  }
+  if (toolSummary.includes('tool="fs_write"')) {
+    return "写入动作已经执行，工具控制台里可以看到结果。";
+  }
+  if (toolSummary.includes('tool="shell_exec"')) {
+    return "命令执行结果已经返回，工具控制台里可以看到输出摘要。";
+  }
+  if (toolSummary.includes('tool="mcp_call"')) {
+    return "MCP 调用已经完成，结果已经返回。";
+  }
   if (lastUserMessage.includes("我偏好什么")) {
     if (normalizedInjection.includes("typescript")) {
       return "你偏好使用 TypeScript。";
@@ -351,6 +620,18 @@ function buildProviderReply(lastUserMessage: string, injectionMessage: string): 
   }
   if (lastUserMessage.includes("记住") || lastUserMessage.includes("偏好")) {
     return "已确认，我会记住你偏好使用 TypeScript。";
+  }
+  if (lastUserMessage.includes("读取") || lastUserMessage.includes("README")) {
+    return "我准备读取 README.md。";
+  }
+  if (lastUserMessage.includes("写入") || lastUserMessage.includes("创建文件")) {
+    return "我准备写入一个文件，这一步会触发确认。";
+  }
+  if (lastUserMessage.includes("命令") || lastUserMessage.includes("目录")) {
+    return "我准备执行一个命令，这一步会触发确认。";
+  }
+  if (lastUserMessage.toLowerCase().includes("mcp") || lastUserMessage.toLowerCase().includes("echo")) {
+    return "我准备调用一个 MCP 工具，这一步会触发确认。";
   }
   return "收到。";
 }
@@ -501,6 +782,7 @@ function createAgentConfig(input: {
   providerBaseUrl: string;
   ids: TestIds;
   memoryMode?: MemoryMode;
+  mcpServers?: AgentConfig["mcp"]["servers"];
 }): AgentConfig {
   return {
     runtime: {
@@ -521,7 +803,7 @@ function createAgentConfig(input: {
       cwd: input.workspaceDir,
     },
     mcp: {
-      servers: [],
+      servers: input.mcpServers ?? [],
     },
     tools: {
       shellExec: {
@@ -546,6 +828,7 @@ export async function createE2eStack(options?: {
   withStorage?: boolean;
   memoryMode?: MemoryMode;
   ids?: Partial<TestIds>;
+  withMcp?: boolean;
 }): Promise<RunningE2eStack> {
   const ids = {
     ...DEFAULT_IDS,
@@ -553,6 +836,7 @@ export async function createE2eStack(options?: {
   };
   const withStorage = options?.withStorage ?? true;
   const withRuntime = options?.withRuntime ?? true;
+  const withMcp = options?.withMcp ?? false;
   const { root, workspaceDir } = createHomeAndWorkspace();
   const startedApps: FastifyInstance[] = [];
   const { createMemoryRepositories } = await importStorageMemoryRepoModule();
@@ -560,6 +844,8 @@ export async function createE2eStack(options?: {
 
   const providerServer = await startStubProviderServer();
   startedApps.push(providerServer.app);
+
+  const mcpServer = withMcp ? await startHttpMcpFixture() : null;
 
   let storageApp: FastifyInstance | undefined;
   let storageService: RunningE2eStack["storageService"] | undefined;
@@ -581,31 +867,51 @@ export async function createE2eStack(options?: {
   let runtimeApp: FastifyInstance | undefined;
   let runtimeRepository: RunningE2eStack["runtimeRepository"] | undefined;
   let runtimeBaseUrl = "http://127.0.0.1:2";
+  let runtimePort = 0;
+  let runtimeFactory:
+    | {
+        createApp: RuntimeAppModule["createApp"];
+        runtimeRepository: RunningE2eStack["runtimeRepository"];
+        createService(readModelRepository: StorageReadModelRepository): unknown;
+      }
+    | undefined;
 
   if (withRuntime) {
     if (!storageService) {
       throw new Error("runtime stack requires storage service");
     }
 
-    const runtimeStack = await createRuntimeStack(storageBaseUrl);
-    const runtimeService = runtimeStack.createService(
+    runtimeFactory = await createRuntimeStack(storageBaseUrl);
+    const runtimeService = runtimeFactory.createService(
       new StorageReadModelRepository(() => storageService, () => storageOnline),
     );
-    const startedRuntime = await startFastify(runtimeStack.createApp(runtimeService));
-    runtimeApp = startedRuntime.app;
-    runtimeRepository = runtimeStack.runtimeRepository;
-    runtimeBaseUrl = startedRuntime.baseUrl;
-    startedApps.push(startedRuntime.app);
+      const startedRuntime = await startFastify(runtimeFactory.createApp(runtimeService));
+      runtimeApp = startedRuntime.app;
+      runtimeRepository = runtimeFactory.runtimeRepository;
+      runtimeBaseUrl = startedRuntime.baseUrl;
+      runtimePort = startedRuntime.port;
+      startedApps.push(startedRuntime.app);
   }
 
-  const mna = createServer(
-    createAgentConfig({
-      workspaceDir,
-      runtimeBaseUrl,
-      providerBaseUrl: providerServer.baseUrl,
-      ids,
-      memoryMode: options?.memoryMode,
-    }),
+  const mnaConfig = createAgentConfig({
+    workspaceDir,
+    runtimeBaseUrl,
+    providerBaseUrl: providerServer.baseUrl,
+    ids,
+    memoryMode: options?.memoryMode,
+    mcpServers: mcpServer
+      ? [
+          {
+            name: "echo-http",
+            transport: "http",
+            url: mcpServer.url,
+          },
+        ]
+      : [],
+  });
+
+  let mna = createServer(
+    mnaConfig,
     {
       homeDirectory: root,
     },
@@ -613,7 +919,7 @@ export async function createE2eStack(options?: {
   await mna.listen({ host: "127.0.0.1", port: 0 });
   startedApps.push(mna);
 
-  return {
+  const stack: RunningE2eStack = {
     ids,
     homeDir: root,
     workspaceDir,
@@ -633,6 +939,7 @@ export async function createE2eStack(options?: {
       }
       await stopFastify(storageApp);
       storageApp = undefined;
+      stack.storageApp = undefined;
     },
     async restartStorage() {
       if (storageApp) {
@@ -644,6 +951,82 @@ export async function createE2eStack(options?: {
       storagePort = storageStack.port;
       storageOnline = true;
       startedApps.push(storageStack.app);
+      stack.storageApp = storageStack.app;
+      stack.storageService = storageStack.service;
+    },
+    async stopRuntime() {
+      if (!runtimeApp) {
+        return;
+      }
+
+      const index = startedApps.indexOf(runtimeApp);
+      if (index >= 0) {
+        startedApps.splice(index, 1);
+      }
+      await stopFastify(runtimeApp);
+      runtimeApp = undefined;
+      stack.runtimeApp = undefined;
+    },
+    async restartRuntime() {
+      if (runtimeApp) {
+        return;
+      }
+      if (!storageService) {
+        throw new Error("runtime restart requires storage service");
+      }
+
+      runtimeFactory = runtimeFactory ?? (await createRuntimeStack(storageBaseUrl));
+      runtimeRepository = runtimeFactory.runtimeRepository;
+      const runtimeService = runtimeFactory.createService(
+        new StorageReadModelRepository(() => storageService, () => storageOnline),
+      );
+      const startedRuntime = await startFastify(runtimeFactory.createApp(runtimeService), runtimePort);
+      runtimeApp = startedRuntime.app;
+      runtimeBaseUrl = startedRuntime.baseUrl;
+      runtimePort = startedRuntime.port;
+      startedApps.push(startedRuntime.app);
+      stack.runtimeApp = startedRuntime.app;
+      stack.runtimeRepository = runtimeRepository;
+    },
+    async stopMna() {
+      if (!mna) {
+        return;
+      }
+      const index = startedApps.indexOf(mna);
+      if (index >= 0) {
+        startedApps.splice(index, 1);
+      }
+      await stopFastify(mna);
+    },
+    async restartMna() {
+      const address = mna.server.address();
+      const port = address && typeof address !== "string" ? address.port : 0;
+      await stopFastify(mna);
+
+      mna = createServer(
+        createAgentConfig({
+          workspaceDir,
+          runtimeBaseUrl,
+          providerBaseUrl: providerServer.baseUrl,
+          ids,
+          memoryMode: options?.memoryMode,
+          mcpServers: mcpServer
+            ? [
+                {
+                  name: "echo-http",
+                  transport: "http",
+                  url: mcpServer.url,
+                },
+              ]
+            : [],
+        }),
+        {
+          homeDirectory: root,
+        },
+      );
+      await mna.listen({ host: "127.0.0.1", port });
+      startedApps.push(mna);
+      stack.mna = mna;
     },
     async invalidateRecord(recordId, input) {
       if (!storageApp) {
@@ -685,9 +1068,14 @@ export async function createE2eStack(options?: {
       for (const app of [...startedApps].reverse()) {
         await stopFastifyWithTimeout(app);
       }
+      if (mcpServer) {
+        await mcpServer.close();
+      }
       fs.rmSync(root, { recursive: true, force: true });
     },
   };
+
+  return stack;
 }
 
 export async function createSession(stack: RunningE2eStack, input?: {
