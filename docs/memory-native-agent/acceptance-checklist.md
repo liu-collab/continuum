@@ -27,16 +27,16 @@
 
 ## 3. 工具与 MCP
 
-- [进行中] 当工具需要确认时，页面会弹出 ConfirmDialog
-- [进行中] 点击允许或拒绝后，后端行为会发生对应变化
-- [进行中] 工具控制台能看到工具调用、输出摘要和 trust level
-- [进行中] MCP 面板能显示 server 状态
-- [进行中] MCP 的 `restart` / `disable` 按钮能成功调用后端
+- [自动化通过] 当工具需要确认时，页面会弹出 ConfirmDialog
+- [自动化通过] 点击允许或拒绝后，后端行为会发生对应变化
+- [自动化通过] 工具控制台能看到工具调用、输出摘要和 trust level
+- [自动化通过] MCP 面板能显示 server 状态
+- [自动化通过] MCP 的 `restart` / `disable` 按钮能成功调用后端
 
 ## 4. 降级与恢复
 
-- [进行中] 关闭 `retrieval-runtime` 后，agent 页面不会白屏
-- [进行中] runtime 不可用时，页面能显示降级状态
+- [自动化通过] 关闭 `retrieval-runtime` 后，agent 页面不会白屏
+- [自动化通过] runtime 不可用时，页面能显示降级状态
 - [自动化通过] 关闭 `memory-native-agent` 后，`/agent` 页面显示离线提示
 - [进行中] 重启 `memory-native-agent` 后，页面能恢复连接
 
@@ -54,10 +54,12 @@
 - `visualization` 的 `agent reducer`、token route、观测页服务层单测
 - `continuum-cli` 的 mna 命令解析、状态命令、构建和类型检查
 - `visualization` 的 `/agent` 核心交互 `Playwright` 用例：session 启动、消息发送、注入空态、Prompt Inspector、memory_mode、文件预览、session 管理
+- `visualization` 的 `/agent` 工具与 MCP `Playwright` 用例：确认框、allow/deny、工具控制台、MCP restart/disable
 - `visualization` 的 `/runs` 联动 `Playwright` 用例：turn trace 查询、`/memories` 与 `/dashboard` 页面回归
+- `visualization` 的 `/agent` 降级 `Playwright` 用例：runtime down 后页面可继续工作并展示降级状态
 
 当前还未自动化覆盖、需要人工复核的部分：
 
 - `continuum start` 拉起整套服务后的真实跨服务联通
 - `token --rotate` 的完整轮换流程
-- `tool/MCP/runtime degrade` 这几组浏览器场景还在补稳定性
+- `memory-native-agent` 重启后，`/agent` 页面自动恢复连接 这一条还在补稳定性

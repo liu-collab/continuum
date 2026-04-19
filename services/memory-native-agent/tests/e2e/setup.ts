@@ -325,10 +325,20 @@ async function startStubProviderServer() {
     };
     const messages = body.messages ?? [];
     const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    const lastUserIndex = (() => {
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index]?.role === "user") {
+          return index;
+        }
+      }
+      return -1;
+    })();
     const injectionMessage = messages.find(
       (message) => message.role === "system" && typeof message.content === "string" && message.content.includes("<memory_injection"),
     )?.content ?? "";
-    const toolMessages = messages.filter((message) => message.role === "tool");
+    const toolMessages = (lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1) : messages).filter(
+      (message) => message.role === "tool",
+    );
     const normalizedInput = lastUserMessage.toLowerCase();
     const availableToolNames = (body.tools ?? [])
       .map((tool) => tool.function?.name)
