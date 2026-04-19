@@ -11,3 +11,6 @@ packages/continuum-cli/vendor/
 .env
 .env.local
 .env.*.local
+services/visualization/test-results/
+services/visualization/tests/agent-e2e/.tmp-*
+services/visualization/tmp-agent-page.png
