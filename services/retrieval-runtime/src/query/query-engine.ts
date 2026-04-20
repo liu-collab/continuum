@@ -14,10 +14,17 @@ export interface QueryEngineResult {
   degradation_reason?: string;
 }
 
-function recencyScore(updatedAt: string): number {
+const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
+  fact_preference: 180,
+  task_state: 14,
+  episodic: 30,
+};
+
+function recencyScore(updatedAt: string, memoryType: CandidateMemory["memory_type"]): number {
   const ageMs = Date.now() - new Date(updatedAt).getTime();
   const days = ageMs / (1000 * 60 * 60 * 24);
-  return clamp(1 - days / 30, 0, 1);
+  const halfLife = RECENCY_HALF_LIFE_DAYS[memoryType];
+  return clamp(Math.pow(2, -days / halfLife), 0, 1);
 }
 
 function scopeBoost(scope: ScopeType, context: TriggerContext): number {
@@ -141,7 +148,7 @@ export class QueryEngine {
           semanticScore * weights.semantic +
           clamp(candidate.importance / 5, 0, 1) * weights.importance +
           clamp(candidate.confidence, 0, 1) * weights.confidence +
-          recencyScore(candidate.updated_at) * weights.recency +
+          recencyScore(candidate.updated_at, candidate.memory_type) * weights.recency +
           scopeBoost(candidate.scope, context) * weights.scope;
 
         return {

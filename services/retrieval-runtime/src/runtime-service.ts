@@ -7,6 +7,7 @@ import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
 import type {
   DependencyStatusSnapshot,
+  FinalizeIdempotencyRecord,
   FinalizeTurnInput,
   FinalizeTurnResponse,
   MemoryMode,
@@ -27,6 +28,32 @@ function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
 
 function isWritebackAccepted(status: FinalizeTurnResponse["submitted_jobs"][number]["status"]): boolean {
   return status === "accepted" || status === "accepted_async" || status === "merged";
+}
+
+function buildFinalizeCacheKey(input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "current_input">): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        session_id: input.session_id,
+        turn_id: input.turn_id ?? null,
+        current_input: input.current_input,
+      }),
+    )
+    .digest("hex");
+}
+
+function buildFinalizeIdempotencyRecord(
+  key: string,
+  response: FinalizeTurnResponse,
+  ttlMs: number,
+): FinalizeIdempotencyRecord {
+  const createdAt = nowIso();
+  return {
+    idempotency_key: key,
+    response,
+    created_at: createdAt,
+    expires_at: new Date(Date.parse(createdAt) + ttlMs).toISOString(),
+  };
 }
 
 export class RetrievalRuntimeService {
@@ -237,18 +264,15 @@ export class RetrievalRuntimeService {
       ...input,
       memory_mode: resolveMemoryMode(input.memory_mode),
     };
-    const finalizeCacheKey = createHash("sha256")
-      .update(
-        JSON.stringify({
-          session_id: normalizedInput.session_id,
-          turn_id: normalizedInput.turn_id ?? null,
-          current_input: normalizedInput.current_input,
-        }),
-      )
-      .digest("hex");
+    const finalizeCacheKey = buildFinalizeCacheKey(normalizedInput);
     const cached = await this.finalizeIdempotencyCache?.get(finalizeCacheKey);
     if (cached) {
       return cached;
+    }
+    const persisted = await this.repository.findFinalizeIdempotencyRecord(finalizeCacheKey);
+    if (persisted) {
+      await this.finalizeIdempotencyCache?.set(finalizeCacheKey, persisted.response);
+      return persisted.response;
     }
     const traceId =
       normalizedInput.turn_id
@@ -346,6 +370,13 @@ export class RetrievalRuntimeService {
       dependency_status: await this.dependencyGuard.snapshot(),
     };
     await this.finalizeIdempotencyCache?.set(finalizeCacheKey, response);
+    await this.repository.upsertFinalizeIdempotencyRecord(
+      buildFinalizeIdempotencyRecord(
+        finalizeCacheKey,
+        response,
+        this.finalizeIdempotencyCache?.ttlMs() ?? 5 * 60 * 1000,
+      ),
+    );
     return response;
   }
 

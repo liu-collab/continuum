@@ -164,6 +164,13 @@ export interface WritebackOutboxRecord {
   submitted_at?: string;
 }
 
+export interface FinalizeIdempotencyRecord {
+  idempotency_key: string;
+  response: FinalizeTurnResponse;
+  created_at: string;
+  expires_at: string;
+}
+
 export interface SubmittedWriteBackJob {
   candidate_summary: string;
   job_id?: string;

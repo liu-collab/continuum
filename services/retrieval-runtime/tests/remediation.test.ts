@@ -8,14 +8,18 @@ import { z } from "zod";
 
 import type { AppConfig } from "../src/config.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
+import { InjectionEngine } from "../src/injection/injection-engine.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import { PostgresRuntimeRepository } from "../src/observability/postgres-runtime-repository.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
 import { PostgresReadModelRepository } from "../src/query/postgres-read-model-repository.js";
 import { buildRetrievalQuery, QueryEngine } from "../src/query/query-engine.js";
+import { RetrievalRuntimeService } from "../src/runtime-service.js";
 import type { CandidateMemory } from "../src/shared/types.js";
+import { estimateTokens } from "../src/shared/utils.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
 import { renderMigrationTemplate } from "../src/db/migration-runner.js";
+import { FinalizeIdempotencyCache } from "../src/writeback/finalize-idempotency-cache.js";
 import { HttpLlmExtractor } from "../src/writeback/llm-extractor.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
 
@@ -161,6 +165,46 @@ class FakePool {
   }
 }
 
+class StubEmbeddingsClient {
+  constructor(private readonly vector: number[] = [1, 0, 0]) {}
+
+  async embedText(): Promise<number[]> {
+    return this.vector;
+  }
+}
+
+class StubStorageClient {
+  public callCount = 0;
+
+  async submitCandidates(candidates: Array<{ summary: string }>) {
+    this.callCount += 1;
+    return candidates.map((candidate) => ({
+      candidate_summary: candidate.summary,
+      status: "accepted_async" as const,
+    }));
+  }
+}
+
+class CountingLlmExtractor {
+  public callCount = 0;
+
+  async extract() {
+    this.callCount += 1;
+    return {
+      candidates: [
+        {
+          candidate_type: "fact_preference" as const,
+          scope: "user" as const,
+          summary: "默认中文输出",
+          importance: 5,
+          confidence: 0.93,
+          write_reason: "stable preference",
+        },
+      ],
+    };
+  }
+}
+
 const candidateRecords: CandidateMemory[] = [
   {
     id: "memory-1",
@@ -178,6 +222,8 @@ const candidateRecords: CandidateMemory[] = [
     summary_embedding: [1, 0, 0],
   },
 ];
+
+const baseCandidateRecord = candidateRecords[0]!;
 
 describe("retrieval-runtime remediation", () => {
   it("ships Claude Code and Codex host adapter artifacts", async () => {
@@ -409,7 +455,7 @@ describe("retrieval-runtime remediation", () => {
       task_id: "550e8400-e29b-41d4-a716-446655440003",
       turn_id: "turn-1",
       current_input: "我偏好: 默认中文输出",
-      assistant_output: "已确认: 后续都用中文。下一步: 完成接口测试。我会把桥接脚本补齐。",
+      assistant_output: "已确认: 后续都用中文。下一步: 完成接口测试。我会在每次发布前补齐桥接脚本并验证。",
       tool_results_summary: "tool summary: runtime observed a stable external event",
     });
 
@@ -519,6 +565,167 @@ describe("retrieval-runtime remediation", () => {
     expect(decision.hit).toBe(false);
     expect(decision.degraded).toBe(true);
     expect(decision.degradation_reason).toBe("dependency_unavailable");
+  });
+
+  it("estimates more tokens for chinese text than for equivalent latin text", () => {
+    expect(estimateTokens("默认中文输出默认中文输出")).toBeGreaterThan(estimateTokens("default output default output"));
+    expect(estimateTokens("  ")).toBe(0);
+  });
+
+  it("keeps semantic fallback model-aware by using a sample-distribution threshold", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const guard = new DependencyGuard(repository, pino({ enabled: false }));
+    const triggerEngine = new TriggerEngine(
+      config,
+      new StubEmbeddingsClient([1, 0, 0]),
+      new InMemoryReadModelRepository([
+        {
+          ...baseCandidateRecord,
+          id: "semantic-low-1",
+          summary: "和当前输入弱相关的样本一",
+          summary_embedding: [0.69, 0.72, 0],
+        },
+        {
+          ...baseCandidateRecord,
+          id: "semantic-low-2",
+          summary: "和当前输入弱相关的样本二",
+          summary_embedding: [0.52, 0.85, 0],
+        },
+      ]),
+      guard,
+      pino({ enabled: false }),
+    );
+
+    const decision = await triggerEngine.decide({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "继续沿用这套输出格式和说明方式",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(decision.hit).toBe(true);
+    expect(decision.trigger_type).toBe("semantic_fallback");
+    expect((decision.semantic_score ?? 0)).toBeLessThan(config.SEMANTIC_TRIGGER_THRESHOLD);
+  });
+
+  it("avoids extracting polite assistant promises as commitments in rules mode", async () => {
+    const guard = new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false }));
+    const engine = new WritebackEngine(
+      config,
+      {
+        submitCandidates: async () => [],
+      },
+      guard,
+    );
+
+    const extracted = await engine.extractCandidates({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "继续处理这个问题",
+      assistant_output: "好的，我会帮你继续看这个问题。",
+      tool_results_summary: "ok",
+    });
+
+    expect(extracted.candidates.some((candidate) => candidate.candidate_type === "episodic")).toBe(false);
+  });
+
+  it("keeps rerank ordering inside the same memory type during injection trimming", () => {
+    const engine = new InjectionEngine({
+      ...config,
+      INJECTION_RECORD_LIMIT: 1,
+      INJECTION_TOKEN_BUDGET: 128,
+    });
+
+    const block = engine.build({
+      packet_id: "packet-1",
+      trigger: "history_reference",
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace"],
+      selected_scopes: ["workspace"],
+      scope_reason: "test",
+      query_scope: "scope=workspace",
+      packet_summary: "测试摘要",
+      injection_hint: "测试提示",
+      ttl_ms: 1000,
+      priority_breakdown: {
+        fact_preference: 2,
+        task_state: 0,
+        episodic: 0,
+      },
+      records: [
+        {
+          ...baseCandidateRecord,
+          id: "low-rerank",
+          scope: "workspace",
+          rerank_score: 0.45,
+          importance: 5,
+        },
+        {
+          ...baseCandidateRecord,
+          id: "high-rerank",
+          scope: "workspace",
+          rerank_score: 0.92,
+          importance: 3,
+        },
+      ],
+    });
+
+    expect(block?.memory_records).toHaveLength(1);
+    expect(block?.memory_records[0]?.id).toBe("high-rerank");
+  });
+
+  it("persists finalize idempotency responses at request scope", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const dependencyGuard = new DependencyGuard(repository, logger);
+    const readModelRepository = new InMemoryReadModelRepository(candidateRecords);
+    const storageClient = new StubStorageClient();
+    const llmExtractor = new CountingLlmExtractor();
+
+    const firstService = new RetrievalRuntimeService(
+      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new InjectionEngine(config),
+      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      repository,
+      dependencyGuard,
+      logger,
+      new FinalizeIdempotencyCache(config),
+    );
+
+    const request = {
+      host: "codex_app_server" as const,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "persisted-finalize-key",
+      current_input: "后续默认中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    };
+
+    const first = await firstService.finalizeTurn(request);
+
+    const secondService = new RetrievalRuntimeService(
+      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new InjectionEngine(config),
+      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      repository,
+      dependencyGuard,
+      logger,
+      new FinalizeIdempotencyCache(config),
+    );
+
+    const second = await secondService.finalizeTurn(request);
+
+    expect(first).toEqual(second);
+    expect(llmExtractor.callCount).toBe(1);
+    expect(storageClient.callCount).toBe(1);
   });
 
   it("rejects host payloads that omit required identity fields instead of falling back to unknown namespaces", async () => {

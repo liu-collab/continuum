@@ -125,6 +125,13 @@ interface WritebackOutboxRow {
   submitted_at: Date | string | null;
 }
 
+interface FinalizeIdempotencyRow {
+  idempotency_key: string;
+  response_json: unknown;
+  created_at: Date | string;
+  expires_at: Date | string;
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -272,6 +279,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL,
         submitted_at TIMESTAMPTZ NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_finalize_idempotency (
+        idempotency_key TEXT PRIMARY KEY,
+        response_json JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL
       )
     `);
   }
@@ -639,6 +654,50 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     );
 
     return result.rows[0]?.trace_id ?? null;
+  }
+
+  async findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null> {
+    const result = await this.pool.query<FinalizeIdempotencyRow>(
+      `
+      SELECT idempotency_key, response_json, created_at, expires_at
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_finalize_idempotency
+      WHERE idempotency_key = $1
+        AND expires_at > NOW()
+      `,
+      [key],
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      idempotency_key: row.idempotency_key,
+      response: row.response_json as FinalizeIdempotencyRecord["response"],
+      created_at: toIso(row.created_at),
+      expires_at: toIso(row.expires_at),
+    };
+  }
+
+  async upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_finalize_idempotency (
+        idempotency_key, response_json, created_at, expires_at
+      ) VALUES ($1,$2::jsonb,$3,$4)
+      ON CONFLICT (idempotency_key) DO UPDATE
+      SET response_json = EXCLUDED.response_json,
+          created_at = EXCLUDED.created_at,
+          expires_at = EXCLUDED.expires_at
+      `,
+      [
+        record.idempotency_key,
+        JSON.stringify(record.response),
+        record.created_at,
+        record.expires_at,
+      ],
+    );
   }
 
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {

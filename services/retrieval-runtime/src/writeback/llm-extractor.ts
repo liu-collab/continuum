@@ -49,6 +49,20 @@ Rules:
 - Use "episodic" for concrete commitments or externally observable events that may matter later.
 - Use "workspace" for repository rules, project constraints, directory conventions, or workspace background.
 - Return at most 5 candidates.
+
+DO NOT extract:
+- Polite acknowledgments like "好的", "没问题", or "I'll help you with that".
+- File paths, code locations, or repository details mentioned only in passing.
+- Temporary debugging notes, investigation chatter, or restatements of the user's question.
+
+Examples of good extractions:
+- User: "我习惯用 4 空格缩进" -> fact_preference, scope=user, summary="偏好 4 空格缩进"
+- Assistant: "数据库迁移已完成，下一步验证回滚" -> task_state, scope=task
+
+Examples of bad extractions:
+- Assistant: "好的，我来帮你修复这个 bug" -> do not extract
+- Assistant: "文件在 src/auth/middleware.ts" -> do not extract
+- User: "看看这个报错" -> do not extract
 `.trim();
 
 export class HttpLlmExtractor implements LlmExtractor {

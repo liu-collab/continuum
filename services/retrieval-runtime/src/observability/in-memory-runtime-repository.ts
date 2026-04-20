@@ -1,6 +1,7 @@
 import type {
   DependencyStatus,
   DependencyStatusSnapshot,
+  FinalizeIdempotencyRecord,
   InjectionRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
@@ -30,6 +31,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly injectionRuns: InjectionRunRecord[] = [];
   private readonly writebackSubmissions: WritebackSubmissionRecord[] = [];
   private readonly writebackOutbox: WritebackOutboxRecord[] = [];
+  private readonly finalizeIdempotencyRecords = new Map<string, FinalizeIdempotencyRecord>();
   private readonly dependencies: Map<DependencyStatus["name"], DependencyStatus> = new Map([
     ["read_model", defaultDependencyStatus("read_model")],
     ["embeddings", defaultDependencyStatus("embeddings")],
@@ -179,6 +181,24 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
 
     const latest = candidates.sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
     return latest?.trace_id ?? null;
+  }
+
+  async findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null> {
+    const record = this.finalizeIdempotencyRecords.get(key);
+    if (!record) {
+      return null;
+    }
+
+    if (Date.parse(record.expires_at) <= Date.now()) {
+      this.finalizeIdempotencyRecords.delete(key);
+      return null;
+    }
+
+    return record;
+  }
+
+  async upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void> {
+    this.finalizeIdempotencyRecords.set(record.idempotency_key, record);
   }
 
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {

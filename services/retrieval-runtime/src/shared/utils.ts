@@ -3,7 +3,30 @@ export function nowIso(): string {
 }
 
 export function estimateTokens(text: string): number {
-  return Math.max(1, Math.ceil(text.trim().length / 4));
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return 0;
+  }
+
+  let cjkChars = 0;
+  let otherChars = 0;
+
+  for (const char of trimmed) {
+    const code = char.codePointAt(0) ?? 0;
+    if (
+      (code >= 0x4e00 && code <= 0x9fff) ||
+      (code >= 0x3400 && code <= 0x4dbf) ||
+      (code >= 0x3000 && code <= 0x303f) ||
+      (code >= 0xff00 && code <= 0xffef)
+    ) {
+      cjkChars += 1;
+      continue;
+    }
+
+    otherChars += 1;
+  }
+
+  return Math.max(1, Math.ceil(cjkChars * 1.5 + otherChars / 4));
 }
 
 export function normalizeText(text: string): string {

@@ -1,6 +1,7 @@
 import type {
   DependencyStatus,
   DependencyStatusSnapshot,
+  FinalizeIdempotencyRecord,
   InjectionRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
@@ -89,6 +90,14 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
     turn_id: string;
   }): Promise<string | null> {
     return this.tryRead((repository) => repository.findTraceIdByTurn(input));
+  }
+
+  async findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null> {
+    return this.tryRead((repository) => repository.findFinalizeIdempotencyRecord(key));
+  }
+
+  async upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.upsertFinalizeIdempotencyRecord(record));
   }
 
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {

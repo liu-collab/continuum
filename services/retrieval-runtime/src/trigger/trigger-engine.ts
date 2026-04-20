@@ -8,6 +8,8 @@ import type { Logger } from "pino";
 import { normalizeText } from "../shared/utils.js";
 
 const HISTORY_PATTERNS = ["上次", "之前", "你还记得", "我一般", "偏好", "上回", "last time", "previously"];
+const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
+const SEMANTIC_TRIGGER_MEDIAN_DELTA = 0.15;
 
 function requestedTypesByPhase(phase: TriggerContext["phase"]): MemoryType[] {
   switch (phase) {
@@ -167,7 +169,7 @@ export class TriggerEngine {
       };
     }
 
-    if (semanticScore.score >= this.config.SEMANTIC_TRIGGER_THRESHOLD) {
+    if (semanticScore.score >= semanticScore.threshold) {
       return {
         hit: true,
         trigger_type: "semantic_fallback",
@@ -202,12 +204,13 @@ export class TriggerEngine {
     requestedScopes: ScopeType[],
   ): Promise<{
     score: number;
+    threshold: number;
     degraded: boolean;
     degradation_reason?: string;
   }> {
     const queryText = normalizeText(context.current_input);
     if (!queryText) {
-      return { score: 0, degraded: false };
+      return { score: 0, threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD, degraded: false };
     }
 
     const embeddingResult = await this.dependencyGuard.run(
@@ -248,6 +251,7 @@ export class TriggerEngine {
       );
       return {
         score: 0,
+        threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
         degraded: true,
         degradation_reason:
           embeddingResult.error?.code ??
@@ -260,10 +264,11 @@ export class TriggerEngine {
     const samples = sampleResult.value ?? [];
 
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) {
-      return { score: 0, degraded: false };
+      return { score: 0, threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD, degraded: false };
     }
 
     let best = 0;
+    const scores: number[] = [];
     for (const sample of samples) {
       const embedding = sample.summary_embedding;
       if (!embedding || embedding.length !== queryEmbedding.length) {
@@ -282,9 +287,18 @@ export class TriggerEngine {
       if (leftNorm === 0 || rightNorm === 0) {
         continue;
       }
-      best = Math.max(best, dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm)));
+      const score = dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+      scores.push(score);
+      best = Math.max(best, score);
     }
 
-    return { score: best, degraded: false };
+    const sortedScores = scores.sort((left, right) => right - left);
+    const median = sortedScores.length === 0 ? 0 : sortedScores[Math.floor(sortedScores.length / 2)] ?? 0;
+    const threshold = Math.max(
+      median + SEMANTIC_TRIGGER_MEDIAN_DELTA,
+      this.config.SEMANTIC_TRIGGER_THRESHOLD * SEMANTIC_TRIGGER_FLOOR_RATIO,
+    );
+
+    return { score: best, threshold, degraded: false };
   }
 }

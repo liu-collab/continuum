@@ -48,6 +48,10 @@ export class FinalizeIdempotencyCache {
     }
   }
 
+  ttlMs(): number {
+    return this.config.FINALIZE_IDEMPOTENCY_TTL_MS;
+  }
+
   private enforceMaxEntries() {
     while (this.entries.size > this.config.FINALIZE_IDEMPOTENCY_MAX_ENTRIES) {
       const oldestKey = this.entries.keys().next().value;

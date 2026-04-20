@@ -1,6 +1,7 @@
 import type {
   DependencyStatus,
   DependencyStatusSnapshot,
+  FinalizeIdempotencyRecord,
   InjectionRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
@@ -40,6 +41,8 @@ export interface RuntimeRepository {
     session_id: string;
     turn_id: string;
   }): Promise<string | null>;
+  findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null>;
+  upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void>;
   updateDependencyStatus(status: DependencyStatus): Promise<void>;
   getDependencyStatus(): Promise<DependencyStatusSnapshot>;
   getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse>;

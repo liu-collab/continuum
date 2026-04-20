@@ -32,6 +32,17 @@ interface ClassifiedDraft extends CandidateDraft {
   scope_reason: string;
 }
 
+const PREFERENCE_PATTERNS = [
+  /(?:我一般|我喜欢|我偏好|我习惯|一直用的是|prefer|i usually|i always|my convention is|my default is)\s*[:：]?\s*(.+)/i,
+];
+
+const COMMITMENT_PATTERNS = [
+  /(?:我会|i will)\s+(?:在|after|before|每次|always|每天).{8,}/i,
+  /(?:承诺|commit to|保证)\s*[:：]?\s*(.+)/i,
+];
+
+const TRIVIAL_TOOL_PATTERNS = /^(exit code|success|ok|done|completed|finished)\b/i;
+
 function extractPreferenceDetails(text: string): Record<string, unknown> {
   const normalized = normalizeText(text);
   return {
@@ -132,7 +143,7 @@ export class WritebackEngine {
     const normalizedTools = normalizeText(input.tool_results_summary ?? "");
     let preferenceFromUserInput = false;
 
-    const preferenceMatch = normalizedUser.match(/(?:我一般|我喜欢|我偏好|prefer)\s*[:：]?\s*(.+)$/i);
+    const preferenceMatch = PREFERENCE_PATTERNS.map((pattern) => normalizedUser.match(pattern)).find((match) => match?.[1]);
     if (preferenceMatch?.[1]) {
       preferenceFromUserInput = true;
       rawCandidates.push({
@@ -197,7 +208,8 @@ export class WritebackEngine {
       filteredReasons.push("no_task_state_update_detected");
     }
 
-    if (normalizedAssistant.includes("我会") || normalizedAssistant.toLowerCase().includes("i will")) {
+    const hasConcreteCommitment = COMMITMENT_PATTERNS.some((pattern) => pattern.test(normalizedAssistant));
+    if (hasConcreteCommitment) {
       rawCandidates.push({
         candidate_type: "episodic",
         scope: input.task_id ? "task" : "session",
@@ -218,7 +230,7 @@ export class WritebackEngine {
       filteredReasons.push("no_commitment_detected");
     }
 
-    if (normalizedTools && normalizedTools.length > 24) {
+    if (normalizedTools && normalizedTools.length > 24 && !TRIVIAL_TOOL_PATTERNS.test(normalizedTools)) {
       rawCandidates.push({
         candidate_type: "episodic",
         scope: input.task_id ? "task" : "session",

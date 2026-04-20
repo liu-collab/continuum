@@ -36,6 +36,9 @@ export class InjectionEngine {
       if (leftPriority !== rightPriority) {
         return leftPriority - rightPriority;
       }
+      if ((left.rerank_score ?? 0) !== (right.rerank_score ?? 0)) {
+        return (right.rerank_score ?? 0) - (left.rerank_score ?? 0);
+      }
       if (left.importance !== right.importance) {
         return right.importance - left.importance;
       }
