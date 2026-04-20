@@ -56,21 +56,18 @@ export default async function RunsPage({
             title="筛选运行"
             description="按 turn / session / trace id 过滤。"
           >
-            {({ close }) => (
-              <SearchForm
-                action="/runs"
-                onSubmitted={close}
-                initialValues={{
-                  turn_id: filters.turnId,
-                  session_id: filters.sessionId,
-                  trace_id: filters.traceId
-                }}
-              >
-                <FormField label="Turn id" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
-                <FormField label="Session id" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-                <FormField label="Trace id" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
-              </SearchForm>
-            )}
+            <SearchForm
+              action="/runs"
+              initialValues={{
+                turn_id: filters.turnId,
+                session_id: filters.sessionId,
+                trace_id: filters.traceId
+              }}
+            >
+              <FormField label="Turn id" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
+              <FormField label="Session id" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+              <FormField label="Trace id" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
+            </SearchForm>
           </FilterModalButton>
           <HealthModalButton health={health} />
         </div>

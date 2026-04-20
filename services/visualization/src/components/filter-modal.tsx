@@ -1,7 +1,7 @@
 "use client";
 
 import { SlidersHorizontal } from "lucide-react";
-import { ReactNode, useState } from "react";
+import React, { ReactNode, useState } from "react";
 
 import { Modal } from "@/components/modal";
 
@@ -9,7 +9,7 @@ type FilterModalButtonProps = {
   activeCount?: number;
   title?: string;
   description?: string;
-  children(options: { close: () => void }): ReactNode;
+  children: ReactNode;
 };
 
 export function FilterModalButton({
@@ -32,7 +32,7 @@ export function FilterModalButton({
         ) : null}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={title} description={description} size="lg">
-        {children({ close: () => setOpen(false) })}
+        {children}
       </Modal>
     </>
   );
