@@ -952,6 +952,11 @@ function createAgentConfig(input: {
       flushChars: 4,
       flushIntervalMs: 1,
     },
+    skills: {
+      enabled: true,
+      autoDiscovery: false,
+      discoveryPaths: [],
+    },
     locale: "zh-CN",
   };
 }

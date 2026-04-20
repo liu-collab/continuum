@@ -20,6 +20,7 @@ import type { AgentConfig } from "../config/index.js";
 import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
 import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
 import type { SessionStore } from "../session-store/index.js";
+import type { MaterializedSkillContext } from "../skills/index.js";
 import type { ToolCallEnvelope, ToolDispatcher, ToolResult } from "../tools/index.js";
 
 export interface InjectionBlock {
@@ -71,6 +72,10 @@ export interface RunnerDeps {
   initialMessages?: ChatMessage[];
 }
 
+export interface SubmitOptions {
+  skillContext?: MaterializedSkillContext;
+}
+
 export class AgentRunner {
   private readonly conversation = new Conversation();
   private readonly sessionId: string;
@@ -93,7 +98,7 @@ export class AgentRunner {
     this.deps.io.emitInjectionBanner(this.sessionId, injection, Boolean(result?.degraded));
   }
 
-  async submit(userInput: string, turnId = createTurnId()): Promise<void> {
+  async submit(userInput: string, turnId = createTurnId(), options: SubmitOptions = {}): Promise<void> {
     const abortController = new AbortController();
     this.activeAbortControllers.set(turnId, abortController);
 
@@ -135,7 +140,7 @@ export class AgentRunner {
       platform: process.platform,
       memoryMode: this.deps.config.memory.mode,
       locale: this.deps.config.locale,
-      appendedPrompt: this.deps.config.cli.systemPrompt,
+      appendedPrompt: [this.deps.config.cli.systemPrompt, options.skillContext?.systemPrompt].filter(Boolean).join("\n\n") || null,
     });
     const tools = this.deps.tools.listTools();
     this.conversation.addMessage({
@@ -201,6 +206,8 @@ export class AgentRunner {
           messages,
           tools,
           max_tokens: requestMaxTokens,
+          model: options.skillContext?.modelOverride,
+          effort: options.skillContext?.effort,
           signal: abortController.signal,
         });
 
@@ -244,7 +251,7 @@ export class AgentRunner {
               ];
             }
             await bridge.handle(chunk);
-            const toolResult = await this.runTool(turnId, chunk.call, abortController.signal);
+            const toolResult = await this.runTool(turnId, chunk.call, abortController.signal, options.skillContext);
             toolResults.push(toolResult);
             this.deps.io.emitToolCallResult(chunk.call.id, toolResult);
             const wrappedToolOutput = this.conversation.wrapToolOutput(
@@ -500,7 +507,12 @@ export class AgentRunner {
     }
   }
 
-  private async runTool(turnId: string, call: ToolCall, abortSignal: AbortSignal): Promise<ToolResult> {
+  private async runTool(
+    turnId: string,
+    call: ToolCall,
+    abortSignal: AbortSignal,
+    skillContext?: MaterializedSkillContext,
+  ): Promise<ToolResult> {
     return await this.deps.tools.invoke(
       call as ToolCallEnvelope,
       {
@@ -510,6 +522,7 @@ export class AgentRunner {
         cwd: this.deps.config.memory.cwd,
         workspaceRoot: this.deps.config.memory.cwd,
         artifactsRoot: requireArtifactsRoot(this.deps),
+        preapprovedTools: skillContext?.preapprovedTools,
         abort: abortSignal,
         confirm: this.deps.io.requestConfirm.bind(this.deps.io),
       },

@@ -230,7 +230,7 @@ export class OllamaProvider implements IModelProvider {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: this.options.model,
+            model: options.request.model ?? this.options.model,
             messages: mapOllamaMessages(options.request.messages),
             tools: mapOllamaTools(options.request.tools),
             stream: options.stream,

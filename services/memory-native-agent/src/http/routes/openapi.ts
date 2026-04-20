@@ -31,6 +31,21 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Update current agent and embedding config",
         },
       },
+      "/v1/skills": {
+        get: {
+          summary: "List imported skills",
+        },
+      },
+      "/v1/skills/import": {
+        post: {
+          summary: "Import a skill from a local path",
+        },
+      },
+      "/v1/skills/preview": {
+        post: {
+          summary: "Preview resolved skill context",
+        },
+      },
       "/v1/agent/metrics": {
         get: {
           summary: "Runtime metrics",

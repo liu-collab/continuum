@@ -12,6 +12,12 @@ export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_DEMO_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
 export const DEFAULT_TOOL_MAX_OUTPUT_CHARS = 8_192;
 export const DEFAULT_CONTEXT_RESERVE_TOKENS = 4_096;
+export const DEFAULT_SKILL_DISCOVERY_PATHS = [
+  ".mna/skills",
+  ".claude/skills",
+  ".claude/commands",
+  "~/.codex/skills",
+];
 
 export const DEFAULT_SHELL_DENY_PATTERNS = [
   "rm -rf /",
@@ -73,6 +79,11 @@ export const DEFAULT_RAW_CONFIG = {
   streaming: {
     flush_chars: DEFAULT_STREAM_FLUSH_CHARS,
     flush_interval_ms: DEFAULT_STREAM_FLUSH_INTERVAL_MS,
+  },
+  skills: {
+    enabled: true,
+    auto_discovery: false,
+    discovery_paths: DEFAULT_SKILL_DISCOVERY_PATHS,
   },
   locale: undefined as "zh-CN" | "en-US" | undefined,
 };

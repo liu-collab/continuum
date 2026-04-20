@@ -304,7 +304,7 @@ export class OpenAICompatibleProvider implements IModelProvider {
             ...(this.options.organization ? { "OpenAI-Organization": this.options.organization } : {}),
           },
           body: JSON.stringify({
-            model: this.options.model,
+            model: options.request.model ?? this.options.model,
             messages: mapOpenAIMessages(options.request.messages),
             tools: mapOpenAITools(options.request.tools),
             tool_choice: options.request.tools?.length ? "auto" : undefined,

@@ -92,6 +92,11 @@ export interface AgentConfig {
     flushChars: number;
     flushIntervalMs: number;
   };
+  skills: {
+    enabled: boolean;
+    autoDiscovery: boolean;
+    discoveryPaths: string[];
+  };
   locale: Locale;
 }
 
@@ -394,6 +399,11 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     streaming: {
       flushChars: effectiveConfig.streaming.flush_chars,
       flushIntervalMs: effectiveConfig.streaming.flush_interval_ms,
+    },
+    skills: {
+      enabled: effectiveConfig.skills.enabled,
+      autoDiscovery: effectiveConfig.skills.auto_discovery,
+      discoveryPaths: [...effectiveConfig.skills.discovery_paths],
     },
     locale: resolveLocale(effectiveConfig.locale, env),
   };

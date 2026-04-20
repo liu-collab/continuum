@@ -117,6 +117,14 @@ const partialStreamingSchema = z
   })
   .strict();
 
+const partialSkillsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    auto_discovery: z.boolean().optional(),
+    discovery_paths: z.array(nonEmptyStringSchema).optional(),
+  })
+  .strict();
+
 export const configFileSchema = z
   .object({
     runtime: partialRuntimeSchema.optional(),
@@ -128,6 +136,7 @@ export const configFileSchema = z
     context: partialContextSchema.optional(),
     logging: partialLoggingSchema.optional(),
     streaming: partialStreamingSchema.optional(),
+    skills: partialSkillsSchema.optional(),
     locale: localeSchema.optional(),
   })
   .strict();
@@ -210,6 +219,14 @@ const mergedStreamingSchema = z
   })
   .strict();
 
+const mergedSkillsSchema = z
+  .object({
+    enabled: z.boolean(),
+    auto_discovery: z.boolean(),
+    discovery_paths: z.array(nonEmptyStringSchema),
+  })
+  .strict();
+
 export const mergedConfigSchema = z
   .object({
     runtime: mergedRuntimeSchema,
@@ -221,6 +238,7 @@ export const mergedConfigSchema = z
     context: mergedContextSchema,
     logging: mergedLoggingSchema,
     streaming: mergedStreamingSchema,
+    skills: mergedSkillsSchema,
     locale: localeSchema.optional(),
   })
   .strict();

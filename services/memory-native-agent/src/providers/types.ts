@@ -34,6 +34,8 @@ export interface ChatRequest {
   tools?: ToolSchema[];
   temperature?: number;
   max_tokens?: number;
+  model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   signal?: AbortSignal;
 }
 

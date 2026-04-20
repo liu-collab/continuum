@@ -24,6 +24,13 @@ export class PermissionGate {
       };
     }
 
+    if (context.preapprovedTools?.includes(call.name)) {
+      return {
+        allowed: true,
+        decision: "preapproved",
+      };
+    }
+
     const sessionKey = this.buildSessionKey(tool, call.args);
     const existing = this.sessionPermissions.get(context.sessionId);
     if (existing?.has(sessionKey)) {

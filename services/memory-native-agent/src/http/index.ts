@@ -6,6 +6,7 @@ import { registerConfigRoutes } from "./routes/config.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
+import { registerSkillRoutes } from "./routes/skills.js";
 import { registerSessionWebsocket } from "./ws/session-ws.js";
 
 export function registerHttpRoutes(app: RuntimeFastifyInstance) {
@@ -49,6 +50,7 @@ export function registerHttpRoutes(app: RuntimeFastifyInstance) {
   registerOpenApiRoutes(app);
   registerConfigRoutes(app);
   registerSessionRoutes(app);
+  registerSkillRoutes(app);
   registerMcpRoutes(app);
   registerSessionWebsocket(app);
 }

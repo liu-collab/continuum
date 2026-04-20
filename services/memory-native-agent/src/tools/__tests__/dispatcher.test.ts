@@ -227,4 +227,37 @@ describe("ToolDispatcher", () => {
       }),
     );
   });
+
+  it("allows confirmed tools through skill preapproval", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mna-tools-dispatch-"));
+    tempRoots.push(root);
+    const registry = new ToolRegistry();
+    registry.register(createFsWriteTool());
+    const dispatcher = new ToolDispatcher({
+      registry,
+      gate: new PermissionGate(),
+    });
+
+    const confirm = vi.fn(async () => "deny" as const);
+    const result = await dispatcher.invoke(
+      {
+        id: "call-preapproved",
+        name: "fs_write",
+        args: {
+          path: "preapproved.txt",
+          content: "ok",
+        },
+      },
+      {
+        ...createContext(root, "deny"),
+        callId: "call-preapproved",
+        preapprovedTools: ["fs_write"],
+        confirm,
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.permission_decision).toBe("preapproved");
+    expect(confirm).not.toHaveBeenCalled();
+  });
 });

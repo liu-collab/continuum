@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentConfig } from "../../config/index.js";
+import type { MaterializedSkillContext } from "../../skills/index.js";
 import { AgentRunner } from "../agent-runner.js";
 
 function createIo() {
@@ -124,6 +125,11 @@ function createConfig(): AgentConfig {
     streaming: {
       flushChars: 2,
       flushIntervalMs: 1_000,
+    },
+    skills: {
+      enabled: true,
+      autoDiscovery: false,
+      discoveryPaths: [],
     },
     locale: "zh-CN" as const,
   };
@@ -727,5 +733,132 @@ describe("AgentRunner", () => {
         max_tokens: 10_000,
       }),
     );
+  });
+
+  it("injects skill context and forwards model override plus preapproved tools", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      output: "updated",
+      trust_level: "builtin_write" as const,
+      permission_decision: "preapproved" as const,
+    }));
+    const chat = vi.fn(async function* () {
+      yield {
+        type: "tool_call",
+        call: {
+          id: "call-skill",
+          name: "fs_write",
+          args: {
+            path: "notes.txt",
+            content: "body",
+          },
+        },
+      } as const;
+      yield {
+        type: "end",
+        finish_reason: "tool_use",
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+        },
+      } as const;
+      yield { type: "text_delta", text: "done" } as const;
+      yield {
+        type: "end",
+        finish_reason: "stop",
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+        },
+      } as const;
+    });
+    const skillContext: MaterializedSkillContext = {
+      skill: {
+        id: "skill-1",
+        name: "Deploy Helper",
+        description: "desc",
+        source: {
+          kind: "claude-skill",
+          rootDir: "C:/workspace",
+          entryFile: "C:/workspace/SKILL.md",
+        },
+        content: {
+          markdown: "body",
+          resources: [],
+        },
+        invocation: {
+          userInvocable: true,
+          modelInvocable: false,
+          slashName: "deploy-helper",
+        },
+        runtime: {
+          model: "claude-sonnet-4",
+          effort: "high",
+        },
+        permissions: {
+          preapprovedTools: ["fs_write"],
+        },
+      },
+      input: {
+        skill: null as unknown as MaterializedSkillContext["skill"],
+        rawInput: "/deploy-helper prod api",
+        rawArguments: "prod api",
+        positionalArguments: ["prod", "api"],
+      },
+      systemPrompt: "skill prompt",
+      modelOverride: "claude-sonnet-4",
+      effort: "high",
+      preapprovedTools: ["fs_write"],
+    };
+    skillContext.input.skill = skillContext.skill;
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "openai-compatible",
+        model: () => "gpt-4.1-mini",
+        chat,
+      },
+      tools: {
+        listTools: () => [
+          {
+            name: "fs_write",
+            description: "Write a file",
+            parameters: { type: "object" },
+          },
+        ],
+        invoke,
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("/deploy-helper prod api", "turn-skill", { skillContext });
+
+    expect(chat).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        model: "claude-sonnet-4",
+        effort: "high",
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: "system",
+            content: expect.stringContaining("skill prompt"),
+          }),
+        ]),
+      }),
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "fs_write",
+      }),
+      expect.objectContaining({
+        preapprovedTools: ["fs_write"],
+      }),
+    );
+    expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-skill", "stop");
   });
 });

@@ -8,6 +8,7 @@ import { MemoryClient } from "../memory-client/index.js";
 import { createProvider, type ChatMessage, type IModelProvider } from "../providers/index.js";
 import { AgentRunner, type RunnerIO } from "../runner/index.js";
 import { SqliteSessionStore, type SessionStore } from "../session-store/index.js";
+import { SkillRegistry } from "../skills/index.js";
 import { createDefaultToolDispatcher, type ToolDispatcher, type ToolResult } from "../tools/index.js";
 import type { MemoryMode } from "../config/schema.js";
 import { resolveArtifactsRoot, resolveMnaHomeDirectory } from "../shared/token.js";
@@ -55,6 +56,7 @@ export interface MnaRuntimeState {
   mcpRegistry: McpRegistry;
   store: SessionStore;
   tools: ToolDispatcher;
+  skills: SkillRegistry;
   sessions: Map<string, SessionState>;
   metrics: ServerMetrics;
   artifactsRoot: string;
@@ -67,6 +69,14 @@ export interface RuntimeStateOptions {
 
 const SESSION_EVENT_BUFFER_LIMIT = 200;
 const SESSION_EVENT_TTL_MS = 10 * 60 * 1000;
+
+function resolveSkillConfig(config: AgentConfig) {
+  return config.skills ?? {
+    enabled: true,
+    autoDiscovery: false,
+    discoveryPaths: [],
+  };
+}
 
 export function createRuntimeState(config: AgentConfig, options: RuntimeStateOptions = {}): MnaRuntimeState {
   const artifactsRoot = resolveArtifactsRoot(options.homeDirectory);
@@ -81,6 +91,18 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
   const mcpRegistry = new McpRegistry();
   for (const server of config.mcp.servers) {
     void mcpRegistry.addServer(server).catch(() => undefined);
+  }
+
+  const mnaHome = resolveMnaHomeDirectory(options.homeDirectory);
+  const skills = new SkillRegistry({
+    persistencePath: path.join(mnaHome, "skills", "registry.json"),
+  });
+  const skillConfig = resolveSkillConfig(config);
+  if (skillConfig.enabled) {
+    skills.loadPersisted();
+    if (skillConfig.autoDiscovery) {
+      skills.discover(skillConfig.discoveryPaths, config.memory.cwd);
+    }
   }
 
   return {
@@ -100,6 +122,7 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
       sessionStore: store,
       artifactsRoot,
     }),
+    skills,
     sessions: new Map(),
     metrics: {
       startedAt: Date.now(),

@@ -3,6 +3,7 @@ import type { ToolCall, ToolSchema } from "../providers/types.js";
 export type PermissionMode = "auto" | "confirm";
 export type PermissionDecision =
   | "auto"
+  | "preapproved"
   | "allowed_once"
   | "allowed_session"
   | "denied"
@@ -48,6 +49,7 @@ export interface ToolContext {
   workspaceRoot: string;
   artifactsRoot: string;
   maxOutputChars?: number;
+  preapprovedTools?: string[];
   abort: AbortSignal;
   confirm(payload: ConfirmPayload): Promise<"allow" | "deny" | "allow_session">;
 }

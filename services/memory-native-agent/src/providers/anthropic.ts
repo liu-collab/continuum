@@ -295,7 +295,7 @@ export class AnthropicProvider implements IModelProvider {
             "x-api-key": this.options.apiKey,
           },
           body: JSON.stringify({
-            model: this.options.model,
+            model: options.request.model ?? this.options.model,
             system: extractAnthropicSystem(options.request.messages),
             messages: mapAnthropicMessages(options.request.messages),
             tools: mapAnthropicTools(options.request.tools),

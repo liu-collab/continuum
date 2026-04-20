@@ -1,0 +1,9 @@
+name: Legacy Skill
+description: Legacy yaml format.
+system_prompt: |
+  Legacy system prompt
+execution_prompt: |
+  Use $ARGUMENTS
+allowed_tools:
+  - fs_read
+

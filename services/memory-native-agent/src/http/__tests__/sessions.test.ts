@@ -151,6 +151,11 @@ function createConfig(home: string, workspaceRoot: string): AgentConfig {
       flushChars: 32,
       flushIntervalMs: 30,
     },
+    skills: {
+      enabled: true,
+      autoDiscovery: false,
+      discoveryPaths: [],
+    },
     locale: "zh-CN",
   };
 }

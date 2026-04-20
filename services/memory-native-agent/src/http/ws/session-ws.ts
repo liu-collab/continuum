@@ -3,6 +3,7 @@ import { URL } from "node:url";
 
 import { decodeClientEvent, encodeGapDetectedEvent, encodeServerEvent } from "./event-codec.js";
 import { createSessionState, getSessionReplayFromEventId } from "../state.js";
+import { materializeSkillContext, resolveSkillInvocation, SkillError } from "../../skills/index.js";
 import type { RuntimeFastifyInstance } from "../types.js";
 import type { WebSocketLike } from "../ws-types.js";
 
@@ -84,7 +85,59 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
       }
 
       if (event.kind === "user_input") {
+        const invocation = resolveSkillInvocation(app.runtimeState.skills, event.text);
+        if (invocation) {
+          try {
+            const skillContext = await materializeSkillContext(invocation, {
+              cwd: app.runtimeState.config.memory.cwd,
+            });
+            await session.runner.submit(event.text, event.turn_id, { skillContext });
+          } catch (error) {
+            const skillError = error instanceof SkillError
+              ? error
+              : new SkillError("skill_runtime_error", error instanceof Error ? error.message : String(error));
+            ws.send(JSON.stringify({
+              kind: "error",
+              scope: "turn",
+              code: skillError.code,
+              message: skillError.message,
+            }));
+          }
+          return;
+        }
+
         await session.runner.submit(event.text, event.turn_id);
+      }
+
+      if (event.kind === "skill_input") {
+        const text = `/${event.skill}${event.arguments ? ` ${event.arguments}` : ""}`;
+        const invocation = resolveSkillInvocation(app.runtimeState.skills, text);
+        if (!invocation) {
+          ws.send(JSON.stringify({
+            kind: "error",
+            scope: "turn",
+            code: "skill_not_found",
+            message: `Skill not found: ${event.skill}`,
+          }));
+          return;
+        }
+
+        try {
+          const skillContext = await materializeSkillContext(invocation, {
+            cwd: app.runtimeState.config.memory.cwd,
+          });
+          await session.runner.submit(text, event.turn_id, { skillContext });
+        } catch (error) {
+          const skillError = error instanceof SkillError
+            ? error
+            : new SkillError("skill_runtime_error", error instanceof Error ? error.message : String(error));
+          ws.send(JSON.stringify({
+            kind: "error",
+            scope: "turn",
+            code: skillError.code,
+            message: skillError.message,
+          }));
+        }
       }
     });
   });

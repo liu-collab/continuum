@@ -18,6 +18,12 @@ export const clientEventSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("ping"),
   }),
+  z.object({
+    kind: z.literal("skill_input"),
+    turn_id: z.string().min(1),
+    skill: z.string().min(1),
+    arguments: z.string().optional(),
+  }),
 ]);
 
 export type ClientEvent = z.infer<typeof clientEventSchema>;

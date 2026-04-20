@@ -5,7 +5,8 @@
   "description": "Continuum memory native agent service.",
   "type": "module",
   "bin": {
-    "mna-server": "./bin/mna-server.mjs"
+    "mna-server": "./bin/mna-server.mjs",
+    "mna": "./bin/mna-server.mjs"
   },
   "files": [
     "bin/",
