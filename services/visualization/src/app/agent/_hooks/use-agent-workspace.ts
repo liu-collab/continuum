@@ -186,7 +186,11 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       return;
     }
 
-    const detail = await client.getSession(sessionId);
+    const requestedWorkspaceId =
+      state.session?.workspace_id
+      ?? state.sessionList.find((item) => item.id === sessionId)?.workspace_id
+      ?? state.sessionList[0]?.workspace_id;
+    const detail = await client.getSession(sessionId, requestedWorkspaceId);
     dispatch({
       type: "hydrate_session",
       session: detail.session,

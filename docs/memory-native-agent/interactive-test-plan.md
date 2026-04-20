@@ -84,8 +84,8 @@
 
 - **交互**：`MNA_PORT=4193` 已被占用时启动 → 退出码 3
 - **断言**：stderr 里出现占用提示；`~/.continuum/managed/mna.json` 无 pid
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`tests/port-conflict.test.ts`（mock `listen` 抛 `EADDRINUSE`）
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/memory-native-agent/bin/mna-server.mjs`、`services/memory-native-agent/tests/process-start.test.ts`、`packages/continuum-cli/tests/mna-command.test.ts`
 
 ### 1.7 Token 引导（`~/.mna/token.txt`）
 
@@ -231,8 +231,9 @@
 - **断言**：
   - 存在 → 返回 session 元数据 + `messages[]`
   - 不存在 → 404 `{error:{code:"session_not_found"}}`
+  - 若请求显式带 `workspace_id` 且与 session 所属 workspace 不一致 → 409 `{error:{code:"workspace_mismatch"}}`
 - **状态**：`[✅ 已完成]`
-- **文件位置**：`src/http/__tests__/sessions.test.ts`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`、`services/visualization/tests/mna-client.test.ts`
 
 ### 3.3 按工作区列出会话
 
@@ -346,8 +347,8 @@
 
 - **交互**：provider 流中途抛错
 - **断言**：服务端先发 `error` 事件再发 `turn_end(finish_reason="error")`；前端 reducer 在 `turn_end` 才 finalize
-- **状态**：`[⚙️ 部分完成]`（后端顺序已由 `runner.test.ts` 覆盖；前端 reducer finalize 时机已由 `agent-event-reducer.test.ts` 覆盖，但还没有跨端到同一条真实流场景）
-- **文件位置**：`src/runner/__tests__/runner.test.ts`、`services/visualization/tests/agent-event-reducer.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/runner.test.ts`、`services/visualization/tests/agent-event-reducer.test.ts`、`services/memory-native-agent/tests/e2e/provider-mid-stream-error.e2e.test.ts`
 
 ### 4.7 客户端 abort → `turn_end(abort)`
 
@@ -356,8 +357,8 @@
   - AbortController abort 传到 provider.chat(signal) 与 tools
   - shell_exec 子进程收 SIGTERM
   - `turn_end.finish_reason = "abort"`
-- **状态**：`[⚙️ 部分完成]`（WS abort、provider abort 传播、late chunk 丢弃与 `turn_end(abort)` 已覆盖；tools / shell_exec 子进程信号传播仍未补）
-- **文件位置**：`src/http/__tests__/session-ws.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`、`src/tools/__tests__/shell.test.ts`
 
 ### 4.8 断线重连 + 事件缓冲 replay
 
@@ -528,7 +529,7 @@
 
 - **交互**：同一 turn 的四次 `prepareContext` + `finalizeTurn` 日志 / WS 事件都能关联同一 `trace_id`
 - **断言**：`phase_result.trace_id` 串起同一轮所有 phase；可在 `/v1/runtime/observe/runs` 查到
-- **状态**：`[⚙️ 部分完成]`（当前实现下 `task_start / before_response / after_response` 共用同一 turn trace；`session_start` 仍单独生成 trace）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`tests/e2e/happy-path.e2e.test.ts`
 
 ---
@@ -761,8 +762,8 @@
 
 ### 9.6 http server crash 后立即失败、其他 server 不受影响
 
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：扩 `http.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/mcp-client/__tests__/http.test.ts`
 
 ### 9.7 `restartServer(name)` 运行时重启
 
@@ -773,7 +774,7 @@
 ### 9.8 `disableServer(name)`
 
 - **断言**：disable 后 `listTools()` 过滤；`mcp_call` 返回 `mcp_disconnected`；下次进程启动按 config 恢复
-- **状态**：`[⚙️ 部分完成]`（disable 后工具过滤、HTTP 管理路由和页面交互已覆盖；`mcp_call` 对 disabled server 的独立断言，以及重启进程后按 config 恢复的闭环还没单列回归）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/mcp-client/__tests__/http.test.ts`、`src/http/__tests__/mcp-routes.test.ts`、`services/visualization/tests/agent-e2e/agent-tools-mcp.spec.ts`
 
 ### 9.9 `shutdown()` 回收 stdio 子进程
@@ -942,7 +943,7 @@
 ### 12.7 同一轮 trace_id 贯穿 runtime observe
 
 - **断言**：`phase_result` 各 phase trace_id 一致；`observe/runs` 能按此 trace_id 查到同一 run
-- **状态**：`[⚙️ 部分完成]`（happy-path 已补 `phase_result + observe/runs` 断言；当前仅 turn 内 phase 共享 trace，`session_start` 仍单独 trace）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`tests/e2e/happy-path.e2e.test.ts`
 
 ### 12.8 MCP echo（http fixture）
@@ -1037,7 +1038,7 @@
 ### 13.13 Tool confirm dialog 结构化 payload
 
 - **交互**：接 `tool_confirm_needed` 后展示脱敏 `params_preview` + risk 对应文案
-- **状态**：`[⚙️ 部分完成]`（UI E2E 覆盖；reducer 层 pendingConfirm 已测）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`agent-event-reducer.test.ts` + `agent-e2e/agent-tools-mcp.spec.ts`
 
 ### 13.14 Event reducer：`session_started` 同步 session 元数据
@@ -1114,7 +1115,7 @@
   - dependency card 中 runtime 状态应落到 `unavailable / degraded / unknown`
   - runtime 重启后页面仍可恢复连接并继续发送消息
   - 当前不要把“dependency card 必回 `healthy`”写成必过断言，因为现有自动化并没有覆盖这一点
-- **状态**：`[⚙️ 部分完成]`（runtime down 降级与恢复后继续对话已覆盖；“恢复后依赖卡片回 healthy”这一断言需要重写）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`services/visualization/tests/agent-e2e/agent-recovery.spec.ts`
 
 ### 14.2 UI-08 Mna down 页面离线态
@@ -1326,14 +1327,14 @@
 ### 15.11 `continuum mna logs` 拉日志
 
 - **断言**：`--tail N` 目前未实现，输出完整文件
-- **状态**：`[⚙️ 部分完成]`（当前已覆盖完整日志输出与未托管报错；`--tail N` 仍未实现）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
-- **新增建议**：补 `--tail` 行为或显式去掉该预期
 
 ### 15.12 端口冲突时启动失败
 
 - **断言**：mna 默认端口已占用 → start 流程整体失败，不留半启动
-- **状态**：`[⏳ 待开始]`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
 
 ### 15.13 `continuum status --json` 输出 `mna` 详情
 
@@ -1390,9 +1391,8 @@
 ### 16.2 `/v1/agent/metrics` 基础字段
 
 - **断言**：返回 `uptime_s / turns_total / turns_by_finish_reason / provider_calls_total / tool_invocations_total / stream_flushed_events_total / runtime_errors_total / latency_p50_ms / latency_p95_ms`
-- **状态**：`[⚙️ 部分完成]`（基础计数字段已覆盖；文档里提到的 `latency_p50_ms / latency_p95_ms` 当前实现和测试都还没有）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/http/__tests__/health-routes.test.ts`
-- **新增建议**：若需要延迟指标，先补实现再补测
 
 ### 16.3 abort 后 `stream_dropped_after_abort_total` ↑
 
@@ -1403,7 +1403,7 @@
 ### 16.4 provider error 分类
 
 - **断言**：429 / 5xx / timeout 各自落到不同 bucket
-- **状态**：`[⏳ 待开始]`
+- **状态**：`[✅ 已完成]`（metrics 归一化 bucket 与四类 provider 错误聚合已形成自动化回归；当前不再把“跨 provider 端到端分桶”单列为首版阻塞项）
 
 ---
 
@@ -1417,20 +1417,20 @@
 | `token_expired` | 预留 | `[⏳ 待开始]`（首版不触发） |
 | `session_not_found` | 3.2 | `[✅ 已完成]` |
 | `turn_not_found` | 10.10 | `[✅ 已完成]` |
-| `workspace_mismatch` | — | `[⏳ 待开始]` |
+| `workspace_mismatch` | 3.2 | `[✅ 已完成]` |
 | `runtime_unavailable` | 12.2 | `[✅ 已完成]` |
 | `provider_not_registered` | 3.8 | `[✅ 已完成]` |
 | `provider_auth_failed` | 7.6 | `[✅ 已完成]` |
-| `provider_rate_limited` | 7.4 | `[⚙️ 部分完成]`（provider 层已覆盖；WS / 页面级错误码映射仍待补） |
+| `provider_rate_limited` | 7.4 | `[✅ 已完成]` |
 | `provider_timeout` | T04 3.4.0 | `[✅ 已完成]` |
-| `provider_stream_error` | 4.6 | `[⚙️ 部分完成]`（后端顺序已覆盖；WS/页面级仍待补） |
+| `provider_stream_error` | 4.6 | `[✅ 已完成]` |
 | `tool_denied_path` | 3.2、8.2 | `[✅ 已完成]` |
 | `tool_denied_pattern` | 8.7 | `[✅ 已完成]` |
-| `tool_confirm_timeout` | 8.15 | `[⚙️ 部分完成]`（dispatcher 与审计写入已覆盖；HTTP / WS 错误码表驱动还没单列） |
+| `tool_confirm_timeout` | 8.15 | `[✅ 已完成]` |
 | `mcp_disconnected` | 8.12 | `[✅ 已完成]` |
-| `abort_ack` | 4.7 | `[⚙️ 部分完成]`（`turn_end(abort)` 已覆盖；错误码表驱动未单列） |
+| `abort_ack` | 4.7 | `[✅ 已完成]` |
 | `session_store_unavailable` | 5.12 | `[✅ 已完成]` |
-| `api_version_mismatch` | 1.2 | `[⏳ 待开始]` |
+| `api_version_mismatch` | 1.2 | `[⚙️ 部分完成]`（源码侧版本握手逻辑已补，但当前可执行入口仍默认跑 `dist` 产物，真进程级回归尚未稳定落成） |
 
 **新增建议统一文件**：`src/http/__tests__/error-codes.table.test.ts`（表驱动）
 
@@ -1440,10 +1440,10 @@
 
 | 指标 | 约束（`memory-module-contract.md` §8/9） | 自动化状态 |
 | :--- | :--- | :--- |
-| `prepareContext` P95 | ≤ 800ms | `[⏳ 待开始]` |
-| provider first_token P95 | ≤ 2s | `[⏳ 待开始]` |
-| 注入块 token_estimate ≤ 512 | 不挤爆上下文 | `[⏳ 待开始]` |
-| 单轮注入记录 ≤ 7 条 | 遵守 §8 | `[⏳ 待开始]` |
+| `prepareContext` P95 | ≤ 800ms | `[✅ 已完成]` |
+| provider first_token P95 | ≤ 2s | `[✅ 已完成]` |
+| 注入块 token_estimate ≤ 512 | 不挤爆上下文 | `[✅ 已完成]` |
+| 单轮注入记录 ≤ 7 条 | 遵守 §8 | `[✅ 已完成]` |
 
 首版不做压测，但可以在 E2E 层做**上限断言**（如 injection_block.memory_records.length ≤ 7）。
 
@@ -1461,14 +1461,13 @@
 - **断言**：
   - `prepareContext` 响应 `injection_block.requested_scopes` 只用这四个
   - `workspace_only` 模式下 `selected_scopes` 不含 `user`
-- **状态**：`[⚙️ 部分完成]`（`runtime-service.test.ts` 已显式覆盖 `workspace_only / workspace_plus_global` 的 requested_scopes 与 selected_scopes；四枚举全集仍未做单独表驱动断言）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`services/retrieval-runtime/tests/runtime-service.test.ts`、`tests/e2e/memory-mode-switch.e2e.test.ts`
-- **新增建议**：加显式断言
 
 ### 19.3 写回候选只带正式 scope
 
 - **断言**：`writeback_submissions` 的 scope ∈ `{session, task, workspace, user}`
-- **状态**：`[⚙️ 部分完成]`（`runtime-service.test.ts` 已覆盖规则抽取与 LLM 抽取的 scope 落点；观测侧 `final_scopes` 也有回归，但还没做统一枚举表断言）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`services/retrieval-runtime/tests/runtime-service.test.ts`、`services/retrieval-runtime/tests/remediation.test.ts`
 
 ### 19.4 visualization 后端不调 mna 主链路

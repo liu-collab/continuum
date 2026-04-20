@@ -91,8 +91,9 @@ export class MnaClient {
     });
   }
 
-  async getSession(sessionId: string) {
-    return this.requestJson<MnaSessionDetailResponse>(`/v1/agent/sessions/${sessionId}`);
+  async getSession(sessionId: string, workspaceId?: string) {
+    const query = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : "";
+    return this.requestJson<MnaSessionDetailResponse>(`/v1/agent/sessions/${sessionId}${query}`);
   }
 
   async renameSession(sessionId: string, title: string) {

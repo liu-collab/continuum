@@ -89,4 +89,37 @@ describe("MnaClient", () => {
     const headers = new Headers((retryRequest?.[1] as RequestInit | undefined)?.headers);
     expect(headers.get("Authorization")).toBe("Bearer token-2");
   });
+
+  it("surfaces workspace_mismatch as a typed request error", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          error: {
+            code: "workspace_mismatch",
+            message: "Session workspace does not match the current workspace.",
+          },
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+
+    await expect(client.getSession("session-cross-workspace")).rejects.toMatchObject({
+      name: "MnaRequestError",
+      statusCode: 409,
+      code: "workspace_mismatch",
+      message: "Session workspace does not match the current workspace.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
