@@ -43,6 +43,9 @@ export interface RunnerIO {
   emitTaskChange(turnId: string, change: TaskChangeEvent): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
   emitError(scope: "turn" | "session", err: Error & { code?: string }): void;
+  recordPrepareContextLatency?(phase: Phase, latencyMs: number): void;
+  recordProviderCall?(providerKey: string): void;
+  recordProviderFirstTokenLatency?(providerKey: string, latencyMs: number): void;
   emitStreamMetrics?(turnId: string, metrics: { dropped_after_abort_total: number; flushed_events_total: number }): void;
   requestConfirm(payload: {
     call_id: string;
@@ -173,6 +176,9 @@ export class AgentRunner {
       while (!abortController.signal.aborted) {
         let encounteredToolCall = false;
         let roundAssistantToolMessage: ChatMessage | null = null;
+        let sawFirstProviderToken = false;
+        const providerStartedAt = Date.now();
+        this.deps.io.recordProviderCall?.(this.deps.provider.id());
         const chunks = this.deps.provider.chat({
           messages,
           tools,
@@ -184,6 +190,14 @@ export class AgentRunner {
             await bridge.handle(chunk);
             finishReason = "abort";
             break;
+          }
+
+          if (!sawFirstProviderToken && (chunk.type === "text_delta" || chunk.type === "tool_call" || chunk.type === "end")) {
+            sawFirstProviderToken = true;
+            this.deps.io.recordProviderFirstTokenLatency?.(
+              this.deps.provider.id(),
+              Date.now() - providerStartedAt,
+            );
           }
 
           if (chunk.type === "text_delta") {
@@ -404,8 +418,9 @@ export class AgentRunner {
   }
 
   private async safePrepareContext(phase: Phase, turnId: string, userInput: string): Promise<PrepareContextResult | null> {
+    const startedAt = Date.now();
     try {
-      return await this.deps.memoryClient.prepareContext({
+      const response = await this.deps.memoryClient.prepareContext({
         workspace_id: this.deps.config.memory.workspaceId,
         user_id: this.deps.config.memory.userId,
         task_id: this.currentTask?.id,
@@ -418,7 +433,10 @@ export class AgentRunner {
         source: "mna",
         memory_mode: this.deps.config.memory.mode,
       });
+      this.deps.io.recordPrepareContextLatency?.(phase, Date.now() - startedAt);
+      return response;
     } catch (error) {
+      this.deps.io.recordPrepareContextLatency?.(phase, Date.now() - startedAt);
       const fallback: PrepareContextResult = {
         trace_id: "dependency_unavailable",
         trigger: false,
