@@ -8,6 +8,7 @@ import type { RetrievalRuntimeService } from "./runtime-service.js";
 import { observeRunsQuerySchema } from "./api/schemas.js";
 
 const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
+const RETRIEVAL_RUNTIME_VERSION = "0.1.0";
 
 export function createApp(runtimeService: RetrievalRuntimeService) {
   const app = Fastify({
@@ -34,6 +35,8 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
   });
 
   app.get("/healthz", async () => ({
+    version: RETRIEVAL_RUNTIME_VERSION,
+    api_version: "v1",
     liveness: (await runtimeService.getLiveness()).status,
     readiness: (await runtimeService.getReadiness()).status,
     dependencies: await runtimeService.getDependencies(),

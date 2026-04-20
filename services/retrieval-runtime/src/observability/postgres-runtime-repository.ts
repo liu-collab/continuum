@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   DependencyStatus,
   DependencyStatusSnapshot,
+  FinalizeIdempotencyRecord,
   InjectionRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
@@ -651,6 +652,23 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       LIMIT 1
       `,
       [input.session_id, input.turn_id],
+    );
+
+    return result.rows[0]?.trace_id ?? null;
+  }
+
+  async findLatestTraceIdBySession(input: {
+    session_id: string;
+  }): Promise<string | null> {
+    const result = await this.pool.query<{ trace_id: string }>(
+      `
+      SELECT trace_id
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_turns
+      WHERE session_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [input.session_id],
     );
 
     return result.rows[0]?.trace_id ?? null;

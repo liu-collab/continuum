@@ -56,6 +56,34 @@ function buildFinalizeIdempotencyRecord(
   };
 }
 
+async function resolveTraceId(
+  repository: RuntimeRepository,
+  input: {
+    session_id: string;
+    turn_id?: string;
+    phase: TriggerContext["phase"] | "after_response";
+  },
+) {
+  if (input.turn_id) {
+    return (
+      (await repository.findTraceIdByTurn({
+        session_id: input.session_id,
+        turn_id: input.turn_id,
+      })) ?? randomUUID()
+    );
+  }
+
+  if (input.phase === "session_start") {
+    return (
+      (await repository.findLatestTraceIdBySession({
+        session_id: input.session_id,
+      })) ?? randomUUID()
+    );
+  }
+
+  return randomUUID();
+}
+
 export class RetrievalRuntimeService {
   constructor(
     private readonly triggerEngine: TriggerEngine,
@@ -73,13 +101,11 @@ export class RetrievalRuntimeService {
       ...context,
       memory_mode: resolveMemoryMode(context.memory_mode),
     };
-    const traceId =
-      normalizedContext.turn_id
-        ? (await this.repository.findTraceIdByTurn({
-            session_id: normalizedContext.session_id,
-            turn_id: normalizedContext.turn_id,
-          })) ?? randomUUID()
-        : randomUUID();
+    const traceId = await resolveTraceId(this.repository, {
+      session_id: normalizedContext.session_id,
+      turn_id: normalizedContext.turn_id,
+      phase: normalizedContext.phase,
+    });
     const turnStartedAt = Date.now();
     await this.repository.recordTurn({
       trace_id: traceId,
@@ -274,13 +300,11 @@ export class RetrievalRuntimeService {
       await this.finalizeIdempotencyCache?.set(finalizeCacheKey, persisted.response);
       return persisted.response;
     }
-    const traceId =
-      normalizedInput.turn_id
-        ? (await this.repository.findTraceIdByTurn({
-            session_id: normalizedInput.session_id,
-            turn_id: normalizedInput.turn_id,
-          })) ?? randomUUID()
-        : randomUUID();
+    const traceId = await resolveTraceId(this.repository, {
+      session_id: normalizedInput.session_id,
+      turn_id: normalizedInput.turn_id,
+      phase: "after_response",
+    });
     const startedAt = Date.now();
 
     await this.repository.recordTurn({

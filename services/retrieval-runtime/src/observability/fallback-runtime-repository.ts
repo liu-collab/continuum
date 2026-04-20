@@ -92,6 +92,12 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
     return this.tryRead((repository) => repository.findTraceIdByTurn(input));
   }
 
+  async findLatestTraceIdBySession(input: {
+    session_id: string;
+  }): Promise<string | null> {
+    return this.tryRead((repository) => repository.findLatestTraceIdBySession(input));
+  }
+
   async findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null> {
     return this.tryRead((repository) => repository.findFinalizeIdempotencyRecord(key));
   }

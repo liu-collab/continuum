@@ -183,6 +183,14 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
     return latest?.trace_id ?? null;
   }
 
+  async findLatestTraceIdBySession(input: {
+    session_id: string;
+  }): Promise<string | null> {
+    const candidates = this.turns.filter((turn) => turn.session_id === input.session_id);
+    const latest = candidates.sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+    return latest?.trace_id ?? null;
+  }
+
   async findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null> {
     const record = this.finalizeIdempotencyRecords.get(key);
     if (!record) {

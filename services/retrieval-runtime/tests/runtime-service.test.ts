@@ -45,7 +45,7 @@ const baseConfig: AppConfig = {
   QUERY_CANDIDATE_LIMIT: 30,
   PACKET_RECORD_LIMIT: 10,
   INJECTION_RECORD_LIMIT: 2,
-  INJECTION_TOKEN_BUDGET: 64,
+  INJECTION_TOKEN_BUDGET: 256,
   SEMANTIC_TRIGGER_THRESHOLD: 0.72,
   IMPORTANCE_THRESHOLD_SESSION_START: 4,
   IMPORTANCE_THRESHOLD_DEFAULT: 3,
@@ -178,6 +178,17 @@ class StubLlmExtractor implements LlmExtractor {
   }
 }
 
+class SpyLlmExtractor implements LlmExtractor {
+  public callCount = 0;
+
+  constructor(private readonly result: LlmExtractionResult) {}
+
+  async extract(): Promise<LlmExtractionResult> {
+    this.callCount += 1;
+    return this.result;
+  }
+}
+
 function createRuntime(overrides?: {
   records?: CandidateMemory[];
   embeddingsClient?: EmbeddingsClient;
@@ -274,7 +285,12 @@ describe("retrieval-runtime service", () => {
   });
 
   it("trims injection records when budget is exceeded", async () => {
-    const { service } = createRuntime();
+    const { service } = createRuntime({
+      config: {
+        INJECTION_TOKEN_BUDGET: 220,
+        INJECTION_RECORD_LIMIT: 2,
+      },
+    });
 
     const response = await service.prepareContext({
       host: "claude_code_plugin",
@@ -303,7 +319,7 @@ describe("retrieval-runtime service", () => {
       task_id: ids.task,
       turn_id: "turn-2",
       current_input: "我偏好: 默认中文输出",
-      assistant_output: "已确认: 后续都用中文。下一步: 完成接口测试。我会把写回链路补齐。",
+      assistant_output: "已确认: 后续都用中文。下一步: 完成接口测试。我会在每次发布前补齐写回链路并验证结果。",
       tool_results_summary: "tool summary: storage connection failed once and then recovered",
     });
 
@@ -428,8 +444,8 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: ids.session,
       task_id: ids.task,
-      current_input: "继续补齐运行时分页接口，默认使用中文输出，并记录上一轮已经确认桥接脚本可用",
-      assistant_output: "好的，我会继续补齐运行时分页接口，默认使用中文输出。",
+      current_input: "默认使用中文输出。继续补齐运行时分页接口。上一轮已经确认桥接脚本可用。",
+      assistant_output: "收到，继续补齐运行时分页接口，默认使用中文输出，上一轮已经确认桥接脚本可用。",
     });
 
     expect(response.write_back_candidates).toHaveLength(2);
@@ -494,6 +510,29 @@ describe("retrieval-runtime service", () => {
     expect(response.memory_packet?.requested_scopes).toContain("user");
     expect(response.memory_packet?.selected_scopes).toContain("workspace");
     expect(response.memory_packet?.selected_scopes).toContain("user");
+  });
+
+  it("keeps injection payload within current token and record budgets", async () => {
+    const { service } = createRuntime({
+      config: {
+        INJECTION_RECORD_LIMIT: 7,
+        INJECTION_TOKEN_BUDGET: 512,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "把之前确定的偏好和任务状态都恢复出来。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.injection_block?.token_estimate ?? 0).toBeLessThanOrEqual(512);
+    expect(response.injection_block?.memory_records.length ?? 0).toBeLessThanOrEqual(7);
   });
 
   it("keeps user scope visible across workspaces while isolating workspace scope", async () => {
@@ -573,6 +612,67 @@ describe("retrieval-runtime service", () => {
     expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.recall_runs[0]?.matched_scopes).toContain("workspace");
     expect(runs.injection_runs[0]?.selected_scopes).toContain("workspace");
+  });
+
+  it("uses only formal scope enum values in requested and selected scopes", async () => {
+    const allowedScopes = new Set(["session", "task", "workspace", "user"]);
+    const { service } = createRuntime();
+
+    const workspaceOnly = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "恢复当前仓库约束。",
+      memory_mode: "workspace_only",
+    });
+
+    const workspacePlusGlobal = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "恢复当前仓库约束和全局偏好。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    for (const scope of workspaceOnly.injection_block?.requested_scopes ?? []) {
+      expect(allowedScopes.has(scope)).toBe(true);
+    }
+    for (const scope of workspaceOnly.injection_block?.selected_scopes ?? []) {
+      expect(allowedScopes.has(scope)).toBe(true);
+    }
+    for (const scope of workspacePlusGlobal.injection_block?.requested_scopes ?? []) {
+      expect(allowedScopes.has(scope)).toBe(true);
+    }
+    for (const scope of workspacePlusGlobal.injection_block?.selected_scopes ?? []) {
+      expect(allowedScopes.has(scope)).toBe(true);
+    }
+  });
+
+  it("emits writeback candidates with only formal scope enum values", async () => {
+    const allowedScopes = new Set(["session", "task", "workspace", "user"]);
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。下一步: 继续补测试。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.write_back_candidates.length).toBeGreaterThan(0);
+    for (const candidate of response.write_back_candidates) {
+      expect(allowedScopes.has(candidate.scope)).toBe(true);
+    }
   });
 
   it("reuses the same trace for prepare and finalize phases and keeps phase records split", async () => {
@@ -688,6 +788,67 @@ describe("retrieval-runtime service", () => {
     expect(storageClient.callCount).toBe(1);
   });
 
+  it("reuses persisted finalize response across service instances before calling llm extraction again", async () => {
+    const llmExtractor = new SpyLlmExtractor({
+      candidates: [
+        {
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用中文输出",
+          importance: 5,
+          confidence: 0.94,
+          write_reason: "stable preference confirmed",
+        },
+      ],
+    });
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const dependencyGuard = new DependencyGuard(repository, logger);
+    const readModelRepository = new InMemoryReadModelRepository(sampleRecords);
+    const storageClient = new StubStorageClient();
+    const config = { ...baseConfig };
+
+    const firstService = new RetrievalRuntimeService(
+      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new InjectionEngine(config),
+      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      repository,
+      dependencyGuard,
+      logger,
+      new FinalizeIdempotencyCache(config),
+    );
+
+    const request = {
+      host: "codex_app_server" as const,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-persisted-idempotent",
+      current_input: "后续默认中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    };
+
+    const first = await firstService.finalizeTurn(request);
+    expect(llmExtractor.callCount).toBe(1);
+
+    const secondService = new RetrievalRuntimeService(
+      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new InjectionEngine(config),
+      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      repository,
+      dependencyGuard,
+      logger,
+      new FinalizeIdempotencyCache(config),
+    );
+
+    const second = await secondService.finalizeTurn(request);
+
+    expect(second).toEqual(first);
+    expect(llmExtractor.callCount).toBe(1);
+  });
+
   it("keeps upstream scope suggestions for llm candidates and leaves final arbitration to storage", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({
@@ -798,6 +959,31 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block?.memory_summary).toContain("偏好与约束");
   });
 
+  it("reuses the latest session trace for session_start when the session already has runtime history", async () => {
+    const { service } = createRuntime();
+
+    const prepared = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-session-trace",
+      phase: "before_response",
+      current_input: "继续沿用之前的约束。",
+    });
+
+    const restarted = await service.sessionStartContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "恢复当前会话",
+    });
+
+    expect(restarted.trace_id).toBe(prepared.trace_id);
+  });
+
   it("returns validation errors for missing host identity boundaries instead of accepting fake namespaces", async () => {
     const { service } = createRuntime();
     const app = createApp(service);
@@ -868,5 +1054,17 @@ describe("retrieval-runtime service", () => {
     expect(finalizeResponse.json().candidate_count).toBeGreaterThanOrEqual(0);
     expect(sessionStartResponse.statusCode).toBe(200);
     expect(sessionStartResponse.json().memory_mode).toBe("workspace_plus_global");
+
+    const healthResponse = await app.inject({
+      method: "GET",
+      url: "/healthz",
+    });
+    expect(healthResponse.statusCode).toBe(200);
+    expect(healthResponse.json()).toMatchObject({
+      version: "0.1.0",
+      api_version: "v1",
+      liveness: "alive",
+      readiness: "ready",
+    });
   });
 });

@@ -41,6 +41,9 @@ export interface RuntimeRepository {
     session_id: string;
     turn_id: string;
   }): Promise<string | null>;
+  findLatestTraceIdBySession(input: {
+    session_id: string;
+  }): Promise<string | null>;
   findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null>;
   upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void>;
   updateDependencyStatus(status: DependencyStatus): Promise<void>;
