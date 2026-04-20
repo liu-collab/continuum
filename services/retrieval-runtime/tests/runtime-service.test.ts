@@ -316,6 +316,9 @@ describe("retrieval-runtime service", () => {
       ),
     ).toBe(true);
     expect(response.write_back_candidates.every((candidate) => candidate.source.service_name === "retrieval-runtime")).toBe(true);
+    expect(
+      response.write_back_candidates.filter((candidate) => candidate.candidate_type === "fact_preference").map((candidate) => candidate.scope),
+    ).toEqual(["user"]);
     expect(response.memory_mode).toBe("workspace_plus_global");
   });
 
@@ -367,6 +370,23 @@ describe("retrieval-runtime service", () => {
 
     expect(response.write_back_candidates.length).toBeGreaterThan(0);
     expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "writeback_llm")).toBe(true);
+  });
+
+  it("deduplicates assistant confirmation when the same preference was already extracted from user input", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    });
+
+    const factPreferences = response.write_back_candidates.filter((candidate) => candidate.candidate_type === "fact_preference");
+    expect(factPreferences).toHaveLength(1);
+    expect(factPreferences[0]?.scope).toBe("user");
   });
 
   it("applies writeback max candidates to llm extraction output", async () => {

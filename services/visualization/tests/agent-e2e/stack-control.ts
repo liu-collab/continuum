@@ -7,12 +7,23 @@ export function getStackControlBaseUrl() {
 }
 
 async function post(path: string) {
-  const response = await fetch(`${getStackControlBaseUrl()}${path}`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error(`stack control request failed: ${path} -> ${response.status}`);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      const response = await fetch(`${getStackControlBaseUrl()}${path}`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error(`stack control request failed: ${path} -> ${response.status}`);
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export async function stopRuntime() {
@@ -29,6 +40,14 @@ export async function stopMna() {
 
 export async function restartMna() {
   await post("/mna/restart");
+}
+
+export async function triggerReplayGap(sessionId: string) {
+  await post(`/agent/replay-gap?session_id=${encodeURIComponent(sessionId)}`);
+}
+
+export async function triggerSessionError(sessionId: string) {
+  await post(`/agent/session-error?session_id=${encodeURIComponent(sessionId)}`);
 }
 
 async function waitForJson(path: string, predicate: (payload: Record<string, unknown>) => boolean, timeoutMs = 10_000) {

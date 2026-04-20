@@ -38,4 +38,55 @@ describe("MnaClient", () => {
     expect(headers.get("Content-Type")).toBeNull();
     expect(headers.get("Authorization")).toBe("Bearer token-123");
   });
+
+  it("retries once after a 401 by reloading bootstrap", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({
+          error: {
+            code: "token_invalid",
+            message: "expired",
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-2",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [],
+          next_cursor: null,
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.listSessions();
+
+    expect(payload).toEqual({
+      items: [],
+      next_cursor: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    const retryRequest = fetchMock.mock.calls[3];
+    const headers = new Headers((retryRequest?.[1] as RequestInit | undefined)?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer token-2");
+  });
 });

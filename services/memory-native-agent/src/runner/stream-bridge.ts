@@ -50,6 +50,10 @@ export class StreamBridge {
       return;
     }
 
+    if (chunk.finish_reason === "tool_use") {
+      return;
+    }
+
     this.sink.emitTurnEnd(this.turnId, chunk.finish_reason);
   }
 

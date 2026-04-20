@@ -675,9 +675,11 @@ async function startHttpMcpFixture(): Promise<RunningHttpMcpServer> {
 }
 
 function buildProviderReply(lastUserMessage: string, injectionMessage: string, toolSummary: string): string {
-  const normalizedInjection = injectionMessage.toLowerCase();
   const normalizedLastUserMessage = lastUserMessage.toLowerCase();
-  const remembersTypeScript = normalizedInjection.includes("typescript");
+  const normalizedInjectionSummary = Array.from(injectionMessage.matchAll(/memory_summary:\s*([^\n\r]*)/gi))
+    .map((match) => match[1]?.trim().toLowerCase() ?? "")
+    .join("\n");
+  const remembersTypeScript = normalizedInjectionSummary.includes("typescript");
   if (toolSummary.includes('tool="fs_read"')) {
     return "我已经读取了 README.md，内容已经返回。";
   }

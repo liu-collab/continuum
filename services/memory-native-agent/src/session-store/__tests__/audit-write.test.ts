@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteSessionStore } from "../index.js";
+import { hashArgs } from "../../tools/helpers.js";
 
 const tempRoots: string[] = [];
 const openStores: SqliteSessionStore[] = [];
@@ -60,5 +61,44 @@ describe("SqliteSessionStore tool audit", () => {
     expect(fetched?.tool_invocations).toHaveLength(1);
     expect(fetched?.tool_invocations[0]?.args_preview?.length).toBe(512);
     expect(fetched?.tool_invocations[0]?.artifact_ref).toBe("sess-1/call-1.txt");
+  });
+
+  it("stores args_hash without persisting raw command content", () => {
+    const store = createStore();
+    store.createSession({
+      id: "sess-1",
+      workspace_id: "ws-1",
+      user_id: "user-1",
+      memory_mode: "workspace_plus_global",
+      locale: "zh-CN",
+    });
+    store.openTurn({
+      id: "turn-1",
+      session_id: "sess-1",
+    });
+
+    const rawArgs = {
+      command: "git status",
+      path: "C:/workspace/private.txt",
+    };
+    const argsHash = hashArgs(rawArgs);
+    store.recordToolInvocation({
+      call_id: "call-2",
+      session_id: "sess-1",
+      turn_id: "turn-1",
+      tool_name: "shell_exec",
+      args_hash: argsHash,
+      args_preview: JSON.stringify(rawArgs),
+      permission_decision: "allowed_once",
+      ok: true,
+      duration_ms: 5,
+    });
+
+    const fetched = store.getTurn("turn-1");
+    const audit = fetched?.tool_invocations.find((item) => item.call_id === "call-2");
+
+    expect(audit?.args_hash).toBe(argsHash);
+    expect(audit?.args_hash).not.toContain("git status");
+    expect(audit?.args_hash).not.toContain("private.txt");
   });
 });

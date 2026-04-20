@@ -44,11 +44,35 @@ describe("memory-native-agent e2e happy path", () => {
     expect(records?.items.some((record) => String(record.summary).toLowerCase().includes("typescript"))).toBe(true);
 
     const phaseResults = secondTurn.filter((event) => event.kind === "phase_result");
-    const traceId = String(phaseResults.find((event) => event.phase === "before_response")?.trace_id ?? "");
+    const responsePhaseResults = phaseResults.filter((event) => event.phase !== "session_start");
+    const traceIds = responsePhaseResults
+      .map((event) => String(event.trace_id ?? ""))
+      .filter((value) => value.length > 0);
+    const uniqueTraceIds = [...new Set(traceIds)];
+    const traceId = uniqueTraceIds[0] ?? "";
     expect(traceId).not.toBe("");
+    expect(uniqueTraceIds).toEqual([traceId]);
+    expect(responsePhaseResults).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: "task_start", trace_id: traceId }),
+        expect.objectContaining({ phase: "before_response", trace_id: traceId }),
+      ]),
+    );
 
     const runs = await stack.runtimeRepository?.getRuns({ page: 1, page_size: 50 });
+    const turns = ((runs?.turns as Array<Record<string, unknown>> | undefined) ?? []).filter(
+      (turn) => String(turn.trace_id ?? "") === traceId,
+    );
+    expect(turns.some((turn) => String(turn.turn_id ?? "") === "turn-recall")).toBe(true);
     const writebackSubmissions = (runs?.writeback_submissions as Array<Record<string, unknown>> | undefined) ?? [];
+    expect(
+      turns.some(
+        (turn) =>
+          String(turn.turn_id ?? "") === "turn-recall" &&
+          String(turn.phase ?? "") === "after_response" &&
+          String(turn.trace_id ?? "") === traceId,
+      ),
+    ).toBe(true);
     expect(
       writebackSubmissions.some(
         (entry) =>

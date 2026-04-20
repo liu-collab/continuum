@@ -46,17 +46,14 @@ export function SessionList({
         return (
           <div
             key={session.id}
+            data-testid={`session-card-${session.id}`}
             className={cn(
               "w-full rounded-2xl border bg-white/80 p-4 text-left transition hover:border-accent hover:shadow-soft",
               isActive && "border-accent ring-2 ring-accent/15"
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => onSelect(session.id)}
-                className="min-w-0 flex-1 text-left"
-              >
+              <div className="min-w-0 flex-1">
                 {isEditing ? (
                   <form
                     onSubmit={(event) => {
@@ -82,18 +79,24 @@ export function SessionList({
                     />
                   </form>
                 ) : (
-                  <div className="truncate text-sm font-semibold text-slate-900">
-                    {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(session.id)}
+                    className="w-full text-left"
+                  >
+                    <div className="truncate text-sm font-semibold text-slate-900">
+                      {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">{t("sessionList.workspace", { id: session.workspace_id })}</div>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <StatusBadge tone={session.closed_at ? "warning" : "success"}>
+                        {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
+                      </StatusBadge>
+                      <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
+                    </div>
+                  </button>
                 )}
-                <div className="mt-2 text-xs text-slate-500">{t("sessionList.workspace", { id: session.workspace_id })}</div>
-                <div className="mt-1 flex flex-wrap gap-2">
-                  <StatusBadge tone={session.closed_at ? "warning" : "success"}>
-                    {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
-                  </StatusBadge>
-                  <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
-                </div>
-              </button>
+              </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"

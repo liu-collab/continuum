@@ -69,13 +69,17 @@ describe("SqliteSessionStore message append", () => {
       tools_json: "[]",
       provider_id: "openai-compatible",
       model: "gpt-test",
+      round: 1,
     });
     store.closeTurn("turn-1", "stop", "trace-1");
 
     const fetchedTurn = store.getTurn("turn-1");
     expect(fetchedTurn?.messages).toHaveLength(2);
     expect(fetchedTurn?.turn.trace_id).toBe("trace-1");
-    expect(store.getDispatchedMessages("turn-1")?.provider_id).toBe("openai-compatible");
+    expect(store.getDispatchedMessages("turn-1")).toMatchObject({
+      provider_id: "openai-compatible",
+      round: 1,
+    });
 
     const messages = store.getMessages("sess-1");
     expect(messages).toHaveLength(2);

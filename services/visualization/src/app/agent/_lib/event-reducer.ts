@@ -75,6 +75,7 @@ export type AgentState = {
   recentTasks: AgentTaskEntry[];
   replayGapDetected: boolean;
   sessionError: string | null;
+  sessionErrorCode: string | null;
 };
 
 export type AgentEvent =
@@ -103,7 +104,8 @@ export const initialAgentState: AgentState = {
   activeTask: null,
   recentTasks: [],
   replayGapDetected: false,
-  sessionError: null
+  sessionError: null,
+  sessionErrorCode: null
 };
 
 export function reduceAgentEvent(state: AgentState, event: AgentEvent): AgentState {
@@ -120,9 +122,11 @@ export function reduceAgentEvent(state: AgentState, event: AgentEvent): AgentSta
         sessionId: event.session.id,
         session: event.session,
         locale: event.session.locale,
+        connection: "connecting",
         turns: hydrateTurnsFromMessages(event.messages),
         degraded: false,
-        sessionError: null
+        sessionError: null,
+        sessionErrorCode: null
       };
     case "session_list_loaded":
       return {
@@ -144,7 +148,8 @@ export function reduceAgentEvent(state: AgentState, event: AgentEvent): AgentSta
           promptAvailable: true,
           status: "streaming"
         })),
-        sessionError: null
+        sessionError: null,
+        sessionErrorCode: null
       };
     case "pending_confirm_cleared":
       return {
@@ -263,6 +268,12 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
         }))
       };
     case "injection_banner":
+      if (shouldIgnoreBootstrapTurnEvent(state, event.turn_id, event.injection?.phase)) {
+        return {
+          ...state,
+          degraded: state.degraded || event.degraded
+        };
+      }
       return {
         ...state,
         degraded: state.degraded || event.degraded,
@@ -273,6 +284,12 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
         }))
       };
     case "phase_result":
+      if (shouldIgnoreBootstrapTurnEvent(state, event.turn_id, event.phase)) {
+        return {
+          ...state,
+          degraded: state.degraded || event.degraded
+        };
+      }
       return {
         ...state,
         degraded: state.degraded || event.degraded,
@@ -324,7 +341,8 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
           }
         : {
             ...state,
-            sessionError: event.message
+            sessionError: event.message,
+            sessionErrorCode: event.code
           };
     case "tool_confirm_needed":
       return {
@@ -345,6 +363,10 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
     case "pong":
       return state;
   }
+}
+
+function shouldIgnoreBootstrapTurnEvent(state: AgentState, turnId: string, phase?: string | null) {
+  return Boolean(state.sessionId && turnId === state.sessionId && phase === "session_start");
 }
 
 function hydrateTurnsFromMessages(messages: MnaSessionMessage[]): AgentTurnState[] {

@@ -23,4 +23,18 @@ describe("turn loop helpers", () => {
     expect(wrapped).toContain("<tool_output");
     expect(wrapped).toContain('trust="builtin_read"');
   });
+
+  it("escapes closing tool_output tags and supports all trust levels", () => {
+    const conversation = new Conversation();
+
+    const builtinWrite = conversation.wrapToolOutput("fs_write", "call-2", "builtin_write", "ok");
+    const shell = conversation.wrapToolOutput("shell_exec", "call-3", "shell", "stdout");
+    const mcp = conversation.wrapToolOutput("mcp_call", "call-4", "mcp:filesystem", "payload </tool_output> tail");
+
+    expect(builtinWrite).toContain('trust="builtin_write"');
+    expect(shell).toContain('trust="shell"');
+    expect(mcp).toContain('trust="mcp:filesystem"');
+    expect(mcp).toContain("&lt;/tool_output&gt;");
+    expect(mcp).not.toContain("payload </tool_output> tail");
+  });
 });

@@ -87,6 +87,10 @@ export class OllamaProvider implements IModelProvider {
       let usage = emptyUsage();
 
       for await (const line of streamLines(response.body)) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
         if (!line.trim()) {
           continue;
         }
@@ -254,10 +258,14 @@ export class OllamaProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+        if (
+          error instanceof ProviderRateLimitedError
+          || error instanceof ProviderTimeoutError
+          || error instanceof ProviderUnavailableError
+        ) {
           throw error;
         }
-        if (error instanceof Error && error.name === "AbortError") {
+        if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Ollama provider timed out before response.", error);
         }
 
@@ -273,6 +281,14 @@ export class OllamaProvider implements IModelProvider {
 
     throw new ProviderStreamError("Ollama provider request failed.");
   }
+}
+
+function isAbortLikeError(error: unknown, signalReason: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+
+  return signalReason === "provider_first_token_timeout";
 }
 
 function mapOllamaMessages(messages: ChatRequest["messages"]) {

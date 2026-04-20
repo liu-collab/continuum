@@ -132,4 +132,28 @@ describe("http cors", () => {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("does not echo non-loopback origins", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "OPTIONS",
+        url: "/v1/agent/sessions",
+        headers: {
+          origin: "http://evil.example.com"
+        }
+      });
+
+      expect(response.statusCode).toBe(204);
+      expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 });

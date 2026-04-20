@@ -38,7 +38,7 @@
 - [自动化通过] 关闭 `retrieval-runtime` 后，agent 页面不会白屏
 - [自动化通过] runtime 不可用时，页面能显示降级状态
 - [自动化通过] 关闭 `memory-native-agent` 后，`/agent` 页面显示离线提示
-- [自动化通过] 重启 `memory-native-agent` 后，页面能恢复连接
+- [进行中] 重启 `memory-native-agent` 后，页面能恢复连接
 
 ## 5. 记忆边界
 
@@ -51,18 +51,15 @@
 当前已由自动化覆盖的部分：
 
 - `memory-native-agent` 的 HTTP / WS / CORS / runner / session-store / provider / MCP / tools 单测
-- `memory-native-agent` 本轮新增补齐：`streamLines` 半行缓冲、`record-replay` 缺 fixture、`confirm timeout`、`artifact truncation / too large`、`args_hash`、`cursor pagination`、`tool_output` 转义边界、真实工具循环二次 dispatch、Prompt Inspector `round` 持久化、`tool_use` 不再错误发 `turn_end`、`visualization` API 契约静态测试
 - `visualization` 的 `agent reducer`、token route、观测页服务层单测
 - `continuum-cli` 的 mna 命令解析、状态命令、构建和类型检查
 - `visualization` 的 `/agent` 核心交互 `Playwright` 用例：session 启动、消息发送、注入空态、Prompt Inspector、memory_mode、文件预览、session 管理
 - `visualization` 的 `/agent` 工具与 MCP `Playwright` 用例：确认框、allow/deny、工具控制台、MCP restart/disable
 - `visualization` 的 `/runs` 联动 `Playwright` 用例：turn trace 查询、`/memories` 与 `/dashboard` 页面回归
 - `visualization` 的 `/agent` 降级 `Playwright` 用例：runtime down 后页面可继续工作并展示降级状态
-- `visualization` 的新增 `/agent` 页面交互 `Playwright` 用例：locale 切换、provider 切换、顶部刷新、Abort / 键盘快捷键、文件树目录导航、shell 黑名单前端反馈、replay gap 提示、已有会话切换、`/agent/[sessionId]` 深链恢复、`session_store_unavailable` 非阻塞错误提示
-- `visualization` 的 `record-replay` 确定性 Playwright 用例：`agent-record-replay.spec.ts`
-- `memory-native-agent` 的真实后端 e2e：`happy path / runtime down / storage down / memory_mode switch / governance roundtrip / mcp_call / mna restart / record-replay provider`
 
 当前还未自动化覆盖、需要人工复核的部分：
 
 - `continuum start` 拉起整套服务后的真实跨服务联通
 - `token --rotate` 的完整轮换流程
+- `memory-native-agent` 重启后，`/agent` 页面自动恢复连接 这一条还在补稳定性

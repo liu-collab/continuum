@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OllamaProvider } from "../ollama.js";
-import { ProviderUnavailableError } from "../types.js";
+import { ProviderTimeoutError, ProviderUnavailableError } from "../types.js";
 import { collectChunks, ndjsonStream, startProviderMock } from "./test-helpers.js";
 
 describe("OllamaProvider", () => {
@@ -135,5 +135,25 @@ describe("OllamaProvider", () => {
     await expect(
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderUnavailableError);
+  });
+
+  it("throws timeout errors when no response arrives before the configured timeout", async () => {
+    const server = await startProviderMock((app) => {
+      app.post("/api/chat", async () => new Promise(() => undefined));
+    });
+    apps.push(server.app);
+
+    const provider = new OllamaProvider({
+      baseUrl: server.baseUrl,
+      model: "qwen2.5-coder",
+      runtimeSettings: {
+        maxRetries: 0,
+        firstTokenTimeoutMs: 20,
+      },
+    });
+
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toBeInstanceOf(ProviderTimeoutError);
   });
 });

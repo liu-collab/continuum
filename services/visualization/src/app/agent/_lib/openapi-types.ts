@@ -45,6 +45,7 @@ export type MnaSessionDetail = Omit<MnaSessionSummary, "latest_turn_id">;
 export type MnaSessionDetailResponse = {
   session: MnaSessionDetail;
   messages: MnaSessionMessage[];
+  latest_event_id: number | null;
 };
 
 export type MnaCreateSessionRequest = {

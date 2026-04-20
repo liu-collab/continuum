@@ -5,7 +5,7 @@ import type { FastifyReply } from "fastify";
 import { z } from "zod";
 
 import { createSessionId } from "../../runner/index.js";
-import { createSessionState, updateSessionMode } from "../state.js";
+import { createSessionState, updateProviderSelection, updateSessionMode } from "../state.js";
 import type { RuntimeFastifyInstance } from "../types.js";
 
 const sessionParamsSchema = z.object({ id: z.string().min(1) });
@@ -81,9 +81,13 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       });
     }
 
+    const liveSession = app.runtimeState.sessions.get(params.id);
+    const latestEventId = liveSession?.events.at(-1)?.id ?? null;
+
     return {
       session,
       messages: app.runtimeState.store.getMessages(params.id),
+      latest_event_id: latestEventId,
     };
   });
 
@@ -192,6 +196,13 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       });
     }
 
+    updateProviderSelection(app.runtimeState, {
+      ...app.runtimeState.config.provider,
+      kind: payload.provider_id as typeof app.runtimeState.config.provider.kind,
+      model: payload.model,
+      temperature: payload.temperature ?? app.runtimeState.config.provider.temperature,
+    });
+
     return {
       ok: true,
       provider_id: payload.provider_id,
@@ -217,7 +228,7 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       turn_id: params.turnId,
       provider_id: payload.provider_id,
       model: payload.model,
-      round: 1,
+      round: payload.round,
       messages: JSON.parse(payload.messages_json),
       tools: JSON.parse(payload.tools_json),
     };

@@ -198,6 +198,7 @@ describe("dashboard trend aggregation", () => {
       triggerRuns: [
         {
           traceId: "trace-current",
+          phase: null,
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",
@@ -215,6 +216,7 @@ describe("dashboard trend aggregation", () => {
         },
         {
           traceId: "trace-previous",
+          phase: null,
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",
@@ -234,6 +236,7 @@ describe("dashboard trend aggregation", () => {
       recallRuns: [
         {
           traceId: "trace-current",
+          phase: null,
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",
@@ -255,6 +258,7 @@ describe("dashboard trend aggregation", () => {
         },
         {
           traceId: "trace-previous",
+          phase: null,
           triggerHit: true,
           triggerType: "history_reference",
           triggerReason: "reason",

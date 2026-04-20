@@ -305,13 +305,14 @@ export class SqliteSessionStore implements SessionStore {
     this.db
       .prepare(
         `
-          INSERT INTO dispatched_messages (turn_id, messages_json, tools_json, provider_id, model, created_at)
-          VALUES (@turn_id, @messages_json, @tools_json, @provider_id, @model, @created_at)
+          INSERT INTO dispatched_messages (turn_id, messages_json, tools_json, provider_id, model, round, created_at)
+          VALUES (@turn_id, @messages_json, @tools_json, @provider_id, @model, @round, @created_at)
           ON CONFLICT(turn_id) DO UPDATE SET
             messages_json = excluded.messages_json,
             tools_json = excluded.tools_json,
             provider_id = excluded.provider_id,
             model = excluded.model,
+            round = excluded.round,
             created_at = excluded.created_at
         `,
       )
@@ -321,6 +322,7 @@ export class SqliteSessionStore implements SessionStore {
         tools_json: payload.tools_json,
         provider_id: payload.provider_id,
         model: payload.model,
+        round: payload.round,
         created_at: createdAt,
       });
   }
@@ -338,6 +340,7 @@ export class SqliteSessionStore implements SessionStore {
       tools_json: readString(row.tools_json),
       provider_id: readString(row.provider_id),
       model: readString(row.model),
+      round: readNumber(row.round),
       created_at: readString(row.created_at),
     };
   }
@@ -356,6 +359,16 @@ export class SqliteSessionStore implements SessionStore {
   private runMigrations() {
     const sql = fs.readFileSync(path.join(currentDir, "migrations", "0001-init.sql"), "utf8");
     this.db.exec(sql);
+    this.ensureColumn("dispatched_messages", "round", "INTEGER NOT NULL DEFAULT 1");
+  }
+
+  private ensureColumn(table: string, column: string, definition: string) {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name?: unknown }>;
+    if (columns.some((item) => item.name === column)) {
+      return;
+    }
+
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   private touchSession(sessionId: string, timestamp: string) {

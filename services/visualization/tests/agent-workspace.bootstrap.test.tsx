@@ -1,0 +1,109 @@
+import React from "react";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+
+import { AgentWorkspace } from "@/app/agent/_components/agent-workspace";
+import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+
+vi.mock("@/app/agent/_hooks/use-agent-workspace", () => ({
+  useAgentWorkspace: vi.fn()
+}));
+
+import { useAgentWorkspace } from "@/app/agent/_hooks/use-agent-workspace";
+
+const mockedUseAgentWorkspace = vi.mocked(useAgentWorkspace);
+
+function createWorkspaceState(status: "mna_not_running" | "token_missing" | "token_invalid") {
+  return {
+    state: {
+      bootstrapStatus: status,
+      bootstrapReason: null,
+      sessionId: null,
+      session: null,
+      sessionList: [],
+      connection: "closed",
+      degraded: false,
+      turns: [],
+      pendingConfirm: null,
+      locale: "zh-CN",
+      activeTask: null,
+      recentTasks: [],
+      replayGapDetected: false,
+      sessionError: null,
+      sessionErrorCode: null
+    },
+    activeTurn: null,
+    fileTree: {
+      path: ".",
+      entries: []
+    },
+    selectedFile: null,
+    metrics: null,
+    dependencyStatus: null,
+    mcpState: null,
+    promptInspector: null,
+    promptInspectorOpen: false,
+    setPromptInspectorOpen: vi.fn(),
+    createNewSession: vi.fn(),
+    openSession: vi.fn(),
+    sendInput: vi.fn(),
+    abortCurrentTurn: vi.fn(),
+    confirmTool: vi.fn(),
+    updateMemoryMode: vi.fn(),
+    renameSession: vi.fn(),
+    deleteSession: vi.fn(),
+    updateProvider: vi.fn(),
+    refreshMetrics: vi.fn(),
+    refreshDependencyStatus: vi.fn(),
+    refreshMcpState: vi.fn(),
+    refreshFileTree: vi.fn(),
+    openFile: vi.fn(),
+    openPromptInspector: vi.fn(),
+    restartMcpServer: vi.fn(),
+    disableMcpServer: vi.fn()
+  };
+}
+
+describe("AgentWorkspace bootstrap states", () => {
+  it("shows a specific message when mna is not running", () => {
+    mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("mna_not_running") as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-offline-state")).toHaveTextContent(
+      "未检测到 memory-native-agent，请先启动本地服务。"
+    );
+  });
+
+  it("shows a specific message when token is missing", () => {
+    mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("token_missing") as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-offline-state")).toHaveTextContent(
+      "未找到可用 token，请确认 mna 已启动并已生成 token 文件。"
+    );
+  });
+
+  it("shows a specific message when token is invalid", () => {
+    mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("token_invalid") as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-offline-state")).toHaveTextContent(
+      "token 无法使用，请检查 token 文件或重新启动 mna。"
+    );
+  });
+});

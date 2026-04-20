@@ -1,4 +1,5 @@
 import {
+  ProviderAuthError,
   ProviderRateLimitedError,
   ProviderStreamError,
   ProviderTimeoutError,
@@ -98,6 +99,10 @@ export class OpenAICompatibleProvider implements IModelProvider {
       }
 
       for await (const line of streamLines(response.body)) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
         if (!line.startsWith("data:")) {
           continue;
         }
@@ -327,10 +332,15 @@ export class OpenAICompatibleProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+        if (
+          error instanceof ProviderAuthError
+          || error instanceof ProviderRateLimitedError
+          || error instanceof ProviderTimeoutError
+          || error instanceof ProviderUnavailableError
+        ) {
           throw error;
         }
-        if (error instanceof Error && error.name === "AbortError") {
+        if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("OpenAI-compatible provider timed out before response.", error);
         }
 
@@ -355,6 +365,14 @@ export class OpenAICompatibleProvider implements IModelProvider {
 
     throw lastError ?? new ProviderStreamError("OpenAI-compatible provider request failed.");
   }
+}
+
+function isAbortLikeError(error: unknown, signalReason: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+
+  return signalReason === "provider_first_token_timeout";
 }
 
 function mapOpenAIFinishReason(reason: string, sawToolCall: boolean): "stop" | "tool_use" | "length" | "error" {

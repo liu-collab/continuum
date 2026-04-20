@@ -50,6 +50,28 @@ describe("SqliteSessionStore purge and recovery", () => {
       memory_mode: "workspace_only",
       locale: "en-US",
     });
+    store.openTurn({
+      id: "turn-1",
+      session_id: "sess-1",
+    });
+    store.appendMessage({
+      id: "msg-1",
+      session_id: "sess-1",
+      turn_id: "turn-1",
+      role: "user",
+      content: "hello",
+    });
+    store.recordToolInvocation({
+      call_id: "call-1",
+      session_id: "sess-1",
+      turn_id: "turn-1",
+      tool_name: "fs_write",
+      args_hash: "hash-1",
+      args_preview: "{\"path\":\"note.txt\"}",
+      permission_decision: "allowed_once",
+      ok: true,
+      duration_ms: 10,
+    });
     fs.mkdirSync(artifactDir, { recursive: true });
     fs.writeFileSync(path.join(artifactDir, "call-1.txt"), "artifact", "utf8");
 
@@ -58,6 +80,7 @@ describe("SqliteSessionStore purge and recovery", () => {
     });
 
     expect(store.getSession("sess-1")).toBeNull();
+    expect(store.getTurn("turn-1")).toBeNull();
     expect(fs.existsSync(artifactDir)).toBe(false);
   });
 

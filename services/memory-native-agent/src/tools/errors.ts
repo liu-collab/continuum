@@ -41,6 +41,6 @@ export class ToolPatternBlockedError extends ToolExecutionError {
 
 export class ToolArtifactTooLargeError extends ToolExecutionError {
   constructor(message: string) {
-    super(message, { code: "tool_artifact_too_large" });
+    super(message, { code: "tool_output_too_large" });
   }
 }

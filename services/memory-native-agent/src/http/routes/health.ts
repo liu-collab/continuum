@@ -8,27 +8,37 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
       .catch(() => "unreachable" as const);
 
     return {
-    status: "ok",
-    version: MNA_VERSION,
-    api_version: "v1",
-    runtime_min_version: "0.1.3",
-    dependencies: {
-      retrieval_runtime: runtimeStatus,
-    },
+      status: "ok",
+      version: MNA_VERSION,
+      api_version: "v1",
+      runtime_min_version: MNA_VERSION,
+      dependencies: {
+        retrieval_runtime: runtimeStatus,
+      },
     };
   });
 
-  app.get("/readyz", async (_request, reply) => {
-    try {
-      await app.runtimeState.memoryClient.dependencyStatus();
-      return {
+  app.get("/readyz", async () => {
+    const runtimeDependency = await app.runtimeState.memoryClient.dependencyStatus()
+      .then(() => ({
+        status: "reachable" as const,
+      }))
+      .catch((error) => ({
+        status: "unreachable" as const,
+        detail: error instanceof Error ? error.message : String(error),
+      }));
+
+    return {
+      liveness: {
+        status: "alive",
+      },
+      readiness: {
         status: "ready",
-      };
-    } catch {
-      return reply.code(503).send({
-        status: "not_ready",
-      });
-    }
+      },
+      dependencies: {
+        retrieval_runtime: runtimeDependency,
+      },
+    };
   });
 
   app.get("/v1/agent/dependency-status", async () => {

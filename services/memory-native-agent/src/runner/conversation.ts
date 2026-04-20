@@ -16,7 +16,6 @@ export interface BuildMessagesInput {
       confidence: number;
     }>;
   }>;
-  newUserInput: string;
 }
 
 export class Conversation {
@@ -46,10 +45,6 @@ export class Conversation {
     }
 
     built.push(...this.messages);
-    built.push({
-      role: "user",
-      content: input.newUserInput,
-    });
     return built;
   }
 
@@ -61,7 +56,7 @@ export class Conversation {
       .filter(Boolean)
       .join("\n");
 
-    return recentUserMessages.slice(0, 1024);
+    return recentUserMessages.slice(0, 500);
   }
 
   wrapToolOutput(toolName: string, callId: string, trustLevel: ToolTrustLevel, rawOutput: string): string {

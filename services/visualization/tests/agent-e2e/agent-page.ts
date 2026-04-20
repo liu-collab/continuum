@@ -7,12 +7,28 @@ export class AgentPage {
     await this.page.goto("/agent");
   }
 
+  async gotoSession(sessionId: string) {
+    await this.page.goto(`/agent/${sessionId}`);
+  }
+
+  async currentSessionId() {
+    await this.page.waitForURL(/\/agent\/[^/]+$/);
+    const match = this.page.url().match(/\/agent\/([^/?#]+)/);
+    return match?.[1] ?? null;
+  }
+
   connectionState() {
     return this.page.getByTestId("agent-connection-state");
   }
 
   async expectConnected() {
     await expect(this.connectionState()).toHaveText(/open|connecting|reconnecting|在线|连接中|重连中|online/);
+  }
+
+  async expectReadyToSend() {
+    await expect(this.connectionState()).toHaveText(/open|在线|online/);
+    await expect(this.page.getByTestId("agent-input")).toBeEnabled();
+    await expect(this.page.getByTestId("send-message")).toBeDisabled();
   }
 
   async waitForConnectedAfterRestart(timeoutMs = 15_000) {
@@ -36,16 +52,38 @@ export class AgentPage {
   }
 
   async sendMessage(text: string) {
+    await this.expectReadyToSend();
     await this.page.getByTestId("agent-input").fill(text);
+    await expect(this.page.getByTestId("send-message")).toBeEnabled();
     await this.page.getByTestId("send-message").click();
+  }
+
+  async typeMessage(text: string) {
+    await this.page.getByTestId("agent-input").fill(text);
+  }
+
+  async pressInputShortcut(key: string) {
+    await this.page.getByTestId("agent-input").press(key);
   }
 
   assistantMessages() {
     return this.page.getByTestId(/assistant-message-/);
   }
 
+  userMessages() {
+    return this.page.getByTestId(/user-message-/);
+  }
+
   async expectLatestAssistantContains(text: RegExp | string) {
     await expect(this.assistantMessages().last()).toContainText(text);
+  }
+
+  async expectLatestUserContains(text: RegExp | string) {
+    await expect(this.userMessages().last()).toContainText(text);
+  }
+
+  async expectAnyUserMessageContains(text: RegExp | string) {
+    await expect(this.userMessages().filter({ hasText: text }).first()).toBeVisible();
   }
 
   async openPromptInspector() {
@@ -126,6 +164,33 @@ export class AgentPage {
     await this.page.getByRole("button", { name: /新建会话|New Session/i }).click();
   }
 
+  async switchLocale(locale: "zh-CN" | "en-US") {
+    await this.page.getByTestId("agent-locale-select").selectOption(locale);
+  }
+
+  async applyProviderModel(model: string) {
+    const input = this.page.getByTestId("provider-model-input");
+    await input.fill(model);
+    await this.page.getByTestId("provider-apply").click();
+  }
+
+  async refreshProviderStatus() {
+    await this.page.getByTestId("provider-refresh").click();
+  }
+
+  async clickWorkspaceRefresh() {
+    await this.page
+      .locator("section")
+      .filter({ has: this.page.getByRole("heading", { name: /最近会话|Recent sessions/i }) })
+      .getByRole("button")
+      .first()
+      .click();
+  }
+
+  async abortTurn() {
+    await this.page.getByTestId("abort-turn").click();
+  }
+
   sessionRenameButtons() {
     return this.page.getByLabel(/重命名会话|rename session/i);
   }
@@ -135,16 +200,15 @@ export class AgentPage {
   }
 
   sessionCardByTitle(title: string): Locator {
-    return this.page
-      .getByText(title)
-      .locator("..")
-      .locator("..");
+    return this.page.getByTestId(/^session-card-/).filter({ hasText: title }).first();
   }
 
   async renameFirstSession(title: string) {
-    const card = this.sessionRenameButtons().first().locator("..").locator("..");
-    await card.getByLabel(/重命名会话|rename session/i).click();
-    const renameInput = this.page.locator("form input").first();
+    const renameButton = this.sessionRenameButtons().first();
+    const card = renameButton.locator("..").locator("..");
+    await renameButton.click();
+    const renameInput = card.locator("form input");
+    await expect(renameInput).toBeVisible();
     await renameInput.fill(title);
     await renameInput.press("Enter");
     await expect(this.page.getByText(title)).toBeVisible();
@@ -154,6 +218,39 @@ export class AgentPage {
     const card = this.sessionCardByTitle(title);
     await card.getByLabel(/删除会话|delete session/i).click();
     await expect(this.page.getByText(title)).toHaveCount(0);
+  }
+
+  async openSessionByTitle(title: string) {
+    await this.sessionCardByTitle(title).getByRole("button").first().click();
+  }
+
+  async waitForSessionReady(title?: string) {
+    if (title) {
+      await this.expectSessionSelected(title);
+    }
+    await expect(this.page.getByTestId("agent-input")).toBeVisible();
+    await expect(this.connectionState()).toHaveText(/open|在线|online/);
+    await expect(this.page.getByTestId("agent-input")).toBeEnabled();
+  }
+
+  async expectSessionSelected(title: string) {
+    await expect(this.sessionCardByTitle(title)).toHaveClass(/border-accent/);
+  }
+
+  async openDirectory(name: string) {
+    await this.page.getByRole("button", { name: new RegExp(name, "i") }).click();
+  }
+
+  async expectFileTreePath(text: RegExp | string) {
+    await expect(this.page.getByText(text).first()).toBeVisible();
+  }
+
+  async expectReplayGap() {
+    await expect(this.page.getByTestId("agent-replay-gap")).toBeVisible();
+  }
+
+  async expectSessionError(text: RegExp | string) {
+    await expect(this.page.getByTestId("agent-session-error")).toContainText(text);
   }
 
   async expectInjectionOrEmptyState() {

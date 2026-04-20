@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { initialAgentState, reduceAgentEvent } from "../_lib/event-reducer";
 import type { AgentLocale, AgentMemoryMode, MnaPromptInspectorResponse } from "../_lib/openapi-types";
@@ -15,6 +15,7 @@ type UseAgentWorkspaceOptions = {
 
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();
+  const pathname = usePathname();
   const client = useAgentClient();
   const [state, dispatch] = useReducer(reduceAgentEvent, initialAgentState);
   const [treePath, setTreePath] = useState(".");
@@ -28,7 +29,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [mcpState, setMcpState] = useState<Awaited<ReturnType<typeof client.getMcpServers>> | null>(null);
   const [promptInspector, setPromptInspector] = useState<MnaPromptInspectorResponse | null>(null);
   const [promptInspectorOpen, setPromptInspectorOpen] = useState(false);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const streamRef = useRef<ReturnType<typeof client.connectSessionStream> | null>(null);
+  const streamGenerationRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,10 +97,25 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
     return () => {
       cancelled = true;
+      streamGenerationRef.current += 1;
       streamRef.current?.close();
       streamRef.current = null;
     };
-  }, [client, options.sessionId, options.uiLocale, router]);
+  }, [bootstrapAttempt, client, options.sessionId, router]);
+
+  useEffect(() => {
+    if (state.bootstrapStatus === "ok" || state.bootstrapStatus === "loading") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setBootstrapAttempt((value) => value + 1);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [state.bootstrapStatus]);
 
   const activeTurn = useMemo(() => state.turns.at(-1) ?? null, [state.turns]);
 
@@ -124,22 +142,34 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     setSelectedFile(payload);
   }
 
-  async function bindSessionStream(sessionId: string) {
+  async function bindSessionStream(sessionId: string, initialLastEventId?: number | null) {
+    const generation = streamGenerationRef.current + 1;
+    streamGenerationRef.current = generation;
     streamRef.current?.close();
     streamRef.current = client.connectSessionStream(sessionId, {
+      initialLastEventId,
       onConnectionChange(connection) {
+        if (streamGenerationRef.current !== generation) {
+          return;
+        }
         dispatch({
           type: "connection_changed",
           connection
         });
       },
       onEvent(event) {
+        if (streamGenerationRef.current !== generation) {
+          return;
+        }
         dispatch({
           type: "server_event",
           event
         });
       },
       onError(error) {
+        if (streamGenerationRef.current !== generation) {
+          return;
+        }
         dispatch({
           type: "bootstrap_loaded",
           bootstrapStatus: error instanceof MnaUnavailableError ? error.status : "token_invalid",
@@ -150,6 +180,12 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   }
 
   async function openSession(sessionId: string) {
+    const targetPath = `/agent/${sessionId}`;
+    if (pathname !== targetPath) {
+      router.push(targetPath);
+      return;
+    }
+
     const detail = await client.getSession(sessionId);
     dispatch({
       type: "hydrate_session",
@@ -157,9 +193,8 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       messages: detail.messages
     });
 
-    await bindSessionStream(sessionId);
+    await bindSessionStream(sessionId, detail.latest_event_id);
     await Promise.allSettled([refreshFileTree("."), refreshMetrics(), refreshDependencyStatus(), refreshMcpState()]);
-    router.push(`/agent/${sessionId}`);
   }
 
   async function createNewSession() {

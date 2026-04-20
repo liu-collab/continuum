@@ -15,6 +15,17 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/sessions/:id/ws", { websocket: true }, (socket, request) => {
     const ws = socket as unknown as WebSocketLike;
     const { params, query } = parseWebsocketRequest(request.raw.url ?? request.url, request.params, request.query);
+    if (!query.token || query.token !== app.mnaToken) {
+      ws.send(JSON.stringify({
+        kind: "error",
+        scope: "session",
+        code: "token_invalid",
+        message: "Invalid or missing token.",
+      }));
+      ws.close(1008);
+      return;
+    }
+
     const existingSession = app.runtimeState.store.getSession(params.id);
     if (!existingSession) {
       ws.send(JSON.stringify({

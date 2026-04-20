@@ -32,7 +32,7 @@ describe("memory-native-agent smoke", () => {
       status: "ok",
       version: "0.1.0",
       api_version: "v1",
-      runtime_min_version: "0.1.3",
+      runtime_min_version: "0.1.0",
       dependencies: {
         retrieval_runtime: "reachable",
       },

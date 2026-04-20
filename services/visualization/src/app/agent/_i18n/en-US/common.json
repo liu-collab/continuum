@@ -21,6 +21,8 @@
     "dependencyTitle": "Dependency status",
     "dependencyEmptyTitle": "Dependency status not loaded",
     "dependencyEmptyDescription": "Runtime, provider, and MCP status will appear here once loaded.",
+    "replayGapTitle": "Connection recovered, but some events were lost",
+    "replayGapDescription": "The reconnect flow could not replay every event. Existing content is preserved and you can continue sending messages.",
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "loading": "loading"
@@ -119,6 +121,80 @@
     "error": "Error",
     "abort": "Aborted",
     "crashed": "Crashed"
+  },
+  "errors": {
+    "token_invalid": {
+      "title": "Authentication failed",
+      "description": "The current token is invalid or no longer accepted. Fetch a new token and try again."
+    },
+    "token_expired": {
+      "title": "Token expired",
+      "description": "The current token has expired. Restart or re-authorize before reconnecting."
+    },
+    "session_not_found": {
+      "title": "Session not found",
+      "description": "The target session does not exist. It may have been deleted or the link is stale."
+    },
+    "turn_not_found": {
+      "title": "Turn not found",
+      "description": "The requested turn does not exist, so its context or debug payload cannot be loaded."
+    },
+    "workspace_mismatch": {
+      "title": "Workspace mismatch",
+      "description": "This session does not belong to the current workspace. Verify the working directory and session source."
+    },
+    "runtime_unavailable": {
+      "title": "Retrieval runtime unavailable",
+      "description": "The retrieval runtime is unavailable right now, so the page will stay in degraded mode."
+    },
+    "provider_not_registered": {
+      "title": "Provider not registered",
+      "description": "The selected provider is not registered. Check the provider configuration."
+    },
+    "provider_auth_failed": {
+      "title": "Provider authentication failed",
+      "description": "The model provider rejected authentication. Check the API key or auth settings."
+    },
+    "provider_rate_limited": {
+      "title": "Provider rate limited",
+      "description": "The model provider returned a rate limit response. Try again later."
+    },
+    "provider_timeout": {
+      "title": "Provider timeout",
+      "description": "The provider did not answer within the configured timeout window."
+    },
+    "provider_stream_error": {
+      "title": "Provider stream interrupted",
+      "description": "The provider failed while streaming output, so this turn ended early."
+    },
+    "tool_denied_path": {
+      "title": "Tool path denied",
+      "description": "The requested path is outside the allowed workspace boundary, so the tool call was blocked."
+    },
+    "tool_denied_pattern": {
+      "title": "Tool command denied",
+      "description": "The request matched a blocked command pattern, so the tool call was rejected."
+    },
+    "tool_confirm_timeout": {
+      "title": "Tool confirmation timed out",
+      "description": "Permission was not granted before the timeout, so the tool call was cancelled."
+    },
+    "mcp_disconnected": {
+      "title": "MCP disconnected",
+      "description": "The MCP server is currently unavailable. Restore the connection and try again."
+    },
+    "abort_ack": {
+      "title": "Abort acknowledged",
+      "description": "The current turn has accepted the abort request and additional output will stop."
+    },
+    "session_store_unavailable": {
+      "title": "Session store unavailable",
+      "description": "The session store is currently unavailable, so some session reads and writes may fail."
+    },
+    "api_version_mismatch": {
+      "title": "API version mismatch",
+      "description": "The client and server API versions do not match. Upgrade to compatible versions."
+    }
   },
   "mcpPanel": {
     "title": "MCP servers",

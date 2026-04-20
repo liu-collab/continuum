@@ -50,7 +50,7 @@ export function tokenizeForSimilarity(input: string): string[] {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]+/gu, " ")
     .split(/\s+/)
-    .map((part) => part.trim())
+    .flatMap((part) => tokenizeSegment(part.trim()))
     .filter((part) => part.length >= 2);
 }
 
@@ -88,4 +88,30 @@ export function findClosestTask(recentTasks: TaskState[], input: string, thresho
   }
 
   return best.task;
+}
+
+function tokenizeSegment(input: string): string[] {
+  if (!input) {
+    return [];
+  }
+
+  if (!/[\u3400-\u9fff]/u.test(input)) {
+    return [input];
+  }
+
+  const chars = [...input];
+  if (chars.length < 2) {
+    return chars;
+  }
+
+  const grams: string[] = [];
+  for (let index = 0; index < chars.length - 1; index += 1) {
+    const current = chars[index];
+    const next = chars[index + 1];
+    if (!current || !next) {
+      continue;
+    }
+    grams.push(`${current}${next}`);
+  }
+  return grams;
 }

@@ -63,4 +63,43 @@ describe("SqliteSessionStore session CRUD", () => {
     });
     expect(store.getSession("sess-1")).toBeNull();
   });
+
+  it("returns next_cursor and excludes newer rows after paging forward", () => {
+    const store = createStore();
+
+    store.createSession({
+      id: "sess-1",
+      workspace_id: "ws-1",
+      user_id: "user-1",
+      memory_mode: "workspace_plus_global",
+      locale: "zh-CN",
+      created_at: "2026-04-18T00:00:00.000Z",
+    });
+    store.createSession({
+      id: "sess-2",
+      workspace_id: "ws-1",
+      user_id: "user-1",
+      memory_mode: "workspace_plus_global",
+      locale: "zh-CN",
+      created_at: "2026-04-19T00:00:00.000Z",
+    });
+
+    const firstPage = store.listSessions({
+      workspace_id: "ws-1",
+      limit: 1,
+    });
+
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.items[0]?.id).toBe("sess-2");
+    expect(firstPage.next_cursor).toBe("2026-04-18T00:00:00.000Z");
+
+    const secondPage = store.listSessions({
+      workspace_id: "ws-1",
+      limit: 1,
+      cursor: firstPage.next_cursor ?? undefined,
+    });
+
+    expect(secondPage.items).toEqual([]);
+    expect(secondPage.next_cursor).toBeNull();
+  });
 });

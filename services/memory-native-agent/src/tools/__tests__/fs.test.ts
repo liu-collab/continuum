@@ -100,6 +100,22 @@ describe("fs tools", () => {
     expect(result.error?.code).toBe("tool_denied_path");
   });
 
+  it("rejects symlink targets that escape the workspace", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mna-tools-fs-outside-"));
+    tempRoots.push(outsideRoot);
+    fs.writeFileSync(path.join(outsideRoot, "secret.txt"), "secret", "utf8");
+    fs.symlinkSync(path.join(outsideRoot, "secret.txt"), path.join(root, "linked-secret.txt"));
+
+    const dispatcher = createDispatcher();
+    const context = createContext(root, artifactsRoot);
+
+    const result = await invoke(dispatcher, "fs_read", { path: "linked-secret.txt" }, context);
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("tool_denied_path");
+  });
+
   it("writes files after confirmation and edits unique matches", async () => {
     const { root, artifactsRoot } = createWorkspace();
     const dispatcher = createDispatcher();
@@ -150,5 +166,42 @@ describe("fs tools", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("tool_edit_match_not_unique");
+  });
+
+  it("writes oversized diffs to artifacts and truncates inline output", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    const dispatcher = createDispatcher();
+    const context = createContext(root, artifactsRoot);
+    const largeContent = "x".repeat(12 * 1024);
+
+    const result = await invoke(
+      dispatcher,
+      "fs_write",
+      { path: "src/large.txt", content: largeContent },
+      context,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.artifact_ref).toBe("session-1/call-1.patch");
+    expect(result.output).toContain("\n...\n");
+    expect(result.output.length).toBeLessThan(largeContent.length);
+    expect(fs.readFileSync(path.join(artifactsRoot, "session-1", "call-1.patch"), "utf8")).toContain("+++ src/large.txt");
+  });
+
+  it("rejects outputs larger than the artifact size cap", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    const dispatcher = createDispatcher();
+    const context = createContext(root, artifactsRoot);
+    const hugeContent = "x".repeat(6 * 1024 * 1024);
+
+    const result = await invoke(
+      dispatcher,
+      "fs_write",
+      { path: "src/huge.txt", content: hugeContent },
+      context,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("tool_output_too_large");
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
@@ -27,8 +28,11 @@ type AgentWorkspaceProps = {
 };
 
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
-  const { locale, t } = useAgentI18n();
+  const { locale, t, formatAgentError } = useAgentI18n();
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
+  const sessionErrorContent = workspace.state.sessionErrorCode
+    ? formatAgentError(workspace.state.sessionErrorCode, workspace.state.sessionError)
+    : null;
   const bootstrapDescription =
     workspace.state.bootstrapReason ??
     resolveBootstrapDescription(workspace.state.bootstrapStatus, t);
@@ -139,6 +143,20 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           </div>
 
           <div className="space-y-6">
+            {workspace.state.replayGapDetected ? (
+              <ErrorState
+                testId="agent-replay-gap"
+                title={t("workspace.replayGapTitle")}
+                description={t("workspace.replayGapDescription")}
+              />
+            ) : null}
+            {workspace.state.sessionError && sessionErrorContent ? (
+              <ErrorState
+                testId="agent-session-error"
+                title={sessionErrorContent.title}
+                description={sessionErrorContent.description}
+              />
+            ) : null}
             <ChatPanel
               turns={workspace.state.turns}
               connection={workspace.state.connection}

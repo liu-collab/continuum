@@ -43,6 +43,7 @@ export interface RunnerIO {
   emitTaskChange(turnId: string, change: TaskChangeEvent): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
   emitError(scope: "turn" | "session", err: Error & { code?: string }): void;
+  emitStreamMetrics?(turnId: string, metrics: { dropped_after_abort_total: number; flushed_events_total: number }): void;
   requestConfirm(payload: {
     call_id: string;
     tool: string;
@@ -96,7 +97,7 @@ export class AgentRunner {
       turn.taskId = this.currentTask.id;
     }
 
-    this.appendUserMessage(turnId, userInput);
+    this.persistUserMessage(turnId, userInput);
 
     const injections: InjectionBlock[] = [];
     let degraded = false;
@@ -129,19 +130,16 @@ export class AgentRunner {
       locale: this.deps.config.locale,
       appendedPrompt: this.deps.config.cli.systemPrompt,
     });
-    const messages = this.conversation.buildMessages({
+    const tools = this.deps.tools.listTools();
+    this.conversation.addMessage({
+      role: "user",
+      content: userInput,
+    });
+
+    let messages = this.conversation.buildMessages({
       systemPrompt,
       injections,
-      newUserInput: userInput,
     });
-    this.safeStore(() =>
-      this.deps.store?.saveDispatchedMessages(turnId, {
-        messages_json: JSON.stringify(messages),
-        tools_json: JSON.stringify(this.deps.tools.listTools()),
-        provider_id: this.deps.provider.id(),
-        model: this.deps.provider.model(),
-      }),
-    );
 
     const bridge = new StreamBridge(
       turnId,
@@ -157,59 +155,116 @@ export class AgentRunner {
         flushIntervalMs: this.deps.config.streaming.flushIntervalMs,
       },
     );
+    const onAbort = () => {
+      bridge.abort();
+    };
+    abortController.signal.addEventListener("abort", onAbort, { once: true });
 
     const toolResults: ToolResult[] = [];
     const assistantParts: string[] = [];
     let finishReason: string = "stop";
     let usage = { prompt_tokens: 0, completion_tokens: 0 };
+    let terminalEventEmitted = false;
+    let round = 1;
+
+    this.persistDispatchedMessages(turnId, messages, tools, round);
 
     try {
-      const chunks = this.deps.provider.chat({
-        messages,
-        tools: this.deps.tools.listTools(),
-        signal: abortController.signal,
-      });
+      while (!abortController.signal.aborted) {
+        let encounteredToolCall = false;
+        let roundAssistantToolMessage: ChatMessage | null = null;
+        const chunks = this.deps.provider.chat({
+          messages,
+          tools,
+          signal: abortController.signal,
+        });
 
-      for await (const chunk of chunks) {
-        if (chunk.type === "text_delta") {
-          assistantParts.push(chunk.text);
-          await bridge.handle(chunk);
-          continue;
-        }
+        for await (const chunk of chunks) {
+          if (abortController.signal.aborted) {
+            await bridge.handle(chunk);
+            finishReason = "abort";
+            break;
+          }
 
-        if (chunk.type === "tool_call") {
-          await bridge.handle(chunk);
-          const toolResult = await this.runTool(turnId, chunk.call, abortController.signal);
-          toolResults.push(toolResult);
-          this.deps.io.emitToolCallResult(chunk.call.id, toolResult);
-          const wrappedToolOutput = this.conversation.wrapToolOutput(
-            chunk.call.name,
-            chunk.call.id,
-            toolResult.trust_level,
-            toolResult.output,
-          );
-          this.conversation.addMessage({
-            role: "tool",
-            content: wrappedToolOutput,
-            tool_call_id: chunk.call.id,
-          });
-          this.safeStore(() =>
-            this.deps.store?.appendMessage({
-              id: createTurnId(),
-              session_id: this.sessionId,
-              turn_id: turnId,
+          if (chunk.type === "text_delta") {
+            assistantParts.push(chunk.text);
+            if (roundAssistantToolMessage) {
+              roundAssistantToolMessage.content += chunk.text;
+            }
+            await bridge.handle(chunk);
+            continue;
+          }
+
+          if (chunk.type === "tool_call") {
+            encounteredToolCall = true;
+            if (!roundAssistantToolMessage) {
+              roundAssistantToolMessage = {
+                role: "assistant",
+                content: "",
+                tool_calls: [chunk.call],
+              };
+              this.conversation.addMessage(roundAssistantToolMessage);
+            } else {
+              roundAssistantToolMessage.tool_calls = [
+                ...(roundAssistantToolMessage.tool_calls ?? []),
+                chunk.call,
+              ];
+            }
+            await bridge.handle(chunk);
+            const toolResult = await this.runTool(turnId, chunk.call, abortController.signal);
+            toolResults.push(toolResult);
+            this.deps.io.emitToolCallResult(chunk.call.id, toolResult);
+            const wrappedToolOutput = this.conversation.wrapToolOutput(
+              chunk.call.name,
+              chunk.call.id,
+              toolResult.trust_level,
+              toolResult.output,
+            );
+            this.conversation.addMessage({
               role: "tool",
               content: wrappedToolOutput,
               tool_call_id: chunk.call.id,
-            }),
-          );
-          finishReason = "tool_use";
-          continue;
+            });
+            this.safeStore(() =>
+              this.deps.store?.appendMessage({
+                id: createTurnId(),
+                session_id: this.sessionId,
+                turn_id: turnId,
+                role: "tool",
+                content: wrappedToolOutput,
+                tool_call_id: chunk.call.id,
+              }),
+            );
+            continue;
+          }
+
+          finishReason = chunk.finish_reason;
+          usage = chunk.usage;
+          await bridge.handle(chunk);
+          terminalEventEmitted = true;
         }
 
-        finishReason = chunk.finish_reason;
-        usage = chunk.usage;
-        await bridge.handle(chunk);
+        if (abortController.signal.aborted) {
+          break;
+        }
+
+        if (!encounteredToolCall || finishReason !== "tool_use") {
+          break;
+        }
+
+        round += 1;
+        messages = this.conversation.buildMessages({
+          systemPrompt,
+          injections,
+        });
+        this.persistDispatchedMessages(turnId, messages, tools, round);
+        terminalEventEmitted = false;
+      }
+
+      if (abortController.signal.aborted && !terminalEventEmitted) {
+        this.deps.io.emitTurnEnd(turnId, "abort");
+        finishReason = "abort";
+        terminalEventEmitted = true;
       }
     } catch (error) {
       bridge.flushPending();
@@ -219,8 +274,11 @@ export class AgentRunner {
       }));
       finishReason = abortController.signal.aborted ? "abort" : "error";
       this.deps.io.emitTurnEnd(turnId, finishReason);
+      terminalEventEmitted = true;
     } finally {
       bridge.flushPending();
+      this.deps.io.emitStreamMetrics?.(turnId, bridge.metrics());
+      abortController.signal.removeEventListener("abort", onAbort);
       this.activeAbortControllers.delete(turnId);
     }
 
@@ -278,6 +336,7 @@ export class AgentRunner {
 
   private applyTaskStateChanges(turnId: string, triggers: DetectedTriggers): Phase[] {
     const phases: Phase[] = [];
+    let resumedExistingTask = false;
 
     if (triggers.taskSwitch && this.currentTask) {
       const resumed = findClosestTask(this.recentTasks, triggers.taskSwitch.newLabel ?? this.currentTask.label);
@@ -285,6 +344,7 @@ export class AgentRunner {
       if (resumed) {
         this.currentTask = touchTask(resumed);
         this.recentTasks = upsertRecentTask(this.recentTasks, this.currentTask);
+        resumedExistingTask = true;
         this.deps.io.emitTaskChange(turnId, {
           change: "resume",
           task_id: this.currentTask.id,
@@ -303,7 +363,7 @@ export class AgentRunner {
       phases.push("task_switch");
     }
 
-    if (triggers.taskStart) {
+    if (triggers.taskStart && !resumedExistingTask) {
       const previousTaskId = this.currentTask?.id;
       this.currentTask = createTaskState(triggers.taskStart.label);
       this.recentTasks = upsertRecentTask(this.recentTasks, this.currentTask);
@@ -412,11 +472,7 @@ export class AgentRunner {
     );
   }
 
-  private appendUserMessage(turnId: string, userInput: string) {
-    this.conversation.addMessage({
-      role: "user",
-      content: userInput,
-    });
+  private persistUserMessage(turnId: string, userInput: string) {
     this.safeStore(() =>
       this.deps.store?.appendMessage({
         id: createTurnId(),
@@ -454,6 +510,23 @@ export class AgentRunner {
         }));
       }
     }
+  }
+
+  private persistDispatchedMessages(
+    turnId: string,
+    messages: ChatMessage[],
+    tools: ReturnType<ToolDispatcher["listTools"]>,
+    round: number,
+  ) {
+    this.safeStore(() =>
+      this.deps.store?.saveDispatchedMessages(turnId, {
+        messages_json: JSON.stringify(messages),
+        tools_json: JSON.stringify(tools),
+        provider_id: this.deps.provider.id(),
+        model: this.deps.provider.model(),
+        round,
+      }),
+    );
   }
 }
 

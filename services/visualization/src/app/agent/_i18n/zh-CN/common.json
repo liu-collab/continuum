@@ -21,6 +21,8 @@
     "dependencyTitle": "依赖状态",
     "dependencyEmptyTitle": "依赖状态未加载",
     "dependencyEmptyDescription": "稍后这里会显示 runtime、provider 和 MCP 的整体状态。",
+    "replayGapTitle": "连接已恢复，但部分事件丢失",
+    "replayGapDescription": "本次重连没有补回全部事件。已有内容会保留，后续消息仍可继续发送。",
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "loading": "加载中"
@@ -119,6 +121,80 @@
     "error": "出错结束",
     "abort": "已中止",
     "crashed": "异常中断"
+  },
+  "errors": {
+    "token_invalid": {
+      "title": "鉴权失败",
+      "description": "当前 token 无效或已失效，请重新获取 token 后再试。"
+    },
+    "token_expired": {
+      "title": "token 已过期",
+      "description": "当前 token 已过期，请重新启动或重新授权后再连接。"
+    },
+    "session_not_found": {
+      "title": "会话不存在",
+      "description": "目标会话不存在，可能已经被删除或当前地址已失效。"
+    },
+    "turn_not_found": {
+      "title": "轮次不存在",
+      "description": "目标轮次不存在，无法继续读取对应的上下文或调试信息。"
+    },
+    "workspace_mismatch": {
+      "title": "工作区不匹配",
+      "description": "当前会话不属于这个工作区，请确认工作目录和会话来源一致。"
+    },
+    "runtime_unavailable": {
+      "title": "检索运行时不可用",
+      "description": "retrieval-runtime 当前不可用，页面会进入降级模式。"
+    },
+    "provider_not_registered": {
+      "title": "模型提供方未注册",
+      "description": "当前 provider 不在已注册列表中，请检查 provider 配置。"
+    },
+    "provider_auth_failed": {
+      "title": "模型鉴权失败",
+      "description": "调用模型时鉴权失败，请检查 API Key 或鉴权配置。"
+    },
+    "provider_rate_limited": {
+      "title": "模型限流",
+      "description": "模型服务返回限流，请稍后重试。"
+    },
+    "provider_timeout": {
+      "title": "模型超时",
+      "description": "模型在限定时间内没有返回结果，本轮请求已超时。"
+    },
+    "provider_stream_error": {
+      "title": "模型流式输出中断",
+      "description": "模型在流式输出过程中发生错误，本轮输出已提前结束。"
+    },
+    "tool_denied_path": {
+      "title": "工具路径被拒绝",
+      "description": "目标路径不在允许范围内，工具调用已被拒绝。"
+    },
+    "tool_denied_pattern": {
+      "title": "工具命令被拒绝",
+      "description": "命中危险命令规则，工具调用已被阻止。"
+    },
+    "tool_confirm_timeout": {
+      "title": "工具确认超时",
+      "description": "在允许时间内未完成权限确认，本次工具调用已超时取消。"
+    },
+    "mcp_disconnected": {
+      "title": "MCP 已断开",
+      "description": "对应的 MCP 服务当前不可用，请检查连接状态后重试。"
+    },
+    "abort_ack": {
+      "title": "中止已确认",
+      "description": "当前轮次的中止请求已被接收，后续输出将停止。"
+    },
+    "session_store_unavailable": {
+      "title": "会话存储不可用",
+      "description": "会话存储当前不可用，部分会话读写能力会受到影响。"
+    },
+    "api_version_mismatch": {
+      "title": "接口版本不匹配",
+      "description": "当前客户端和服务端的 API 版本不兼容，请更新到匹配版本。"
+    }
   },
   "mcpPanel": {
     "title": "MCP 服务",

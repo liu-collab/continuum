@@ -153,4 +153,86 @@ describe("AnthropicProvider", () => {
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderUnavailableError);
   });
+
+  it("maps system prompts and tool schemas into the anthropic request body", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/messages", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        return reply.send({
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 3,
+            output_tokens: 2,
+          },
+        });
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new AnthropicProvider({
+      baseUrl: server.baseUrl,
+      model: "claude-sonnet",
+      apiKey: "anthropic-key",
+      runtimeSettings: {
+        maxRetries: 0,
+      },
+    });
+
+    await collectChunks(
+      provider.chat({
+        messages: [
+          { role: "system", content: "你是 memory-native-agent。\n请先读工具输出规则。" },
+          { role: "user", content: "读取 README" },
+        ],
+        tools: [
+          {
+            name: "fs_read",
+            description: "Read a file",
+            parameters: {
+              type: "object",
+              properties: {
+                path: { type: "string" },
+              },
+              required: ["path"],
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(requestBody).toMatchObject({
+      model: "claude-sonnet",
+      system: "你是 memory-native-agent。\n请先读工具输出规则。",
+      tools: [
+        {
+          name: "fs_read",
+          description: "Read a file",
+          input_schema: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+            },
+            required: ["path"],
+          },
+        },
+      ],
+    });
+    if (!requestBody) {
+      throw new Error("expected anthropic request body");
+    }
+    const anthropicRequest = requestBody as { messages?: unknown };
+    expect(anthropicRequest.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "读取 README",
+          },
+        ],
+      },
+    ]);
+  });
 });

@@ -56,6 +56,7 @@ type StreamOptions = {
   onEvent(event: MnaServerEventEnvelope): void;
   onConnectionChange(state: "connecting" | "open" | "reconnecting" | "closed"): void;
   onError(error: Error): void;
+  initialLastEventId?: number | null;
 };
 
 export type SessionStreamHandle = {
@@ -169,20 +170,32 @@ export class MnaClient {
     let disposed = false;
     let socket: WebSocket | null = null;
     let retries = 0;
-    let lastEventId: number | undefined;
+    let lastEventId: number | undefined = options.initialLastEventId ?? undefined;
     let heartbeat: number | null = null;
+    let reconnectScheduled = false;
+    const maxRetries = 5;
 
     const scheduleReconnect = () => {
-      if (disposed || retries >= 5) {
+      if (disposed) {
         options.onConnectionChange("closed");
         return;
       }
+      if (reconnectScheduled) {
+        return;
+      }
+      if (retries >= maxRetries) {
+        options.onConnectionChange("closed");
+        options.onError(new MnaUnavailableError("memory-native-agent 当前不可访问，请稍后重试。", "mna_not_running"));
+        return;
+      }
 
+      reconnectScheduled = true;
       retries += 1;
       options.onConnectionChange("reconnecting");
       window.setTimeout(() => {
+        reconnectScheduled = false;
         if (!disposed) {
-          void connect();
+          void connect(true);
         }
       }, Math.min(1500 * retries, 5000));
     };
@@ -194,8 +207,8 @@ export class MnaClient {
       }
     };
 
-    const connect = async () => {
-      const bootstrap = await this.bootstrap();
+    const connect = async (forceBootstrap = retries > 0) => {
+      const bootstrap = await this.bootstrap(forceBootstrap);
       if (bootstrap.status !== "ok" || !bootstrap.token) {
         throw new MnaUnavailableError(bootstrap.reason ?? "memory-native-agent 不可用。", bootstrap.status);
       }
@@ -205,6 +218,7 @@ export class MnaClient {
 
       socket.addEventListener("open", () => {
         retries = 0;
+        reconnectScheduled = false;
         options.onConnectionChange("open");
         clearHeartbeat();
         heartbeat = window.setInterval(() => {
@@ -268,11 +282,20 @@ export class MnaClient {
       headers.set("Content-Type", "application/json");
     }
 
-    const response = await fetch(`${bootstrap.baseUrl}${pathname}`, {
-      ...init,
-      cache: "no-store",
-      headers
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${bootstrap.baseUrl}${pathname}`, {
+        ...init,
+        cache: "no-store",
+        headers
+      });
+    } catch (error) {
+      this.bootstrapCache = null;
+      throw new MnaUnavailableError(
+        error instanceof Error ? error.message : "memory-native-agent 当前不可访问，请稍后重试。",
+        "mna_not_running"
+      );
+    }
 
     if (response.status === 401 && retryOnUnauthorized) {
       await this.bootstrap(true);

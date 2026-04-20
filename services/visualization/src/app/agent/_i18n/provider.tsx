@@ -9,6 +9,7 @@ import {
   formatConnectionState,
   formatDefaultSessionTitle,
   formatFinishReason,
+  formatAgentError,
   formatMcpState,
   formatMemoryMode,
   formatPhase,
@@ -27,6 +28,10 @@ type AgentI18nValue = {
   formatSessionTitle(id: string): string;
   formatPhaseLabel(phase: string): string;
   formatFinishReasonLabel(finishReason: string): string;
+  formatAgentError(code: string, fallbackMessage?: string | null): {
+    title: string;
+    description: string;
+  };
 };
 
 const AgentI18nContext = createContext<AgentI18nValue | null>(null);
@@ -77,6 +82,9 @@ export function AgentI18nProvider({
     },
     formatFinishReasonLabel(finishReason) {
       return formatFinishReason(locale, finishReason);
+    },
+    formatAgentError(code, fallbackMessage) {
+      return formatAgentError(locale, code, fallbackMessage);
     }
   };
 

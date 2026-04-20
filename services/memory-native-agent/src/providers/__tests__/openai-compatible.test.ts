@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OpenAICompatibleProvider } from "../openai-compatible.js";
-import { ProviderRateLimitedError, ProviderUnavailableError } from "../types.js";
+import { ProviderAuthError, ProviderRateLimitedError, ProviderTimeoutError, ProviderUnavailableError } from "../types.js";
 import { collectChunks, sseStream, startProviderMock } from "./test-helpers.js";
 
 describe("OpenAICompatibleProvider", () => {
@@ -164,6 +164,31 @@ describe("OpenAICompatibleProvider", () => {
     ).rejects.toBeInstanceOf(ProviderRateLimitedError);
   });
 
+  it("throws auth errors for upstream 401 responses without retrying", async () => {
+    let requestCount = 0;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/chat/completions", async (_request, reply) => {
+        requestCount += 1;
+        reply.status(401).send({ error: { message: "bad key" } });
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: server.baseUrl,
+      model: "deepseek-chat",
+      apiKey: "test-key",
+      runtimeSettings: {
+        maxRetries: 2,
+      },
+    });
+
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toBeInstanceOf(ProviderAuthError);
+    expect(requestCount).toBe(1);
+  });
+
   it("throws unavailable errors for upstream 5xx responses after retries", async () => {
     const server = await startProviderMock((app) => {
       app.post("/v1/chat/completions", async (_request, reply) => {
@@ -184,5 +209,70 @@ describe("OpenAICompatibleProvider", () => {
     await expect(
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderUnavailableError);
+  });
+
+  it("stops streaming after the caller aborts the request signal", async () => {
+    const server = await startProviderMock((app) => {
+      app.post("/v1/chat/completions", async (_request, reply) => {
+        reply.header("content-type", "text/event-stream");
+        return reply.send(
+          sseStream([
+            "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"second\"}}]}\n",
+            "data: [DONE]\n",
+          ]),
+        );
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: server.baseUrl,
+      model: "deepseek-chat",
+      apiKey: "test-key",
+    });
+
+    const controller = new AbortController();
+    const chunks: Array<{ type: string; text?: string }> = [];
+
+    await (async () => {
+      for await (const chunk of provider.chat({
+        messages: [{ role: "user", content: "继续" }],
+        signal: controller.signal,
+      })) {
+        chunks.push(chunk as { type: string; text?: string });
+        if (chunk.type === "text_delta") {
+          controller.abort();
+        }
+      }
+    })();
+
+    expect(chunks).toEqual([
+      {
+        type: "text_delta",
+        text: "first",
+      },
+    ]);
+  });
+
+  it("throws timeout errors when the first token never arrives", async () => {
+    const server = await startProviderMock((app) => {
+      app.post("/v1/chat/completions", async () => new Promise(() => undefined));
+    });
+    apps.push(server.app);
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: server.baseUrl,
+      model: "deepseek-chat",
+      apiKey: "test-key",
+      runtimeSettings: {
+        maxRetries: 0,
+        firstTokenTimeoutMs: 20,
+      },
+    });
+
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toBeInstanceOf(ProviderTimeoutError);
   });
 });

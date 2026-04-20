@@ -97,6 +97,10 @@ export class AnthropicProvider implements IModelProvider {
       }
 
       for await (const line of streamLines(response.body)) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
         if (!line) {
           if (currentDataLines.length > 0) {
             cancelFirstTokenTimer();
@@ -318,10 +322,13 @@ export class AnthropicProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+        if (
+          error instanceof ProviderRateLimitedError
+          || error instanceof ProviderUnavailableError
+        ) {
           throw error;
         }
-        if (error instanceof Error && error.name === "AbortError") {
+        if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Anthropic provider timed out before response.", error);
         }
         if (attempt >= this.runtimeSettings.maxRetries) {
@@ -336,6 +343,14 @@ export class AnthropicProvider implements IModelProvider {
 
     throw new ProviderStreamError("Anthropic provider request failed.");
   }
+}
+
+function isAbortLikeError(error: unknown, signalReason: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+
+  return signalReason === "provider_first_token_timeout";
 }
 
 function extractAnthropicSystem(messages: ChatRequest["messages"]): string | undefined {

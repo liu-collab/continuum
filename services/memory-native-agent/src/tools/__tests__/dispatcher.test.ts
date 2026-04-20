@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { McpServerUnavailableError, type McpRegistry } from "../../mcp-client/index.js";
 import type { SessionStore } from "../../session-store/index.js";
@@ -31,7 +31,12 @@ function createContext(root: string, decision: "allow" | "deny" | "allow_session
 }
 
 describe("ToolDispatcher", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     for (const root of tempRoots.splice(0)) {
       fs.rmSync(root, { recursive: true, force: true });
@@ -173,5 +178,53 @@ describe("ToolDispatcher", () => {
         name: "mcp_call",
       }),
     ]);
+  });
+
+  it("returns tool_confirm_timeout and records timeout audits", async () => {
+    vi.useFakeTimers();
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mna-tools-dispatch-"));
+    tempRoots.push(root);
+    const recordToolInvocation = vi.fn<SessionStore["recordToolInvocation"]>();
+    const registry = new ToolRegistry();
+    registry.register(createFsWriteTool());
+    const dispatcher = new ToolDispatcher({
+      registry,
+      gate: new PermissionGate(10),
+      sessionStore: {
+        recordToolInvocation,
+      } as unknown as SessionStore,
+    });
+
+    const resultPromise = dispatcher.invoke(
+      {
+        id: "call-timeout",
+        name: "fs_write",
+        args: {
+          path: "note.txt",
+          content: "alpha",
+        },
+      },
+      {
+        ...createContext(root, "allow"),
+        callId: "call-timeout",
+        confirm: async () => await new Promise<"allow" | "deny" | "allow_session">(() => undefined),
+      },
+    );
+
+    await vi.advanceTimersByTimeAsync(20);
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("tool_confirm_timeout");
+    expect(result.permission_decision).toBe("timeout");
+    expect(recordToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        call_id: "call-timeout",
+        permission_decision: "timeout",
+        ok: false,
+        error_code: "tool_confirm_timeout",
+      }),
+    );
   });
 });

@@ -32,6 +32,15 @@ interface ClassifiedDraft extends CandidateDraft {
   scope_reason: string;
 }
 
+function extractPreferenceDetails(text: string): Record<string, unknown> {
+  const normalized = normalizeText(text);
+  return {
+    subject: "user",
+    predicate: normalized,
+    stability: "long_term",
+  };
+}
+
 function buildCandidate(
   input: FinalizeTurnInput,
   draft: CandidateDraft,
@@ -121,14 +130,20 @@ export class WritebackEngine {
     const normalizedUser = normalizeText(input.current_input);
     const normalizedAssistant = normalizeText(input.assistant_output);
     const normalizedTools = normalizeText(input.tool_results_summary ?? "");
+    let preferenceFromUserInput = false;
 
     const preferenceMatch = normalizedUser.match(/(?:我一般|我喜欢|我偏好|prefer)\s*[:：]?\s*(.+)$/i);
     if (preferenceMatch?.[1]) {
+      preferenceFromUserInput = true;
       rawCandidates.push({
         candidate_type: "fact_preference",
-        scope: "workspace",
+        scope: "user",
         summary: preferenceMatch[1],
-        details: { user_prompt: normalizedUser, extraction_method: "rules" },
+        details: {
+          user_prompt: normalizedUser,
+          extraction_method: "rules",
+          ...extractPreferenceDetails(preferenceMatch[1]),
+        },
         importance: 4,
         confidence: 0.9,
         write_reason: "user stated a stable preference explicitly",
@@ -142,17 +157,22 @@ export class WritebackEngine {
     }
 
     const factMatch = normalizedAssistant.match(/(?:已确认|确定|confirmed)\s*[:：]?\s*(.+)$/i);
-    if (factMatch?.[1]) {
+    if (factMatch?.[1] && !preferenceFromUserInput) {
       rawCandidates.push({
         candidate_type: "fact_preference",
-        scope: "workspace",
+        scope: "user",
         summary: factMatch[1],
-        details: { assistant_output: normalizedAssistant, extraction_method: "rules" },
+        details: {
+          assistant_output: normalizedAssistant,
+          extraction_method: "rules",
+          ...extractPreferenceDetails(factMatch[1]),
+        },
         importance: 4,
         confidence: 0.8,
         write_reason: "assistant produced a confirmed durable fact",
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
+        confirmed_by_user: true,
         extraction_method: "rules",
       });
     } else {

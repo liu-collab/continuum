@@ -59,6 +59,7 @@ export interface DispatchedMessagesPayload {
   tools_json: string;
   provider_id: string;
   model: string;
+  round: number;
   created_at?: string;
 }
 

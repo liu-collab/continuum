@@ -66,5 +66,6 @@ CREATE TABLE IF NOT EXISTS dispatched_messages (
   tools_json TEXT NOT NULL,
   provider_id TEXT NOT NULL,
   model TEXT NOT NULL,
+  round INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
