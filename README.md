@@ -148,6 +148,12 @@ continuum claude install
 continuum start
 ```
 
+如果你是在这个源码仓库里直接开发，也可以在仓库根目录用 `npm` 启动：
+
+```bash
+npm run start
+```
+
 这条命令当前会做这些事情：
 
 - 启动或拉起 Continuum 自己的单一 Docker 容器
@@ -199,6 +205,34 @@ continuum ui
 ```
 
 这条命令会优先连接已经由 `continuum start` 拉起的可视化页面。
+
+## 源码开发启动
+
+如果你要在源码仓库里直接跑开发态，可以在仓库根目录执行：
+
+```bash
+npm run dev
+```
+
+这条命令会一起启动：
+
+- `storage`
+- `storage worker`
+- `retrieval-runtime`
+- `visualization`
+- `memory-native-agent`
+
+这条命令默认会先执行 `storage` 和 `retrieval-runtime` 的迁移，然后再进入热更新开发态。
+
+当前约定如下：
+
+- 本地数据库默认使用 `postgres://postgres:postgres@127.0.0.1:5432/agent_memory`
+- `storage` 默认端口 `3001`
+- `retrieval-runtime` 默认端口 `3002`
+- `visualization` 默认端口 `3003`
+- `memory-native-agent` 默认端口 `4193`
+
+如果本地数据库已经自己准备好了，也可以直接覆盖环境变量后再执行 `npm run dev`。
 
 用户视角下，它提供的效果也是：
 

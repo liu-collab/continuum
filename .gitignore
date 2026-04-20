@@ -14,3 +14,5 @@ packages/continuum-cli/vendor/
 services/visualization/test-results/
 services/visualization/tests/agent-e2e/.tmp-*
 services/visualization/tmp-agent-page.png
+*.log
+.tmp-visualization-start.*

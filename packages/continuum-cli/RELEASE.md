@@ -71,3 +71,23 @@ continuum-claude-plugin-v<version>.zip
 ```
 
 现在以 `@jiankarlin/continuum` 作为 npm 发布主入口。
+
+### 自动发布 tag 规则
+
+这条工作流会在推送下面格式的 tag 时自动发布：
+
+```text
+continuum-v<package.json 里的版本号>
+```
+
+最小发布步骤：
+
+```bash
+cd packages/continuum-cli
+npm version patch
+git push origin main
+git tag continuum-v0.2.4
+git push origin continuum-v0.2.4
+```
+
+工作流会先校验 tag 和 `package.json` 版本一致，再执行发布。
