@@ -10,11 +10,11 @@ export function StatusBadge({ tone, children }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-        tone === "neutral" && "bg-slate-200 text-slate-700",
-        tone === "success" && "bg-emerald-100 text-emerald-700",
-        tone === "warning" && "bg-amber-100 text-amber-700",
-        tone === "danger" && "bg-rose-100 text-rose-700"
+        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
+        tone === "neutral" && "bg-surface-muted text-muted-foreground",
+        tone === "success" && "bg-emerald-50 text-emerald-700",
+        tone === "warning" && "bg-amber-50 text-amber-700",
+        tone === "danger" && "bg-rose-50 text-rose-700"
       )}
     >
       {children}

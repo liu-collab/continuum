@@ -1,5 +1,5 @@
 import { MetricCard } from "@/components/metric-card";
-import { SourceHealthPanel } from "@/components/source-health-panel";
+import { HealthModalButton } from "@/components/health-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { TrendCard } from "@/components/trend-card";
 import { getDashboard } from "@/features/dashboard/service";
@@ -14,6 +14,12 @@ const windows = [
   { label: "24h", value: "24h" }
 ];
 
+function severityTone(severity: string) {
+  if (severity === "danger") return "danger";
+  if (severity === "warning") return "warning";
+  return "success";
+}
+
 export default async function DashboardPage({
   searchParams
 }: {
@@ -25,94 +31,83 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-6">
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">诊断</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
-              {response.diagnosis.title}
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              {response.diagnosis.summary}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">看板</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            运行时与存储指标，按时间窗聚合。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center rounded-md border bg-surface p-0.5">
             {windows.map((item) => (
               <a
                 key={item.value}
                 href={`/dashboard?window=${item.value}`}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                className={`rounded px-3 py-1 text-xs font-medium transition ${
                   item.value === window
-                    ? "bg-accent text-white"
-                    : "border bg-white text-slate-700"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {item.label}
               </a>
             ))}
-            <StatusBadge
-              tone={
-                response.diagnosis.severity === "danger"
-                  ? "danger"
-                  : response.diagnosis.severity === "warning"
-                    ? "warning"
-                    : "success"
-              }
-            >
-              {response.trendWindow}
-            </StatusBadge>
           </div>
+          <HealthModalButton health={health} />
         </div>
-      </section>
+      </div>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">retrieval-runtime</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">运行时指标</h2>
+      <div className="rounded-lg border bg-surface px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-foreground">{response.diagnosis.title}</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{response.diagnosis.summary}</p>
+          </div>
+          <StatusBadge tone={severityTone(response.diagnosis.severity)}>
+            {response.trendWindow}
+          </StatusBadge>
+        </div>
+      </div>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            retrieval-runtime
           </div>
         </div>
-        <div className="panel-body grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {response.retrievalMetrics.map((metric) => (
             <MetricCard key={metric.key} metric={metric} />
           ))}
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">storage</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">存储指标</h2>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            storage
           </div>
         </div>
-        <div className="panel-body grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {response.storageMetrics.map((metric) => (
             <MetricCard key={metric.key} metric={metric} />
           ))}
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">最近变化</p>
-            <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">
-              趋势与窗口对比
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              这些卡片会把当前窗口和前一个半窗口放在一起对比，帮助判断空召回、积压、冲突或时延最近是否发生了变化。
-            </p>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            趋势
           </div>
         </div>
-        <div className="panel-body grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {response.trends.map((trend) => (
             <TrendCard key={trend.key} trend={trend} />
           ))}
         </div>
       </section>
-
-      <SourceHealthPanel title="服务与依赖健康" health={health} />
     </div>
   );
 }

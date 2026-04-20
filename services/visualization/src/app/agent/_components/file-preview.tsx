@@ -18,12 +18,12 @@ export function FilePreview({ path, content }: FilePreviewProps) {
   const { t } = useAgentI18n();
 
   return (
-    <section data-testid="file-preview" className="rounded-3xl border bg-white/88 shadow-soft">
-      <div className="border-b px-5 py-4">
-        <div className="text-sm font-semibold text-slate-900">{t("filePreview.title")}</div>
-        <div className="mt-1 truncate text-xs text-slate-500">{path}</div>
+    <section data-testid="file-preview" className="rounded-lg border bg-surface">
+      <div className="border-b px-4 py-3">
+        <div className="text-sm font-medium text-foreground">{t("filePreview.title")}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">{path}</div>
       </div>
-      <div className="h-80">
+      <div className="h-72">
         <MonacoEditor
           language={guessLanguage(path)}
           theme="vs-light"
@@ -32,7 +32,7 @@ export function FilePreview({ path, content }: FilePreviewProps) {
           options={{
             readOnly: true,
             minimap: { enabled: false },
-            fontSize: 13
+            fontSize: 12
           }}
         />
       </div>
@@ -41,21 +41,10 @@ export function FilePreview({ path, content }: FilePreviewProps) {
 }
 
 function guessLanguage(path: string) {
-  if (path.endsWith(".ts") || path.endsWith(".tsx")) {
-    return "typescript";
-  }
-  if (path.endsWith(".js") || path.endsWith(".mjs")) {
-    return "javascript";
-  }
-  if (path.endsWith(".json")) {
-    return "json";
-  }
-  if (path.endsWith(".md")) {
-    return "markdown";
-  }
-  if (path.endsWith(".css")) {
-    return "css";
-  }
-
+  if (path.endsWith(".ts") || path.endsWith(".tsx")) return "typescript";
+  if (path.endsWith(".js") || path.endsWith(".mjs")) return "javascript";
+  if (path.endsWith(".json")) return "json";
+  if (path.endsWith(".md")) return "markdown";
+  if (path.endsWith(".css")) return "css";
   return "plaintext";
 }

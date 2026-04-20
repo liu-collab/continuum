@@ -19,20 +19,20 @@ export function CostBar({ metrics, turnCount }: CostBarProps) {
     : 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-3xl border bg-white/85 px-5 py-3 shadow-soft">
+    <div className="flex flex-wrap items-center gap-3 rounded-md border bg-surface px-3 py-1.5 text-xs">
       <Metric label={t("costBar.turns")} value={String(metrics?.turns_total ?? turnCount)} />
       <Metric label={t("costBar.providerCalls")} value={String(totalProviderCalls)} />
       <Metric label={t("costBar.providerErrors")} value={String(totalProviderErrors)} />
-      <Metric label={t("costBar.uptime")} value={metrics ? `${metrics.uptime_s}s` : "..."} />
+      <Metric label={t("costBar.uptime")} value={metrics ? `${metrics.uptime_s}s` : "…"} />
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-full bg-slate-50 px-3 py-2 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className="ml-2 font-semibold text-slate-900">{value}</span>
+    <div className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-foreground">{value}</span>
     </div>
   );
 }

@@ -16,14 +16,10 @@ export function FormField({
   type = "text"
 }: FormFieldProps) {
   return (
-    <label className="grid gap-2">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+    <label className="grid gap-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {options ? (
-        <select
-          name={name}
-          defaultValue={defaultValue ?? ""}
-          className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-        >
+        <select name={name} defaultValue={defaultValue ?? ""} className="field">
           <option value="">全部</option>
           {options.map((option) => (
             <option key={option.value} value={option.value}>
@@ -37,7 +33,7 @@ export function FormField({
           type={type}
           defaultValue={defaultValue ?? ""}
           placeholder={placeholder}
-          className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+          className="field"
         />
       )}
     </label>

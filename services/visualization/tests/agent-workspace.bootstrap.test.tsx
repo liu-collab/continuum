@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentWorkspace } from "@/app/agent/_components/agent-workspace";
@@ -204,8 +204,10 @@ describe("AgentWorkspace bootstrap states", () => {
       </AgentI18nProvider>
     );
 
-    expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
+
+    fireEvent.click(screen.getByRole("button", { name: /设置/ }));
+    expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();
   });
 });

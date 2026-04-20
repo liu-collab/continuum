@@ -1,34 +1,34 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  content: [
-    "./src/**/*.{ts,tsx}"
-  ],
+  content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
         background: "var(--background)",
+        surface: "var(--surface)",
+        "surface-muted": "var(--surface-muted)",
         foreground: "var(--foreground)",
         muted: "var(--muted)",
         "muted-foreground": "var(--muted-foreground)",
         card: "var(--card)",
         "card-foreground": "var(--card-foreground)",
         border: "var(--border)",
+        "border-strong": "var(--border-strong)",
         accent: "var(--accent)",
         "accent-foreground": "var(--accent-foreground)",
+        "accent-soft": "var(--accent-soft)",
         success: "var(--success)",
         warning: "var(--warning)",
         danger: "var(--danger)"
       },
       boxShadow: {
-        soft: "0 12px 50px rgba(15, 23, 42, 0.08)"
+        soft: "0 1px 2px rgba(24, 24, 27, 0.04), 0 1px 3px rgba(24, 24, 27, 0.06)",
+        overlay: "0 10px 40px rgba(24, 24, 27, 0.18)"
       },
       borderRadius: {
-        xl: "1.25rem"
-      },
-      backgroundImage: {
-        "page-glow":
-          "radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 32%), radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 26%)"
+        lg: "0.625rem",
+        xl: "0.75rem"
       }
     }
   },

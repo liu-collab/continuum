@@ -8,9 +8,10 @@ type SearchFormProps = {
   action: Route;
   initialValues?: Record<string, string | undefined>;
   children: ReactNode;
+  onSubmitted?(): void;
 };
 
-export function SearchForm({ action, initialValues = {}, children }: SearchFormProps) {
+export function SearchForm({ action, initialValues = {}, children, onSubmitted }: SearchFormProps) {
   const router = useRouter();
   const [formState, setFormState] = useState<Record<string, string>>(
     Object.fromEntries(
@@ -36,12 +37,13 @@ export function SearchForm({ action, initialValues = {}, children }: SearchFormP
     }
 
     router.push((query.toString() ? `${action}?${query.toString()}` : action) as Route);
+    onSubmitted?.();
   }
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
       <div
-        className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-2"
         onChange={(event) => {
           const target = event.target as HTMLInputElement | HTMLSelectElement;
 
@@ -52,19 +54,19 @@ export function SearchForm({ action, initialValues = {}, children }: SearchFormP
       >
         {children}
       </div>
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="submit"
-          className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          应用筛选
-        </button>
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
-          onClick={() => router.push(action)}
-          className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+          onClick={() => {
+            router.push(action);
+            onSubmitted?.();
+          }}
+          className="btn-outline"
         >
           清空
+        </button>
+        <button type="submit" className="btn-primary">
+          应用
         </button>
       </div>
     </form>

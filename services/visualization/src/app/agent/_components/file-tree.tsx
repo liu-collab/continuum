@@ -26,19 +26,19 @@ export function FileTree({
   const { t } = useAgentI18n();
 
   return (
-    <div className="rounded-2xl border bg-white/75">
+    <div className="rounded-lg border bg-surface">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-semibold text-slate-900">{t("fileTree.title")}</div>
-        <div className="mt-1 truncate text-xs text-slate-500">{path}</div>
+        <div className="text-sm font-medium text-foreground">{t("fileTree.title")}</div>
+        <div className="mt-0.5 truncate text-xs text-muted-foreground">{path}</div>
       </div>
-      <div className="max-h-[24rem] overflow-auto px-2 py-2">
+      <div className="max-h-80 overflow-auto p-2">
         {path !== "." ? (
           <button
             type="button"
             onClick={() => onOpenDirectory(parentPath(path))}
-            className="mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
+            className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-surface-muted"
           >
-            <ChevronRight className="h-4 w-4 rotate-180" />
+            <ChevronRight className="h-3.5 w-3.5 rotate-180" />
             ..
           </button>
         ) : null}
@@ -54,14 +54,14 @@ export function FileTree({
                 entry.type === "directory" ? onOpenDirectory(targetPath) : onOpenFile(targetPath)
               }
               className={cn(
-                "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50",
-                isSelected && "bg-accent/10 text-accent"
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground transition hover:bg-surface-muted",
+                isSelected && "bg-accent-soft text-foreground"
               )}
             >
               {entry.type === "directory" ? (
-                <Folder className="h-4 w-4 text-amber-600" />
+                <Folder className="h-3.5 w-3.5 text-muted-foreground" />
               ) : (
-                <FileText className="h-4 w-4 text-slate-400" />
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
               )}
               <span className="truncate">{entry.name}</span>
             </button>
@@ -76,7 +76,6 @@ function normalizeChildPath(basePath: string, name: string) {
   if (basePath === "." || !basePath) {
     return name;
   }
-
   return `${basePath}/${name}`;
 }
 
@@ -85,6 +84,5 @@ function parentPath(currentPath: string) {
   if (parts.length <= 1) {
     return ".";
   }
-
   return parts.slice(0, -1).join("/");
 }

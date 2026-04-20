@@ -37,10 +37,10 @@ export function ChatPanel({
   const latestTurn = turns.at(-1) ?? null;
 
   return (
-    <div className="flex min-h-[40rem] flex-col rounded-3xl border bg-white/88 shadow-soft">
-      <div className="border-b px-6 py-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="eyebrow">{t("chatPanel.eyebrow")}</p>
+    <div className="flex min-h-[38rem] flex-col rounded-lg border bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-foreground">{t("chatPanel.title")}</span>
           <StatusBadge
             tone={
               connection === "open"
@@ -52,18 +52,16 @@ export function ChatPanel({
           >
             <span data-testid="agent-connection-state">{formatConnection(connection)}</span>
           </StatusBadge>
-          {degraded ? <StatusBadge tone="warning"><span data-testid="agent-degraded-banner">{t("chatPanel.memoryDegraded")}</span></StatusBadge> : null}
+          {degraded ? (
+            <StatusBadge tone="warning">
+              <span data-testid="agent-degraded-banner">{t("chatPanel.memoryDegraded")}</span>
+            </StatusBadge>
+          ) : null}
           {activeTaskLabel ? <StatusBadge tone="neutral">{activeTaskLabel}</StatusBadge> : null}
         </div>
-        <h2 className="mt-3 font-[var(--font-serif)] text-3xl text-slate-900">
-          {t("chatPanel.title")}
-        </h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-          {t("chatPanel.description")}
-        </p>
       </div>
 
-      <div className="flex-1 space-y-5 overflow-auto px-6 py-5">
+      <div className="flex-1 space-y-4 overflow-auto px-4 py-4">
         {turns.length === 0 ? (
           <EmptyState
             title={t("chatPanel.emptyTitle")}
@@ -71,44 +69,68 @@ export function ChatPanel({
           />
         ) : (
           turns.map((turn) => (
-            <div key={turn.turnId} className="space-y-4 rounded-3xl border bg-slate-50/70 px-5 py-4">
+            <div key={turn.turnId} className="space-y-3 rounded-md border bg-surface-muted/30 p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="neutral">{t("chatPanel.turnLabel", { id: turn.turnId.slice(0, 8) })}</StatusBadge>
-                {turn.injection ? <StatusBadge tone="success">{t("chatPanel.injectionReady")}</StatusBadge> : null}
-                {turn.finishReason ? <StatusBadge tone="neutral">{formatFinishReasonLabel(turn.finishReason)}</StatusBadge> : null}
+                <StatusBadge tone="neutral">
+                  {t("chatPanel.turnLabel", { id: turn.turnId.slice(0, 8) })}
+                </StatusBadge>
+                {turn.injection ? (
+                  <StatusBadge tone="success">{t("chatPanel.injectionReady")}</StatusBadge>
+                ) : null}
+                {turn.finishReason ? (
+                  <StatusBadge tone="neutral">{formatFinishReasonLabel(turn.finishReason)}</StatusBadge>
+                ) : null}
                 {turn.promptAvailable ? (
                   <button
                     type="button"
                     onClick={() => onOpenPrompt(turn.turnId)}
-                    className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-white"
+                    className="inline-flex items-center gap-1 rounded-md border bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
                   >
-                    <WandSparkles className="h-3.5 w-3.5" />
+                    <WandSparkles className="h-3 w-3" />
                     {t("chatPanel.viewPrompt")}
                   </button>
                 ) : null}
               </div>
 
               {turn.injection ? (
-                <div className="rounded-2xl border bg-white px-4 py-3">
-                  <div className="text-sm font-semibold text-slate-900">{t("chatPanel.injectionTitle")}</div>
-                  <div className="mt-2 text-sm leading-6 text-slate-700" data-testid={`injection-summary-${turn.turnId}`}>{turn.injection.memory_summary}</div>
+                <div className="rounded-md border bg-surface px-3 py-2">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    {t("chatPanel.injectionTitle")}
+                  </div>
+                  <div
+                    className="mt-1 text-sm leading-6 text-foreground"
+                    data-testid={`injection-summary-${turn.turnId}`}
+                  >
+                    {turn.injection.memory_summary}
+                  </div>
                 </div>
               ) : null}
 
               {turn.phases.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {turn.phases.map((phase) => (
-                    <StatusBadge key={`${turn.turnId}:${phase.phase}:${phase.traceId ?? ""}`} tone="neutral">
+                    <StatusBadge
+                      key={`${turn.turnId}:${phase.phase}:${phase.traceId ?? ""}`}
+                      tone="neutral"
+                    >
                       {formatPhaseLabel(phase.phase)}
                     </StatusBadge>
                   ))}
                 </div>
               ) : null}
 
-              <MessageBubble title={t("chatPanel.you")} content={turn.userInput || t("chatPanel.waitingForInput")} tone="user" testId={`user-message-${turn.turnId}`} />
+              <MessageBubble
+                title={t("chatPanel.you")}
+                content={turn.userInput || t("chatPanel.waitingForInput")}
+                tone="user"
+                testId={`user-message-${turn.turnId}`}
+              />
               <MessageBubble
                 title={t("chatPanel.assistant")}
-                content={turn.assistantOutput || (turn.status === "streaming" ? t("chatPanel.streaming") : t("chatPanel.noOutput"))}
+                content={
+                  turn.assistantOutput ||
+                  (turn.status === "streaming" ? t("chatPanel.streaming") : t("chatPanel.noOutput"))
+                }
                 tone="assistant"
                 testId={`assistant-message-${turn.turnId}`}
               />
@@ -124,12 +146,15 @@ export function ChatPanel({
         )}
       </div>
 
-      <div className="border-t px-6 py-5">
+      <div className="border-t px-4 py-3">
         {connection === "closed" ? (
-          <ErrorState title={t("chatPanel.connectionClosedTitle")} description={t("chatPanel.connectionClosedDescription")} />
+          <ErrorState
+            title={t("chatPanel.connectionClosedTitle")}
+            description={t("chatPanel.connectionClosedDescription")}
+          />
         ) : null}
         <form
-          className="mt-3 flex flex-col gap-3"
+          className="mt-2 flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             const nextText = draft.trim();
@@ -145,9 +170,9 @@ export function ChatPanel({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={t("chatPanel.placeholder")}
-            rows={4}
+            rows={3}
             disabled={connection !== "open"}
-            className="min-h-28 rounded-3xl border bg-slate-50/70 px-4 py-4 text-sm leading-6 text-slate-900 outline-none ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+            className="field min-h-20 resize-none disabled:cursor-not-allowed disabled:opacity-60"
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -165,24 +190,28 @@ export function ChatPanel({
               }
             }}
           />
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onAbort}
               disabled={!isBusy}
               data-testid="abort-turn"
-              className="inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-outline"
             >
-              <Square className="h-4 w-4" />
+              <Square className="h-3.5 w-3.5" />
               {t("chatPanel.abort")}
             </button>
             <button
               type="submit"
               disabled={connection !== "open" || !draft.trim()}
               data-testid="send-message"
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-primary"
             >
-              {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+              {isBusy ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <SendHorizontal className="h-3.5 w-3.5" />
+              )}
               {t("chatPanel.send")}
             </button>
           </div>
@@ -204,9 +233,14 @@ function MessageBubble({
   testId?: string;
 }) {
   return (
-    <div data-testid={testId} className={`rounded-3xl px-5 py-4 ${tone === "user" ? "bg-white" : "bg-white/70"}`}>
-      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</div>
-      <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-800">{content}</div>
+    <div
+      data-testid={testId}
+      className={`rounded-md px-4 py-3 ${tone === "user" ? "bg-surface" : "border bg-surface"}`}
+    >
+      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </div>
+      <div className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{content}</div>
     </div>
   );
 }

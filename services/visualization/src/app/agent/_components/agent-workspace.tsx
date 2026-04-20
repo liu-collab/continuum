@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Plus, RefreshCcw } from "lucide-react";
+import React, { useState } from "react";
+import { Cog, Plus, RefreshCcw } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -14,14 +14,11 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { CostBar } from "./cost-bar";
 import { FileTree } from "./file-tree";
 import { FilePreview } from "./file-preview";
-import { LocaleSwitch } from "./locale-switch";
 import { McpPanel } from "./mcp-panel";
 import { MemoryPanel } from "./memory-panel";
-import { ModeSwitch } from "./mode-switch";
 import { PromptInspector } from "./prompt-inspector";
-import { ProviderSwitch } from "./provider-switch";
-import { RuntimeConfigCard } from "./runtime-config-card";
 import { SessionList } from "./session-list";
+import { SettingsModal } from "./settings-modal";
 import { ToolConsole } from "./tool-console";
 
 type AgentWorkspaceProps = {
@@ -31,6 +28,7 @@ type AgentWorkspaceProps = {
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const { locale, t, formatAgentError } = useAgentI18n();
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const sessionErrorContent = workspace.state.sessionErrorCode
     ? formatAgentError(workspace.state.sessionErrorCode, workspace.state.sessionError)
     : null;
@@ -52,38 +50,44 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <CostBar metrics={workspace.metrics} turnCount={workspace.state.turns.length} />
-          <div className="flex flex-wrap items-center gap-3">
-            <LocaleSwitch />
-            <ProviderSwitch
-              providerId={workspace.dependencyStatus?.provider.id ?? "provider"}
-              providerLabel={
-                workspace.dependencyStatus
-                  ? `${workspace.dependencyStatus.provider.id}:${workspace.dependencyStatus.provider.model}`
-                  : t("workspace.loading")
-              }
-              model={workspace.dependencyStatus?.provider.model ?? ""}
-              onApply={(model) => {
-                void workspace.updateProvider(model);
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Agent</h1>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {workspace.dependencyStatus
+                ? `${workspace.dependencyStatus.provider.id} · ${workspace.dependencyStatus.provider.model}`
+                : t("workspace.loading")}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <CostBar metrics={workspace.metrics} turnCount={workspace.state.turns.length} />
+            <button
+              type="button"
+              onClick={() => {
+                void workspace.refreshMetrics();
+                void workspace.refreshDependencyStatus();
+                void workspace.refreshMcpState();
               }}
-              onRefresh={() => {
-                void Promise.all([workspace.refreshMetrics(), workspace.refreshDependencyStatus()]);
-              }}
-            />
-            <ModeSwitch
-              value={workspace.state.session?.memory_mode ?? "workspace_plus_global"}
-              onChange={(value) => {
-                void workspace.updateMemoryMode(value);
-              }}
-            />
+              className="btn-outline"
+              title={t("workspace.sessionsEyebrow")}
+            >
+              <RefreshCcw className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="btn-outline"
+            >
+              <Cog className="h-4 w-4" />
+              设置
+            </button>
             <button
               type="button"
               onClick={() => {
                 void workspace.createNewSession();
               }}
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+              className="btn-primary"
             >
               <Plus className="h-4 w-4" />
               {t("workspace.newSession")}
@@ -91,35 +95,13 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem]">
-          <div className="space-y-6">
-            <RuntimeConfigCard
-              config={workspace.agentConfig}
-              dependencyStatus={workspace.dependencyStatus}
-              onSave={(payload) => {
-                void workspace.updateRuntimeConfig(payload);
-              }}
-            />
-
-            <section className="rounded-3xl border bg-white/88 p-5 shadow-soft">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="eyebrow">{t("workspace.sessionsEyebrow")}</p>
-                  <h2 className="mt-2 text-xl font-semibold text-slate-900">{t("workspace.sessionsTitle")}</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void workspace.refreshMetrics();
-                    void workspace.refreshDependencyStatus();
-                    void workspace.refreshMcpState();
-                  }}
-                  className="rounded-full border p-2 text-slate-600 transition hover:bg-slate-50"
-                >
-                  <RefreshCcw className="h-4 w-4" />
-                </button>
+        <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
+          <div className="space-y-4">
+            <section className="rounded-lg border bg-surface">
+              <div className="border-b px-4 py-3">
+                <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
               </div>
-              <div className="mt-4">
+              <div className="p-3">
                 <SessionList
                   sessions={workspace.state.sessionList}
                   activeSessionId={workspace.state.sessionId}
@@ -148,10 +130,12 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               }}
             />
 
-            {workspace.selectedFile ? <FilePreview path={workspace.selectedFile.path} content={workspace.selectedFile.content} /> : null}
+            {workspace.selectedFile ? (
+              <FilePreview path={workspace.selectedFile.path} content={workspace.selectedFile.content} />
+            ) : null}
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {workspace.state.replayGapDetected ? (
               <ErrorState
                 testId="agent-replay-gap"
@@ -180,44 +164,52 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             <ToolConsole turns={workspace.state.turns} />
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             <MemoryPanel activeTurn={workspace.activeTurn} degraded={workspace.state.degraded} />
             {workspace.dependencyStatus ? (
-              <section data-testid="agent-dependency-card" className="rounded-3xl border bg-white/88 px-5 py-4 shadow-soft">
-                <div className="text-sm font-semibold text-slate-900">{t("workspace.dependencyTitle")}</div>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-500">{t("workspace.runtimeLabel")}</span>
-                    <StatusBadge
-                      tone={workspace.dependencyStatus.runtime.status === "healthy" ? "success" : "warning"}
-                    >
-                      {String(workspace.dependencyStatus.runtime.status ?? "unknown")}
-                    </StatusBadge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-slate-500">{t("workspace.providerLabel")}</span>
-                    <StatusBadge tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}>
-                      {workspace.dependencyStatus.provider.status}
-                    </StatusBadge>
-                    <StatusBadge tone="neutral">{workspace.dependencyStatus.provider_key}</StatusBadge>
-                  </div>
+              <section
+                data-testid="agent-dependency-card"
+                className="rounded-lg border bg-surface p-4"
+              >
+                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  {t("workspace.dependencyTitle")}
+                </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  <DependencyRow
+                    label={t("workspace.runtimeLabel")}
+                    tone={workspace.dependencyStatus.runtime.status === "healthy" ? "success" : "warning"}
+                    value={String(workspace.dependencyStatus.runtime.status ?? "unknown")}
+                  />
+                  <DependencyRow
+                    label={t("workspace.providerLabel")}
+                    tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}
+                    value={workspace.dependencyStatus.provider.status}
+                    extra={workspace.dependencyStatus.provider_key}
+                  />
                   {workspace.dependencyStatus.provider.detail ? (
-                    <div className="text-xs leading-5 text-slate-500">{workspace.dependencyStatus.provider.detail}</div>
-                  ) : null}
-                  {"embeddings" in workspace.dependencyStatus.runtime && workspace.dependencyStatus.runtime.embeddings ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-slate-500">{t("workspace.embeddingLabel")}</span>
-                      <StatusBadge
-                        tone={workspace.dependencyStatus.runtime.embeddings.status === "healthy" ? "success" : "warning"}
-                      >
-                        {String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
-                      </StatusBadge>
+                    <div className="text-xs leading-5 text-muted-foreground">
+                      {workspace.dependencyStatus.provider.detail}
                     </div>
+                  ) : null}
+                  {"embeddings" in workspace.dependencyStatus.runtime &&
+                  workspace.dependencyStatus.runtime.embeddings ? (
+                    <DependencyRow
+                      label={t("workspace.embeddingLabel")}
+                      tone={
+                        workspace.dependencyStatus.runtime.embeddings.status === "healthy"
+                          ? "success"
+                          : "warning"
+                      }
+                      value={String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
+                    />
                   ) : null}
                 </div>
               </section>
             ) : (
-              <EmptyState title={t("workspace.dependencyEmptyTitle")} description={t("workspace.dependencyEmptyDescription")} />
+              <EmptyState
+                title={t("workspace.dependencyEmptyTitle")}
+                description={t("workspace.dependencyEmptyDescription")}
+              />
             )}
             <McpPanel
               servers={workspace.mcpState?.servers ?? []}
@@ -233,6 +225,20 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         </div>
       </div>
 
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        config={workspace.agentConfig}
+        dependencyStatus={workspace.dependencyStatus}
+        memoryMode={workspace.state.session?.memory_mode ?? "workspace_plus_global"}
+        onMemoryModeChange={(value) => {
+          void workspace.updateMemoryMode(value);
+        }}
+        onSaveRuntime={(payload) => {
+          void workspace.updateRuntimeConfig(payload);
+        }}
+      />
+
       <ConfirmDialog pendingConfirm={workspace.state.pendingConfirm} onDecision={workspace.confirmTool} />
       <PromptInspector
         open={workspace.promptInspectorOpen}
@@ -240,6 +246,26 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onClose={() => workspace.setPromptInspectorOpen(false)}
       />
     </>
+  );
+}
+
+function DependencyRow({
+  label,
+  value,
+  tone,
+  extra
+}: {
+  label: string;
+  value: string;
+  tone: "success" | "warning" | "neutral" | "danger";
+  extra?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <StatusBadge tone={tone}>{value}</StatusBadge>
+      {extra ? <StatusBadge tone="neutral">{extra}</StatusBadge> : null}
+    </div>
   );
 }
 

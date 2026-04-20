@@ -18,28 +18,31 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/25 px-4">
-      <div data-testid="tool-confirm-dialog" className="w-full max-w-xl rounded-3xl border bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 px-4">
+      <div
+        data-testid="tool-confirm-dialog"
+        className="w-full max-w-xl rounded-lg border bg-surface p-5 shadow-overlay"
+      >
         <div className="flex items-start gap-3">
-          <div className="rounded-full bg-amber-100 p-2 text-amber-700">
-            <AlertTriangle className="h-5 w-5" />
+          <div className="rounded-md bg-amber-100 p-1.5 text-amber-700">
+            <AlertTriangle className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-lg font-semibold text-slate-900">{t("confirmDialog.title")}</div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <div className="text-base font-semibold text-foreground">{t("confirmDialog.title")}</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
               {t("confirmDialog.description", { tool: pendingConfirm.tool })}
             </p>
-            <div className="mt-4 rounded-2xl border bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-700">
+            <div className="mt-3 rounded-md border bg-surface-muted/40 px-3 py-2 text-xs leading-5 text-foreground">
               {pendingConfirm.paramsPreview}
             </div>
           </div>
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={() => onDecision("deny")}
             data-testid="confirm-deny"
-            className="rounded-full border px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="btn-outline"
           >
             {t("confirmDialog.deny")}
           </button>
@@ -47,7 +50,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             type="button"
             onClick={() => onDecision("allow")}
             data-testid="confirm-allow"
-            className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/5"
+            className="btn-outline"
           >
             {t("confirmDialog.allow")}
           </button>
@@ -55,7 +58,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
             type="button"
             onClick={() => onDecision("allow_session")}
             data-testid="confirm-allow-session"
-            className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
+            className="btn-primary"
           >
             {t("confirmDialog.allowSession")}
           </button>

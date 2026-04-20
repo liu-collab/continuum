@@ -15,16 +15,16 @@ export function DataTable<TData>({ columns, data }: DataTableProps<TData>) {
   });
 
   return (
-    <div className="overflow-hidden rounded-xl border">
+    <div className="overflow-hidden rounded-lg border">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-muted">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"
+                    className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground"
                   >
                     {header.isPlaceholder
                       ? null
@@ -34,11 +34,11 @@ export function DataTable<TData>({ columns, data }: DataTableProps<TData>) {
               </tr>
             ))}
           </thead>
-          <tbody className="divide-y divide-slate-100 bg-white/80">
+          <tbody className="divide-y divide-border bg-surface">
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="align-top">
+              <tr key={row.id} className="align-top transition hover:bg-surface-muted/50">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-4 text-sm text-slate-700">
+                  <td key={cell.id} className="px-4 py-3 text-sm text-foreground">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}

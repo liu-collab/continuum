@@ -138,140 +138,139 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error ? submissionError.message : "版本恢复失败。"
-      );
+      setError(submissionError instanceof Error ? submissionError.message : "版本恢复失败。");
     }
   }
 
   return (
-    <section className="panel">
-      <div className="panel-header">
+    <div className="rounded-lg border bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="eyebrow">治理</p>
-          <h2 className="font-[var(--font-serif)] text-2xl text-slate-900">最小治理动作</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            先填写原因，再对这条记忆执行确认、失效、归档、删除、编辑或版本恢复。
+          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            治理
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            填写原因后执行动作。
           </p>
         </div>
       </div>
-      <div className="panel-body space-y-6">
-        {pendingActionAt ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
-            治理请求已提交，读模型可能还在刷新。页面会在 10 秒内自动再刷新一次。
-          </div>
-        ) : null}
-        <label className="grid gap-2">
-          <span className="text-sm font-medium text-slate-700">原因</span>
-          <textarea
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            rows={4}
-            className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-            placeholder="说明为什么需要执行这次治理动作。"
-          />
-        </label>
 
-        <div className="space-y-3">
-          <div className="text-sm font-semibold text-slate-900">快捷动作</div>
-          <div className="flex flex-wrap gap-3">
-            {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
-              <button
-                key={action}
-                type="button"
-                disabled={isPending}
-                onClick={() => void submitAction(action)}
-                className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:opacity-60"
-              >
-                {actionLabels[action]}
-              </button>
-            ))}
-          </div>
+      {pendingActionAt ? (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          已提交，读模型刷新中，10 秒后自动再刷新。
         </div>
+      ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-3 rounded-xl border bg-white/80 p-4">
-            <div className="text-sm font-semibold text-slate-900">编辑</div>
-            <label className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">摘要</span>
-              <textarea
-                value={summary}
-                onChange={(event) => setSummary(event.target.value)}
-                rows={3}
-                className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-              />
-            </label>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-slate-700">作用域</span>
-                <select
-                  value={scope}
-                  onChange={(event) => setScope(event.target.value as Scope)}
-                  className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="session">会话</option>
-                  <option value="task">任务</option>
-                  <option value="workspace">工作区</option>
-                  <option value="user">全局</option>
-                </select>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-slate-700">状态</span>
-                <select
-                  value={status}
-                  onChange={(event) => setStatus(event.target.value as MemoryStatus)}
-                  className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="active">生效中</option>
-                  <option value="pending_confirmation">待确认</option>
-                  <option value="superseded">已被替代</option>
-                  <option value="archived">已归档</option>
-                </select>
-              </label>
-            </div>
+      <label className="mt-4 block">
+        <span className="text-xs font-medium text-muted-foreground">原因</span>
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          rows={3}
+          className="field mt-1"
+          placeholder="说明为什么需要执行这次治理动作。"
+        />
+      </label>
+
+      <div className="mt-4">
+        <div className="text-xs font-medium text-muted-foreground">快捷动作</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
             <button
+              key={action}
               type="button"
               disabled={isPending}
-              onClick={() => void submitEdit()}
-              className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:opacity-60"
+              onClick={() => void submitAction(action)}
+              className="btn-outline"
             >
-              保存编辑
+              {actionLabels[action]}
             </button>
-          </div>
-
-          <div className="space-y-3 rounded-xl border bg-white/80 p-4">
-            <div className="text-sm font-semibold text-slate-900">恢复版本</div>
-            <label className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">版本号</span>
-              <input
-                value={versionId}
-                onChange={(event) => setVersionId(event.target.value)}
-                className="rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                placeholder="例如 3"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => void submitRestoreVersion()}
-              className="rounded-full border bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:opacity-60"
-            >
-              恢复版本
-            </button>
-          </div>
+          ))}
         </div>
-
-        {message ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm text-emerald-900">
-            {message}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-sm text-rose-900">
-            {error}
-          </div>
-        ) : null}
       </div>
-    </section>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="space-y-2 rounded-md border bg-surface-muted/40 p-3">
+          <div className="text-xs font-medium text-foreground">编辑</div>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">摘要</span>
+            <textarea
+              value={summary}
+              onChange={(event) => setSummary(event.target.value)}
+              rows={2}
+              className="field mt-1"
+            />
+          </label>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="block">
+              <span className="text-xs text-muted-foreground">作用域</span>
+              <select
+                value={scope}
+                onChange={(event) => setScope(event.target.value as Scope)}
+                className="field mt-1"
+              >
+                <option value="session">会话</option>
+                <option value="task">任务</option>
+                <option value="workspace">工作区</option>
+                <option value="user">全局</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">状态</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as MemoryStatus)}
+                className="field mt-1"
+              >
+                <option value="active">生效中</option>
+                <option value="pending_confirmation">待确认</option>
+                <option value="superseded">已被替代</option>
+                <option value="archived">已归档</option>
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => void submitEdit()}
+            className="btn-outline mt-1"
+          >
+            保存编辑
+          </button>
+        </div>
+
+        <div className="space-y-2 rounded-md border bg-surface-muted/40 p-3">
+          <div className="text-xs font-medium text-foreground">恢复版本</div>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">版本号</span>
+            <input
+              value={versionId}
+              onChange={(event) => setVersionId(event.target.value)}
+              className="field mt-1"
+              placeholder="例如 3"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => void submitRestoreVersion()}
+            className="btn-outline mt-1"
+          >
+            恢复版本
+          </button>
+        </div>
+      </div>
+
+      {message ? (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          {message}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+          {error}
+        </div>
+      ) : null}
+    </div>
   );
 }
