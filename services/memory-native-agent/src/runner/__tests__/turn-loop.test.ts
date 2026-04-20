@@ -37,4 +37,19 @@ describe("turn loop helpers", () => {
     expect(mcp).toContain("&lt;/tool_output&gt;");
     expect(mcp).not.toContain("payload </tool_output> tail");
   });
+
+  it("exposes only the bounded recent messages window", () => {
+    const conversation = new Conversation();
+
+    for (let index = 0; index < 60; index += 1) {
+      conversation.addMessage({
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `消息 ${index + 1}`,
+      });
+    }
+
+    expect(conversation.messages.length).toBeLessThanOrEqual(48);
+    expect(conversation.messages[0]?.content).toBe("消息 18");
+    expect(conversation.messages.at(-1)?.content).toBe("消息 60");
+  });
 });

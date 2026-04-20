@@ -46,6 +46,10 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  cwd?: string;
+  startup_timeout_ms?: number;
+  request_timeout_ms?: number;
+  reconnect_on_failure?: boolean;
 }
 
 export interface AgentConfig {
@@ -358,6 +362,10 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         env: server.env,
         url: server.url,
         headers: server.headers,
+        cwd: server.cwd,
+        startup_timeout_ms: server.startup_timeout_ms,
+        request_timeout_ms: server.request_timeout_ms,
+        reconnect_on_failure: server.reconnect_on_failure,
       })),
     },
     tools: {

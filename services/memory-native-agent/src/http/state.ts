@@ -229,6 +229,31 @@ export function updateProviderSelection(state: MnaRuntimeState, provider: AgentC
   }
 }
 
+export async function updateMcpServers(state: MnaRuntimeState, servers: AgentConfig["mcp"]["servers"]) {
+  state.config = {
+    ...state.config,
+    mcp: {
+      servers: [...servers],
+    },
+  };
+
+  await state.mcpRegistry.shutdown();
+  for (const server of servers) {
+    await state.mcpRegistry.addServer(server).catch(() => undefined);
+  }
+
+  state.tools = createDefaultToolDispatcher({
+    config: state.config,
+    mcpRegistry: state.mcpRegistry,
+    sessionStore: state.store,
+    artifactsRoot: state.artifactsRoot,
+  });
+
+  for (const session of state.sessions.values()) {
+    session.runner = buildSessionRunner(state, session);
+  }
+}
+
 function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO {
   return {
     emitAssistantDelta(turnId, text) {

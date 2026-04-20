@@ -253,6 +253,9 @@ describe("health routes", () => {
           base_url: null,
           model: null,
           api_key: null
+        },
+        mcp: {
+          servers: []
         }
       });
 
@@ -273,6 +276,15 @@ describe("health routes", () => {
             base_url: "https://api.openai.com/v1",
             model: "text-embedding-3-small",
             api_key: "embed-key"
+          },
+          mcp: {
+            servers: [
+              {
+                name: "echo-http",
+                transport: "http",
+                url: "http://127.0.0.1:7001/mcp",
+              },
+            ],
           }
         }
       });
@@ -288,6 +300,15 @@ describe("health routes", () => {
           base_url: "https://api.deepseek.com",
           api_key: "demo-key",
           temperature: 0.2
+        },
+        mcp: {
+          servers: [
+            {
+              name: "echo-http",
+              transport: "http",
+              url: "http://127.0.0.1:7001/mcp",
+            },
+          ],
         }
       });
 
@@ -319,6 +340,15 @@ describe("health routes", () => {
           base_url: "https://api.openai.com/v1",
           model: "text-embedding-3-small",
           api_key: "embed-key"
+        },
+        mcp: {
+          servers: [
+            {
+              name: "echo-http",
+              transport: "http",
+              url: "http://127.0.0.1:7001/mcp",
+            },
+          ],
         }
       });
 
@@ -345,7 +375,7 @@ describe("health routes", () => {
     }
   });
 
-  it("keeps mna available but marks provider as misconfigured when auth config is missing", async () => {
+  it("rejects provider config when required api_key is missing", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");
     fs.mkdirSync(workspaceRoot, { recursive: true });
@@ -368,25 +398,53 @@ describe("health routes", () => {
         }
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        ok: false,
+        error: {
+          code: "invalid_config_payload",
+          message: "provider.api_key: api_key is required for the selected provider.",
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 
-      const dependencyResponse = await app.inject({
-        method: "GET",
-        url: "/v1/agent/dependency-status",
+  it("rejects mcp config when stdio transport is missing command", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
         headers: {
-          authorization: `Bearer ${app.mnaToken}`
-        }
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+        payload: {
+          mcp: {
+            servers: [
+              {
+                name: "echo-stdio",
+                transport: "stdio",
+              },
+            ],
+          },
+        },
       });
 
-      expect(dependencyResponse.statusCode).toBe(200);
-      expect(dependencyResponse.json()).toMatchObject({
-        provider: {
-          id: "openai-compatible",
-          model: "deepseek-chat",
-          status: "misconfigured",
-          detail: "provider openai-compatible 缺少 API key 配置"
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        ok: false,
+        error: {
+          code: "invalid_config_payload",
+          message: "mcp.servers.0.command: command is required for stdio transport.",
         },
-        provider_key: "openai-compatible:deepseek-chat"
       });
     } finally {
       await app.close();

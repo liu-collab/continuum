@@ -99,4 +99,32 @@ describe("Conversation.shortSummary", () => {
     expect(built.some((message) => message.content.includes("第一轮内容"))).toBe(false);
     expect(built.some((message) => message.content.includes("第三轮内容"))).toBe(true);
   });
+
+  it("keeps only a bounded recent window in memory and folds older history into a summary", () => {
+    const conversation = new Conversation();
+
+    conversation.seed(
+      Array.from({ length: 60 }, (_, index) => ({
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: `消息 ${index + 1}`,
+      })),
+    );
+
+    expect(conversation.messages).toHaveLength(32);
+    expect(conversation.messages[0]?.content).toBe("消息 29");
+
+    const built = conversation.buildMessages({
+      systemPrompt: "system prompt",
+      injections: [],
+    });
+
+    expect(built[0]).toEqual({ role: "system", content: "system prompt" });
+    expect(built[1]).toMatchObject({
+      role: "system",
+    });
+    expect(built[1]?.content).toContain("<conversation_history_summary>");
+    expect(built[1]?.content).toContain("消息 28");
+    expect(built.some((message) => message.content === "消息 1")).toBe(false);
+    expect(built.some((message) => message.content === "消息 29")).toBe(true);
+  });
 });

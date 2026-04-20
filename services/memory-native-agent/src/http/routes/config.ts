@@ -4,19 +4,67 @@ import path from "node:path";
 import { z } from "zod";
 
 import type { RuntimeFastifyInstance } from "../types.js";
-import { updateProviderSelection } from "../state.js";
+import { updateMcpServers, updateProviderSelection } from "../state.js";
 
 const providerKindSchema = z.enum(["demo", "openai-compatible", "anthropic", "ollama", "record-replay"]);
+const mcpServerPayloadSchema = z.object({
+  name: z.string().trim().min(1),
+  transport: z.enum(["stdio", "http"]),
+  command: z.string().trim().min(1).optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  url: z.string().trim().url().optional(),
+  headers: z.record(z.string()).optional(),
+  cwd: z.string().trim().min(1).optional(),
+  startup_timeout_ms: z.number().int().min(100).max(120_000).optional(),
+  request_timeout_ms: z.number().int().min(100).max(120_000).optional(),
+  reconnect_on_failure: z.boolean().optional(),
+}).superRefine((value, context) => {
+  if (value.transport === "stdio" && !value.command) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["command"],
+      message: "command is required for stdio transport.",
+    });
+  }
+
+  if (value.transport === "http" && !value.url) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["url"],
+      message: "url is required for http transport.",
+    });
+  }
+});
 
 const providerPayloadSchema = z.object({
   kind: providerKindSchema,
   model: z.string().trim().min(1),
   base_url: z.string().trim().url().optional(),
   api_key: z.string().trim().optional(),
-  api_key_env: z.string().trim().optional(),
   temperature: z.number().min(0).max(2).optional(),
   organization: z.string().trim().optional(),
   keep_alive: z.union([z.string().trim().min(1), z.number().int().min(0)]).optional(),
+}).superRefine((value, context) => {
+  const requiresBaseUrl =
+    value.kind === "openai-compatible" || value.kind === "anthropic" || value.kind === "ollama";
+  const requiresApiKey = value.kind === "openai-compatible" || value.kind === "anthropic";
+
+  if (requiresBaseUrl && !value.base_url) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["base_url"],
+      message: "base_url is required for the selected provider.",
+    });
+  }
+
+  if (requiresApiKey && !value.api_key) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["api_key"],
+      message: "api_key is required for the selected provider.",
+    });
+  }
 });
 
 const embeddingPayloadSchema = z.object({
@@ -28,7 +76,16 @@ const embeddingPayloadSchema = z.object({
 const updateConfigSchema = z.object({
   provider: providerPayloadSchema.optional(),
   embedding: embeddingPayloadSchema.optional(),
+  mcp: z.object({
+    servers: z.array(mcpServerPayloadSchema),
+  }).optional(),
 });
+
+function formatZodIssues(error: z.ZodError) {
+  return error.issues
+    .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
+    .join("; ");
+}
 
 function resolveManagedEmbeddingConfigPath(app: RuntimeFastifyInstance) {
   return process.env.CONTINUUM_EMBEDDING_CONFIG_PATH?.trim()
@@ -67,7 +124,6 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: app.runtimeState.config.provider.model,
         base_url: app.runtimeState.config.provider.baseUrl,
         api_key: app.runtimeState.config.provider.apiKey,
-        api_key_env: app.runtimeState.config.provider.apiKeyEnv,
         temperature: app.runtimeState.config.provider.temperature,
         organization: app.runtimeState.config.provider.organization,
         keep_alive: app.runtimeState.config.provider.keepAlive,
@@ -77,11 +133,24 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: embedding?.model ?? process.env.EMBEDDING_MODEL ?? null,
         api_key: embedding?.apiKey ?? process.env.EMBEDDING_API_KEY ?? null,
       },
+      mcp: {
+        servers: app.runtimeState.config.mcp.servers,
+      },
     };
   });
 
-  app.post("/v1/agent/config", async (request) => {
-    const payload = updateConfigSchema.parse(request.body ?? {});
+  app.post("/v1/agent/config", async (request, reply) => {
+    const parsed = updateConfigSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: "invalid_config_payload",
+          message: formatZodIssues(parsed.error),
+        },
+      });
+    }
+    const payload = parsed.data;
 
     if (payload.embedding) {
       await writeJson(resolveManagedEmbeddingConfigPath(app), {
@@ -99,7 +168,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: payload.provider.model,
         baseUrl: payload.provider.base_url ?? app.runtimeState.config.provider.baseUrl,
         apiKey: payload.provider.api_key || undefined,
-        apiKeyEnv: payload.provider.api_key_env || undefined,
+        apiKeyEnv: undefined,
         temperature: payload.provider.temperature ?? app.runtimeState.config.provider.temperature,
         organization: payload.provider.organization || undefined,
         keepAlive: payload.provider.keep_alive,
@@ -112,10 +181,35 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
           model: nextProvider.model,
           base_url: nextProvider.baseUrl,
           ...(nextProvider.apiKey ? { api_key: nextProvider.apiKey } : {}),
-          ...(nextProvider.apiKeyEnv ? { api_key_env: nextProvider.apiKeyEnv } : {}),
           temperature: nextProvider.temperature,
           ...(nextProvider.organization ? { organization: nextProvider.organization } : {}),
           ...(nextProvider.keepAlive !== undefined ? { keep_alive: nextProvider.keepAlive } : {}),
+        },
+      });
+    }
+
+    if (payload.mcp) {
+      const nextServers = payload.mcp.servers.map((server) => ({
+        name: server.name,
+        transport: server.transport,
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        url: server.url,
+        headers: server.headers,
+        cwd: server.cwd,
+        startup_timeout_ms: server.startup_timeout_ms,
+        request_timeout_ms: server.request_timeout_ms,
+        reconnect_on_failure: server.reconnect_on_failure,
+      }));
+
+      await updateMcpServers(app.runtimeState, nextServers);
+
+      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
+      await writeJson(resolveProviderConfigPath(app), {
+        ...existingConfig,
+        mcp: {
+          servers: nextServers,
         },
       });
     }

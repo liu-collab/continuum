@@ -20,10 +20,17 @@ const { start, stop } = await loadEntrypoint();
 
 const port = Number.parseInt(process.env.MNA_PORT ?? "", 10) || 4193;
 const host = process.env.MNA_HOST || "127.0.0.1";
+const workspaceCwd = process.env.MNA_WORKSPACE_CWD?.trim() || process.cwd();
 let app;
 
 try {
-  app = await start({ host, port });
+  app = await start({
+    host,
+    port,
+    config: {
+      cwdOverride: workspaceCwd,
+    },
+  });
 } catch (error) {
   const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
   const message = error instanceof Error ? error.message : String(error);

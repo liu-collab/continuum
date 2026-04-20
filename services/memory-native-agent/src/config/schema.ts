@@ -44,6 +44,10 @@ const partialMcpServerSchema = z
     env: z.record(z.string()).optional(),
     url: z.string().trim().url().optional(),
     headers: z.record(z.string()).optional(),
+    cwd: nonEmptyStringSchema.optional(),
+    startup_timeout_ms: timeoutMsSchema.max(120_000).optional(),
+    request_timeout_ms: timeoutMsSchema.max(120_000).optional(),
+    reconnect_on_failure: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, context) => {
