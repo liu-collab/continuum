@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { FormEvent, ReactNode, useState } from "react";
+import React, { FormEvent, ReactNode, useState } from "react";
 
 type SearchFormProps = {
   action: Route;
