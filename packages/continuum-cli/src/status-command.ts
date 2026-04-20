@@ -149,7 +149,7 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   const databaseUrl =
     typeof options["database-url"] === "string"
       ? options["database-url"]
-      : process.env.DATABASE_URL ?? managedDatabaseUrl;
+      : managedDatabaseUrl ?? process.env.DATABASE_URL;
   const timeoutMs =
     typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
   const strict = options.strict === true || options.strict === "true";

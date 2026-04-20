@@ -1,12 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const getManagedMnaStatusMock = vi.hoisted(() => vi.fn());
+const readManagedStateMock = vi.hoisted(() => vi.fn());
+
+readManagedStateMock.mockResolvedValue({
+  version: 1,
+  services: [],
+});
 
 vi.mock("../src/mna-command.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/mna-command.js")>();
   return {
     ...actual,
     getManagedMnaStatus: getManagedMnaStatusMock
+  };
+});
+
+vi.mock("../src/managed-state.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/managed-state.js")>();
+  return {
+    ...actual,
+    readManagedState: readManagedStateMock,
   };
 });
 
@@ -27,6 +41,11 @@ describe("continuum cli", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     getManagedMnaStatusMock.mockReset();
+    readManagedStateMock.mockReset();
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
   });
 
   it("parses command and options", () => {
@@ -206,5 +225,64 @@ describe("continuum cli", () => {
     expect(hasManagedMnaProviderOptionOverrides({
       "provider-model": "deepseek-chat",
     })).toBe(true);
+  });
+
+  it("prefers managed database port over inherited DATABASE_URL in status", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const originalDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:5432/agent_memory";
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      postgres: {
+        containerName: "continuum-stack",
+        port: 54329,
+        database: "continuum",
+        username: "continuum",
+      },
+      services: [],
+    });
+    getManagedMnaStatusMock.mockResolvedValue({
+      record: null,
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.mna/token.txt",
+      artifactsPath: "C:/tmp/.mna/artifacts",
+      health: {
+        ok: false,
+        status: 503,
+        error: "unavailable"
+      },
+      dependency: {
+        body: null
+      }
+    });
+
+    const connectSpy = vi
+      .spyOn((await import("pg")).Client.prototype, "connect")
+      .mockImplementation(async function connect(this: { connectionParameters: { port?: number } }) {
+        expect(this.connectionParameters.port).toBe(54329);
+      });
+    const querySpy = vi
+      .spyOn((await import("pg")).Client.prototype, "query")
+      .mockResolvedValue({ rows: [{ ok: 1 }] } as never);
+    const endSpy = vi
+      .spyOn((await import("pg")).Client.prototype, "end")
+      .mockResolvedValue(undefined as never);
+
+    try {
+      await runStatusCommand({
+        json: true,
+        strict: false,
+        "runtime-url": "http://127.0.0.1:39992",
+        "storage-url": "http://127.0.0.1:39991",
+        "ui-url": "http://127.0.0.1:39993",
+        timeout: "50",
+      });
+    } finally {
+      process.env.DATABASE_URL = originalDatabaseUrl;
+      connectSpy.mockRestore();
+      querySpy.mockRestore();
+      endSpy.mockRestore();
+      stdoutSpy.mockRestore();
+    }
   });
 });
