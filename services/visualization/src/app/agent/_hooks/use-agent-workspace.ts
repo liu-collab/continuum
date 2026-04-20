@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -33,6 +34,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const streamRef = useRef<ReturnType<typeof client.connectSessionStream> | null>(null);
   const streamGenerationRef = useRef(0);
+
+  function toAgentRoute(sessionId: string) {
+    return `/agent/${sessionId}` as Route;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +75,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
       const existingSessionId = sessionList.items[0]?.id;
       if (existingSessionId) {
-        router.replace(`/agent/${existingSessionId}`);
+        router.replace(toAgentRoute(existingSessionId));
         return;
       }
 
@@ -81,7 +86,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
 
-      router.replace(`/agent/${created.session_id}`);
+      router.replace(toAgentRoute(created.session_id));
     };
 
     void bootstrap().catch((error) => {
@@ -187,7 +192,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   async function openSession(sessionId: string) {
     const targetPath = `/agent/${sessionId}`;
     if (pathname !== targetPath) {
-      router.push(targetPath);
+      router.push(toAgentRoute(sessionId));
       return;
     }
 
@@ -210,7 +215,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     const created = await client.createSession({
       locale: options.uiLocale
     });
-    router.push(`/agent/${created.session_id}`);
+    router.push(toAgentRoute(created.session_id));
   }
 
   function sendInput(text: string) {

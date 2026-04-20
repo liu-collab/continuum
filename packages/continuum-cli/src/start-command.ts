@@ -36,6 +36,7 @@ import {
   readManagedEmbeddingConfig,
   writeManagedEmbeddingConfig,
 } from "./managed-config.js";
+import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -168,15 +169,6 @@ async function ensureDockerDaemonReady() {
   }
 
   throw new Error("Docker daemon 未就绪，无法启动 Continuum。");
-}
-
-async function stopLegacyContinuumProcesses() {
-  await runForegroundQuiet("powershell", [
-    "-NoLogo",
-    "-NoProfile",
-    "-Command",
-    "Get-CimInstance Win32_Process -Filter \"Name = 'node.exe'\" | Where-Object { $_.CommandLine -like '*continuum*embeddings*' -or $_.CommandLine -like '*storage/dist/src/server.js*' -or $_.CommandLine -like '*storage/dist/src/worker.js*' -or $_.CommandLine -like '*retrieval-runtime/dist/src/index.js*' -or $_.CommandLine -like '*visualization/standalone/server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
-  ]).catch(() => undefined);
 }
 
 async function stopLegacyPostgresContainer() {

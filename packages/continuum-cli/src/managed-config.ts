@@ -13,7 +13,16 @@ export type ManagedEmbeddingConfig = {
 };
 
 export type ManagedProviderOverride = {
-  provider: ManagedMnaProviderConfig;
+  provider: {
+    kind: ManagedMnaProviderConfig["kind"];
+    model: string;
+    base_url?: string;
+    api_key?: string;
+    api_key_env?: string;
+    baseUrl?: string;
+    apiKey?: string;
+    apiKeyEnv?: string;
+  };
 };
 
 export function continuumManagedEmbeddingConfigPath() {
@@ -50,7 +59,13 @@ export async function writeManagedMnaProviderConfig(
     filePath,
     JSON.stringify(
       {
-        provider,
+        provider: {
+          kind: provider.kind,
+          model: provider.model,
+          ...(provider.baseUrl ? { base_url: provider.baseUrl } : {}),
+          ...(provider.apiKey ? { api_key: provider.apiKey } : {}),
+          ...(provider.apiKeyEnv ? { api_key_env: provider.apiKeyEnv } : {}),
+        },
       } satisfies ManagedProviderOverride,
       null,
       2,
@@ -69,5 +84,28 @@ export async function readManagedMnaProviderConfig(
 
   const content = await readFile(filePath, "utf8");
   const payload = JSON.parse(content) as ManagedProviderOverride;
-  return payload.provider ?? null;
+  const provider = payload.provider;
+  if (!provider) {
+    return null;
+  }
+
+  return {
+    kind: provider.kind,
+    model: provider.model,
+    ...(provider.base_url
+      ? { baseUrl: provider.base_url }
+      : provider.baseUrl
+        ? { baseUrl: provider.baseUrl }
+        : {}),
+    ...(provider.api_key
+      ? { apiKey: provider.api_key }
+      : provider.apiKey
+        ? { apiKey: provider.apiKey }
+        : {}),
+    ...(provider.api_key_env
+      ? { apiKeyEnv: provider.api_key_env }
+      : provider.apiKeyEnv
+        ? { apiKeyEnv: provider.apiKeyEnv }
+        : {}),
+  } as ManagedMnaProviderConfig;
 }

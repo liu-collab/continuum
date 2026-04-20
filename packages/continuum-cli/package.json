@@ -1,6 +1,6 @@
 {
   "name": "@jiankarlin/continuum",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Continuum delivery CLI for status, UI, Claude plugin install, and Codex launch.",
   "type": "module",
   "bin": {
@@ -24,7 +24,7 @@
     "prepare:vendor": "node ./scripts/prepare-vendor.mjs",
     "release:bundle": "npm run release:verify && npm run package:claude-plugin",
     "release:verify": "npm run prepare:vendor && npm run check && npm run build && npm test",
-    "prepack": "npm run ensure:vendor && npm run check && npm run build && npm test",
+    "prepack": "npm run prepare:vendor && npm run check && npm run build && npm test",
     "test": "vitest run",
     "test:watch": "vitest"
   },

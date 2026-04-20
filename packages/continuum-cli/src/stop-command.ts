@@ -7,6 +7,7 @@ import {
   writeManagedState,
 } from "./managed-state.js";
 import { stopManagedMna } from "./mna-command.js";
+import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
 
 async function runForegroundQuiet(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
@@ -34,6 +35,7 @@ async function runForegroundQuiet(command: string, args: string[]) {
 
 export async function runStopCommand() {
   await stopManagedMna().catch(() => undefined);
+  await stopLegacyContinuumProcesses();
   const state = await readManagedState();
   const containerName = state.postgres?.containerName ?? DEFAULT_MANAGED_STACK_CONTAINER;
 
