@@ -38,6 +38,7 @@ function createWorkspaceState(status: "loading" | "mna_not_running" | "token_mis
       entries: []
     },
     selectedFile: null,
+    selectedFilePath: null,
     metrics: null,
     dependencyStatus: null,
     mcpState: null,
@@ -53,6 +54,7 @@ function createWorkspaceState(status: "loading" | "mna_not_running" | "token_mis
     renameSession: vi.fn(),
     deleteSession: vi.fn(),
     updateProvider: vi.fn(),
+    updateRuntimeConfig: vi.fn(),
     refreshMetrics: vi.fn(),
     refreshDependencyStatus: vi.fn(),
     refreshMcpState: vi.fn(),
@@ -175,7 +177,6 @@ describe("AgentWorkspace bootstrap states", () => {
           model: "deepseek-chat",
           base_url: "https://api.deepseek.com",
           api_key: null,
-          api_key_env: null,
           temperature: 0.2,
           organization: null,
           keep_alive: null
@@ -184,6 +185,9 @@ describe("AgentWorkspace bootstrap states", () => {
           base_url: null,
           model: null,
           api_key: null
+        },
+        mcp: {
+          servers: []
         }
       },
       mcpState: {
@@ -220,8 +224,10 @@ describe("AgentWorkspace bootstrap states", () => {
       </AgentI18nProvider>
     );
 
+    expect(screen.getByText("openai · deepseek-chat")).toBeInTheDocument();
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
+    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("openai:deepseek-chat");
 
     fireEvent.click(screen.getByRole("button", { name: /设置/ }));
     expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();

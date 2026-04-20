@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 
 import { useAgentI18n } from "../_i18n/provider";
 import { useAgentWorkspace } from "../_hooks/use-agent-workspace";
+import { formatProviderKindLabel } from "../_lib/provider-kind";
 import { ChatPanel } from "./chat-panel";
 import { ConfirmDialog } from "./confirm-dialog";
 import { CostBar } from "./cost-bar";
@@ -19,7 +20,6 @@ import { MemoryPanel } from "./memory-panel";
 import { PromptInspector } from "./prompt-inspector";
 import { SessionList } from "./session-list";
 import { SettingsModal } from "./settings-modal";
-import { ToolConsole } from "./tool-console";
 
 type AgentWorkspaceProps = {
   sessionId?: string;
@@ -70,7 +70,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Agent</h1>
             <div className="mt-1 text-xs text-muted-foreground">
               {workspace.dependencyStatus
-                ? `${workspace.dependencyStatus.provider.id} · ${workspace.dependencyStatus.provider.model}`
+                ? `${formatProviderKindLabel(workspace.dependencyStatus.provider.id)} · ${workspace.dependencyStatus.provider.model}`
                 : t("workspace.loading")}
             </div>
           </div>
@@ -109,7 +109,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
+        <div className="grid gap-6 xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
           <div className="space-y-4">
             <section className="rounded-lg border bg-surface">
               <div className="border-b px-4 py-3">
@@ -135,7 +135,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             <FileTree
               path={workspace.fileTree.path}
               entries={workspace.fileTree.entries}
-              selectedFilePath={workspace.selectedFile?.path ?? null}
+              selectedFilePath={workspace.selectedFilePath ?? null}
               onOpenDirectory={(nextPath) => {
                 void workspace.refreshFileTree(nextPath);
               }}
@@ -175,7 +175,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 void workspace.openPromptInspector(turnId);
               }}
             />
-            <ToolConsole turns={workspace.state.turns} />
           </div>
 
           <div className="space-y-4">
@@ -198,7 +197,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                     label={t("workspace.providerLabel")}
                     tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}
                     value={workspace.dependencyStatus.provider.status}
-                    extra={workspace.dependencyStatus.provider_key}
+                    extra={formatProviderKey(workspace.dependencyStatus.provider_key)}
                   />
                   {workspace.dependencyStatus.provider.detail ? (
                     <div className="text-xs leading-5 text-muted-foreground">
@@ -249,7 +248,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           void workspace.updateMemoryMode(value);
         }}
         onSaveRuntime={(payload) => {
-          void workspace.updateRuntimeConfig(payload);
+          return workspace.updateRuntimeConfig(payload);
         }}
       />
 
@@ -261,6 +260,17 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
       />
     </>
   );
+}
+
+function formatProviderKey(providerKey: string) {
+  const separatorIndex = providerKey.indexOf(":");
+  if (separatorIndex === -1) {
+    return formatProviderKindLabel(providerKey);
+  }
+
+  const providerKind = providerKey.slice(0, separatorIndex);
+  const model = providerKey.slice(separatorIndex + 1);
+  return `${formatProviderKindLabel(providerKind)}:${model}`;
 }
 
 function DependencyRow({
