@@ -38,7 +38,7 @@
 - [自动化通过] 关闭 `retrieval-runtime` 后，agent 页面不会白屏
 - [自动化通过] runtime 不可用时，页面能显示降级状态
 - [自动化通过] 关闭 `memory-native-agent` 后，`/agent` 页面显示离线提示
-- [进行中] 重启 `memory-native-agent` 后，页面能恢复连接
+- [自动化通过] 重启 `memory-native-agent` 后，页面能恢复连接
 
 ## 5. 记忆边界
 
@@ -62,4 +62,3 @@
 
 - `continuum start` 拉起整套服务后的真实跨服务联通
 - `token --rotate` 的完整轮换流程
-- `memory-native-agent` 重启后，`/agent` 页面自动恢复连接 这一条还在补稳定性

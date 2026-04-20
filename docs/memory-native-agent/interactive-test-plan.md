@@ -56,9 +56,8 @@
 
 - **交互**：`GET /healthz` 必返 `api_version`、`runtime_min_version`、`dependencies.retrieval_runtime`
 - **断言**：字段存在；`runtime_min_version` ≤ 当前 runtime `version`；runtime fail 时 `dependencies.retrieval_runtime !== "reachable"`
-- **状态**：`[⚙️ 部分完成]`（`reachable` 正向与 `unreachable` 负向已覆盖，版本字段存在且格式已断言；当前实现里的 `runtime_min_version` 仍高于 `MNA_VERSION`，版本高低关系尚未收口）
+- **状态**：`[✅ 已完成]`
 - **文件位置 / 已有引用**：`src/http/__tests__/sessions.test.ts`、`src/http/__tests__/health-routes.test.ts`
-- **新增建议**：补版本协商断言
 
 ### 1.3 `/readyz` 与三段状态
 
@@ -757,7 +756,7 @@
 ### 9.5 streamable-http transport 基础
 
 - **断言**：add → list → call 一条链路跑通
-- **状态**：`[⚙️ 部分完成]`（文件已存在；HTTP 测试细节需代码侧核对）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/mcp-client/__tests__/http.test.ts`
 
 ### 9.6 http server crash 后立即失败、其他 server 不受影响
@@ -768,13 +767,14 @@
 ### 9.7 `restartServer(name)` 运行时重启
 
 - **交互**：标记 disabled 的 server → restart → 状态回 ok + 工具重新出现
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/mcp-client/__tests__/restart.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/mcp-client/__tests__/http.test.ts`、`src/http/__tests__/mcp-routes.test.ts`
 
 ### 9.8 `disableServer(name)`
 
 - **断言**：disable 后 `listTools()` 过滤；`mcp_call` 返回 `mcp_disconnected`；下次进程启动按 config 恢复
-- **状态**：`[⏳ 待开始]`
+- **状态**：`[⚙️ 部分完成]`（disable 后工具过滤、HTTP 管理路由和页面交互已覆盖；`mcp_call` 对 disabled server 的独立断言，以及重启进程后按 config 恢复的闭环还没单列回归）
+- **文件位置**：`src/mcp-client/__tests__/http.test.ts`、`src/http/__tests__/mcp-routes.test.ts`、`services/visualization/tests/agent-e2e/agent-tools-mcp.spec.ts`
 
 ### 9.9 `shutdown()` 回收 stdio 子进程
 
@@ -1421,12 +1421,12 @@
 | `runtime_unavailable` | 12.2 | `[✅ 已完成]` |
 | `provider_not_registered` | 3.8 | `[✅ 已完成]` |
 | `provider_auth_failed` | 7.6 | `[✅ 已完成]` |
-| `provider_rate_limited` | 7.4 | `[✅ 已完成]`（provider 层）/ WS 层 `[⏳ 待开始]` |
+| `provider_rate_limited` | 7.4 | `[⚙️ 部分完成]`（provider 层已覆盖；WS / 页面级错误码映射仍待补） |
 | `provider_timeout` | T04 3.4.0 | `[✅ 已完成]` |
 | `provider_stream_error` | 4.6 | `[⚙️ 部分完成]`（后端顺序已覆盖；WS/页面级仍待补） |
 | `tool_denied_path` | 3.2、8.2 | `[✅ 已完成]` |
 | `tool_denied_pattern` | 8.7 | `[✅ 已完成]` |
-| `tool_confirm_timeout` | 8.15 | `[⏳ 待开始]` |
+| `tool_confirm_timeout` | 8.15 | `[⚙️ 部分完成]`（dispatcher 与审计写入已覆盖；HTTP / WS 错误码表驱动还没单列） |
 | `mcp_disconnected` | 8.12 | `[✅ 已完成]` |
 | `abort_ack` | 4.7 | `[⚙️ 部分完成]`（`turn_end(abort)` 已覆盖；错误码表驱动未单列） |
 | `session_store_unavailable` | 5.12 | `[✅ 已完成]` |
@@ -1461,13 +1461,15 @@
 - **断言**：
   - `prepareContext` 响应 `injection_block.requested_scopes` 只用这四个
   - `workspace_only` 模式下 `selected_scopes` 不含 `user`
-- **状态**：`[⚙️ 部分完成]`（mode-switch e2e 间接覆盖）
+- **状态**：`[⚙️ 部分完成]`（`runtime-service.test.ts` 已显式覆盖 `workspace_only / workspace_plus_global` 的 requested_scopes 与 selected_scopes；四枚举全集仍未做单独表驱动断言）
+- **文件位置**：`services/retrieval-runtime/tests/runtime-service.test.ts`、`tests/e2e/memory-mode-switch.e2e.test.ts`
 - **新增建议**：加显式断言
 
 ### 19.3 写回候选只带正式 scope
 
 - **断言**：`writeback_submissions` 的 scope ∈ `{session, task, workspace, user}`
-- **状态**：`[⚙️ 部分完成]`
+- **状态**：`[⚙️ 部分完成]`（`runtime-service.test.ts` 已覆盖规则抽取与 LLM 抽取的 scope 落点；观测侧 `final_scopes` 也有回归，但还没做统一枚举表断言）
+- **文件位置**：`services/retrieval-runtime/tests/runtime-service.test.ts`、`services/retrieval-runtime/tests/remediation.test.ts`
 
 ### 19.4 visualization 后端不调 mna 主链路
 
