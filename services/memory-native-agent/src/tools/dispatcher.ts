@@ -21,6 +21,7 @@ export interface ToolDispatcherOptions {
   sessionStore?: SessionStore;
   logger?: ToolLogger;
   artifactsRoot?: string;
+  defaultMaxOutputChars?: number;
 }
 
 export class ToolDispatcher {
@@ -29,6 +30,7 @@ export class ToolDispatcher {
   private readonly auditSink: ToolAuditSink | null;
   private readonly logger: ToolLogger;
   private readonly artifactsRoot: string | null;
+  private readonly defaultMaxOutputChars: number | undefined;
 
   constructor(options: ToolDispatcherOptions) {
     this.registry = options.registry;
@@ -47,6 +49,7 @@ export class ToolDispatcher {
       : null;
     this.logger = options.logger ?? {};
     this.artifactsRoot = options.artifactsRoot ?? null;
+    this.defaultMaxOutputChars = options.defaultMaxOutputChars;
   }
 
   listTools() {
@@ -95,7 +98,10 @@ export class ToolDispatcher {
           permission_decision: permission.decision,
         };
       } else {
-        result = await tool.invoke(call.args, context);
+        result = await tool.invoke(call.args, {
+          ...context,
+          maxOutputChars: context.maxOutputChars ?? this.defaultMaxOutputChars,
+        });
         result.permission_decision = permissionDecision;
       }
     } catch (error) {

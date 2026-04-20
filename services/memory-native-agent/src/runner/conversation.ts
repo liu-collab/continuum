@@ -1,8 +1,15 @@
 import type { ChatMessage } from "../providers/types.js";
 import type { ToolTrustLevel } from "../tools/index.js";
+import { compactMessages, type TokenBudgetSettings } from "./token-budget.js";
 
 export interface BuildMessagesInput {
   systemPrompt: string;
+  tools?: Array<{
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  }>;
+  tokenBudget?: TokenBudgetSettings;
   injections: Array<{
     phase: string;
     injection_reason: string;
@@ -30,7 +37,7 @@ export class Conversation {
   }
 
   buildMessages(input: BuildMessagesInput): ChatMessage[] {
-    const built: ChatMessage[] = [
+    const fixedMessages: ChatMessage[] = [
       {
         role: "system",
         content: input.systemPrompt,
@@ -38,14 +45,22 @@ export class Conversation {
     ];
 
     for (const injection of input.injections) {
-      built.push({
+      fixedMessages.push({
         role: "system",
         content: buildInjectionBlock(injection),
       });
     }
 
-    built.push(...this.messages);
-    return built;
+    return compactMessages(
+      fixedMessages,
+      this.messages,
+      {
+        maxTokens: input.tokenBudget?.maxTokens ?? null,
+        reserveTokens: input.tokenBudget?.reserveTokens ?? 4_096,
+        compactionStrategy: input.tokenBudget?.compactionStrategy ?? "truncate",
+        toolTokenEstimate: input.tokenBudget?.toolTokenEstimate,
+      },
+    );
   }
 
   shortSummary(): string {

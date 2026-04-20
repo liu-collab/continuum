@@ -20,7 +20,11 @@ export interface CreateServerOptions {
 
 export function createServer(config: AgentConfig, options: CreateServerOptions = {}): MnaServerInstance {
   const app = Fastify({
-    logger: false,
+    logger: config.logging.level === "silent"
+      ? false
+      : {
+          level: config.logging.level,
+        },
   }) as unknown as MnaServerInstance;
 
   const tokenBootstrap = loadOrCreateToken(options.homeDirectory);

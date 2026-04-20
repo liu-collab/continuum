@@ -102,6 +102,7 @@ function createConfig(): AgentConfig {
     },
     mcp: { servers: [] },
     tools: {
+      maxOutputChars: 8_192,
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -110,6 +111,15 @@ function createConfig(): AgentConfig {
     },
     cli: {
       systemPrompt: null,
+    },
+    context: {
+      maxTokens: null,
+      reserveTokens: 4_096,
+      compactionStrategy: "truncate",
+    },
+    logging: {
+      level: "info",
+      format: "json",
     },
     streaming: {
       flushChars: 2,
@@ -672,6 +682,49 @@ describe("AgentRunner", () => {
         turn_id: "turn-with-output",
         current_input: "继续",
         assistant_output: "hello",
+      }),
+    );
+  });
+
+  it("passes computed max_tokens to the provider when context budget is configured", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    const config = createConfig();
+    config.context.maxTokens = 12_000;
+    config.context.reserveTokens = 2_000;
+    const chat = vi.fn(async function* () {
+      yield { type: "text_delta", text: "hello" } as const;
+      yield {
+        type: "end",
+        finish_reason: "stop",
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+        },
+      } as const;
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "anthropic",
+        model: () => "claude-sonnet",
+        chat,
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config,
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("继续", "turn-budget");
+
+    expect(chat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_tokens: 10_000,
       }),
     );
   });

@@ -7,6 +7,8 @@ import type { Tool } from "../types.js";
 
 const argsSchema = z.object({
   path: z.string().trim().min(1),
+  max_lines: z.number().int().min(1).max(20_000).optional(),
+  byte_limit: z.number().int().min(64).max(5 * 1024 * 1024).optional(),
 });
 
 export function createFsReadTool(): Tool {
@@ -20,6 +22,14 @@ export function createFsReadTool(): Tool {
         path: {
           type: "string",
           description: "Relative path inside the workspace.",
+        },
+        max_lines: {
+          type: "number",
+          description: "Optional maximum number of lines to return for files.",
+        },
+        byte_limit: {
+          type: "number",
+          description: "Optional maximum number of UTF-8 bytes to read from a file before truncation.",
         },
       },
       additionalProperties: false,
@@ -70,11 +80,18 @@ export function createFsReadTool(): Tool {
       }
 
       const content = await fs.readFile(targetPath, "utf8");
+      const byteLimited = parsed.data.byte_limit
+        ? Buffer.from(content, "utf8").subarray(0, parsed.data.byte_limit).toString("utf8")
+        : content;
+      const limited = parsed.data.max_lines
+        ? byteLimited.split(/\r?\n/).slice(0, parsed.data.max_lines).join("\n")
+        : byteLimited;
       const artifact = maybePersistArtifact({
-        content,
+        content: limited,
         context,
         extension: "txt",
         kind: "file_content",
+        maxInlineBytes: parsed.data.byte_limit,
       });
 
       return {

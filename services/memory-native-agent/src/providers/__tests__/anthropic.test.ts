@@ -235,4 +235,37 @@ describe("AnthropicProvider", () => {
       },
     ]);
   });
+
+  it("uses a higher default max_tokens when the caller does not provide one", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/messages", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        return reply.send({
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 3,
+            output_tokens: 2,
+          },
+        });
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new AnthropicProvider({
+      baseUrl: server.baseUrl,
+      model: "claude-sonnet",
+      apiKey: "anthropic-key",
+      runtimeSettings: {
+        maxRetries: 0,
+      },
+    });
+
+    await collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] }));
+
+    expect(requestBody).toMatchObject({
+      max_tokens: 4096,
+    });
+  });
 });

@@ -11,6 +11,7 @@ const argsSchema = z.object({
   command: z.string().trim().min(1),
   description: z.string().trim().optional(),
   timeout_ms: z.number().int().min(1).max(120_000).optional(),
+  max_output_bytes: z.number().int().min(256).max(5 * 1024 * 1024).optional(),
   env: z.record(z.string()).optional(),
 });
 
@@ -32,6 +33,7 @@ export function createShellExecTool(options: ShellExecToolOptions): Tool {
         command: { type: "string" },
         description: { type: "string" },
         timeout_ms: { type: "number" },
+        max_output_bytes: { type: "number" },
         env: {
           type: "object",
           additionalProperties: {
@@ -92,6 +94,7 @@ export function createShellExecTool(options: ShellExecToolOptions): Tool {
         context,
         extension: "txt",
         kind: "stdout",
+        maxInlineBytes: parsed.data.max_output_bytes,
       });
 
       return {

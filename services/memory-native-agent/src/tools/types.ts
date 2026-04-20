@@ -47,6 +47,7 @@ export interface ToolContext {
   cwd: string;
   workspaceRoot: string;
   artifactsRoot: string;
+  maxOutputChars?: number;
   abort: AbortSignal;
   confirm(payload: ConfirmPayload): Promise<"allow" | "deny" | "allow_session">;
 }

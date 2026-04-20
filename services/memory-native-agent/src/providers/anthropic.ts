@@ -300,7 +300,7 @@ export class AnthropicProvider implements IModelProvider {
             messages: mapAnthropicMessages(options.request.messages),
             tools: mapAnthropicTools(options.request.tools),
             temperature: options.request.temperature,
-            max_tokens: options.request.max_tokens ?? 1024,
+            max_tokens: options.request.max_tokens ?? 4096,
             stream: options.stream,
           }),
           signal: controller.signal,

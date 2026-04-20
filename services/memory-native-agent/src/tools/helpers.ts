@@ -5,10 +5,8 @@ import { createHash } from "node:crypto";
 import { ToolArtifactTooLargeError, ToolPermissionError } from "./errors.js";
 import type { ToolArtifactKind, ToolContext } from "./types.js";
 
-const MAX_OUTPUT_BYTES = 10 * 1024;
 const MAX_ARTIFACT_BYTES = 5 * 1024 * 1024;
-const OUTPUT_HEAD_BYTES = 5 * 1024;
-const OUTPUT_TAIL_BYTES = 2 * 1024;
+const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024;
 
 export function stableJsonStringify(value: unknown): string {
   return JSON.stringify(sortValue(value));
@@ -40,13 +38,19 @@ export function previewArgs(args: unknown, maxLength = 512): string {
 }
 
 export function truncateOutput(value: string): string {
+  return truncateOutputToBytes(value, DEFAULT_MAX_OUTPUT_BYTES);
+}
+
+export function truncateOutputToBytes(value: string, maxBytes: number): string {
   const bytes = Buffer.byteLength(value, "utf8");
-  if (bytes <= MAX_OUTPUT_BYTES) {
+  if (bytes <= maxBytes) {
     return value;
   }
 
-  const head = sliceUtf8Bytes(value, OUTPUT_HEAD_BYTES);
-  const tail = sliceUtf8BytesFromEnd(value, OUTPUT_TAIL_BYTES);
+  const headBytes = Math.max(Math.floor(maxBytes * 0.7), 64);
+  const tailBytes = Math.max(maxBytes - headBytes, 32);
+  const head = sliceUtf8Bytes(value, headBytes);
+  const tail = sliceUtf8BytesFromEnd(value, tailBytes);
   return `${head}\n...\n${tail}`;
 }
 
@@ -64,9 +68,11 @@ export function maybePersistArtifact(input: {
   context: ToolContext;
   extension: string;
   kind: ToolArtifactKind;
+  maxInlineBytes?: number;
 }): { output: string; artifact_ref?: string } {
+  const maxInlineBytes = input.maxInlineBytes ?? input.context.maxOutputChars ?? DEFAULT_MAX_OUTPUT_BYTES;
   const bytes = Buffer.byteLength(input.content, "utf8");
-  if (bytes <= MAX_OUTPUT_BYTES) {
+  if (bytes <= maxInlineBytes) {
     return {
       output: input.content,
     };
@@ -83,7 +89,7 @@ export function maybePersistArtifact(input: {
   fs.writeFileSync(targetPath, input.content, "utf8");
 
   return {
-    output: truncateOutput(input.content),
+    output: truncateOutputToBytes(input.content, maxInlineBytes),
     artifact_ref: `${input.context.sessionId}/${fileName}`,
   };
 }

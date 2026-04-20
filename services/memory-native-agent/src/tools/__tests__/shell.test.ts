@@ -150,4 +150,29 @@ describe("shell_exec tool", () => {
     expect(result.error?.code).toBe("tool_timeout");
     expect(result.error?.message).toContain("aborted");
   });
+
+  it("supports max_output_bytes overrides for shell_exec", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    const dispatcher = createDispatcher();
+    const context = createContext(root, artifactsRoot);
+    const command = process.platform === "win32"
+      ? "for /L %i in (1,1,200) do @echo xxxxxxxxxx"
+      : "python -c \"print('xxxxxxxxxx\\n' * 200, end='')\"";
+
+    const result = await dispatcher.invoke(
+      {
+        id: "call-1",
+        name: "shell_exec",
+        args: {
+          command,
+          max_output_bytes: 256,
+        },
+      },
+      context,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.artifact_ref).toBe("session-1/call-1.txt");
+    expect(result.output).toContain("\n...\n");
+  });
 });

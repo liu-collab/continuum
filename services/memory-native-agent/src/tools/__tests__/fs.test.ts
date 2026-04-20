@@ -89,6 +89,30 @@ describe("fs tools", () => {
     expect(dirResult.output).toContain("README.md");
   });
 
+  it("supports byte and line limits for fs_read", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    fs.writeFileSync(path.join(root, "notes.txt"), "line-1\nline-2\nline-3\nline-4\n", "utf8");
+
+    const dispatcher = createDispatcher();
+    const context = createContext(root, artifactsRoot);
+
+    const result = await invoke(
+      dispatcher,
+      "fs_read",
+      {
+        path: "notes.txt",
+        max_lines: 2,
+        byte_limit: 64,
+      },
+      context,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("line-1");
+    expect(result.output).toContain("line-2");
+    expect(result.output).not.toContain("line-3");
+  });
+
   it("rejects paths outside the workspace before confirmation", async () => {
     const { root, artifactsRoot } = createWorkspace();
     const dispatcher = createDispatcher();

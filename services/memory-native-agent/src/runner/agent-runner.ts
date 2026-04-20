@@ -11,6 +11,10 @@ import {
   type TaskState,
 } from "./task-state.js";
 import { detectTriggers, type DetectedTriggers } from "./trigger-detector.js";
+import {
+  estimateToolTokens,
+  resolveContextMaxTokens,
+} from "./token-budget.js";
 import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
 import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
@@ -139,8 +143,22 @@ export class AgentRunner {
       content: userInput,
     });
 
+    const contextMaxTokens = this.deps.config.context.maxTokens ?? resolveContextMaxTokens(this.deps.config.provider);
+    const toolTokenEstimate = estimateToolTokens(tools);
+    const requestMaxTokens = Math.max(
+      contextMaxTokens - Math.min(this.deps.config.context.reserveTokens, Math.floor(contextMaxTokens / 2)),
+      1_024,
+    );
+
     let messages = this.conversation.buildMessages({
       systemPrompt,
+      tools,
+      tokenBudget: {
+        maxTokens: contextMaxTokens,
+        reserveTokens: this.deps.config.context.reserveTokens,
+        compactionStrategy: this.deps.config.context.compactionStrategy,
+        toolTokenEstimate,
+      },
       injections,
     });
 
@@ -182,6 +200,7 @@ export class AgentRunner {
         const chunks = this.deps.provider.chat({
           messages,
           tools,
+          max_tokens: requestMaxTokens,
           signal: abortController.signal,
         });
 
@@ -269,6 +288,13 @@ export class AgentRunner {
         round += 1;
         messages = this.conversation.buildMessages({
           systemPrompt,
+          tools,
+          tokenBudget: {
+            maxTokens: contextMaxTokens,
+            reserveTokens: this.deps.config.context.reserveTokens,
+            compactionStrategy: this.deps.config.context.compactionStrategy,
+            toolTokenEstimate,
+          },
           injections,
         });
         this.persistDispatchedMessages(turnId, messages, tools, round);

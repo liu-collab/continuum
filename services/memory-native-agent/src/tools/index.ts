@@ -47,5 +47,6 @@ export function createDefaultToolDispatcher(options: {
     }),
     sessionStore: options.sessionStore,
     artifactsRoot: options.artifactsRoot,
+    defaultMaxOutputChars: options.config.tools.maxOutputChars,
   });
 }
