@@ -32,9 +32,30 @@ vi.mock("../../providers/index.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../providers/index.js")>();
   return {
     ...actual,
-    createProvider: vi.fn((config: { kind: string; model: string }) => ({
+    createProvider: vi.fn((
+      config: { kind: string; model: string; apiKey?: string; apiKeyEnv?: string },
+      env?: NodeJS.ProcessEnv,
+    ) => ({
       id: () => config.kind,
       model: () => config.model,
+      status: () => {
+        const missingApiKey =
+          (config.kind === "openai-compatible" || config.kind === "anthropic")
+          && !config.apiKey
+          && !(config.apiKeyEnv && env?.[config.apiKeyEnv]);
+
+        if (missingApiKey) {
+          return {
+            status: "misconfigured" as const,
+            detail: `provider ${config.kind} 缺少 API key 配置`,
+          };
+        }
+
+        return {
+          status: "configured" as const,
+          detail: undefined,
+        };
+      },
       chat: async function* () {
         yield {
           type: "end",
@@ -76,6 +97,7 @@ function createConfig(workspaceRoot: string): AgentConfig {
       servers: []
     },
     tools: {
+      maxOutputChars: 8_192,
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -84,6 +106,15 @@ function createConfig(workspaceRoot: string): AgentConfig {
     },
     cli: {
       systemPrompt: null
+    },
+    context: {
+      maxTokens: null,
+      reserveTokens: 4_096,
+      compactionStrategy: "truncate"
+    },
+    logging: {
+      level: "info",
+      format: "json"
     },
     streaming: {
       flushChars: 32,
@@ -183,10 +214,179 @@ describe("health routes", () => {
         provider: {
           id: "ollama",
           model: "qwen2.5-coder",
-          status: "configured"
+          status: "configured",
+          detail: undefined,
         },
         mcp: [],
         provider_key: "ollama:qwen2.5-coder"
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("reads runtime config and persists updated provider plus embedding config", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const readResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(readResponse.statusCode).toBe(200);
+      expect(readResponse.json()).toMatchObject({
+        provider: {
+          kind: "ollama",
+          model: "qwen2.5-coder",
+          base_url: "http://127.0.0.1:11434"
+        },
+        embedding: {
+          base_url: null,
+          model: null,
+          api_key: null
+        }
+      });
+
+      const writeResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          provider: {
+            kind: "openai-compatible",
+            model: "deepseek-chat",
+            base_url: "https://api.deepseek.com",
+            api_key: "demo-key"
+          },
+          embedding: {
+            base_url: "https://api.openai.com/v1",
+            model: "text-embedding-3-small",
+            api_key: "embed-key"
+          }
+        }
+      });
+
+      expect(writeResponse.statusCode).toBe(200);
+      expect(writeResponse.json()).toEqual({ ok: true });
+
+      const providerConfigPath = path.join(home, ".mna", "config.json");
+      expect(JSON.parse(fs.readFileSync(providerConfigPath, "utf8"))).toEqual({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key: "demo-key",
+          temperature: 0.2
+        }
+      });
+
+      const embeddingConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
+      expect(JSON.parse(fs.readFileSync(embeddingConfigPath, "utf8"))).toEqual({
+        version: 1,
+        baseUrl: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+        apiKey: "embed-key"
+      });
+
+      const configResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(configResponse.statusCode).toBe(200);
+      expect(configResponse.json()).toMatchObject({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key: "demo-key"
+        },
+        embedding: {
+          base_url: "https://api.openai.com/v1",
+          model: "text-embedding-3-small",
+          api_key: "embed-key"
+        }
+      });
+
+      const dependencyResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/dependency-status",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(dependencyResponse.statusCode).toBe(200);
+      expect(dependencyResponse.json()).toMatchObject({
+        provider: {
+          id: "openai-compatible",
+          model: "deepseek-chat",
+          status: "configured"
+        },
+        provider_key: "openai-compatible:deepseek-chat"
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps mna available but marks provider as misconfigured when auth config is missing", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          provider: {
+            kind: "openai-compatible",
+            model: "deepseek-chat",
+            base_url: "https://api.deepseek.com"
+          }
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const dependencyResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/dependency-status",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(dependencyResponse.statusCode).toBe(200);
+      expect(dependencyResponse.json()).toMatchObject({
+        provider: {
+          id: "openai-compatible",
+          model: "deepseek-chat",
+          status: "misconfigured",
+          detail: "provider openai-compatible 缺少 API key 配置"
+        },
+        provider_key: "openai-compatible:deepseek-chat"
       });
     } finally {
       await app.close();

@@ -20,6 +20,7 @@ import type { StorageConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import type { StorageDatabase } from "./db/client.js";
 import type { EmbeddingsClient } from "./db/embeddings-client.js";
+import { hasCompleteStorageEmbeddingConfig } from "./embedding-config.js";
 import { normalizeCandidate } from "./domain/normalizer.js";
 import { GovernanceEngine } from "./domain/governance-engine.js";
 import { createRepositories, type StorageRepositories } from "./db/repositories.js";
@@ -335,7 +336,7 @@ export class StorageService {
   }
 
   private getEmbeddingDependencyStatus(): DependencyStatus {
-    if (!this.config.embedding_base_url) {
+    if (!hasCompleteStorageEmbeddingConfig(this.config)) {
       return {
         name: "embedding_service",
         status: "not_configured",

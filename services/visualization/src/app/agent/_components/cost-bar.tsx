@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useAgentI18n } from "../_i18n/provider";
 import type { MnaMetricsResponse } from "../_lib/openapi-types";
 

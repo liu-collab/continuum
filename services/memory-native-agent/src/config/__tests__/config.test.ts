@@ -47,6 +47,10 @@ describe("config loader", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
     expect(config.cli.systemPrompt).toBeNull();
+    expect(config.tools.maxOutputChars).toBe(8192);
+    expect(config.context.maxTokens).toBeNull();
+    expect(config.context.reserveTokens).toBe(4096);
+    expect(config.logging.level).toBe("info");
     expect(config.streaming.flushChars).toBe(32);
     expect(config.streaming.flushIntervalMs).toBe(30);
   });
@@ -68,6 +72,7 @@ provider:
 memory:
   mode: workspace_only
 tools:
+  max_output_chars: 4096
   shell_exec:
     enabled: false
 `,
@@ -77,6 +82,10 @@ tools:
       `
 runtime:
   request_timeout_ms: 1200
+context:
+  max_tokens: 64000
+logging:
+  level: debug
 tools:
   shell_exec:
     enabled: true
@@ -96,6 +105,9 @@ tools:
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3999");
     expect(config.runtime.requestTimeoutMs).toBe(1200);
     expect(config.memory.mode).toBe("workspace_only");
+    expect(config.tools.maxOutputChars).toBe(4096);
+    expect(config.context.maxTokens).toBe(64000);
+    expect(config.logging.level).toBe("debug");
     expect(config.tools.shellExec.enabled).toBe(true);
     expect(config.tools.shellExec.timeoutMs).toBe(45000);
     expect(config.tools.shellExec.denyPatterns).toEqual(["git reset --hard"]);
@@ -254,7 +266,7 @@ cli:
     expect(config.cli.systemPrompt).toContain("自定义 system prompt");
   });
 
-  it("throws a clear error when provider api key env is missing", () => {
+  it("allows provider config to load even when api key env is not yet available", () => {
     const homeDir = createTempDir("mna-home-");
     const workspaceDir = createTempDir("mna-workspace-");
     createdRoots.push(homeDir, workspaceDir);
@@ -270,14 +282,44 @@ provider:
 `,
     );
 
-    expect(() =>
-      loadConfig({
-        cwdOverride: workspaceDir,
-        env: {
-          HOME: homeDir,
-        },
-      }),
-    ).toThrow("Environment variable OPENAI_API_KEY is required");
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+      },
+    });
+
+    expect(config.provider.kind).toBe("openai-compatible");
+    expect(config.provider.apiKeyEnv).toBe("OPENAI_API_KEY");
+    expect(config.provider.apiKey).toBeUndefined();
+  });
+
+  it("supports inline provider api key from config file", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    writeYaml(
+      path.join(homeDir, ".mna", "config.yaml"),
+      `
+provider:
+  kind: openai-compatible
+  model: gpt-4.1-mini
+  base_url: https://api.openai.com/v1
+  api_key: demo-inline-key
+`,
+    );
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+      },
+    });
+
+    expect(config.provider.kind).toBe("openai-compatible");
+    expect(config.provider.apiKey).toBe("demo-inline-key");
+    expect(config.provider.apiKeyEnv).toBeUndefined();
   });
 
   it("throws when memory mode is invalid", () => {
@@ -421,6 +463,28 @@ provider:
     expect(config.provider.fixtureDir).toBe("tests/fixtures/model-record-replay");
     expect(config.provider.fixtureName).toBe("agent-ui");
     expect(config.provider.recordReplayTarget).toBe("ollama");
+  });
+
+  it("does not block startup when record-replay target is missing", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        MNA_PROVIDER_KIND: "record-replay",
+        MNA_PROVIDER_MODEL: "fixture-model",
+        MNA_PROVIDER_BASE_URL: "http://127.0.0.1:11434",
+        MNA_FIXTURE_DIR: "tests/fixtures/model-record-replay",
+        MNA_FIXTURE_NAME: "agent-ui",
+        MNA_PROVIDER_MODE: "record",
+      },
+    });
+
+    expect(config.provider.kind).toBe("record-replay");
+    expect(config.provider.recordReplayTarget).toBeUndefined();
   });
 
   it("normalizes mixed Windows separators and drive-letter casing before deriving workspace id", () => {

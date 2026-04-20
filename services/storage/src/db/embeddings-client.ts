@@ -1,12 +1,21 @@
 import type { StorageConfig } from "../config.js";
+import {
+  hasCompleteStorageEmbeddingConfig,
+  resolveStorageEmbeddingConfig,
+} from "../embedding-config.js";
 
 export interface EmbeddingsClient {
   embedText(text: string, signal?: AbortSignal): Promise<number[]>;
   embedTexts?(texts: string[], signal?: AbortSignal): Promise<number[][]>;
+  isConfigured?(): boolean;
 }
 
 export class HttpEmbeddingsClient implements EmbeddingsClient {
   constructor(private readonly config: StorageConfig) {}
+
+  isConfigured() {
+    return hasCompleteStorageEmbeddingConfig(this.config);
+  }
 
   async embedText(text: string, signal?: AbortSignal): Promise<number[]> {
     const [embedding] = await this.embedTexts([text], signal);
@@ -18,20 +27,21 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
   }
 
   async embedTexts(texts: string[], signal?: AbortSignal): Promise<number[][]> {
-    if (!this.config.embedding_base_url) {
-      throw new Error("embedding base url is not configured");
+    const activeConfig = resolveStorageEmbeddingConfig(this.config);
+    if (!activeConfig.baseUrl || !activeConfig.model) {
+      throw new Error("embedding config is not complete");
     }
 
     const requestInit: RequestInit = {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(this.config.embedding_api_key
-          ? { authorization: `Bearer ${this.config.embedding_api_key}` }
+        ...(activeConfig.apiKey
+          ? { authorization: `Bearer ${activeConfig.apiKey}` }
           : {}),
       },
       body: JSON.stringify({
-        model: this.config.embedding_model,
+        model: activeConfig.model,
         input: texts,
       }),
     };
@@ -40,7 +50,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
       requestInit.signal = signal;
     }
 
-    const response = await fetch(this.buildEmbeddingsUrl(), requestInit);
+    const response = await fetch(this.buildEmbeddingsUrl(activeConfig.baseUrl), requestInit);
 
     if (!response.ok) {
       throw new Error(`embeddings request failed with ${response.status}`);
@@ -57,7 +67,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
     return embeddings.map((embedding) => embedding.map((item) => Number(item)));
   }
 
-  private buildEmbeddingsUrl() {
-    return new URL("./embeddings", `${this.config.embedding_base_url!.replace(/\/+$/, "")}/`);
+  private buildEmbeddingsUrl(baseUrl: string) {
+    return new URL("./embeddings", `${baseUrl.replace(/\/+$/, "")}/`);
   }
 }

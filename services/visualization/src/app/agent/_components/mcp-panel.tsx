@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Cable } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";

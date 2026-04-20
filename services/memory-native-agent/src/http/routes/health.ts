@@ -44,6 +44,10 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/dependency-status", async () => {
     const runtime = await app.runtimeState.memoryClient.dependencyStatus().catch(() => null);
     const providerKey = `${app.runtimeState.provider.id()}:${app.runtimeState.provider.model()}`;
+    const providerStatus = app.runtimeState.provider.status?.() ?? {
+      status: "configured" as const,
+      detail: undefined,
+    };
     return {
       runtime: runtime ?? {
         status: "unavailable",
@@ -52,7 +56,8 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
       provider: {
         id: app.runtimeState.provider.id(),
         model: app.runtimeState.provider.model(),
-        status: "configured",
+        status: providerStatus.status,
+        detail: providerStatus.detail,
       },
       mcp: app.runtimeState.mcpRegistry.listServerStatuses(),
       provider_key: providerKey,

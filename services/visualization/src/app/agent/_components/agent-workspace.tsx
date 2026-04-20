@@ -20,6 +20,7 @@ import { MemoryPanel } from "./memory-panel";
 import { ModeSwitch } from "./mode-switch";
 import { PromptInspector } from "./prompt-inspector";
 import { ProviderSwitch } from "./provider-switch";
+import { RuntimeConfigCard } from "./runtime-config-card";
 import { SessionList } from "./session-list";
 import { ToolConsole } from "./tool-console";
 
@@ -92,6 +93,14 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
         <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem]">
           <div className="space-y-6">
+            <RuntimeConfigCard
+              config={workspace.agentConfig}
+              dependencyStatus={workspace.dependencyStatus}
+              onSave={(payload) => {
+                void workspace.updateRuntimeConfig(payload);
+              }}
+            />
+
             <section className="rounded-3xl border bg-white/88 p-5 shadow-soft">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -187,8 +196,24 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-slate-500">{t("workspace.providerLabel")}</span>
+                    <StatusBadge tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}>
+                      {workspace.dependencyStatus.provider.status}
+                    </StatusBadge>
                     <StatusBadge tone="neutral">{workspace.dependencyStatus.provider_key}</StatusBadge>
                   </div>
+                  {workspace.dependencyStatus.provider.detail ? (
+                    <div className="text-xs leading-5 text-slate-500">{workspace.dependencyStatus.provider.detail}</div>
+                  ) : null}
+                  {"embeddings" in workspace.dependencyStatus.runtime && workspace.dependencyStatus.runtime.embeddings ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-500">{t("workspace.embeddingLabel")}</span>
+                      <StatusBadge
+                        tone={workspace.dependencyStatus.runtime.embeddings.status === "healthy" ? "success" : "warning"}
+                      >
+                        {String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
+                      </StatusBadge>
+                    </div>
+                  ) : null}
                 </div>
               </section>
             ) : (

@@ -16,6 +16,8 @@ import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
 import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js";
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
+import { hasCompleteRuntimeEmbeddingConfig } from "./embedding-config.js";
+import { nowIso } from "./shared/utils.js";
 
 async function main() {
   const config = loadConfig();
@@ -43,6 +45,15 @@ async function main() {
     logger,
     finalizeIdempotencyCache,
   );
+
+  if (!hasCompleteRuntimeEmbeddingConfig(config)) {
+    await repository.updateDependencyStatus({
+      name: "embeddings",
+      status: "unavailable",
+      detail: "embedding config is not complete",
+      last_checked_at: nowIso(),
+    });
+  }
 
   const app = createApp(runtimeService);
   app.addHook("onClose", async () => {

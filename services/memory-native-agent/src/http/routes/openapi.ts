@@ -23,6 +23,14 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Dependency status",
         },
       },
+      "/v1/agent/config": {
+        get: {
+          summary: "Read current agent and embedding config",
+        },
+        post: {
+          summary: "Update current agent and embedding config",
+        },
+      },
       "/v1/agent/metrics": {
         get: {
           summary: "Runtime metrics",

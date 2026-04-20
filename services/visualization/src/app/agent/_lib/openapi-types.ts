@@ -124,14 +124,37 @@ export type MnaDependencyStatusResponse = {
   runtime: Record<string, unknown> & {
     status?: string;
     base_url?: string;
+    embeddings?: {
+      status?: string;
+      detail?: string;
+    };
   };
   provider: {
     id: string;
     model: string;
     status: string;
+    detail?: string;
   };
   mcp: MnaMcpServerStatus[];
   provider_key: string;
+};
+
+export type MnaAgentConfigResponse = {
+  provider: {
+    kind: "demo" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
+    model: string;
+    base_url: string | null;
+    api_key: string | null;
+    api_key_env: string | null;
+    temperature: number | null;
+    organization?: string | null;
+    keep_alive?: string | number | null;
+  };
+  embedding: {
+    base_url: string | null;
+    model: string | null;
+    api_key: string | null;
+  };
 };
 
 export type MnaWsSessionStartedEvent = {

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useAgentI18n } from "../_i18n/provider";
 import type { AgentMemoryMode } from "../_lib/openapi-types";
 

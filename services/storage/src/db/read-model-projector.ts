@@ -61,6 +61,10 @@ export class ReadModelProjector {
       return 0;
     }
 
+    if (this.embeddingsClient.isConfigured && !this.embeddingsClient.isConfigured()) {
+      return 0;
+    }
+
     const entries = await this.repository.listPendingEmbeddings(limit);
     if (entries.length === 0) {
       return 0;
@@ -97,6 +101,13 @@ export class ReadModelProjector {
 
   private async generateEmbedding(summary: string) {
     if (!this.embeddingsClient) {
+      return {
+        embedding: null,
+        degradation_reason: "embedding_unavailable",
+      };
+    }
+
+    if (this.embeddingsClient.isConfigured && !this.embeddingsClient.isConfigured()) {
       return {
         embedding: null,
         degradation_reason: "embedding_unavailable",

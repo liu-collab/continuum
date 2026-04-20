@@ -25,6 +25,7 @@
     "replayGapDescription": "The reconnect flow could not replay every event. Existing content is preserved and you can continue sending messages.",
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
+    "embeddingLabel": "embeddings",
     "loading": "loading"
   },
   "connectionStates": {
@@ -68,6 +69,27 @@
     "modelPlaceholder": "model",
     "apply": "Apply model",
     "refresh": "Refresh status"
+  },
+  "runtimeConfig": {
+    "eyebrow": "Config",
+    "title": "Runtime config",
+    "description": "Fill in embedding and memory-native-agent model settings here. Services start first, and the config takes effect after you save it.",
+    "embeddingTitle": "Embedding config",
+    "embeddingBaseUrl": "EMBEDDING_BASE_URL",
+    "embeddingModel": "EMBEDDING_MODEL",
+    "embeddingApiKey": "EMBEDDING_API_KEY (optional)",
+    "providerTitle": "memory-native-agent model config",
+    "providerStatus": "provider status",
+    "embeddingStatus": "embedding status",
+    "providerModel": "provider model",
+    "providerBaseUrl": "provider base_url",
+    "providerApiKey": "provider api_key (optional)",
+    "providerApiKeyEnv": "provider api_key_env (optional)",
+    "save": "Save config",
+    "errors": {
+      "providerModelRequired": "provider model is required.",
+      "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set."
+    }
   },
   "costBar": {
     "turns": "turns",

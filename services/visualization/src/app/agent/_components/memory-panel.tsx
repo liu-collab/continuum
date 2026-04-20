@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { BrainCircuit } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";

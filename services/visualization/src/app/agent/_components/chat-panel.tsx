@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { LoaderCircle, SendHorizontal, Square, WandSparkles } from "lucide-react";
 import { useState } from "react";
 

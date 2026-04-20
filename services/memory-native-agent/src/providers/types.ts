@@ -41,6 +41,10 @@ export interface IModelProvider {
   id(): string;
   model(): string;
   chat(request: ChatRequest): AsyncIterable<ChatChunk>;
+  status?(): {
+    status: "configured" | "misconfigured";
+    detail?: string;
+  };
 }
 
 export interface ProviderRuntimeSettings {

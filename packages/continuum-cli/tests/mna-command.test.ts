@@ -212,7 +212,8 @@ describe("continuum mna command", () => {
   });
 
   it("fails start when managed process exits before becoming healthy", async () => {
-    pathExistsMock.mockResolvedValue(true);
+    const mnaHome = path.join(tempHome, ".continuum", "managed", "mna");
+    pathExistsMock.mockImplementation(async (targetPath: string) => targetPath.endsWith("mna-server.mjs"));
     fetchJsonMock.mockResolvedValue({
       ok: false,
       error: "connect ECONNREFUSED"
@@ -227,12 +228,13 @@ describe("continuum mna command", () => {
       return child;
     });
 
-    await expect(startManagedMna({}, import.meta.url)).rejects.toThrow(/启动失败|未在预期时间内就绪/);
+    await expect(startManagedMna({ "mna-home": mnaHome }, import.meta.url)).rejects.toThrow(/启动失败|未在预期时间内就绪/);
     expect(managedStateStore.state.services).toEqual([]);
   }, 15_000);
 
   it("fails start when the target port is already occupied by another process", async () => {
-    pathExistsMock.mockResolvedValue(true);
+    const mnaHome = path.join(tempHome, ".continuum", "managed", "mna");
+    pathExistsMock.mockImplementation(async (targetPath: string) => targetPath.endsWith("mna-server.mjs"));
     fetchJsonMock.mockResolvedValue({
       ok: false,
       error: "connect ECONNREFUSED",
@@ -260,7 +262,7 @@ describe("continuum mna command", () => {
     });
 
     try {
-      await expect(startManagedMna({ "mna-port": String(occupiedPort) }, import.meta.url)).rejects.toThrow(
+      await expect(startManagedMna({ "mna-port": String(occupiedPort), "mna-home": mnaHome }, import.meta.url)).rejects.toThrow(
         /未在预期时间内就绪|启动失败/,
       );
       expect(managedStateStore.state.services).toEqual([]);

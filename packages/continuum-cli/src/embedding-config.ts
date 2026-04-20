@@ -6,6 +6,12 @@ export type ThirdPartyEmbeddingConfig = {
   apiKey?: string;
 };
 
+export type PartialThirdPartyEmbeddingConfig = {
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+};
+
 function readNonEmpty(value: string | boolean | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -26,9 +32,10 @@ export function resolveThirdPartyEmbeddingConfig(
   options: Record<string, string | boolean>,
   env: NodeJS.ProcessEnv = process.env,
 ): ThirdPartyEmbeddingConfig {
-  const baseUrl = readNonEmpty(options["embedding-base-url"]) ?? readNonEmpty(env.EMBEDDING_BASE_URL);
-  const model = readNonEmpty(options["embedding-model"]) ?? readNonEmpty(env.EMBEDDING_MODEL);
-  const apiKey = readNonEmpty(options["embedding-api-key"]) ?? readNonEmpty(env.EMBEDDING_API_KEY);
+  const partial = resolveOptionalThirdPartyEmbeddingConfig(options, env);
+  const baseUrl = partial.baseUrl;
+  const model = partial.model;
+  const apiKey = partial.apiKey;
 
   if (!baseUrl || !model) {
     throw new Error(
@@ -39,6 +46,21 @@ export function resolveThirdPartyEmbeddingConfig(
   return {
     baseUrl: ensureUrl(baseUrl, "EMBEDDING_BASE_URL"),
     model,
+    ...(apiKey ? { apiKey } : {}),
+  };
+}
+
+export function resolveOptionalThirdPartyEmbeddingConfig(
+  options: Record<string, string | boolean>,
+  env: NodeJS.ProcessEnv = process.env,
+): PartialThirdPartyEmbeddingConfig {
+  const baseUrl = readNonEmpty(options["embedding-base-url"]) ?? readNonEmpty(env.EMBEDDING_BASE_URL);
+  const model = readNonEmpty(options["embedding-model"]) ?? readNonEmpty(env.EMBEDDING_MODEL);
+  const apiKey = readNonEmpty(options["embedding-api-key"]) ?? readNonEmpty(env.EMBEDDING_API_KEY);
+
+  return {
+    ...(baseUrl ? { baseUrl: ensureUrl(baseUrl, "EMBEDDING_BASE_URL") } : {}),
+    ...(model ? { model } : {}),
     ...(apiKey ? { apiKey } : {}),
   };
 }

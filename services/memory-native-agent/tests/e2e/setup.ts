@@ -929,6 +929,7 @@ function createAgentConfig(input: {
       servers: input.mcpServers ?? [],
     },
     tools: {
+      maxOutputChars: 8_192,
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -937,6 +938,15 @@ function createAgentConfig(input: {
     },
     cli: {
       systemPrompt: null,
+    },
+    context: {
+      maxTokens: null,
+      reserveTokens: 4_096,
+      compactionStrategy: "truncate",
+    },
+    logging: {
+      level: "info",
+      format: "json",
     },
     streaming: {
       flushChars: 4,

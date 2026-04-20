@@ -50,14 +50,12 @@ async function main() {
   const config = loadConfig();
   const logger = createLogger(config.log_level);
   const database = new StorageDatabase(config, logger);
-  const embeddingsClient = config.embedding_base_url
-    ? new HttpEmbeddingsClient(config)
-    : undefined;
+  const embeddingsClient = new HttpEmbeddingsClient(config);
   const service = createStorageService({
     logger,
     config,
     database,
-    ...(embeddingsClient ? { embeddingsClient } : {}),
+    embeddingsClient,
   });
 
   await runWorker({

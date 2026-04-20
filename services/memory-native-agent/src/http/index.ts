@@ -2,6 +2,7 @@ import type { RuntimeFastifyInstance } from "./types.js";
 
 import { registerOpenApiRoutes } from "./routes/openapi.js";
 import { verifyToken } from "./middleware/auth.js";
+import { registerConfigRoutes } from "./routes/config.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
@@ -46,6 +47,7 @@ export function registerHttpRoutes(app: RuntimeFastifyInstance) {
   app.addHook("preHandler", verifyToken);
   registerHealthRoutes(app);
   registerOpenApiRoutes(app);
+  registerConfigRoutes(app);
   registerSessionRoutes(app);
   registerMcpRoutes(app);
   registerSessionWebsocket(app);

@@ -10,6 +10,8 @@ export const DEFAULT_RUNTIME_REQUEST_TIMEOUT_MS = 800;
 export const DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS = 1500;
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_DEMO_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
+export const DEFAULT_TOOL_MAX_OUTPUT_CHARS = 8_192;
+export const DEFAULT_CONTEXT_RESERVE_TOKENS = 4_096;
 
 export const DEFAULT_SHELL_DENY_PATTERNS = [
   "rm -rf /",
@@ -49,6 +51,7 @@ export const DEFAULT_RAW_CONFIG = {
     }>,
   },
   tools: {
+    max_output_chars: DEFAULT_TOOL_MAX_OUTPUT_CHARS,
     shell_exec: {
       enabled: true,
       timeout_ms: 30_000,
@@ -57,6 +60,15 @@ export const DEFAULT_RAW_CONFIG = {
   },
   cli: {
     system_prompt_file: null as string | null,
+  },
+  context: {
+    max_tokens: null as number | null,
+    reserve_tokens: DEFAULT_CONTEXT_RESERVE_TOKENS,
+    compaction_strategy: "truncate" as const,
+  },
+  logging: {
+    level: "info" as const,
+    format: "json" as const,
   },
   streaming: {
     flush_chars: DEFAULT_STREAM_FLUSH_CHARS,

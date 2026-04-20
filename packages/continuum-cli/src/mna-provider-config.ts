@@ -3,18 +3,21 @@ export type ManagedMnaProviderConfig =
       kind: "demo";
       model: string;
       baseUrl?: string;
+      apiKey?: undefined;
       apiKeyEnv?: undefined;
     }
   | {
       kind: "openai-compatible" | "anthropic";
       model: string;
       baseUrl: string;
-      apiKeyEnv: string;
+      apiKey?: string;
+      apiKeyEnv?: string;
     }
   | {
       kind: "ollama";
       model: string;
       baseUrl: string;
+      apiKey?: undefined;
       apiKeyEnv?: undefined;
     };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { TerminalSquare } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";

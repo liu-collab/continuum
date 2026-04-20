@@ -11,6 +11,10 @@ import {
   writeManagedState
 } from "./managed-state.js";
 import {
+  readManagedMnaProviderConfig,
+  writeManagedMnaProviderConfig,
+} from "./managed-config.js";
+import {
   DEFAULT_RUNTIME_URL,
   DEFAULT_TIMEOUT_MS,
   fetchJson,
@@ -242,7 +246,11 @@ export async function startManagedMna(
   const port = parseMnaPort(options);
   const homeDir = parseMnaHome(options);
   const runtimeUrl = typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
-  const providerConfig = resolveManagedMnaProviderConfig(options, process.env);
+  const persistedProviderConfig = await readManagedMnaProviderConfig(homeDir);
+  const providerConfig =
+    Object.keys(options).some((key) => key.startsWith("provider-"))
+      ? resolveManagedMnaProviderConfig(options, process.env)
+      : persistedProviderConfig ?? resolveManagedMnaProviderConfig(options, process.env);
   const url = `http://${host}:${port}`;
   const logPath = path.join(continuumLogsDir(), "mna.log");
   const tokenPath = path.join(homeDir, "token.txt");
@@ -250,6 +258,7 @@ export async function startManagedMna(
 
   await mkdir(continuumLogsDir(), { recursive: true });
   await mkdir(homeDir, { recursive: true });
+  await writeManagedMnaProviderConfig(homeDir, providerConfig);
   const stdoutHandle = await open(logPath, "a");
   const stderrHandle = await open(logPath, "a");
 
@@ -268,6 +277,7 @@ export async function startManagedMna(
       MNA_PROVIDER_KIND: providerConfig.kind,
       MNA_PROVIDER_MODEL: providerConfig.model,
       ...(providerConfig.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),
+      ...(providerConfig.apiKey ? { MNA_PROVIDER_API_KEY: providerConfig.apiKey } : {}),
       ...(providerConfig.apiKeyEnv ? { MNA_PROVIDER_API_KEY_ENV: providerConfig.apiKeyEnv } : {}),
     }
   });

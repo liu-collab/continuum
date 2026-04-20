@@ -122,4 +122,68 @@ describe("MnaClient", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("loads and updates runtime config through the config endpoint", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          provider: {
+            kind: "demo",
+            model: "continuum-demo",
+            base_url: null,
+            api_key: null,
+            api_key_env: null,
+            temperature: null,
+          },
+          embedding: {
+            base_url: null,
+            model: null,
+            api_key: null,
+          },
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const config = await client.getConfig();
+    await client.updateConfig({
+      provider: {
+        kind: "openai-compatible",
+        model: "deepseek-chat",
+      },
+      embedding: {
+        base_url: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+      },
+    });
+
+    expect(config.provider.kind).toBe("demo");
+    const updateRequest = fetchMock.mock.calls[2];
+    expect(updateRequest?.[0]).toBe("http://127.0.0.1:4193/v1/agent/config");
+    expect(JSON.parse(String((updateRequest?.[1] as RequestInit).body))).toEqual({
+      provider: {
+        kind: "openai-compatible",
+        model: "deepseek-chat",
+      },
+      embedding: {
+        base_url: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+      },
+    });
+  });
 });

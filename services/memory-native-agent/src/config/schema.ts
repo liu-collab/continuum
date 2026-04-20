@@ -7,6 +7,9 @@ export const providerKindSchema = z.enum(["openai-compatible", "anthropic", "oll
 const nonEmptyStringSchema = z.string().trim().min(1);
 const timeoutMsSchema = z.coerce.number().int().min(1);
 const probabilitySchema = z.coerce.number().min(0).max(2);
+const logLevelSchema = z.enum(["silent", "error", "warn", "info", "debug", "trace"]);
+const logFormatSchema = z.enum(["json", "pretty"]);
+const compactionStrategySchema = z.enum(["truncate", "summarize"]);
 
 const partialRuntimeSchema = z
   .object({
@@ -21,6 +24,7 @@ const partialProviderSchema = z
     kind: providerKindSchema.optional(),
     model: nonEmptyStringSchema.optional(),
     base_url: z.string().trim().url().optional(),
+    api_key: nonEmptyStringSchema.optional(),
     api_key_env: nonEmptyStringSchema.optional(),
     temperature: probabilitySchema.optional(),
     organization: nonEmptyStringSchema.optional(),
@@ -69,6 +73,7 @@ const partialMemorySchema = z
 
 const partialToolsSchema = z
   .object({
+    max_output_chars: z.coerce.number().int().min(256).max(256 * 1024).optional(),
     shell_exec: z
       .object({
         enabled: z.boolean().optional(),
@@ -83,6 +88,21 @@ const partialToolsSchema = z
 const partialCliSchema = z
   .object({
     system_prompt_file: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict();
+
+const partialContextSchema = z
+  .object({
+    max_tokens: z.coerce.number().int().min(1).nullable().optional(),
+    reserve_tokens: z.coerce.number().int().min(128).max(128 * 1024).optional(),
+    compaction_strategy: compactionStrategySchema.optional(),
+  })
+  .strict();
+
+const partialLoggingSchema = z
+  .object({
+    level: logLevelSchema.optional(),
+    format: logFormatSchema.optional(),
   })
   .strict();
 
@@ -101,6 +121,8 @@ export const configFileSchema = z
     mcp: z.object({ servers: z.array(partialMcpServerSchema).optional() }).strict().optional(),
     tools: partialToolsSchema.optional(),
     cli: partialCliSchema.optional(),
+    context: partialContextSchema.optional(),
+    logging: partialLoggingSchema.optional(),
     streaming: partialStreamingSchema.optional(),
     locale: localeSchema.optional(),
   })
@@ -119,6 +141,7 @@ const mergedProviderSchema = z
     kind: providerKindSchema,
     model: nonEmptyStringSchema,
     base_url: z.string().trim().url(),
+    api_key: nonEmptyStringSchema.optional(),
     api_key_env: nonEmptyStringSchema.optional(),
     temperature: probabilitySchema,
     organization: nonEmptyStringSchema.optional(),
@@ -127,16 +150,7 @@ const mergedProviderSchema = z
     fixture_name: nonEmptyStringSchema.optional(),
     record_replay_target: z.enum(["openai-compatible", "anthropic", "ollama", "demo"]).optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if ((value.kind === "openai-compatible" || value.kind === "anthropic") && !value.api_key_env) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["api_key_env"],
-        message: `${value.kind} provider requires api_key_env`,
-      });
-    }
-  });
+  .strict();
 
 const mergedMemorySchema = z
   .object({
@@ -153,6 +167,7 @@ const mergedMcpSchema = z
 
 const mergedToolsSchema = z
   .object({
+    max_output_chars: z.coerce.number().int().min(256).max(256 * 1024),
     shell_exec: z
       .object({
         enabled: z.boolean(),
@@ -166,6 +181,21 @@ const mergedToolsSchema = z
 const mergedCliSchema = z
   .object({
     system_prompt_file: z.string().trim().min(1).nullable(),
+  })
+  .strict();
+
+const mergedContextSchema = z
+  .object({
+    max_tokens: z.coerce.number().int().min(1).nullable(),
+    reserve_tokens: z.coerce.number().int().min(128).max(128 * 1024),
+    compaction_strategy: compactionStrategySchema,
+  })
+  .strict();
+
+const mergedLoggingSchema = z
+  .object({
+    level: logLevelSchema,
+    format: logFormatSchema,
   })
   .strict();
 
@@ -184,6 +214,8 @@ export const mergedConfigSchema = z
     mcp: mergedMcpSchema,
     tools: mergedToolsSchema,
     cli: mergedCliSchema,
+    context: mergedContextSchema,
+    logging: mergedLoggingSchema,
     streaming: mergedStreamingSchema,
     locale: localeSchema.optional(),
   })

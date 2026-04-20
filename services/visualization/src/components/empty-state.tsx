@@ -1,3 +1,5 @@
+import React from "react";
+
 type EmptyStateProps = {
   title: string;
   description: string;

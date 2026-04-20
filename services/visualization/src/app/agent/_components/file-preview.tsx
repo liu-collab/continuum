@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import dynamic from "next/dynamic";
 
 import { useAgentI18n } from "../_i18n/provider";

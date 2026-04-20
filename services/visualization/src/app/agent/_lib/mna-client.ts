@@ -10,6 +10,7 @@ import type {
   MnaDependencyStatusResponse,
   MnaFileResponse,
   MnaFileTreeResponse,
+  MnaAgentConfigResponse,
   MnaMcpServersResponse,
   MnaMetricsResponse,
   MnaPromptInspectorResponse,
@@ -149,6 +150,33 @@ export class MnaClient {
 
   async getDependencyStatus() {
     return this.requestJson<MnaDependencyStatusResponse>("/v1/agent/dependency-status");
+  }
+
+  async getConfig() {
+    return this.requestJson<MnaAgentConfigResponse>("/v1/agent/config");
+  }
+
+  async updateConfig(payload: {
+    provider?: {
+      kind: "demo" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
+      model: string;
+      base_url?: string;
+      api_key?: string;
+      api_key_env?: string;
+      temperature?: number;
+      organization?: string;
+      keep_alive?: string | number;
+    };
+    embedding?: {
+      base_url?: string;
+      model?: string;
+      api_key?: string;
+    };
+  }) {
+    return this.requestJson<{ ok: true }>("/v1/agent/config", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 
   async getMcpServers() {

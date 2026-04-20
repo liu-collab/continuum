@@ -28,9 +28,14 @@ import {
 } from "./managed-state.js";
 import {
   buildEmbeddingsEndpoint,
-  resolveThirdPartyEmbeddingConfig,
+  resolveOptionalThirdPartyEmbeddingConfig,
 } from "./embedding-config.js";
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
+import {
+  continuumManagedEmbeddingConfigPath,
+  readManagedEmbeddingConfig,
+  writeManagedEmbeddingConfig,
+} from "./managed-config.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -207,14 +212,12 @@ async function buildStackImage(stageDir: string) {
 async function startStackContainer(
   port: number,
   bindHost: string,
-  embeddingConfig: {
-    baseUrl: string;
-    model: string;
-    apiKey?: string;
-  },
+  embeddingConfigPath: string,
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
-  const managedMnaDir = path.join(continuumManagedDir(), "mna");
+  const managedDir = continuumManagedDir();
+  const managedMnaDir = path.join(managedDir, "mna");
+  await mkdir(managedDir, { recursive: true });
   await mkdir(managedMnaDir, { recursive: true });
 
   // Container-internal loopback: all services run in same container
@@ -232,7 +235,7 @@ async function startStackContainer(
     "-p",
     `${bindHost}:3003:3003`,
     "-v",
-    `${managedMnaDir}:/opt/continuum/mna-host:ro`,
+    `${managedDir}:/opt/continuum/managed`,
     "-e",
     `POSTGRES_DB=${DEFAULT_MANAGED_DATABASE_NAME}`,
     "-e",
@@ -254,10 +257,6 @@ async function startStackContainer(
     "-e",
     `STORAGE_WRITEBACK_URL=${DEFAULT_STORAGE_URL}`,
     "-e",
-    `EMBEDDING_BASE_URL=${embeddingConfig.baseUrl}`,
-    "-e",
-    `EMBEDDING_MODEL=${embeddingConfig.model}`,
-    "-e",
     `STORAGE_READ_MODEL_DSN=${internalDatabaseUrl}`,
     "-e",
     "STORAGE_READ_MODEL_SCHEMA=storage_shared_v1",
@@ -270,12 +269,10 @@ async function startStackContainer(
     "-e",
     `NEXT_PUBLIC_MNA_BASE_URL=http://host.docker.internal:${DEFAULT_MNA_PORT}`,
     "-e",
-    "MNA_TOKEN_PATH=/opt/continuum/mna-host/token.txt",
+    "MNA_TOKEN_PATH=/opt/continuum/managed/mna/token.txt",
+    "-e",
+    `CONTINUUM_EMBEDDING_CONFIG_PATH=${embeddingConfigPath}`,
   ];
-
-  if (embeddingConfig.apiKey) {
-    dockerArgs.push("-e", `EMBEDDING_API_KEY=${embeddingConfig.apiKey}`);
-  }
 
   dockerArgs.push(DEFAULT_MANAGED_STACK_IMAGE);
 
@@ -294,11 +291,19 @@ export async function runStartCommand(
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
   const open = options.open === true || options.open === "true";
-  const embeddingConfig = resolveThirdPartyEmbeddingConfig(options);
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
-  const embeddingsUrl = buildEmbeddingsEndpoint(embeddingConfig.baseUrl);
+  const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
+  const existingEmbeddingConfig = await readManagedEmbeddingConfig();
+  const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options);
+  const mergedEmbeddingConfig = {
+    version: 1 as const,
+    ...(existingEmbeddingConfig ?? {}),
+    ...requestedEmbeddingConfig,
+  };
+
+  await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();
@@ -314,7 +319,7 @@ export async function runStartCommand(
     () => undefined,
   );
 
-  await startStackContainer(postgresPort, bindHost, embeddingConfig);
+  await startStackContainer(postgresPort, bindHost, embeddingConfigPath);
 
   await waitForHealthy(`${storageUrl}/health`, 120_000);
   await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
@@ -346,7 +351,13 @@ export async function runStartCommand(
   process.stdout.write(`runtime: ${runtimeUrl}\n`);
   process.stdout.write(`visualization: ${uiUrl}\n`);
   process.stdout.write(`memory-native-agent: ${mna.url}\n`);
-  process.stdout.write(`third-party embeddings: ${embeddingsUrl}\n`);
+  if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
+    process.stdout.write(
+      `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
+    );
+  } else {
+    process.stdout.write("third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。\n");
+  }
 
   if (open) {
     await openBrowser(uiUrl);

@@ -1,4 +1,8 @@
 import type { AppConfig } from "../config.js";
+import {
+  hasCompleteRuntimeEmbeddingConfig,
+  resolveRuntimeEmbeddingConfig,
+} from "../embedding-config.js";
 
 export interface EmbeddingsClient {
   embedText(text: string, signal?: AbortSignal): Promise<number[]>;
@@ -7,15 +11,24 @@ export interface EmbeddingsClient {
 export class HttpEmbeddingsClient implements EmbeddingsClient {
   constructor(private readonly config: AppConfig) {}
 
+  isConfigured() {
+    return hasCompleteRuntimeEmbeddingConfig(this.config);
+  }
+
   async embedText(text: string, signal?: AbortSignal): Promise<number[]> {
-    const response = await fetch(this.buildEmbeddingsUrl(), {
+    const activeConfig = resolveRuntimeEmbeddingConfig(this.config);
+    if (!activeConfig.baseUrl || !activeConfig.model) {
+      throw new Error("embedding config is not complete");
+    }
+
+    const response = await fetch(this.buildEmbeddingsUrl(activeConfig.baseUrl), {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(this.config.EMBEDDING_API_KEY ? { authorization: `Bearer ${this.config.EMBEDDING_API_KEY}` } : {}),
+        ...(activeConfig.apiKey ? { authorization: `Bearer ${activeConfig.apiKey}` } : {}),
       },
       body: JSON.stringify({
-        model: this.config.EMBEDDING_MODEL,
+        model: activeConfig.model,
         input: text,
       }),
       signal,
@@ -35,7 +48,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
     return embedding;
   }
 
-  private buildEmbeddingsUrl() {
-    return new URL("./embeddings", `${this.config.EMBEDDING_BASE_URL.replace(/\/+$/, "")}/`);
+  private buildEmbeddingsUrl(baseUrl: string) {
+    return new URL("./embeddings", `${baseUrl.replace(/\/+$/, "")}/`);
   }
 }

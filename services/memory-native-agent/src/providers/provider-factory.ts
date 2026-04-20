@@ -1,6 +1,7 @@
 import type { ProviderConfig } from "../config/index.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { DemoProvider } from "./demo.js";
+import { MisconfiguredProvider } from "./misconfigured.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
 import { RecordReplayProvider } from "./record-replay.js";
@@ -8,12 +9,22 @@ import { ProviderAuthError, type IModelProvider } from "./types.js";
 
 export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = process.env): IModelProvider {
   if (config.kind === "record-replay") {
+    const mode = resolveRecordReplayMode(env);
+    const targetProvider = createRecordReplayTargetProvider(config, env);
+    if ((mode === "live" || mode === "record") && !targetProvider) {
+      return new MisconfiguredProvider({
+        kind: config.kind,
+        model: config.model,
+        detail: "provider record-replay 缺少目标 provider 配置",
+      });
+    }
+
     return new RecordReplayProvider({
       fixtureDir: config.fixtureDir,
       fixtureName: config.fixtureName,
-      mode: resolveRecordReplayMode(env),
+      mode,
       modelId: config.model,
-      targetProvider: createRecordReplayTargetProvider(config, env),
+      targetProvider,
     });
   }
 
@@ -24,7 +35,14 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
   }
 
   if (config.kind === "openai-compatible") {
-    const apiKey = resolveApiKey(config.apiKeyEnv, env, config.kind);
+    const apiKey = resolveApiKey(config, env, config.kind);
+    if (!apiKey) {
+      return new MisconfiguredProvider({
+        kind: config.kind,
+        model: config.model,
+        detail: `provider ${config.kind} 缺少 API key 配置`,
+      });
+    }
     return new OpenAICompatibleProvider({
       baseUrl: config.baseUrl,
       model: config.model,
@@ -34,7 +52,14 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
   }
 
   if (config.kind === "anthropic") {
-    const apiKey = resolveApiKey(config.apiKeyEnv, env, config.kind);
+    const apiKey = resolveApiKey(config, env, config.kind);
+    if (!apiKey) {
+      return new MisconfiguredProvider({
+        kind: config.kind,
+        model: config.model,
+        detail: `provider ${config.kind} 缺少 API key 配置`,
+      });
+    }
     return new AnthropicProvider({
       baseUrl: config.baseUrl,
       model: config.model,
@@ -76,17 +101,21 @@ function resolveRecordReplayMode(env: NodeJS.ProcessEnv): "live" | "record" | "r
 }
 
 function resolveApiKey(
-  apiKeyEnv: string | undefined,
+  config: ProviderConfig,
   env: NodeJS.ProcessEnv,
   providerKind: ProviderConfig["kind"],
-): string {
-  if (!apiKeyEnv) {
-    throw new ProviderAuthError(`Missing api_key_env for provider kind "${providerKind}".`);
+): string | null {
+  if (config.apiKey && config.apiKey.trim().length > 0) {
+    return config.apiKey;
   }
 
-  const apiKey = env[apiKeyEnv];
+  if (!config.apiKeyEnv) {
+    return null;
+  }
+
+  const apiKey = env[config.apiKeyEnv];
   if (!apiKey || apiKey.trim().length === 0) {
-    throw new ProviderAuthError(`Environment variable ${apiKeyEnv} is missing for provider kind "${providerKind}".`);
+    return null;
   }
 
   return apiKey;

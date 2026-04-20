@@ -128,6 +128,7 @@ function createConfig(home: string, workspaceRoot: string): AgentConfig {
       servers: [],
     },
     tools: {
+      maxOutputChars: 8_192,
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -136,6 +137,15 @@ function createConfig(home: string, workspaceRoot: string): AgentConfig {
     },
     cli: {
       systemPrompt: null,
+    },
+    context: {
+      maxTokens: null,
+      reserveTokens: 4_096,
+      compactionStrategy: "truncate",
+    },
+    logging: {
+      level: "info",
+      format: "json",
     },
     streaming: {
       flushChars: 32,

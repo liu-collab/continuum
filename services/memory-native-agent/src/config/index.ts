@@ -28,6 +28,7 @@ export interface ProviderConfig {
   kind: ProviderKind;
   model: string;
   baseUrl: string;
+  apiKey?: string;
   apiKeyEnv?: string;
   temperature: number;
   organization?: string;
@@ -64,6 +65,7 @@ export interface AgentConfig {
     servers: McpServerConfig[];
   };
   tools: {
+    maxOutputChars: number;
     shellExec: {
       enabled: boolean;
       timeoutMs: number;
@@ -72,6 +74,15 @@ export interface AgentConfig {
   };
   cli: {
     systemPrompt: string | null;
+  };
+  context: {
+    maxTokens: number | null;
+    reserveTokens: number;
+    compactionStrategy: "truncate" | "summarize";
+  };
+  logging: {
+    level: "silent" | "error" | "warn" | "info" | "debug" | "trace";
+    format: "json" | "pretty";
   };
   streaming: {
     flushChars: number;
@@ -208,29 +219,12 @@ function resolveSystemPrompt(options: {
 
 function validateProviderEnvironment(provider: {
   kind: ProviderKind;
-  api_key_env?: string;
   record_replay_target?: Exclude<ProviderKind, "record-replay">;
 }, env: NodeJS.ProcessEnv) {
   if (provider.kind === "record-replay") {
-    const mode = env.MNA_PROVIDER_MODE?.trim();
-    const target = env.MNA_REC_TARGET?.trim() || provider.record_replay_target;
-    if ((mode === "record" || mode === "live") && !target) {
-      throw new Error("record-replay provider requires MNA_REC_TARGET or provider.record_replay_target in live/record mode");
-    }
+    // record-replay missing target should not block startup.
+    // provider-factory will surface it as misconfigured at runtime when needed.
     return;
-  }
-
-  if (provider.kind === "ollama" || provider.kind === "demo") {
-    return;
-  }
-
-  if (!provider.api_key_env) {
-    throw new Error(`provider.api_key_env is required for provider kind "${provider.kind}"`);
-  }
-
-  const actualValue = env[provider.api_key_env];
-  if (!actualValue || actualValue.trim().length === 0) {
-    throw new Error(`Environment variable ${provider.api_key_env} is required for provider kind "${provider.kind}"`);
   }
 }
 
@@ -296,6 +290,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     env.MNA_PROVIDER_KIND
     || env.MNA_PROVIDER_MODEL
     || env.MNA_PROVIDER_BASE_URL
+    || env.MNA_PROVIDER_API_KEY
     || env.MNA_PROVIDER_API_KEY_ENV
     || env.MNA_FIXTURE_DIR
     || env.MNA_FIXTURE_NAME
@@ -308,6 +303,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         kind: (env.MNA_PROVIDER_KIND as ProviderKind | undefined) ?? parsed.data.provider.kind,
         model: env.MNA_PROVIDER_MODEL?.trim() || parsed.data.provider.model,
         base_url: env.MNA_PROVIDER_BASE_URL?.trim() || parsed.data.provider.base_url,
+        api_key: env.MNA_PROVIDER_API_KEY?.trim() || parsed.data.provider.api_key,
         api_key_env: env.MNA_PROVIDER_API_KEY_ENV?.trim() || parsed.data.provider.api_key_env,
         fixture_dir: env.MNA_FIXTURE_DIR?.trim() || parsed.data.provider.fixture_dir,
         fixture_name: env.MNA_FIXTURE_NAME?.trim() || parsed.data.provider.fixture_name,
@@ -338,6 +334,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       kind: effectiveConfig.provider.kind,
       model: effectiveConfig.provider.model,
       baseUrl: effectiveConfig.provider.base_url,
+      apiKey: effectiveConfig.provider.api_key,
       apiKeyEnv: effectiveConfig.provider.api_key_env,
       temperature: effectiveConfig.provider.temperature,
       organization: effectiveConfig.provider.organization,
@@ -364,6 +361,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       })),
     },
     tools: {
+      maxOutputChars: effectiveConfig.tools.max_output_chars,
       shellExec: {
         enabled: effectiveConfig.tools.shell_exec.enabled,
         timeoutMs: effectiveConfig.tools.shell_exec.timeout_ms,
@@ -375,6 +373,15 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         filePath: effectiveConfig.cli.system_prompt_file,
         sourceConfigPath: systemPromptSourcePath,
       }),
+    },
+    context: {
+      maxTokens: effectiveConfig.context.max_tokens,
+      reserveTokens: effectiveConfig.context.reserve_tokens,
+      compactionStrategy: effectiveConfig.context.compaction_strategy,
+    },
+    logging: {
+      level: effectiveConfig.logging.level,
+      format: effectiveConfig.logging.format,
     },
     streaming: {
       flushChars: effectiveConfig.streaming.flush_chars,

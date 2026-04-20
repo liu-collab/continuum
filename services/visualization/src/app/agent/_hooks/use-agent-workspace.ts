@@ -26,6 +26,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof client.getMetrics>> | null>(null);
   const [dependencyStatus, setDependencyStatus] = useState<Awaited<ReturnType<typeof client.getDependencyStatus>> | null>(null);
+  const [agentConfig, setAgentConfig] = useState<Awaited<ReturnType<typeof client.getConfig>> | null>(null);
   const [mcpState, setMcpState] = useState<Awaited<ReturnType<typeof client.getMcpServers>> | null>(null);
   const [promptInspector, setPromptInspector] = useState<MnaPromptInspectorResponse | null>(null);
   const [promptInspectorOpen, setPromptInspectorOpen] = useState(false);
@@ -127,6 +128,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     setDependencyStatus(await client.getDependencyStatus());
   }
 
+  async function refreshAgentConfig() {
+    setAgentConfig(await client.getConfig());
+  }
+
   async function refreshMcpState() {
     setMcpState(await client.getMcpServers());
   }
@@ -198,7 +203,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
 
     await bindSessionStream(sessionId, detail.latest_event_id);
-    await Promise.allSettled([refreshFileTree("."), refreshMetrics(), refreshDependencyStatus(), refreshMcpState()]);
+    await Promise.allSettled([refreshFileTree("."), refreshMetrics(), refreshDependencyStatus(), refreshAgentConfig(), refreshMcpState()]);
   }
 
   async function createNewSession() {
@@ -309,6 +314,27 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     await refreshDependencyStatus();
   }
 
+  async function updateRuntimeConfig(payload: {
+    provider?: {
+      kind: "demo" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
+      model: string;
+      base_url?: string;
+      api_key?: string;
+      api_key_env?: string;
+      temperature?: number;
+      organization?: string;
+      keep_alive?: string | number;
+    };
+    embedding?: {
+      base_url?: string;
+      model?: string;
+      api_key?: string;
+    };
+  }) {
+    await client.updateConfig(payload);
+    await Promise.all([refreshAgentConfig(), refreshDependencyStatus()]);
+  }
+
   async function openPromptInspector(turnId: string) {
     setPromptInspectorOpen(true);
     setPromptInspector(await client.getPromptInspector(turnId));
@@ -331,6 +357,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     selectedFile,
     metrics,
     dependencyStatus,
+    agentConfig,
     mcpState,
     promptInspector,
     promptInspectorOpen,
@@ -344,8 +371,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     renameSession,
     deleteSession,
     updateProvider,
+    updateRuntimeConfig,
     refreshMetrics,
     refreshDependencyStatus,
+    refreshAgentConfig,
     refreshMcpState,
     refreshFileTree,
     openFile,

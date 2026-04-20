@@ -106,4 +106,106 @@ describe("AgentWorkspace bootstrap states", () => {
       "token 无法使用，请检查 token 文件或重新启动 mna。"
     );
   });
+
+  it("renders runtime config card and dependency status after bootstrap succeeds", () => {
+    mockedUseAgentWorkspace.mockReturnValue({
+      state: {
+        bootstrapStatus: "ok",
+        bootstrapReason: null,
+        sessionId: "session-1",
+        session: {
+          id: "session-1",
+          memory_mode: "workspace_plus_global",
+        },
+        sessionList: [],
+        connection: "open",
+        degraded: false,
+        turns: [],
+        pendingConfirm: null,
+        locale: "zh-CN",
+        activeTask: null,
+        recentTasks: [],
+        replayGapDetected: false,
+        sessionError: null,
+        sessionErrorCode: null
+      },
+      activeTurn: null,
+      fileTree: {
+        path: ".",
+        entries: []
+      },
+      selectedFile: null,
+      metrics: null,
+      dependencyStatus: {
+        runtime: {
+          status: "unavailable",
+          embeddings: {
+            status: "not_configured",
+            detail: "embedding config is not complete"
+          }
+        },
+        provider: {
+          id: "openai-compatible",
+          model: "deepseek-chat",
+          status: "misconfigured",
+          detail: "provider openai-compatible 缺少 API key 配置"
+        },
+        mcp: [],
+        provider_key: "openai-compatible:deepseek-chat"
+      },
+      agentConfig: {
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key: null,
+          api_key_env: null,
+          temperature: 0.2,
+          organization: null,
+          keep_alive: null
+        },
+        embedding: {
+          base_url: null,
+          model: null,
+          api_key: null
+        }
+      },
+      mcpState: {
+        servers: [],
+        tools: []
+      },
+      promptInspector: null,
+      promptInspectorOpen: false,
+      setPromptInspectorOpen: vi.fn(),
+      createNewSession: vi.fn(),
+      openSession: vi.fn(),
+      sendInput: vi.fn(),
+      abortCurrentTurn: vi.fn(),
+      confirmTool: vi.fn(),
+      updateMemoryMode: vi.fn(),
+      renameSession: vi.fn(),
+      deleteSession: vi.fn(),
+      updateProvider: vi.fn(),
+      updateRuntimeConfig: vi.fn(),
+      refreshMetrics: vi.fn(),
+      refreshDependencyStatus: vi.fn(),
+      refreshAgentConfig: vi.fn(),
+      refreshMcpState: vi.fn(),
+      refreshFileTree: vi.fn(),
+      openFile: vi.fn(),
+      openPromptInspector: vi.fn(),
+      restartMcpServer: vi.fn(),
+      disableMcpServer: vi.fn()
+    } as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
+    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
+  });
 });

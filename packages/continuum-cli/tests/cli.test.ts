@@ -13,6 +13,7 @@ vi.mock("../src/mna-command.js", async (importOriginal) => {
 import { parseArgs } from "../src/args.js";
 import {
   buildEmbeddingsEndpoint,
+  resolveOptionalThirdPartyEmbeddingConfig,
   resolveThirdPartyEmbeddingConfig,
 } from "../src/embedding-config.js";
 import { renderHelp } from "../src/help.js";
@@ -156,10 +157,8 @@ describe("continuum cli", () => {
     expect(payload.mna).toHaveProperty("dependency");
   });
 
-  it("requires third-party embedding config for managed start", () => {
-    expect(() => resolveThirdPartyEmbeddingConfig({}, {})).toThrow(
-      "continuum start 需要第三方 embedding 配置",
-    );
+  it("allows managed start to proceed without third-party embedding config", () => {
+    expect(resolveOptionalThirdPartyEmbeddingConfig({}, {})).toEqual({});
   });
 
   it("accepts third-party embedding config from options and preserves v1 path", () => {
