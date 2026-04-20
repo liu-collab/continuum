@@ -162,7 +162,6 @@ export class MnaClient {
       model: string;
       base_url?: string;
       api_key?: string;
-      api_key_env?: string;
       temperature?: number;
       organization?: string;
       keep_alive?: string | number;
@@ -171,6 +170,21 @@ export class MnaClient {
       base_url?: string;
       model?: string;
       api_key?: string;
+    };
+    mcp?: {
+      servers: Array<{
+        name: string;
+        transport: "stdio" | "http";
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+        url?: string;
+        headers?: Record<string, string>;
+        cwd?: string;
+        startup_timeout_ms?: number;
+        request_timeout_ms?: number;
+        reconnect_on_failure?: boolean;
+      }>;
     };
   }) {
     return this.requestJson<{ ok: true }>("/v1/agent/config", {

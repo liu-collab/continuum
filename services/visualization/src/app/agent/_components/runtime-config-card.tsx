@@ -1,14 +1,19 @@
 "use client";
 
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "@/components/status-badge";
 
 import type { MnaAgentConfigResponse } from "../_lib/openapi-types";
+import {
+  EDITABLE_PROVIDER_KIND_OPTIONS,
+  formatProviderKindLabel,
+  isEditableProviderKind,
+  type EditableProviderKind,
+  type ProviderKind
+} from "../_lib/provider-kind";
 import { useAgentI18n } from "../_i18n/provider";
-
-type ProviderKind = "demo" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
 
 type RuntimeConfigCardProps = {
   config: MnaAgentConfigResponse | null;
@@ -31,7 +36,6 @@ type RuntimeConfigCardProps = {
       model: string;
       base_url?: string;
       api_key?: string;
-      api_key_env?: string;
     };
     embedding: {
       base_url?: string;
@@ -40,14 +44,6 @@ type RuntimeConfigCardProps = {
     };
   }): void;
 };
-
-const PROVIDER_KIND_OPTIONS: ProviderKind[] = [
-  "demo",
-  "openai-compatible",
-  "anthropic",
-  "ollama",
-  "record-replay",
-];
 
 function resolveStatusTone(status: string | undefined) {
   if (status === "healthy" || status === "configured") {
@@ -61,11 +57,13 @@ function resolveStatusTone(status: string | undefined) {
 
 export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeConfigCardProps) {
   const { t } = useAgentI18n();
-  const [providerKind, setProviderKind] = useState<ProviderKind>("demo");
+  const [providerKind, setProviderKind] = useState<"openai-compatible" | "anthropic" | "ollama">(
+    "openai-compatible"
+  );
+  const [providerKindToSave, setProviderKindToSave] = useState<ProviderKind>("openai-compatible");
   const [providerModel, setProviderModel] = useState("");
   const [providerBaseUrl, setProviderBaseUrl] = useState("");
   const [providerApiKey, setProviderApiKey] = useState("");
-  const [providerApiKeyEnv, setProviderApiKeyEnv] = useState("");
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
@@ -76,24 +74,54 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       return;
     }
 
-    setProviderKind(config.provider.kind);
+    if (isEditableProviderKind(config.provider.kind)) {
+      setProviderKind(config.provider.kind);
+    }
+    setProviderKindToSave(config.provider.kind);
     setProviderModel(config.provider.model ?? "");
     setProviderBaseUrl(config.provider.base_url ?? "");
     setProviderApiKey(config.provider.api_key ?? "");
-    setProviderApiKeyEnv(config.provider.api_key_env ?? "");
     setEmbeddingBaseUrl(config.embedding.base_url ?? "");
     setEmbeddingModel(config.embedding.model ?? "");
     setEmbeddingApiKey(config.embedding.api_key ?? "");
     setErrorMessage(null);
   }, [config]);
 
+  const providerRequiresBaseUrl = useMemo(
+    () => {
+      const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
+      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama";
+    },
+    [providerKind, providerKindToSave]
+  );
+
+  const providerRequiresApiKey = useMemo(
+    () => {
+      const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
+      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic";
+    },
+    [providerKind, providerKindToSave]
+  );
+
   function handleSave() {
     const trimmedProviderModel = providerModel.trim();
+    const trimmedProviderBaseUrl = providerBaseUrl.trim();
+    const trimmedProviderApiKey = providerApiKey.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
+      return;
+    }
+
+    if (providerRequiresBaseUrl && !trimmedProviderBaseUrl) {
+      setErrorMessage(t("runtimeConfig.errors.providerBaseUrlRequired"));
+      return;
+    }
+
+    if (providerRequiresApiKey && !trimmedProviderApiKey) {
+      setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
 
@@ -103,13 +131,14 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
     }
 
     setErrorMessage(null);
+    const currentProviderKind: ProviderKind =
+      isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
     onSave({
       provider: {
-        kind: providerKind,
+        kind: currentProviderKind,
         model: trimmedProviderModel,
-        ...(providerBaseUrl.trim() ? { base_url: providerBaseUrl.trim() } : {}),
-        ...(providerApiKey.trim() ? { api_key: providerApiKey.trim() } : {}),
-        ...(providerApiKeyEnv.trim() ? { api_key_env: providerApiKeyEnv.trim() } : {}),
+        ...(trimmedProviderBaseUrl ? { base_url: trimmedProviderBaseUrl } : {}),
+        ...(trimmedProviderApiKey ? { api_key: trimmedProviderApiKey } : {}),
       },
       embedding: {
         ...(trimmedEmbeddingBaseUrl ? { base_url: trimmedEmbeddingBaseUrl } : {}),
@@ -118,6 +147,16 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       },
     });
   }
+
+  const providerKindOptions = isEditableProviderKind(providerKindToSave)
+    ? EDITABLE_PROVIDER_KIND_OPTIONS
+    : [
+        ...EDITABLE_PROVIDER_KIND_OPTIONS,
+        {
+          value: providerKindToSave,
+          label: formatProviderKindLabel(providerKindToSave)
+        }
+      ];
 
   return (
     <section className="rounded-3xl border bg-white/88 p-5 shadow-soft" data-testid="runtime-config-card">
@@ -178,13 +217,17 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
           <div className="text-sm font-semibold text-slate-900">{t("runtimeConfig.providerTitle")}</div>
           <select
-            value={providerKind}
-            onChange={(event) => setProviderKind(event.target.value as ProviderKind)}
+            value={isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave}
+            onChange={(event) => {
+              const nextKind = event.target.value as "openai-compatible" | "anthropic" | "ollama";
+              setProviderKind(nextKind);
+              setProviderKindToSave(nextKind);
+            }}
             className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
           >
-            {PROVIDER_KIND_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
+            {providerKindOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -204,12 +247,6 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
             value={providerApiKey}
             onChange={(event) => setProviderApiKey(event.target.value)}
             placeholder={t("runtimeConfig.providerApiKey")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
-          />
-          <input
-            value={providerApiKeyEnv}
-            onChange={(event) => setProviderApiKeyEnv(event.target.value)}
-            placeholder={t("runtimeConfig.providerApiKeyEnv")}
             className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
           />
         </div>

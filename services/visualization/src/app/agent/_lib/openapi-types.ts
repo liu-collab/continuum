@@ -145,7 +145,6 @@ export type MnaAgentConfigResponse = {
     model: string;
     base_url: string | null;
     api_key: string | null;
-    api_key_env: string | null;
     temperature: number | null;
     organization?: string | null;
     keep_alive?: string | number | null;
@@ -154,6 +153,21 @@ export type MnaAgentConfigResponse = {
     base_url: string | null;
     model: string | null;
     api_key: string | null;
+  };
+  mcp: {
+    servers: Array<{
+      name: string;
+      transport: "stdio" | "http";
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      url?: string;
+      headers?: Record<string, string>;
+      cwd?: string;
+      startup_timeout_ms?: number;
+      request_timeout_ms?: number;
+      reconnect_on_failure?: boolean;
+    }>;
   };
 };
 

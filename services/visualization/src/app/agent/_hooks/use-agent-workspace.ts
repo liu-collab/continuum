@@ -14,6 +14,9 @@ type UseAgentWorkspaceOptions = {
   uiLocale: AgentLocale;
 };
 
+const FILE_TREE_PATH_STORAGE_KEY = "continuum.agent.fileTree.path";
+const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "continuum.agent.fileTree.selectedFile";
+
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();
   const pathname = usePathname();
@@ -24,6 +27,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     path: ".",
     entries: []
   });
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof client.getMetrics>> | null>(null);
   const [dependencyStatus, setDependencyStatus] = useState<Awaited<ReturnType<typeof client.getDependencyStatus>> | null>(null);
@@ -34,6 +38,21 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const streamRef = useRef<ReturnType<typeof client.connectSessionStream> | null>(null);
   const streamGenerationRef = useRef(0);
+
+  useEffect(() => {
+    const savedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY);
+    const savedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+
+    if (savedTreePath) {
+      setTreePath(savedTreePath);
+      setFileTree((current) => ({
+        ...current,
+        path: savedTreePath,
+      }));
+    }
+
+    setSelectedFilePath(savedSelectedFile);
+  }, []);
 
   function toAgentRoute(sessionId: string) {
     return `/agent/${sessionId}` as Route;
@@ -145,11 +164,14 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     const payload = await client.getFileTree(nextPath);
     setTreePath(payload.path);
     setFileTree(payload);
+    window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, payload.path);
   }
 
   async function openFile(filePath: string) {
     const payload = await client.getFile(filePath);
+    setSelectedFilePath(payload.path);
     setSelectedFile(payload);
+    window.localStorage.setItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY, payload.path);
   }
 
   async function bindSessionStream(sessionId: string, initialLastEventId?: number | null) {
@@ -208,7 +230,23 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
 
     await bindSessionStream(sessionId, detail.latest_event_id);
-    await Promise.allSettled([refreshFileTree("."), refreshMetrics(), refreshDependencyStatus(), refreshAgentConfig(), refreshMcpState()]);
+    const storedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY) ?? treePath ?? ".";
+    const storedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    await Promise.allSettled([
+      refreshFileTree(storedTreePath),
+      refreshMetrics(),
+      refreshDependencyStatus(),
+      refreshAgentConfig(),
+      refreshMcpState()
+    ]);
+
+    if (storedSelectedFile) {
+      await openFile(storedSelectedFile).catch(() => {
+        window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+        setSelectedFilePath(null);
+        setSelectedFile(null);
+      });
+    }
   }
 
   async function createNewSession() {
@@ -325,7 +363,6 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       model: string;
       base_url?: string;
       api_key?: string;
-      api_key_env?: string;
       temperature?: number;
       organization?: string;
       keep_alive?: string | number;
@@ -335,9 +372,25 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       model?: string;
       api_key?: string;
     };
+    mcp?: {
+      servers: Array<{
+        name: string;
+        transport: "stdio" | "http";
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+        url?: string;
+        headers?: Record<string, string>;
+        cwd?: string;
+        startup_timeout_ms?: number;
+        request_timeout_ms?: number;
+        reconnect_on_failure?: boolean;
+      }>;
+    };
   }) {
     await client.updateConfig(payload);
     await Promise.all([refreshAgentConfig(), refreshDependencyStatus()]);
+    await refreshMcpState();
   }
 
   async function openPromptInspector(turnId: string) {
@@ -359,6 +412,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     state,
     activeTurn,
     fileTree,
+    selectedFilePath,
     selectedFile,
     metrics,
     dependencyStatus,

@@ -123,12 +123,12 @@ export class AgentPage {
     await this.page.getByTestId("confirm-allow-session").click();
   }
 
-  toolConsole() {
-    return this.page.getByTestId("tool-console");
+  toolCallBlocks() {
+    return this.page.getByTestId(/tool-call-/);
   }
 
   async expectToolConsoleContains(text: RegExp | string) {
-    await expect(this.toolConsole()).toContainText(text);
+    await expect(this.toolCallBlocks().last()).toContainText(text);
   }
 
   mcpPanel() {

@@ -142,13 +142,15 @@ describe("MnaClient", () => {
             model: "continuum-demo",
             base_url: null,
             api_key: null,
-            api_key_env: null,
             temperature: null,
           },
           embedding: {
             base_url: null,
             model: null,
             api_key: null,
+          },
+          mcp: {
+            servers: [],
           },
         }),
       } as Response)
@@ -170,6 +172,9 @@ describe("MnaClient", () => {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
       },
+      mcp: {
+        servers: [],
+      },
     });
 
     expect(config.provider.kind).toBe("demo");
@@ -183,6 +188,9 @@ describe("MnaClient", () => {
       embedding: {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
+      },
+      mcp: {
+        servers: [],
       },
     });
   });

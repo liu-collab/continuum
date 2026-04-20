@@ -12,7 +12,6 @@ const baseConfig = {
     model: "continuum-demo",
     base_url: null,
     api_key: null,
-    api_key_env: null,
     temperature: null,
     organization: null,
     keep_alive: null,
@@ -21,6 +20,9 @@ const baseConfig = {
     base_url: null,
     model: null,
     api_key: null,
+  },
+  mcp: {
+    servers: [],
   },
 };
 
@@ -93,7 +95,7 @@ describe("RuntimeConfigCard", () => {
     await user.clear(screen.getByPlaceholderText("provider model"));
     await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
     await user.type(screen.getByPlaceholderText("provider base_url"), "https://api.deepseek.com");
-    await user.type(screen.getByPlaceholderText("provider api_key（可选）"), "demo-key");
+    await user.type(screen.getByPlaceholderText("provider api_key"), "demo-key");
     await user.type(screen.getByPlaceholderText("EMBEDDING_BASE_URL"), "https://api.openai.com/v1");
     await user.type(screen.getByPlaceholderText("EMBEDDING_MODEL"), "text-embedding-3-small");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
@@ -112,5 +114,96 @@ describe("RuntimeConfigCard", () => {
     });
     expect(screen.getByText("misconfigured")).toBeInTheDocument();
     expect(screen.getByText("not_configured")).toBeInTheDocument();
+  });
+
+  it("requires provider base_url for openai-compatible provider", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <RuntimeConfigCard config={baseConfig} dependencyStatus={null} onSave={onSave} />
+      </AgentI18nProvider>,
+    );
+
+    await user.selectOptions(screen.getByRole("combobox"), "openai-compatible");
+    await user.clear(screen.getByPlaceholderText("provider model"));
+    await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前 provider 需要填写 base_url。");
+  });
+
+  it("requires provider api_key for openai-compatible provider", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "deepseek-chat",
+              base_url: "https://api.deepseek.com",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={onSave}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前 provider 需要填写 api_key。");
+  });
+
+  it("only exposes the three common provider kinds in the selector", async () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "gpt-4.1-mini",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const options = screen.getAllByRole("option").map((option) => option.textContent);
+    expect(options).toEqual(["openai", "anthropic", "ollama"]);
+  });
+
+  it("keeps a hidden provider kind visible when existing config already uses it", async () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "record-replay",
+              model: "fixture-model",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const options = screen.getAllByRole("option").map((option) => option.textContent);
+    expect(options).toEqual(["openai", "anthropic", "ollama", "record-replay"]);
   });
 });
