@@ -15,6 +15,7 @@ export interface MnaServerInstance extends RuntimeFastifyInstance, FastifyInstan
 
 export interface CreateServerOptions {
   homeDirectory?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function createServer(config: AgentConfig, options: CreateServerOptions = {}): MnaServerInstance {

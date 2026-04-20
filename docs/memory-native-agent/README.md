@@ -131,7 +131,7 @@ services/retrieval-runtime/                # 小幅改动（T03）
 | [T07](./T07-agent-runner.md) | agent 主循环与生命周期钩子 | 已完成 | mna | T02, T04, T05, T09, T12 | 无 |
 | [T08](./T08-http-api.md) | HTTP + WebSocket API 服务端 | 已完成 | mna | T07, T12 | 无 |
 | [T09](./T09-config-workspace.md) | 配置与工作区 / memory_mode 解析 | 已完成 | mna | T01 | 无 |
-| [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 进行中 | 全部 | T01-T09, T11, T12 | 剩余 UI e2e |
+| [T10](./T10-e2e-acceptance.md) | 端到端联调与验收测试 | 进行中 | 全部 | T01-T09, T11, T12 | 剩余交付级人工复核 |
 | [T11](./T11-visualization-frontend.md) | visualization 前端 agent IDE 页面 | 已完成 | visualization | T08, T12 | `visualization` |
 | [T12](./T12-cross-cutting.md) | 横切规范（token / prompt / artifact / shell / fixture / port） | 进行中 | mna | T01 | 无 |
 | [T13](./T13-cli-integration.md) | continuum-cli 集成 mna 启停 | 已完成 | continuum-cli | T01, T12 | `continuum-cli` |
@@ -149,8 +149,8 @@ services/retrieval-runtime/                # 小幅改动（T03）
 - `T08` 已完成：HTTP/WS 路由装配、token 鉴权、session CRUD、文件与 artifact 读取、MCP 管理、OpenAPI 输出、事件缓冲回放与 HTTP/WS 测试已落地。
 - `T11` 已完成：`/agent` 与 `/agent/[sessionId]` 页面、会话列表、文件树、聊天流、Prompt Inspector、工具确认弹窗、MCP 面板、基础 cost bar、Monaco 文件预览、前端 reducer 测试和浏览器直连 mna 所需的 loopback CORS 已落地。
 - `T13` 已完成：`continuum start/status/stop` 已接入 mna，`continuum mna install/start/stop/logs/token` 已落地，vendor 打包和交付文档已同步。
-- `T10` 进行中：人工验收清单已补齐；`mna + runtime + storage` 的真实后端 e2e 已补 `happy path / runtime down / storage down / memory_mode switch / governance roundtrip` 五条并跑通；Playwright 的测试装配和首条 UI 用例已落地，但当前机器还缺浏览器安装，record/replay 浏览器验收也还待补。
-- `T12` 进行中：`token` 引导、默认 `system prompt`、流式常量、`record-replay provider`、artifact 统一存储与 TTL 清理都已落地；前端 i18n 资源、locale 切换和 confirm 文案也已补齐，当前主要剩 Playwright 浏览器验收关联项待收口。
+- `T10` 进行中：人工验收清单已补齐；`mna + runtime + storage` 的真实后端 e2e 已补 `happy path / runtime down / storage down / memory_mode switch / governance roundtrip / mcp_call / mna restart / record-replay provider` 并跑通；Playwright 已真实跑通 `mna restart` 恢复、locale 切换、provider 切换、Abort / keyboard shortcuts、文件树目录导航、replay gap 提示、已有会话切换、`/agent/[sessionId]` 深链恢复、`session_store_unavailable` 页面级非阻塞错误提示、`record-replay` 确定性 UI 基线，当前主要剩交付级人工复核项。
+- `T12` 进行中：`token` 引导、默认 `system prompt`、流式常量、`record-replay provider`、artifact 统一存储与 TTL 清理都已落地；前端 i18n 资源、locale 切换和 confirm 文案也已补齐，WS 重连已支持强制刷新 token，当前主要剩交付级人工复核与少量非本轮范围内的收口项。
 - `T09` 已完成：配置发现、分层合并、`user_id / workspace_id / locale` 解析、`identity.json / workspaces.json` 持久化与测试已落地。
 - `T14` 已完成：`SQLite session-store`、启动 migration、会话/轮次/消息/工具审计/`prompt snapshot` 持久化、`crashed` 恢复标记与 purge 测试已落地。
 

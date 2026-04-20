@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
-async function waitForFile(filePath, timeoutMs = 30_000) {
+async function waitForFile(filePath, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (fs.existsSync(filePath)) {
@@ -28,6 +28,7 @@ export default async function globalSetup() {
     env: {
       ...process.env,
       PLAYWRIGHT_STACK_STATE_FILE: stateFile,
+      PLAYWRIGHT_AGENT_PROVIDER_MODE: process.env.PLAYWRIGHT_AGENT_PROVIDER_MODE,
     },
     stdio: "pipe",
   });

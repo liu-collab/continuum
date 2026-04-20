@@ -550,7 +550,7 @@ T12 本身没有独立代码产出，但下列文件必须存在并被引用：
   - shell 跨平台执行与黑名单：已在 `T05` 落地
   - 工具输出信任边界与 `tool_results_summary` 前置说明：已在 `T07` 落地
   - `stream-bridge` 基础合批与 abort 丢弃计数：已在 `T07` 落地；WS 事件顺序与 metrics 暴露在 `T08`
-  - Playwright UI e2e 与 record/replay 浏览器验收：`T10` 已落测试装配与首条用例，本机还缺浏览器安装与 record/replay 收口
+  - Playwright UI e2e 与 record/replay 浏览器验收：`T10` 已完成测试装配、后端 `record-replay provider` e2e 与浏览器基线用例，当前剩余的是整套服务交付级人工复核
 - 已验证：
   - `npm run check`
   - `npm test`

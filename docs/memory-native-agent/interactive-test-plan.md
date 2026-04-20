@@ -56,24 +56,23 @@
 
 - **交互**：`GET /healthz` 必返 `api_version`、`runtime_min_version`、`dependencies.retrieval_runtime`
 - **断言**：字段存在；`runtime_min_version` ≤ 当前 runtime `version`；runtime fail 时 `dependencies.retrieval_runtime !== "reachable"`
-- **状态**：`[⚙️ 部分完成]`（`reachable` 正向已覆盖；不可达 / 版本过低尚未显式断言）
-- **文件位置 / 已有引用**：`src/http/__tests__/sessions.test.ts`
-- **新增建议**：`src/http/__tests__/healthz-runtime-version.test.ts`
+- **状态**：`[⚙️ 部分完成]`（`reachable` 正向与 `unreachable` 负向已覆盖，版本字段存在且格式已断言；当前实现里的 `runtime_min_version` 仍高于 `MNA_VERSION`，版本高低关系尚未收口）
+- **文件位置 / 已有引用**：`src/http/__tests__/sessions.test.ts`、`src/http/__tests__/health-routes.test.ts`
+- **新增建议**：补版本协商断言
 
 ### 1.3 `/readyz` 与三段状态
 
 - **交互**：`GET /readyz` 必返 `liveness / readiness / dependencies`（遵守 `architecture-independence.md` 3.3.1）
 - **断言**：runtime 不可达时 readiness 仍 200，`dependencies.retrieval_runtime.status` 为显式错误；liveness 不受影响
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/readyz.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/health-routes.test.ts`
 
 ### 1.4 `GET /v1/agent/dependency-status`
 
 - **交互**：返回 `{runtime:{status}, provider:{kind,model}, mcp:[{name,state}]}`
 - **断言**：runtime 不可达时 `runtime.status = "unavailable"`；mcp 未配置时返回空数组；provider 切换后下一轮响应
-- **状态**：`[⚙️ 部分完成]`（runtime unavailable 已被 e2e `degrade-runtime-down` 间接覆盖；provider / mcp 字段未正面断言）
-- **文件位置**：`tests/e2e/degrade-runtime-down.e2e.test.ts`
-- **新增建议**：`src/http/__tests__/dependency-status.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`tests/e2e/degrade-runtime-down.e2e.test.ts`、`src/http/__tests__/health-routes.test.ts`
 
 ### 1.5 SIGINT / SIGTERM 优雅退出
 
@@ -162,8 +161,8 @@
 
 - **交互**：`cwd="c:\\workspace"` 与 `"C:/workspace/"` → 同一 `workspace_id`
 - **断言**：两次 `loadConfig` 返回同一 UUID；内部 `normalize(cwd)` 统一大写盘符 + 正斜杠
-- **状态**：`[⚙️ 部分完成]`（"keeps workspace id stable for the same path" 已覆盖同一 realpath，但大小写/反斜杠混用未单独覆盖）
-- **新增建议**：`src/config/__tests__/workspace-id.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/config/__tests__/config.test.ts`
 
 ---
 
@@ -173,17 +172,15 @@
 
 - **交互**：`GET /v1/agent/sessions` with `Authorization: Bearer <正确token>` → 200
 - **断言**：token 匹配；无 token 返回 401 `{error:{code:"token_invalid"}}`
-- **状态**：`[⚙️ 部分完成]`（正向已覆盖；401 路径未单独断言）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/http/__tests__/sessions.test.ts`
-- **新增建议**：增加一条 `rejects requests without bearer token` 用例
 
 ### 2.2 WS token 通过查询参数
 
 - **交互**：`ws://.../ws?token=<token>` → 连接成功发出 `session_started`
 - **断言**：token 错误 → HTTP 401 / close code 1008；正确 → `session_started` 事件
-- **状态**：`[⚙️ 部分完成]`（正向已覆盖；错误 token 路径缺）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/http/__tests__/session-ws.test.ts`
-- **新增建议**：补 `rejects websocket with invalid token`
 
 ### 2.3 token 轮换（手动）
 
@@ -203,8 +200,8 @@
 
 - **交互**：`OPTIONS /v1/agent/sessions` with `Origin: http://evil.example.com`
 - **断言**：不带 `Access-Control-Allow-Origin` 头；浏览器侧被拒
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：补进 `src/http/__tests__/cors.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/cors.test.ts`
 
 ### 2.6 visualization token 路由
 
@@ -235,9 +232,8 @@
 - **断言**：
   - 存在 → 返回 session 元数据 + `messages[]`
   - 不存在 → 404 `{error:{code:"session_not_found"}}`
-- **状态**：`[⚙️ 部分完成]`（存在路径已覆盖；404 路径缺断言）
-- **文件位置**：同上
-- **新增建议**：补 `returns 404 for unknown session`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`
 
 ### 3.3 按工作区列出会话
 
@@ -246,9 +242,8 @@
   - 仅返回同 workspace 下 session
   - 按 `last_active_at DESC` 排序
   - `next_cursor` 在分页尽头为 `null`
-- **状态**：`[⚙️ 部分完成]`（基本返回已覆盖；多 session + 游标行为未覆盖）
-- **文件位置**：同上
-- **新增建议**：补 `paginates sessions by last_active_at desc`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`
 
 ### 3.4 更新会话 title（PATCH）
 
@@ -256,16 +251,15 @@
 - **断言**：
   - 成功后 `GET` 返回新 title
   - 传非白名单字段（如 `memory_mode`）应被忽略或 400
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/sessions-patch.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`
 
 ### 3.5 关闭会话（软关闭）
 
 - **交互**：`DELETE /v1/agent/sessions/:id`
 - **断言**：`sessions.closed_at` 被置位；消息与 tool_invocations 仍可查
-- **状态**：`[⚙️ 部分完成]`（store 层 `deleteSession` 已测；HTTP 层路径未显式覆盖）
-- **文件位置**：`src/session-store/__tests__/session-crud.test.ts`
-- **新增建议**：`src/http/__tests__/sessions-delete.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/session-store/__tests__/session-crud.test.ts`、`src/http/__tests__/sessions.test.ts`
 
 ### 3.6 purge 物理清理（`?purge=all`）
 
@@ -273,9 +267,8 @@
 - **断言**：
   - DB 里 session/turns/messages/tool_invocations 全部被 CASCADE 删
   - `~/.mna/artifacts/<session_id>/` 目录被删
-- **状态**：`[✅ 已完成]`（store 层）+ `[⚙️ 部分完成]`（HTTP 层路由）
-- **文件位置**：`src/session-store/__tests__/purge.test.ts`
-- **新增建议**：补一条 HTTP 端的 purge 用例（与 artifact 目录联动）
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/session-store/__tests__/purge.test.ts`、`src/http/__tests__/sessions.test.ts`
 
 ### 3.7 切换 `memory_mode`
 
@@ -293,8 +286,8 @@
   - 注册的 provider → 200
   - 未注册 → 400 `provider_not_registered`
   - 变更只对下一轮 turn 生效，不中断进行中 turn
-- **状态**：`[⏳ 待开始]`（T08 §3.10 当前实现仅占位返回，缺测试固化）
-- **新增建议**：`src/http/__tests__/provider-switch.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`
 
 ### 3.9 崩溃恢复（`finish_reason=crashed`）
 
@@ -330,9 +323,8 @@
 
 - **交互**：输入含"换成..."+"规划..."关键词
 - **断言**：依次发出 `task_switch → task_start → before_plan → before_response` 四个 `phase_result`；`task_change` 早于对应 `phase_result`
-- **状态**：`[⚙️ 部分完成]`（trigger-detector 单测已覆盖，但完整 runner 串行未落到一条测试）
-- **文件位置**：`src/runner/__tests__/trigger-detector.test.ts`
-- **新增建议**：`src/runner/__tests__/multi-phase-order.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/trigger-detector.test.ts`、`src/runner/__tests__/runner.test.ts`
 
 ### 4.4 `assistant_delta` 合批策略
 
@@ -355,8 +347,8 @@
 
 - **交互**：provider 流中途抛错
 - **断言**：服务端先发 `error` 事件再发 `turn_end(finish_reason="error")`；前端 reducer 在 `turn_end` 才 finalize
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/stream-error-order.test.ts` + `services/visualization/tests/agent-event-reducer.test.ts` 补一条
+- **状态**：`[⚙️ 部分完成]`（后端顺序已由 `runner.test.ts` 覆盖；前端 reducer finalize 时机已由 `agent-event-reducer.test.ts` 覆盖，但还没有跨端到同一条真实流场景）
+- **文件位置**：`src/runner/__tests__/runner.test.ts`、`services/visualization/tests/agent-event-reducer.test.ts`
 
 ### 4.7 客户端 abort → `turn_end(abort)`
 
@@ -365,30 +357,29 @@
   - AbortController abort 传到 provider.chat(signal) 与 tools
   - shell_exec 子进程收 SIGTERM
   - `turn_end.finish_reason = "abort"`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/session-ws-abort.test.ts`
+- **状态**：`[⚙️ 部分完成]`（WS abort、provider abort 传播、late chunk 丢弃与 `turn_end(abort)` 已覆盖；tools / shell_exec 子进程信号传播仍未补）
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`
 
 ### 4.8 断线重连 + 事件缓冲 replay
 
 - **交互**：断线后带 `?last_event_id=<n>` 重连
 - **断言**：缓存内事件按顺序补发；超出缓冲或 10 分钟 TTL 丢弃
-- **状态**：`[✅ 已完成]`（正常 replay）+ `[⏳ 待开始]`（超限丢弃 + 前端 gap 提示）
-- **文件位置**：`src/http/__tests__/session-ws.test.ts`
-- **新增建议**：补 `drops events beyond buffer TTL`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`、`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
 
 ### 4.9 心跳 ping/pong
 
 - **交互**：客户端发 `{kind:"ping"}` → 服务端回 `{kind:"pong"}`
 - **断言**：ping 后 100ms 内收到 pong
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/session-ws-ping.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`
 
 ### 4.10 事件缓冲内存上限（200 条 / 10min）
 
 - **交互**：制造超过 200 条事件再重连
 - **断言**：最早事件被丢弃；客户端收到 `event_id` 跳号提示
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：合并到 4.8 的负向用例中
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`
 
 ---
 
@@ -412,29 +403,29 @@
 
 - **交互**：输入与 `recentTasks[i]` 相似度 > 0.4
 - **断言**：`currentTask = recentTasks[i]`（resume）；`task_change.change = "resume"`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/task-state-resume.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/task-state.test.ts`、`src/runner/__tests__/runner.test.ts`、`services/visualization/tests/agent-event-reducer.test.ts`
 
 ### 5.4 task_id 生命周期
 
 - **交互**：task_start → currentTask 指向新 TaskState；LRU 上限 10
 - **断言**：`recentTasks` 头部是最新 task；超 10 条后最旧被挤出
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/task-state-lru.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/task-state.test.ts`
 
 ### 5.5 多 phase 串行顺序调用 runtime
 
 - **交互**：同轮命中 task_switch + task_start + before_plan + before_response
 - **断言**：`memoryClient.prepareContext` 被调 4 次；`phase` 依次为 `task_switch, task_start, before_plan, before_response`
-- **状态**：`[⏳ 待开始]`（`runner.test.ts` 仅覆盖单 phase）
-- **新增建议**：`src/runner/__tests__/phase-order.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/runner.test.ts`
 
 ### 5.6 单 phase 失败不阻断后续 phase
 
 - **交互**：`task_start` 阶段 runtime 抛 Timeout，其他 phase 正常
 - **断言**：仍能收到 `before_response` 的 injection；对话继续
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/phase-partial-fail.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/runner.test.ts`
 
 ### 5.7 runtime 完全不可达下的对话继续
 
@@ -462,16 +453,15 @@
   - `tool_call_start / tool_call_result` 事件按序发出
   - tool 输出按 `conversation.wrapToolOutput` 包裹
   - round=2 的 `dispatched_messages` 被写库
-- **状态**：`[⚙️ 部分完成]`（单独组件覆盖；端到端单测级别缺）
-- **文件位置**：`src/runner/__tests__/turn-loop.test.ts`（仅 helper 层）
-- **新增建议**：`src/runner/__tests__/runner-tool-loop.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/turn-loop.test.ts` + `src/runner/__tests__/runner.test.ts`
 
 ### 5.10 `shortSummary` 截断到 500 字符
 
 - **交互**：历史对话很长
 - **断言**：`conversation.shortSummary()` ≤ 500 字符；传给 `prepareContext.recent_context_summary`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/conversation-summary.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/conversation.test.ts`
 
 ### 5.11 writeback 规则
 
@@ -480,16 +470,15 @@
   - 至少一次 user + assistant 交互 → 发 finalize
   - 只要 runner 能调用 → 即使 store 挂掉也不阻塞
   - 非 `builtin_read` trust 的 tool summary 前置"以下摘要来自外部工具输出..."
-- **状态**：`[✅ 已完成]`（trust 前置）+ `[⚙️ 部分完成]`（finalize 触发逻辑端到端）
-- **文件位置**：`src/runner/__tests__/turn-loop.test.ts`
-- **新增建议**：补"writeback 触发条件矩阵"测试
+- **状态**：`[✅ 已完成]`（trust 前置 + finalize 触发条件）
+- **文件位置**：`src/runner/__tests__/turn-loop.test.ts` + `src/runner/__tests__/runner.test.ts`
 
 ### 5.12 Store 写入失败转 session error
 
 - **交互**：store 设为只读文件系统 → runner 写入失败
 - **断言**：WS 发出 `error{scope:"session", code:"session_store_unavailable"}`；对话继续
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/runner/__tests__/store-failure.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/runner.test.ts`
 
 ---
 
@@ -540,9 +529,8 @@
 
 - **交互**：同一 turn 的四次 `prepareContext` + `finalizeTurn` 日志 / WS 事件都能关联同一 `trace_id`
 - **断言**：`phase_result.trace_id` 串起同一轮所有 phase；可在 `/v1/runtime/observe/runs` 查到
-- **状态**：`[⚙️ 部分完成]`（happy-path e2e 只验证第一段 trace_id 存在）
+- **状态**：`[⚙️ 部分完成]`（当前实现下 `task_start / before_response / after_response` 共用同一 turn trace；`session_start` 仍单独生成 trace）
 - **文件位置**：`tests/e2e/happy-path.e2e.test.ts`
-- **新增建议**：补"所有 phase trace 相同"断言
 
 ---
 
@@ -578,24 +566,24 @@
 
 ### 7.6 OpenAI 兼容：401 不重试抛 `ProviderAuthError`
 
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：在同文件追加 `fails fast on 401`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/providers/__tests__/openai-compatible.test.ts`
 
 ### 7.7 Anthropic：system 拆分 + tools schema 映射
 
-- **状态**：`[⚙️ 部分完成]`（已有文件；未检查具体断言覆盖度，待代码层补齐）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/providers/__tests__/anthropic.test.ts`
 
 ### 7.8 Ollama：NDJSON 解析 + 工具调用
 
-- **状态**：`[⚙️ 部分完成]`（同上）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/providers/__tests__/ollama.test.ts`
 
 ### 7.9 SSE 行缓冲
 
 - **断言**：chunk 被切在字节中间时不丢事件；半条 JSON 挂到下次
-- **状态**：`[⚙️ 部分完成]`（通过正向 SSE 测试间接覆盖；显式半行测试缺）
-- **新增建议**：`src/providers/__tests__/sse-line-buffer.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/providers/__tests__/sse-line-buffer.test.ts`
 
 ### 7.10 Record / Replay provider
 
@@ -608,15 +596,15 @@
 - **文件位置**：同上
 
 #### 7.10.3 fixture 缺失抛 `FixtureMissingError`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：补 `throws when replay key not found`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/providers/__tests__/record-replay.test.ts`
 
 ### 7.11 Provider abort 传播
 
 - **交互**：`signal.abort()` 后流立即停止；fetch 被 cancel
 - **断言**：abort 后不再 yield chunk；不泄漏连接
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/providers/__tests__/abort-propagation.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/session-ws.test.ts`、`src/providers/__tests__/openai-compatible.test.ts`
 
 ---
 
@@ -681,8 +669,8 @@
 
 - **交互**：workspace 内 symlink 指向外部 → 调用时拒绝
 - **断言**：`fs.realpath` 解开后判边界；越界 → `tool_denied_path`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/tools/__tests__/fs-symlink.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/tools/__tests__/fs.test.ts`
 
 ### 8.11 `mcp_call` 成功转发
 
@@ -711,22 +699,21 @@
 ### 8.15 confirm 60s 超时退化为 deny
 
 - **断言**：前端 60s 未回 → `RunnerIO.requestConfirm` reject / timeout；audit `permission_decision=timeout`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/tools/__tests__/confirm-timeout.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/tools/__tests__/dispatcher.test.ts`
 
 ### 8.16 工具输出超限写 artifact
 
 - **交互**：输出 > 10KB
 - **断言**：output 被截断（头 5KB + "..." + 尾 2KB）；artifact 写入 `~/.mna/artifacts/<session>/<call>.txt`；`artifact_ref` 回传
-- **状态**：`[⚙️ 部分完成]`（审计字段 `artifact_ref` 已测；截断策略本身未单独测）
-- **文件位置**：`src/session-store/__tests__/audit-write.test.ts`
-- **新增建议**：`src/tools/__tests__/artifact-truncation.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/tools/__tests__/fs.test.ts`、`src/session-store/__tests__/audit-write.test.ts`
 
 ### 8.17 工具输出 > 5MB 直接拒绝
 
 - **断言**：返回 `{ok:false, error.code:"tool_output_too_large"}`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：合并到 8.16
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/tools/__tests__/fs.test.ts`
 
 ### 8.18 Tool schema 暴露给 provider
 
@@ -737,9 +724,8 @@
 ### 8.19 Tool output 信任边界包裹
 
 - **断言**：`conversation.wrapToolOutput("fs_read", call_id, trust, body)` 生成 `<tool_output tool="fs_read" call_id="..." trust="builtin_read">body</tool_output>`；body 内 `</tool_output>` 被转义
-- **状态**：`[⚙️ 部分完成]`（包裹已测；转义边界未显式断言）
+- **状态**：`[✅ 已完成]`
 - **文件位置**：`src/runner/__tests__/turn-loop.test.ts`
-- **新增建议**：`src/runner/__tests__/wrap-tool-output-escape.test.ts`
 
 ---
 
@@ -798,8 +784,8 @@
 ### 9.10 HTTP MCP 管理路由
 
 - **交互**：`GET /v1/agent/mcp/servers`、`POST .../restart`、`POST .../disable`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/mcp-routes.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/mcp-routes.test.ts`
 
 ---
 
@@ -833,14 +819,14 @@
 ### 10.6 CASCADE 删除（turns/messages/tool_invocations）
 
 - **断言**：删除 session 后所有外键表都清
-- **状态**：`[⚙️ 部分完成]`（purge 已覆盖；CASCADE 语义隐式验证，未单独断言 turns/messages 行数）
-- **新增建议**：扩 `purge.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/session-store/__tests__/purge.test.ts`
 
 ### 10.7 args_hash 不存 args 原文
 
 - **断言**：DB 里 `args_hash` 是 sha256；不包含明文路径 / 明文命令
-- **状态**：`[⚙️ 部分完成]`（preview 512 字符已测；原文不入库未断言）
-- **新增建议**：补 `audit-write.test.ts` 同文件一条
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/session-store/__tests__/audit-write.test.ts`
 
 ### 10.8 Migration 启动自动执行
 
@@ -859,14 +845,14 @@
 - **断言**：
   - 存在 → 返回完整 messages + tools
   - 不存在 → 404 `turn_not_found`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/dispatched-messages.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/sessions.test.ts`
 
 ### 10.11 Session 列表游标分页
 
 - **断言**：`listSessions({ limit, cursor })` 按 last_active_at DESC；`next_cursor` 正确
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/session-store/__tests__/list-cursor.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/session-store/__tests__/session-crud.test.ts`
 
 ---
 
@@ -898,8 +884,8 @@
 
 ### 11.5 Trust level 枚举全覆盖
 
-- **状态**：`[⏳ 待开始]`（仅 shell/builtin_read 已测；builtin_write 与 mcp:<name> 缺）
-- **新增建议**：扩 `turn-loop.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/runner/__tests__/turn-loop.test.ts`
 
 ---
 
@@ -950,21 +936,20 @@
 
 - **交互**：中途 stopMna → restartMna → 继续轮
 - **断言**：session 列表保留；crashed turn 标记正确
-- **状态**：`[⚙️ 部分完成]`（UI E2E 层 `agent-recovery.spec.ts` 已覆盖 UI 层；后端侧缺独立 e2e）
-- **新增建议**：`tests/e2e/mna-restart.e2e.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`tests/e2e/mna-restart.e2e.test.ts` + `services/visualization/tests/agent-e2e/agent-recovery.spec.ts`
 
 ### 12.7 同一轮 trace_id 贯穿 runtime observe
 
 - **断言**：`phase_result` 各 phase trace_id 一致；`observe/runs` 能按此 trace_id 查到同一 run
-- **状态**：`[⚙️ 部分完成]`
-- **新增建议**：合进 happy-path 断言
+- **状态**：`[⚙️ 部分完成]`（happy-path 已补 `phase_result + observe/runs` 断言；当前仅 turn 内 phase 共享 trace，`session_start` 仍单独 trace）
+- **文件位置**：`tests/e2e/happy-path.e2e.test.ts`
 
 ### 12.8 MCP echo（http fixture）
 
 - **断言**：通过 `with_mcp=true` 启动 stack，`mcp_call` 成功返回 `mcp:<text>`
-- **状态**：`[⚙️ 部分完成]`（fixture 已落；端到端断言散在 UI 层）
-- **文件位置**：`tests/e2e/setup.ts` 里 `startHttpMcpFixture`
-- **新增建议**：`tests/e2e/mcp-call.e2e.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`tests/e2e/setup.ts` + `tests/e2e/mcp-call.e2e.test.ts`
 
 ---
 
@@ -991,8 +976,8 @@
 
 - **交互**：`error` → `turn_end`
 - **断言**：reducer 不在 `error` 时清 pending，只在 `turn_end` finalize
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：扩 `agent-event-reducer.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
 
 ### 13.4 MnaClient DELETE 请求不带 JSON content-type
 
@@ -1005,123 +990,284 @@
 - **状态**：`[✅ 已完成]`
 - **文件位置**：`services/visualization/tests/agent-token-route.test.ts`
 
-### 13.6 Token route `ENOENT` → mna_not_running
+### 13.6 Token route `ENOENT` → `mna_not_running`
 
 - **状态**：`[✅ 已完成]`
 - **文件位置**：同上
 
-### 13.7 Token route 读文件失败（非 ENOENT）
+### 13.7 Token route 空文件 / 读取超时 → `token_missing`
 
-- **断言**：权限问题 / 内容损坏 → 显示明确离线原因
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：扩 `agent-token-route.test.ts`
+- **交互**：token 文件存在但为空，或读取 token 超时
+- **断言**：返回 `status="token_missing"`；reason 明确区分"文件为空"或"读取超时"
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-token-route.test.ts`
 
-### 13.8 i18n provider 切换
+### 13.8 Token route 非法格式 / 无权限 → `token_invalid`
+
+- **交互**：token 文件内容非法，或读取时抛 `EACCES`
+- **断言**：返回 `status="token_invalid"`；reason 明确指向 token 不可用
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-token-route.test.ts`
+
+### 13.9 AgentWorkspace 离线原因映射
+
+- **交互**：bootstrap 分别返回 `mna_not_running`、`token_missing`、`token_invalid`
+- **断言**：页面离线态文案与状态一一对应，不退化成同一条泛化错误
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-workspace.bootstrap.test.tsx`
+
+### 13.10 i18n provider 切换
 
 - **交互**：顶部栏切换 zh-CN ⇄ en-US
 - **断言**：按钮 / 错误提示立即切换；历史消息不变
 - **状态**：`[✅ 已完成]`（reducer + i18n test）
 - **文件位置**：`services/visualization/tests/agent-i18n.test.tsx`
 
-### 13.9 Session list 渲染
+### 13.11 Session list 渲染
 
 - **状态**：`[✅ 已完成]`（至少组件级）
 - **文件位置**：`services/visualization/tests/session-list.test.tsx`
 
-### 13.10 error code → i18n 展示表
+### 13.12 error code → i18n 展示表
 
 - **断言**：T08 §3.12 所有 code 都有 `errors.<code>.title` + `description`
-- **状态**：`[⏳ 待开始]`（代码里有资源，未加键级覆盖测试）
-- **新增建议**：`services/visualization/tests/agent-i18n-error-codes.test.tsx`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-i18n-error-codes.test.tsx`
 
-### 13.11 Tool confirm dialog 结构化 payload
+### 13.13 Tool confirm dialog 结构化 payload
 
 - **交互**：接 `tool_confirm_needed` 后展示脱敏 `params_preview` + risk 对应文案
 - **状态**：`[⚙️ 部分完成]`（UI E2E 覆盖；reducer 层 pendingConfirm 已测）
 - **文件位置**：`agent-event-reducer.test.ts` + `agent-e2e/agent-tools-mcp.spec.ts`
 
+### 13.14 Event reducer：`session_started` 同步 session 元数据
+
+- **交互**：收到 `session_started`
+- **断言**：`sessionId`、`memory_mode`、`workspace_id`、`locale` 同步到当前 state；不丢已有 turns
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
+
+### 13.15 Event reducer：`task_change` 驱动 activeTask / recentTasks
+
+- **交互**：连续收到 `task_change(start/switch/resume)`
+- **断言**：`activeTask` 更新；`recentTasks` 去重、保序、最多保留 8 条；当前 turn 带上 `taskLabel`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
+
+### 13.16 Event reducer：`replay_gap`
+
+- **交互**：收到 `replay_gap`
+- **断言**：`replayGapDetected=true`；已有会话内容不被清空；后续事件仍可继续累积
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
+
+### 13.17 Event reducer：session scope error
+
+- **交互**：收到 `error(scope="session")`
+- **断言**：`sessionError` 被写入；当前 turns 保留；不误把最后一轮 turn 标成失败
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
+
+### 13.18 Event reducer：保留 `artifact_ref`
+
+- **交互**：`tool_call_start` 后收到带 `artifact_ref` 的 `tool_call_result`
+- **断言**：tool call state 记录 `artifactRef`，为后续 artifact 下载入口保留契约
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-event-reducer.test.ts`
+
+### 13.19 `MnaClient` 401 后重新 bootstrap 一次
+
+- **交互**：首次 REST 请求返回 401，客户端重新拉 `/api/agent/token` 后重试一次
+- **断言**：只重试一次；第二次请求带新 token；仍失败时向上抛清晰错误
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/mna-client.test.ts`
+
+### 13.20 `MnaClient` WebSocket 重连携带 `last_event_id`
+
+- **交互**：WS 正常收过事件后断线重连
+- **断言**：重连 URL 带最新 `last_event_id`；连接恢复后继续发心跳；超过重试上限后进入 `closed`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/mna-client.websocket.test.ts`
+
 ---
 
 ## 14. 前端 UI E2E（Playwright，L3）
 
-> 所有 Playwright 用例共享 `global-setup.mjs` 启动的真实 mna + runtime + storage + provider stub。本机缺浏览器时标为 `[👤 人工复核]`。
+> 所有 Playwright 用例共享 `global-setup.mjs` 启动的真实 mna + runtime + storage + provider stub。本节只保留当前仍未闭环、需要重写、或尚未补齐的页面交互项；已经完成的页面用例统一移到 14.0 归档，避免和现状混淆。
 
-### 14.1 UI-01 会话启动 + 流式回复
+### 14.0 已完成归档（不纳入当前缺口）
 
+- `UI-01 会话启动 + 流式回复`：已完成，覆盖连接态、发送消息、流式回复、首轮 injection / 空态；文件位置 `services/visualization/tests/agent-e2e/agent-core.spec.ts`
+- `UI-02 Memory mode 切换 + 再问偏好`：已完成，覆盖切换 `workspace_only` 后再次追问偏好；文件位置 `services/visualization/tests/agent-e2e/agent-core.spec.ts`
+- `UI-03 Prompt Inspector 打开`：已完成，覆盖打开弹框并查看 `Tool count`；文件位置 `services/visualization/tests/agent-e2e/agent-core.spec.ts`
+- `UI-04 文件预览（Monaco）`：已完成，覆盖打开 `README.md` 并渲染 `file-preview`；文件位置 `services/visualization/tests/agent-e2e/agent-core.spec.ts`
+- `UI-05 Session 改标题 + 删除`：已完成，覆盖创建会话、改标题、删除；文件位置 `services/visualization/tests/agent-e2e/agent-core.spec.ts`
+- `UI-06 工具调用 + 确认弹窗 + deny / allow_session`：已完成，覆盖 `fs_read`、`fs_write`、`mcp_call`、MCP restart / disable；文件位置 `services/visualization/tests/agent-e2e/agent-tools-mcp.spec.ts`
+- `UI-09 /runs trace_id 联动`：已完成，覆盖消息发送后在 `/runs` 页面按 `trace_id` 回查；文件位置 `services/visualization/tests/agent-e2e/agent-runs.spec.ts`
+- `UI-10 其他 visualization 页面不受影响`：已完成，覆盖 `/memories`、`/dashboard` 正常访问；文件位置 `services/visualization/tests/agent-e2e/agent-runs.spec.ts`
+
+### 14.1 UI-07 Runtime down 降级（需重写断言）
+
+- **交互**：`stopRuntime` → 页面 reload → 继续发送消息；`restartRuntime` 后再次 reload 并继续发送消息
 - **断言**：
-  - 连接态显示 connected
-  - 发送 "请记住我偏好使用 TypeScript" → 收到含 "TypeScript" 的流式回复
-  - 首轮有 injection banner 或空态
-- **状态**：`[⚙️ 部分完成]`（Spec 已写；本机浏览器未装，未稳定跑通）
-- **文件位置**：`services/visualization/tests/agent-e2e/agent-core.spec.ts`
-
-### 14.2 UI-02 Memory mode 切换 + 再问偏好
-
-- **断言**：切 `workspace_only` 后再问"我偏好什么语言？"回答"当前没有恢复到相关偏好"
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
-
-### 14.3 UI-03 Prompt Inspector 打开
-
-- **断言**：弹框能看到工具数 / Tool count
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
-
-### 14.4 UI-04 文件预览（Monaco）
-
-- **断言**：点 README.md → `file-preview` 内含 "README.md"
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
-
-### 14.5 UI-05 Session 改标题 + 删除
-
-- **断言**：renameFirstSession 生效；delete 清理当前 session
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
-
-### 14.6 UI-06 工具调用 + 确认弹窗 + deny / allow_session
-
-- **断言**：
-  - `fs_read` auto 执行；tool-console 标 `builtin_read`
-  - `fs_write` 触发 ConfirmDialog；deny → "denied"
-  - 再次触发后 allow_session → `builtin_write`
-  - `mcp_call` allow → `mcp:echo-http`
-  - MCP panel restart / disable 有效
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：`services/visualization/tests/agent-e2e/agent-tools-mcp.spec.ts`
-
-### 14.7 UI-07 Runtime down 降级
-
-- **断言**：
-  - stopRuntime → 页面 `agent-degraded-banner` 可见
-  - restartRuntime → runtime dep 回 healthy
-- **状态**：`[⚙️ 部分完成]`
+  - runtime 停止后页面 `agent-degraded-banner` 可见
+  - dependency card 中 runtime 状态应落到 `unavailable / degraded / unknown`
+  - runtime 重启后页面仍可恢复连接并继续发送消息
+  - 当前不要把“dependency card 必回 `healthy`”写成必过断言，因为现有自动化并没有覆盖这一点
+- **状态**：`[⚙️ 部分完成]`（runtime down 降级与恢复后继续对话已覆盖；“恢复后依赖卡片回 healthy”这一断言需要重写）
 - **文件位置**：`services/visualization/tests/agent-e2e/agent-recovery.spec.ts`
 
-### 14.8 UI-08 Mna down / 恢复
+### 14.2 UI-08 Mna down 页面离线态
 
+- **交互**：`stopMna` → 页面 reload
 - **断言**：
-  - stopMna → expectOfflineState
-  - restartMna → expectConnected
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
+  - 页面显示 `agent-offline-state`
+  - 不再展示可交互的在线工作区
+  - 离线描述明确指向 mna 不可用，而不是泛化成未知错误
+- **状态**：`[✅ 已完成]`（已纳入 Playwright 回归并验证离线态）
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-recovery.spec.ts`
 
-### 14.9 UI-09 `/runs` trace_id 联动
+### 14.3 UI-09 Mna restart 后自动恢复连接
 
-- **断言**：发送消息 → 最新 trace 可在 `/runs` 搜到
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：`services/visualization/tests/agent-e2e/agent-runs.spec.ts`
+- **交互**：`stopMna` → 页面进入离线态 → `restartMna` → 页面自动恢复连接
+- **断言**：
+  - 不需要手工重建会话
+  - 连接态回到 `open / connecting / reconnecting`
+  - 恢复连接后可以继续在当前页面发送消息
+- **状态**：`[✅ 已完成]`（已补前端 bootstrap 自动重试、WS 重连强制刷新 token、测试栈固定 mna 重启端口，`agent-recovery.spec.ts` 已真实通过）
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-recovery.spec.ts`
 
-### 14.10 UI-10 其他 visualization 页面不受影响
+### 14.4 UI-10 Record / Replay provider 驱动的确定性 UI 用例
 
-- **断言**：打开 `/memories`、`/dashboard` 正常可见
-- **状态**：`[⚙️ 部分完成]`
-- **文件位置**：同上
+- **交互**：使用固定 provider 输出脚本驱动同一轮 UI 交互，确保页面断言不依赖随机模型输出
+- **断言**：
+  - 固定输入对应固定 phase、固定 assistant 输出、固定工具调用序列
+  - 可以作为后续 UI 回归的稳定基线
+- **状态**：`[✅ 已完成]`
+- **文件位置**：
+  - `services/visualization/tests/agent-e2e/agent-record-replay.spec.ts`
+  - `services/memory-native-agent/tests/e2e/record-replay-provider.e2e.test.ts`
 
-### 14.11 UI-11 Record / Replay provider 驱动的确定性 UI 用例
+### 14.5 UI-11 语言切换（Locale Switch）
 
-- **状态**：`[⏳ 待开始]`（acceptance-checklist 明确列为"待补"）
-- **新增建议**：新增 `agent-record-replay.spec.ts`
+- **交互**：在页面顶部切换 `zh-CN ⇄ en-US`
+- **断言**：
+  - 标题、按钮、空态、离线态文案立即切换
+  - 已有会话内容和历史消息不被清空
+  - 刷新页面后沿用用户刚刚选择的 locale
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-locale.spec.ts`
+
+### 14.6 UI-12 Provider Switch（模型切换与刷新状态）
+
+- **交互**：修改 `model` 输入框 → 点击“应用模型 / Apply”；再点击“刷新状态 / Refresh status”
+- **断言**：
+  - 点击应用后 provider 标签或依赖状态中的 model 展示发生更新
+  - 再发起一轮对话时，Prompt Inspector 或依赖信息体现新 model 已生效
+  - 点击刷新后会重新拉取 provider / dependency / metrics，不要求用户刷新整页
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-provider.spec.ts`
+
+### 14.7 UI-13 顶部刷新按钮
+
+- **交互**：点击左侧会话区顶部刷新按钮
+- **断言**：
+  - 会重新拉取 metrics、dependency status、MCP state
+  - 当 runtime / mcp 状态发生变化时，页面对应卡片同步更新
+  - 不影响当前 session、消息历史和输入框内容
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-refresh.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-refresh.spec.ts`
+
+### 14.8 UI-14 中止当前轮次（Abort）
+
+- **交互**：发送一个可持续输出的请求，在流式回复过程中点击“中止 / Abort”或按 `Escape`
+- **断言**：
+  - 当前轮次进入 `abort` 收敛态
+  - 页面不再继续追加新的 `assistant_delta`
+  - 中止按钮在轮次结束后恢复禁用
+- **状态**：`[✅ 已完成]`（`Escape` 中止和流式中断已覆盖；“中止按钮恢复禁用”这条仍作为后续细化断言）
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-abort.spec.ts`
+
+### 14.9 UI-15 已有会话切换与历史恢复
+
+- **交互**：创建两个会话，分别发送不同消息，再切换左侧 session card
+- **断言**：
+  - 切换会话后当前消息历史、Prompt Inspector、Memory Panel 都跟着切换
+  - 返回之前的会话时，原消息历史保持不变
+  - 当前选中态和 URL 中的 `sessionId` 一致
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-session-switch.spec.ts`
+
+### 14.10 UI-16 `/agent/[sessionId]` 深链恢复
+
+- **交互**：直接打开已有会话的 `/agent/<sessionId>`，或在该页面手工刷新
+- **断言**：
+  - 页面能直接 hydrate 到对应 session
+  - 不会误跳到别的 session，也不会重新创建新 session
+  - 连接建立后可以继续在该 session 上发送消息
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-deeplink.spec.ts`
+
+### 14.11 UI-17 文件树目录导航
+
+- **交互**：先打开目录，再打开子目录中的文件
+- **断言**：
+  - 文件树当前 path 会更新
+  - 目录展开后可以继续进入下一层
+  - 打开文件后 `file-preview` 显示正确路径和内容，不局限于根目录 `README.md`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-file-tree.spec.ts`
+
+### 14.12 UI-18 shell 黑名单前端反馈
+
+- **交互**：发送会触发危险 `shell_exec` 的请求
+- **断言**：
+  - 工具控制台出现 `shell_exec`
+  - 页面显示 `blocked_pattern / tool_denied_pattern` 对应拒绝结果
+  - 这类黑名单拒绝不会被伪装成普通执行失败
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-shell-deny.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-shell-deny.spec.ts`
+
+### 14.13 UI-19 replay gap 提示
+
+- **交互**：断线后用过旧的 `last_event_id` 恢复，触发 `replay_gap`
+- **断言**：
+  - 页面明确提示"连接恢复但部分事件丢失"
+  - 已有消息不被清空
+  - 后续继续发送新消息仍可正常完成
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-replay-gap.spec.ts`
+
+### 14.14 UI-20 session 级错误提示
+
+- **交互**：后端发出 `error(scope="session", code="session_store_unavailable")`
+- **断言**：
+  - 页面出现非阻塞错误提示
+  - 当前 turns 和输入区保留
+  - 用户仍可继续发起下一轮对话
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-session-error.spec.ts`
+
+### 14.15 UI-21 输入框键盘交互
+
+- **交互**：输入框分别按 `Enter`、`Shift+Enter`、流式期间按 `Escape`
+- **断言**：
+  - `Enter` 提交当前消息
+  - `Shift+Enter` 只换行，不提交
+  - 流式期间 `Escape` 等价于点击 `Abort`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/agent-e2e/agent-extra-ui.spec.ts`
+- **新增建议**：新增 `services/visualization/tests/agent-e2e/agent-input-shortcuts.spec.ts`
 
 ---
 
@@ -1170,8 +1316,8 @@
 
 ### 15.9 `continuum mna install` vendor 打包
 
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`packages/continuum-cli/tests/mna-install.test.ts`（stub vendor 目录）
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-install.test.ts`
 
 ### 15.10 `continuum mna token --rotate` 生效
 
@@ -1180,13 +1326,56 @@
 ### 15.11 `continuum mna logs` 拉日志
 
 - **断言**：`--tail N` 目前未实现，输出完整文件
-- **状态**：`[⏳ 待开始]`（T13 明确保留项）
-- **新增建议**：对齐实现 + 补测
+- **状态**：`[⚙️ 部分完成]`（当前已覆盖完整日志输出与未托管报错；`--tail N` 仍未实现）
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
+- **新增建议**：补 `--tail` 行为或显式去掉该预期
 
 ### 15.12 端口冲突时启动失败
 
 - **断言**：mna 默认端口已占用 → start 流程整体失败，不留半启动
 - **状态**：`[⏳ 待开始]`
+
+### 15.13 `continuum status --json` 输出 `mna` 详情
+
+- **交互**：执行 `continuum status --json`
+- **断言**：JSON 中包含 `mna.url`、`mna.tokenPath`、`mna.artifactsPath`、`mna.dependency`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/cli.test.ts`
+
+### 15.14 `continuum mna token` 打印当前 token
+
+- **交互**：执行 `continuum mna token`
+- **断言**：读取并输出 token 文件内容；无 token 时输出空串或明确提示，不抛未处理异常
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
+
+### 15.15 `continuum mna logs` 未托管时明确报错
+
+- **交互**：在未通过 continuum 托管启动 mna 的情况下执行 `continuum mna logs`
+- **断言**：返回明确错误，不输出误导性空内容
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
+
+### 15.16 `continuum mna stop` 幂等
+
+- **交互**：mna 未运行时执行 `continuum mna stop`
+- **断言**：命令返回成功；输出"当前未运行"之类的 no-op 结果；不会误删其他 managed state
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
+
+### 15.17 `continuum mna start` 缺 vendor 时明确失败
+
+- **交互**：vendor 目录或入口文件缺失时执行 `continuum mna start`
+- **断言**：给出明确错误提示；不写入伪 managed record
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
+
+### 15.18 `continuum mna start` 遇到已健康实例时复用
+
+- **交互**：已有被托管且健康的 mna，再次执行 `continuum mna start`
+- **断言**：不重复 spawn；直接返回现有 `url / tokenPath / artifactsPath`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`packages/continuum-cli/tests/mna-command.test.ts`
 
 ---
 
@@ -1201,14 +1390,15 @@
 ### 16.2 `/v1/agent/metrics` 基础字段
 
 - **断言**：返回 `uptime_s / turns_total / turns_by_finish_reason / provider_calls_total / tool_invocations_total / stream_flushed_events_total / runtime_errors_total / latency_p50_ms / latency_p95_ms`
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：`src/http/__tests__/metrics.test.ts`
+- **状态**：`[⚙️ 部分完成]`（基础计数字段已覆盖；文档里提到的 `latency_p50_ms / latency_p95_ms` 当前实现和测试都还没有）
+- **文件位置**：`src/http/__tests__/health-routes.test.ts`
+- **新增建议**：若需要延迟指标，先补实现再补测
 
 ### 16.3 abort 后 `stream_dropped_after_abort_total` ↑
 
 - **断言**：跑一轮 abort 后 metrics 对应计数增加
-- **状态**：`[⏳ 待开始]`
-- **新增建议**：合到 16.2
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`src/http/__tests__/health-routes.test.ts`
 
 ### 16.4 provider error 分类
 
@@ -1223,23 +1413,23 @@
 
 | code | 覆盖来源 | 状态 |
 | :--- | :--- | :--- |
-| `token_invalid` | 2.1 / 2.2 | `[⏳ 待开始]` |
+| `token_invalid` | 2.1 / 2.2 | `[✅ 已完成]` |
 | `token_expired` | 预留 | `[⏳ 待开始]`（首版不触发） |
-| `session_not_found` | 3.2 | `[⏳ 待开始]` |
-| `turn_not_found` | 10.10 | `[⏳ 待开始]` |
+| `session_not_found` | 3.2 | `[✅ 已完成]` |
+| `turn_not_found` | 10.10 | `[✅ 已完成]` |
 | `workspace_mismatch` | — | `[⏳ 待开始]` |
 | `runtime_unavailable` | 12.2 | `[✅ 已完成]` |
-| `provider_not_registered` | 3.8 | `[⏳ 待开始]` |
-| `provider_auth_failed` | 7.6 | `[⏳ 待开始]` |
+| `provider_not_registered` | 3.8 | `[✅ 已完成]` |
+| `provider_auth_failed` | 7.6 | `[✅ 已完成]` |
 | `provider_rate_limited` | 7.4 | `[✅ 已完成]`（provider 层）/ WS 层 `[⏳ 待开始]` |
-| `provider_timeout` | T04 3.4.0 | `[⏳ 待开始]` |
-| `provider_stream_error` | 4.6 | `[⏳ 待开始]` |
+| `provider_timeout` | T04 3.4.0 | `[✅ 已完成]` |
+| `provider_stream_error` | 4.6 | `[⚙️ 部分完成]`（后端顺序已覆盖；WS/页面级仍待补） |
 | `tool_denied_path` | 3.2、8.2 | `[✅ 已完成]` |
 | `tool_denied_pattern` | 8.7 | `[✅ 已完成]` |
 | `tool_confirm_timeout` | 8.15 | `[⏳ 待开始]` |
 | `mcp_disconnected` | 8.12 | `[✅ 已完成]` |
-| `abort_ack` | 4.7 | `[⏳ 待开始]` |
-| `session_store_unavailable` | 5.12 | `[⏳ 待开始]` |
+| `abort_ack` | 4.7 | `[⚙️ 部分完成]`（`turn_end(abort)` 已覆盖；错误码表驱动未单列） |
+| `session_store_unavailable` | 5.12 | `[✅ 已完成]` |
 | `api_version_mismatch` | 1.2 | `[⏳ 待开始]` |
 
 **新增建议统一文件**：`src/http/__tests__/error-codes.table.test.ts`（表驱动）
@@ -1282,8 +1472,8 @@
 ### 19.4 visualization 后端不调 mna 主链路
 
 - **断言**：visualization 的 API route 不出现 `prepare-context` / `finalize-turn` 调用
-- **状态**：`[⏳ 待开始]`（需要静态 grep 作为回归测试）
-- **新增建议**：`services/visualization/tests/contract-no-runtime-call.test.ts`
+- **状态**：`[✅ 已完成]`
+- **文件位置**：`services/visualization/tests/contract-no-runtime-call.test.ts`
 
 ---
 
@@ -1292,15 +1482,15 @@
 按"回归风险大 + 当前覆盖缺失"排序：
 
 1. **错误码枚举表驱动测试**（§17）—— 一次搞完大部分 REST/WS 失败路径
-2. **多 phase 串行** + **单 phase 部分失败**（5.5 / 5.6）—— 6 钩子落地的稳定性关键
+2. **Token / bootstrap / 离线原因测试**（2.6、13.7 ~ 13.9）—— 这是 `/agent` 首屏能不能正确恢复的前提
 3. **Mid-stream 错误顺序** + **abort 传播**（4.6 / 4.7 / 7.11）—— 前端 reducer 状态机核心依赖
-4. **Prompt inspector HTTP 路由 + dispatched_messages**（10.10）—— T11 依赖
-5. **Provider 切换端点**（3.8）—— T11 provider-switch UI 依赖
-6. **MCP 管理 HTTP 路由 + restart / disable**（9.7 ~ 9.10）—— T11 mcp-panel 依赖
-7. **Artifact 截断策略** + **工具输出 > 5MB 拒绝**（8.16 / 8.17）
-8. **Metrics 端点**（§16）—— cost bar / 监控依赖
-9. **Playwright 浏览器本机安装 + UI E2E 跑通**（§14）—— 人工转自动化
-10. **contract-no-runtime-call 静态检查**（19.4）—— 契约层兜底
+4. **WS 客户端重连 + replay gap**（4.8、13.16、13.20、14.13）—— 真实网络波动下的核心体验
+5. **Prompt inspector HTTP 路由 + dispatched_messages**（10.10）—— T11 依赖
+6. **Provider 切换端点**（3.8）—— T11 provider-switch UI 依赖
+7. **MCP 管理 HTTP 路由 + restart / disable**（9.7 ~ 9.10）—— T11 mcp-panel 依赖
+8. **补齐剩余页面交互 Playwright 用例**（§14）—— 优先补 `mna` 恢复、shell 黑名单、session error、keyboard shortcuts
+9. **CLI 真命令交互**（15.13 ~ 15.18）—— 用户实际交付链路不能只停留在参数解析
+10. **Metrics 端点 + contract-no-runtime-call**（§16、19.4）—— 监控与契约层兜底
 
 ---
 

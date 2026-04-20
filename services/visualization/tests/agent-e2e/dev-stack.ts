@@ -46,6 +46,7 @@ async function getAvailablePort() {
 async function start() {
   const stack = await createE2eStack({
     withMcp: true,
+    providerMode: process.env.PLAYWRIGHT_AGENT_PROVIDER_MODE === "record-replay" ? "record-replay" : "stub",
   });
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), "viz-agent-stack-"));
   const homeDir = path.join(workRoot, "home");
@@ -95,50 +96,86 @@ async function start() {
       response.end(JSON.stringify(payload));
     };
 
-    if (request.method === "POST" && url.pathname === "/runtime/stop") {
-      await stack.stopRuntime();
-      sendJson(200, { ok: true });
-      return;
-    }
-    if (request.method === "POST" && url.pathname === "/runtime/restart") {
-      await stack.restartRuntime();
-      sendJson(200, { ok: true });
-      return;
-    }
-    if (request.method === "POST" && url.pathname === "/mna/stop") {
-      await stack.stopMna();
-      sendJson(200, { ok: true });
-      return;
-    }
-    if (request.method === "POST" && url.pathname === "/mna/restart") {
-      await stack.restartMna();
-      sendJson(200, { ok: true });
-      return;
-    }
-    if (request.method === "GET" && url.pathname === "/state") {
-      const mnaAddress = stack.mna.server.address();
-      const runtimeAddress = stack.runtimeApp?.server.address();
-      sendJson(200, {
-        mnaPort: mnaAddress && typeof mnaAddress !== "string" ? mnaAddress.port : null,
-        runtimePort: runtimeAddress && typeof runtimeAddress !== "string" ? runtimeAddress.port : null,
-        tokenPath: stack.mna.mnaTokenPath,
-      });
-      return;
-    }
-    if (request.method === "GET" && url.pathname === "/runs/latest") {
-      const runs = await stack.runtimeRepository?.getRuns({ page: 1, page_size: 20 });
-      const turns = (runs?.turns as Array<Record<string, unknown>> | undefined) ?? [];
-      const latestTurn =
-        turns.find((turn) => typeof turn.trace_id === "string" && turn.trace_id.length > 0) ?? null;
-      sendJson(200, {
-        traceId: latestTurn?.trace_id ?? null,
-        turnId: latestTurn?.turn_id ?? null,
-        turns,
-      });
-      return;
-    }
+    try {
+      if (request.method === "POST" && url.pathname === "/runtime/stop") {
+        await stack.stopRuntime();
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/runtime/restart") {
+        await stack.restartRuntime();
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/mna/stop") {
+        await stack.stopMna();
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/mna/restart") {
+        await stack.restartMna();
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/state") {
+        const mnaAddress = stack.mna.server.address();
+        const runtimeAddress = stack.runtimeApp?.server.address();
+        sendJson(200, {
+          mnaPort: mnaAddress && typeof mnaAddress !== "string" ? mnaAddress.port : null,
+          runtimePort: runtimeAddress && typeof runtimeAddress !== "string" ? runtimeAddress.port : null,
+          tokenPath: stack.mna.mnaTokenPath,
+        });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/agent/replay-gap") {
+        const sessionId = url.searchParams.get("session_id");
+        if (!sessionId) {
+          sendJson(400, { error: "session_id_required" });
+          return;
+        }
+        const session = stack.mna.runtimeState.sessions.get(sessionId);
+        const socket = session?.sockets.values().next().value as { send(data: string): void } | undefined;
+        if (!socket) {
+          sendJson(404, { error: "session_socket_not_found" });
+          return;
+        }
+        stack.forceReplayGap(sessionId, socket);
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/agent/session-error") {
+        const sessionId = url.searchParams.get("session_id");
+        if (!sessionId) {
+          sendJson(400, { error: "session_id_required" });
+          return;
+        }
+        stack.emitSessionError(sessionId, {
+          code: "session_store_unavailable",
+          message: "session store unavailable"
+        });
+        sendJson(200, { ok: true });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/runs/latest") {
+        const runs = await stack.runtimeRepository?.getRuns({ page: 1, page_size: 20 });
+        const turns = (runs?.turns as Array<Record<string, unknown>> | undefined) ?? [];
+        const latestTurn =
+          turns.find((turn) => typeof turn.trace_id === "string" && turn.trace_id.length > 0) ?? null;
+        sendJson(200, {
+          traceId: latestTurn?.trace_id ?? null,
+          turnId: latestTurn?.turn_id ?? null,
+          turns,
+        });
+        return;
+      }
 
-    sendJson(404, { error: "not_found" });
+      sendJson(404, { error: "not_found" });
+    } catch (error) {
+      sendJson(500, {
+        error: "control_handler_failed",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
   });
   await new Promise<void>((resolve) => {
     control.listen(0, "127.0.0.1", () => resolve());

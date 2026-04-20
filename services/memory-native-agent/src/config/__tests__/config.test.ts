@@ -377,4 +377,48 @@ provider:
     expect(config.provider.baseUrl).toBe("https://api.deepseek.com");
     expect(config.provider.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
   });
+
+  it("allows record-replay provider env overrides for fixture and target settings", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        MNA_PROVIDER_KIND: "record-replay",
+        MNA_PROVIDER_MODEL: "fixture-model",
+        MNA_PROVIDER_BASE_URL: "http://127.0.0.1:11434",
+        MNA_FIXTURE_DIR: "tests/fixtures/model-record-replay",
+        MNA_FIXTURE_NAME: "agent-ui",
+        MNA_REC_TARGET: "ollama",
+        MNA_PROVIDER_MODE: "replay",
+      },
+    });
+
+    expect(config.provider.kind).toBe("record-replay");
+    expect(config.provider.fixtureDir).toBe("tests/fixtures/model-record-replay");
+    expect(config.provider.fixtureName).toBe("agent-ui");
+    expect(config.provider.recordReplayTarget).toBe("ollama");
+  });
+
+  it("normalizes mixed Windows separators and drive-letter casing before deriving workspace id", () => {
+    const cwd = process.cwd();
+    const root = path.parse(cwd).root;
+    if (!/^[A-Za-z]:\\?$/.test(root)) {
+      const first = loadConfig({ cwdOverride: cwd });
+      const second = loadConfig({ cwdOverride: cwd });
+      expect(first.memory.workspaceId).toBe(second.memory.workspaceId);
+      return;
+    }
+
+    const relative = path.relative(root, cwd);
+    const loweredRoot = `${root[0]?.toLowerCase()}:${root.slice(2).replace(/\\/g, "/")}`;
+    const variant = `${loweredRoot}${relative.replace(/\\/g, "/")}/`;
+
+    const first = loadConfig({ cwdOverride: cwd });
+    const second = loadConfig({ cwdOverride: variant });
+    expect(first.memory.workspaceId).toBe(second.memory.workspaceId);
+  });
 });

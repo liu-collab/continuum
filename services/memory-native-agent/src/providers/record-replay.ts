@@ -31,6 +31,11 @@ type ChunkRecord = {
 
 type FixtureRecord = RequestRecord | ChunkRecord;
 
+type FixtureMatch = {
+  chunks: ChatChunk[];
+  nextOffset: number;
+};
+
 export class FixtureMissingError extends Error {
   constructor(message: string) {
     super(message);
@@ -44,6 +49,7 @@ export class RecordReplayProvider implements IModelProvider {
   private readonly mode: RecordReplayMode;
   private readonly modelId?: string;
   private readonly targetProvider?: IModelProvider;
+  private replayOffset = 0;
 
   constructor(options: RecordReplayOptions = {}) {
     this.fixtureDir = options.fixtureDir ?? DEFAULT_FIXTURE_DIR;
@@ -77,17 +83,17 @@ export class RecordReplayProvider implements IModelProvider {
 
     if (this.mode === "replay") {
       const records = await readFixture(path.join(this.fixtureDir, `${this.fixtureName}.jsonl`));
-      const header = records.find((record): record is RequestRecord => record.kind === "request");
-      if (!header || header.key !== key) {
+      const matched = findFixtureMatch(records, key, this.replayOffset);
+      if (!matched) {
         throw new FixtureMissingError(
           `Fixture mismatch for key ${key}. Run with MNA_PROVIDER_MODE=record to re-record.`,
         );
       }
 
-      for (const record of records) {
-        if (record.kind === "chunk") {
-          yield record.data;
-        }
+      this.replayOffset = matched.nextOffset;
+
+      for (const chunk of matched.chunks) {
+        yield chunk;
       }
       return;
     }
@@ -111,7 +117,7 @@ export class RecordReplayProvider implements IModelProvider {
       tools_digest: digestJson(normalizeTools(request.tools ?? [])),
     };
 
-    await writeFixture(path.join(this.fixtureDir, `${this.fixtureName}.jsonl`), [
+    await appendFixture(path.join(this.fixtureDir, `${this.fixtureName}.jsonl`), [
       requestRecord,
       ...chunks.map(
         (chunk): ChunkRecord => ({
@@ -124,7 +130,15 @@ export class RecordReplayProvider implements IModelProvider {
 }
 
 async function readFixture(filePath: string): Promise<FixtureRecord[]> {
-  const content = await fs.readFile(filePath, "utf8");
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      throw new FixtureMissingError(`Fixture file not found: ${filePath}`);
+    }
+    throw error;
+  }
   return content
     .split("\n")
     .map((line) => line.trim())
@@ -132,9 +146,9 @@ async function readFixture(filePath: string): Promise<FixtureRecord[]> {
     .map((line) => JSON.parse(line) as FixtureRecord);
 }
 
-async function writeFixture(filePath: string, records: FixtureRecord[]) {
+async function appendFixture(filePath: string, records: FixtureRecord[]) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
+  await fs.appendFile(filePath, `${records.map((record) => JSON.stringify(record)).join("\n")}\n`, "utf8");
 }
 
 function normalizeMessages(messages: ChatRequest["messages"]) {
@@ -197,4 +211,30 @@ function stableSortObject<T>(value: T): T {
   }
 
   return value;
+}
+
+function findFixtureMatch(records: FixtureRecord[], key: string, offset: number): FixtureMatch | null {
+  for (let index = offset; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record || record.kind !== "request" || record.key !== key) {
+      continue;
+    }
+
+    const chunks: ChatChunk[] = [];
+    let cursor = index + 1;
+    while (cursor < records.length && records[cursor]?.kind !== "request") {
+      const next = records[cursor];
+      if (next?.kind === "chunk") {
+        chunks.push(next.data);
+      }
+      cursor += 1;
+    }
+
+    return {
+      chunks,
+      nextOffset: cursor,
+    };
+  }
+
+  return null;
 }

@@ -32,6 +32,9 @@ export interface ProviderConfig {
   temperature: number;
   organization?: string;
   keepAlive?: string | number;
+  fixtureDir?: string;
+  fixtureName?: string;
+  recordReplayTarget?: Exclude<ProviderKind, "record-replay">;
 }
 
 export interface McpServerConfig {
@@ -206,7 +209,17 @@ function resolveSystemPrompt(options: {
 function validateProviderEnvironment(provider: {
   kind: ProviderKind;
   api_key_env?: string;
+  record_replay_target?: Exclude<ProviderKind, "record-replay">;
 }, env: NodeJS.ProcessEnv) {
+  if (provider.kind === "record-replay") {
+    const mode = env.MNA_PROVIDER_MODE?.trim();
+    const target = env.MNA_REC_TARGET?.trim() || provider.record_replay_target;
+    if ((mode === "record" || mode === "live") && !target) {
+      throw new Error("record-replay provider requires MNA_REC_TARGET or provider.record_replay_target in live/record mode");
+    }
+    return;
+  }
+
   if (provider.kind === "ollama" || provider.kind === "demo") {
     return;
   }
@@ -253,7 +266,15 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
 
   let effectiveConfig = parsed.data;
 
-  if (env.MNA_PROVIDER_KIND || env.MNA_PROVIDER_MODEL || env.MNA_PROVIDER_BASE_URL || env.MNA_PROVIDER_API_KEY_ENV) {
+  if (
+    env.MNA_PROVIDER_KIND
+    || env.MNA_PROVIDER_MODEL
+    || env.MNA_PROVIDER_BASE_URL
+    || env.MNA_PROVIDER_API_KEY_ENV
+    || env.MNA_FIXTURE_DIR
+    || env.MNA_FIXTURE_NAME
+    || env.MNA_REC_TARGET
+  ) {
     const reparsed = mergedConfigSchema.safeParse({
       ...parsed.data,
       provider: {
@@ -262,6 +283,11 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         model: env.MNA_PROVIDER_MODEL?.trim() || parsed.data.provider.model,
         base_url: env.MNA_PROVIDER_BASE_URL?.trim() || parsed.data.provider.base_url,
         api_key_env: env.MNA_PROVIDER_API_KEY_ENV?.trim() || parsed.data.provider.api_key_env,
+        fixture_dir: env.MNA_FIXTURE_DIR?.trim() || parsed.data.provider.fixture_dir,
+        fixture_name: env.MNA_FIXTURE_NAME?.trim() || parsed.data.provider.fixture_name,
+        record_replay_target:
+          (env.MNA_REC_TARGET?.trim() as Exclude<ProviderKind, "record-replay"> | undefined)
+          ?? parsed.data.provider.record_replay_target,
       },
     });
     if (!reparsed.success) {
@@ -290,6 +316,9 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       temperature: effectiveConfig.provider.temperature,
       organization: effectiveConfig.provider.organization,
       keepAlive: effectiveConfig.provider.keep_alive,
+      fixtureDir: effectiveConfig.provider.fixture_dir,
+      fixtureName: effectiveConfig.provider.fixture_name,
+      recordReplayTarget: effectiveConfig.provider.record_replay_target,
     },
     memory: {
       mode: effectiveConfig.memory.mode,

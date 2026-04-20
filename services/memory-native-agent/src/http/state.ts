@@ -45,6 +45,7 @@ export interface ServerMetrics {
 
 export interface MnaRuntimeState {
   config: AgentConfig;
+  env: NodeJS.ProcessEnv;
   memoryClient: MemoryClient;
   provider: IModelProvider;
   mcpRegistry: McpRegistry;
@@ -57,6 +58,7 @@ export interface MnaRuntimeState {
 
 export interface RuntimeStateOptions {
   homeDirectory?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 const SESSION_EVENT_BUFFER_LIMIT = 200;
@@ -79,12 +81,13 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
 
   return {
     config,
+    env: options.env ?? process.env,
     memoryClient: new MemoryClient({
       baseUrl: config.runtime.baseUrl,
       requestTimeoutMs: config.runtime.requestTimeoutMs,
       finalizeTimeoutMs: config.runtime.finalizeTimeoutMs,
     }),
-    provider: createProvider(config.provider),
+    provider: createProvider(config.provider, options.env),
     mcpRegistry,
     store,
     tools: createDefaultToolDispatcher({
@@ -127,24 +130,7 @@ export function createSessionState(state: MnaRuntimeState, sessionId: string): S
     sockets: new Set(),
   };
 
-  session.runner = new AgentRunner({
-      memoryClient: state.memoryClient,
-      provider: state.provider,
-      tools: state.tools,
-      config: {
-        ...state.config,
-        memory: {
-          ...state.config.memory,
-          mode: memoryMode,
-          workspaceId,
-        },
-        locale,
-      },
-      io: createRunnerIo(state, session),
-      store: state.store,
-      sessionId,
-      initialMessages: loadInitialMessages(state.store, sessionId),
-  });
+  session.runner = buildSessionRunner(state, session);
 
   state.sessions.set(sessionId, session);
   return session;
@@ -201,6 +187,12 @@ export function getSessionReplayFromEventId(session: SessionState, lastEventId?:
   };
 }
 
+export function __expireSessionEventsForTest(session: SessionState, cutoffMs: number) {
+  while (session.events[0] && session.events[0].createdAt < cutoffMs) {
+    session.events.shift();
+  }
+}
+
 export function updateSessionMode(state: MnaRuntimeState, sessionId: string, memoryMode: MemoryMode) {
   state.store.updateSession(sessionId, {
     memory_mode: memoryMode,
@@ -212,24 +204,21 @@ export function updateSessionMode(state: MnaRuntimeState, sessionId: string, mem
   }
 
   session.memoryMode = memoryMode;
-  session.runner = new AgentRunner({
-    memoryClient: state.memoryClient,
-    provider: state.provider,
-      tools: state.tools,
-    config: {
-      ...state.config,
-      memory: {
-        ...state.config.memory,
-        mode: memoryMode,
-        workspaceId: session.workspaceId,
-      },
-      locale: session.locale,
+  session.runner = buildSessionRunner(state, session);
+}
+
+export function updateProviderSelection(state: MnaRuntimeState, provider: AgentConfig["provider"]) {
+  state.config = {
+    ...state.config,
+    provider: {
+      ...provider,
     },
-    io: createRunnerIo(state, session),
-    store: state.store,
-    sessionId,
-    initialMessages: loadInitialMessages(state.store, sessionId),
-  });
+  };
+  state.provider = createProvider(state.config.provider, state.env);
+
+  for (const session of state.sessions.values()) {
+    session.runner = buildSessionRunner(state, session);
+  }
 }
 
 function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO {
@@ -309,6 +298,9 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         message: err.message,
       });
     },
+    emitStreamMetrics(_turnId, metrics) {
+      state.metrics.streamDroppedAfterAbortTotal += metrics.dropped_after_abort_total;
+    },
     requestConfirm(payload) {
       const confirmId = createConfirmId();
       return new Promise((resolve) => {
@@ -329,6 +321,27 @@ function loadInitialMessages(store: SessionStore, sessionId: string): ChatMessag
     content: message.content,
     tool_call_id: message.tool_call_id ?? undefined,
   }));
+}
+
+function buildSessionRunner(state: MnaRuntimeState, session: SessionState): AgentRunner {
+  return new AgentRunner({
+    memoryClient: state.memoryClient,
+    provider: state.provider,
+    tools: state.tools,
+    config: {
+      ...state.config,
+      memory: {
+        ...state.config.memory,
+        mode: session.memoryMode,
+        workspaceId: session.workspaceId,
+      },
+      locale: session.locale,
+    },
+    io: createRunnerIo(state, session),
+    store: state.store,
+    sessionId: session.sessionId,
+    initialMessages: loadInitialMessages(state.store, session.sessionId),
+  });
 }
 
 function incrementCounter(target: Record<string, number>, key: string) {

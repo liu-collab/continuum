@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { RecordReplayProvider } from "../record-replay.js";
+import { FixtureMissingError, RecordReplayProvider } from "../record-replay.js";
 import type { ChatRequest, IModelProvider } from "../types.js";
 
 const tempRoots: string[] = [];
@@ -107,5 +107,120 @@ describe("RecordReplayProvider", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1 },
       },
     ]);
+  });
+
+  it("throws FixtureMissingError when replay fixture is missing", async () => {
+    const fixtureDir = createTempDir();
+    const provider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "missing",
+      mode: "replay",
+      modelId: "fake-model",
+    });
+
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.chat({
+          messages: [{ role: "user", content: "hello" }],
+          tools: [],
+        })) {
+          // no-op
+        }
+      })(),
+    ).rejects.toBeInstanceOf(FixtureMissingError);
+  });
+
+  it("throws FixtureMissingError when replay fixture key does not match", async () => {
+    const fixtureDir = createTempDir();
+    const recordedProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "sample",
+      mode: "record",
+      modelId: "fake-model",
+      targetProvider: new FakeProvider(),
+    });
+
+    for await (const _chunk of recordedProvider.chat({
+      messages: [{ role: "user", content: "hello" }],
+      tools: [],
+    })) {
+      // drain recorded chunks
+    }
+
+    const replayProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "sample",
+      mode: "replay",
+      modelId: "fake-model",
+    });
+
+    await expect(
+      (async () => {
+        for await (const _chunk of replayProvider.chat({
+          messages: [{ role: "user", content: "different request" }],
+          tools: [],
+        })) {
+          // no-op
+        }
+      })(),
+    ).rejects.toBeInstanceOf(FixtureMissingError);
+  });
+
+  it("replays multiple recorded provider calls in order from the same fixture file", async () => {
+    const fixtureDir = createTempDir();
+    const recordedProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "multi-turn",
+      mode: "record",
+      modelId: "fake-model",
+      targetProvider: new FakeProvider(),
+    });
+
+    for await (const _chunk of recordedProvider.chat({
+      messages: [{ role: "user", content: "hello" }],
+      tools: [],
+    })) {
+      // drain first request
+    }
+
+    for await (const _chunk of recordedProvider.chat({
+      messages: [{ role: "user", content: "hello again" }],
+      tools: [],
+    })) {
+      // drain second request
+    }
+
+    const replayProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "multi-turn",
+      mode: "replay",
+      modelId: "fake-model",
+    });
+
+    const firstReplay = [];
+    for await (const chunk of replayProvider.chat({
+      messages: [{ role: "user", content: "hello" }],
+      tools: [],
+    })) {
+      firstReplay.push(chunk);
+    }
+
+    const secondReplay = [];
+    for await (const chunk of replayProvider.chat({
+      messages: [{ role: "user", content: "hello again" }],
+      tools: [],
+    })) {
+      secondReplay.push(chunk);
+    }
+
+    expect(firstReplay).toEqual([
+      { type: "text_delta", text: "hello" },
+      {
+        type: "end",
+        finish_reason: "stop",
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      },
+    ]);
+    expect(secondReplay).toEqual(firstReplay);
   });
 });
