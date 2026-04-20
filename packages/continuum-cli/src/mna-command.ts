@@ -93,6 +93,19 @@ async function waitForHealthy(url: string, timeoutMs: number) {
   throw new Error(`memory-native-agent 未在预期时间内就绪: ${url}`);
 }
 
+function readTailLines(content: string, lineCount: number) {
+  if (lineCount <= 0) {
+    return "";
+  }
+
+  const normalized = content.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const trailingEmpty = lines.at(-1) === "";
+  const selected = lines.slice(trailingEmpty ? -(lineCount + 1) : -lineCount);
+  const result = trailingEmpty ? selected.slice(0, -1) : selected;
+  return result.join("\n");
+}
+
 async function fetchMnaDependency(url: string, tokenPath: string, timeoutMs: number) {
   const token = (await readFile(tokenPath, "utf8").catch(() => "")).trim();
   if (!token) {
@@ -262,7 +275,24 @@ export async function startManagedMna(
   await stdoutHandle.close();
   await stderrHandle.close();
 
-  const healthy = await waitForHealthy(url, 10_000);
+  const exitPromise = new Promise<number | null>((resolve) => {
+    child.once("exit", (code) => resolve(code));
+    child.once("error", () => resolve(1));
+  });
+
+  let healthy;
+  try {
+    healthy = await Promise.race([
+      waitForHealthy(url, 10_000),
+      exitPromise.then((code) => {
+        throw new Error(`memory-native-agent 启动失败，退出码 ${code ?? 1}`);
+      })
+    ]);
+  } catch (error) {
+    await writeManagedMnaRecord(null);
+    throw error;
+  }
+
   await writeManagedMnaRecord(
     buildMnaRecord({
       pid: child.pid ?? 0,
@@ -331,7 +361,8 @@ export async function runMnaCommand(
     }
 
     const content = (await readFile(record.logPath, "utf8").catch(() => "")) || "";
-    process.stdout.write(content);
+    const tailOption = typeof options.tail === "string" ? Number.parseInt(options.tail, 10) : undefined;
+    process.stdout.write(Number.isFinite(tailOption) ? readTailLines(content, tailOption ?? 0) : content);
     return 0;
   }
 

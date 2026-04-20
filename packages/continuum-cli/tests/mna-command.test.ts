@@ -1,5 +1,7 @@
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import net from "node:net";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const stdoutWriteMock = vi.hoisted(() => vi.fn());
 const fetchJsonMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
+const spawnMock = vi.hoisted(() => vi.fn());
 const managedStateStore = vi.hoisted(() => ({
   state: {
     version: 1 as const,
@@ -28,6 +31,14 @@ vi.mock("../src/utils.js", async (importOriginal) => {
     ...actual,
     fetchJson: fetchJsonMock,
     pathExists: pathExistsMock
+  };
+});
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: spawnMock
   };
 });
 
@@ -53,6 +64,7 @@ describe("continuum mna command", () => {
     stdoutWriteMock.mockReset();
     fetchJsonMock.mockReset();
     pathExistsMock.mockReset();
+    spawnMock.mockReset();
     process.stdout.write = stdoutWriteMock as unknown as typeof process.stdout.write;
     process.env.HOME = tempHome;
     process.env.USERPROFILE = tempHome;
@@ -118,6 +130,28 @@ describe("continuum mna command", () => {
     expect(stdoutWriteMock).toHaveBeenCalledWith("hello logs");
   });
 
+  it("prints only the requested tail lines for managed logs", async () => {
+    const logsDir = path.join(tempHome, ".continuum", "logs");
+    const logPath = path.join(logsDir, "mna.log");
+    await mkdir(logsDir, { recursive: true });
+    await writeFile(logPath, "line-1\nline-2\nline-3\n", "utf8");
+    managedStateStore.state = {
+      version: 1,
+      services: [
+        {
+          name: "memory-native-agent",
+          pid: 123,
+          logPath
+        }
+      ]
+    };
+
+    const exitCode = await runMnaCommand("logs", { tail: "2" }, import.meta.url);
+
+    expect(exitCode).toBe(0);
+    expect(stdoutWriteMock).toHaveBeenCalledWith("line-2\nline-3");
+  });
+
   it("stops gracefully when mna is not running", async () => {
     const exitCode = await runMnaCommand("stop", {}, import.meta.url);
 
@@ -176,4 +210,62 @@ describe("continuum mna command", () => {
       version: "0.1.1"
     });
   });
+
+  it("fails start when managed process exits before becoming healthy", async () => {
+    pathExistsMock.mockResolvedValue(true);
+    fetchJsonMock.mockResolvedValue({
+      ok: false,
+      error: "connect ECONNREFUSED"
+    });
+    spawnMock.mockImplementation(() => {
+      const child = new EventEmitter() as EventEmitter & { pid: number; unref(): void };
+      child.pid = 4321;
+      child.unref = vi.fn();
+      setImmediate(() => {
+        child.emit("exit", 3);
+      });
+      return child;
+    });
+
+    await expect(startManagedMna({}, import.meta.url)).rejects.toThrow(/启动失败|未在预期时间内就绪/);
+    expect(managedStateStore.state.services).toEqual([]);
+  }, 15_000);
+
+  it("fails start when the target port is already occupied by another process", async () => {
+    pathExistsMock.mockResolvedValue(true);
+    fetchJsonMock.mockResolvedValue({
+      ok: false,
+      error: "connect ECONNREFUSED",
+    });
+    spawnMock.mockImplementation(() => {
+      const child = new EventEmitter() as EventEmitter & { pid: number; unref(): void };
+      child.pid = 6789;
+      child.unref = vi.fn();
+      setImmediate(() => {
+        child.emit("exit", 3);
+      });
+      return child;
+    });
+
+    const server = net.createServer();
+    const occupiedPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("occupied port unavailable"));
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+
+    try {
+      await expect(startManagedMna({ "mna-port": String(occupiedPort) }, import.meta.url)).rejects.toThrow(
+        /未在预期时间内就绪|启动失败/,
+      );
+      expect(managedStateStore.state.services).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 15_000);
 });
