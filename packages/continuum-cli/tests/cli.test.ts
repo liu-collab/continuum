@@ -17,7 +17,10 @@ import {
   resolveThirdPartyEmbeddingConfig,
 } from "../src/embedding-config.js";
 import { renderHelp } from "../src/help.js";
-import { resolveManagedMnaProviderConfig } from "../src/mna-provider-config.js";
+import {
+  hasManagedMnaProviderOptionOverrides,
+  resolveManagedMnaProviderConfig,
+} from "../src/mna-provider-config.js";
 import { runStatusCommand } from "../src/status-command.js";
 
 describe("continuum cli", () => {
@@ -175,7 +178,7 @@ describe("continuum cli", () => {
   });
 
   it("falls back to demo provider when no model credential is available", () => {
-    const config = resolveManagedMnaProviderConfig({}, {});
+    const config = resolveManagedMnaProviderConfig({});
 
     expect(config).toEqual({
       kind: "demo",
@@ -184,9 +187,10 @@ describe("continuum cli", () => {
     });
   });
 
-  it("prefers DeepSeek env as managed openai-compatible provider", () => {
-    const config = resolveManagedMnaProviderConfig({}, {
-      DEEPSEEK_API_KEY: "demo-key",
+  it("uses explicit DeepSeek provider options without reading local env", () => {
+    const config = resolveManagedMnaProviderConfig({
+      "provider-kind": "openai-compatible",
+      "provider-model": "deepseek-chat",
     });
 
     expect(config).toEqual({
@@ -195,5 +199,12 @@ describe("continuum cli", () => {
       baseUrl: "https://api.deepseek.com",
       apiKeyEnv: "DEEPSEEK_API_KEY",
     });
+  });
+
+  it("detects whether provider overrides were explicitly passed", () => {
+    expect(hasManagedMnaProviderOptionOverrides({})).toBe(false);
+    expect(hasManagedMnaProviderOptionOverrides({
+      "provider-model": "deepseek-chat",
+    })).toBe(true);
   });
 });

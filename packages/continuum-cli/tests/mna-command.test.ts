@@ -270,4 +270,107 @@ describe("continuum mna command", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 15_000);
+
+  it("passes the current workspace as MNA_WORKSPACE_CWD when starting managed mna", async () => {
+    const mnaHome = path.join(tempHome, ".continuum", "managed", "mna");
+    pathExistsMock.mockImplementation(async (targetPath: string) => targetPath.endsWith("mna-server.mjs"));
+    fetchJsonMock
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "connect ECONNREFUSED",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          version: "0.1.1",
+        },
+      });
+
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    spawnMock.mockImplementation((_command, _args, options) => {
+      capturedEnv = options?.env as NodeJS.ProcessEnv;
+      const child = new EventEmitter() as EventEmitter & { pid: number; unref(): void };
+      child.pid = 12345;
+      child.unref = vi.fn();
+      return child;
+    });
+
+    await startManagedMna({ "mna-home": mnaHome }, import.meta.url);
+
+    expect(capturedEnv?.MNA_WORKSPACE_CWD).toBe(process.cwd());
+  });
+
+  it("ignores legacy env-based persisted provider config when no page config was saved", async () => {
+    const mnaHome = path.join(tempHome, ".continuum", "managed", "mna");
+    await mkdir(mnaHome, { recursive: true });
+    await writeFile(
+      path.join(mnaHome, "config.json"),
+      JSON.stringify({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key_env: "DEEPSEEK_API_KEY",
+        },
+      }),
+      "utf8",
+    );
+    pathExistsMock.mockImplementation(async (targetPath: string) => targetPath.endsWith("mna-server.mjs"));
+    fetchJsonMock
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "connect ECONNREFUSED",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          version: "0.1.1",
+        },
+      });
+
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    spawnMock.mockImplementation((_command, _args, options) => {
+      capturedEnv = options?.env as NodeJS.ProcessEnv;
+      const child = new EventEmitter() as EventEmitter & { pid: number; unref(): void };
+      child.pid = 12345;
+      child.unref = vi.fn();
+      return child;
+    });
+
+    await startManagedMna({ "mna-home": mnaHome }, import.meta.url);
+
+    expect(capturedEnv?.MNA_PROVIDER_KIND).toBe("demo");
+    expect(capturedEnv?.MNA_PROVIDER_MODEL).toBe("continuum-demo");
+    expect(capturedEnv?.MNA_PROVIDER_API_KEY_ENV).toBeUndefined();
+  });
+
+  it("does not persist cli provider overrides into managed page config", async () => {
+    const mnaHome = path.join(tempHome, ".continuum", "managed", "mna");
+    pathExistsMock.mockImplementation(async (targetPath: string) => targetPath.endsWith("mna-server.mjs"));
+    fetchJsonMock
+      .mockResolvedValueOnce({
+        ok: false,
+        error: "connect ECONNREFUSED",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          version: "0.1.1",
+        },
+      });
+    spawnMock.mockImplementation(() => {
+      const child = new EventEmitter() as EventEmitter & { pid: number; unref(): void };
+      child.pid = 12345;
+      child.unref = vi.fn();
+      return child;
+    });
+
+    await startManagedMna({
+      "mna-home": mnaHome,
+      "provider-kind": "openai-compatible",
+      "provider-model": "deepseek-chat",
+    }, import.meta.url);
+
+    await expect(readFile(path.join(mnaHome, "config.json"), "utf8")).rejects.toThrow();
+  });
 });

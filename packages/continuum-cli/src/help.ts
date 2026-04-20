@@ -16,8 +16,8 @@ Options:
   --embedding-model MODEL    第三方 embedding 模型名，也可通过 EMBEDDING_MODEL 提供
   --embedding-api-key KEY    第三方 embedding 鉴权，可选，也可通过 EMBEDDING_API_KEY 提供
   --provider-kind KIND       mna 模型类型，支持 demo / openai-compatible / anthropic / ollama
-  --provider-model MODEL     mna 模型名；未提供时优先从现有环境变量推断，推断不到则回退 demo provider
-  --provider-base-url URL    mna provider 地址
-  --provider-api-key-env ENV mna provider 鉴权环境变量名
+  --provider-model MODEL     mna 模型名；仅对本次启动生效，页面默认读取已保存配置
+  --provider-base-url URL    mna provider 地址；仅对本次启动生效
+  --provider-api-key-env ENV mna provider 鉴权环境变量名；仅对本次启动生效
 `;
 }

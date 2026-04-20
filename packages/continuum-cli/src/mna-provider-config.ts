@@ -21,9 +21,25 @@ export type ManagedMnaProviderConfig =
       apiKeyEnv?: undefined;
     };
 
+function isNonEmptyString(value: string | boolean | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function shouldUseDeepSeekDefaults(model: string, baseUrl: string) {
+  return model.startsWith("deepseek") || baseUrl.includes("api.deepseek.com");
+}
+
+export function hasManagedMnaProviderOptionOverrides(options: Record<string, string | boolean>) {
+  return [
+    options["provider-kind"],
+    options["provider-model"],
+    options["provider-base-url"],
+    options["provider-api-key-env"],
+  ].some(isNonEmptyString);
+}
+
 export function resolveManagedMnaProviderConfig(
   options: Record<string, string | boolean>,
-  env: NodeJS.ProcessEnv = process.env,
 ): ManagedMnaProviderConfig {
   const explicitKind =
     typeof options["provider-kind"] === "string" ? options["provider-kind"].trim() : "";
@@ -36,7 +52,7 @@ export function resolveManagedMnaProviderConfig(
       ? options["provider-api-key-env"].trim()
       : "";
 
-  if (explicitKind === "demo" || (!explicitKind && !hasAnyThirdPartyProvider(env))) {
+  if (explicitKind === "demo" || !hasManagedMnaProviderOptionOverrides(options)) {
     return {
       kind: "demo",
       model: explicitModel || "continuum-demo",
@@ -44,9 +60,7 @@ export function resolveManagedMnaProviderConfig(
     };
   }
 
-  const resolvedKind =
-    explicitKind ||
-    (env.DEEPSEEK_API_KEY ? "openai-compatible" : env.OPENAI_API_KEY ? "openai-compatible" : env.ANTHROPIC_API_KEY ? "anthropic" : "ollama");
+  const resolvedKind = explicitKind || "ollama";
 
   if (resolvedKind === "anthropic") {
     return {
@@ -58,9 +72,10 @@ export function resolveManagedMnaProviderConfig(
   }
 
   if (resolvedKind === "openai-compatible") {
-    const defaultApiKeyEnv = env.DEEPSEEK_API_KEY ? "DEEPSEEK_API_KEY" : "OPENAI_API_KEY";
-    const defaultBaseUrl = env.DEEPSEEK_API_KEY ? "https://api.deepseek.com" : "https://api.openai.com/v1";
-    const defaultModel = env.DEEPSEEK_API_KEY ? "deepseek-chat" : "gpt-4.1-mini";
+    const useDeepSeekDefaults = shouldUseDeepSeekDefaults(explicitModel, explicitBaseUrl);
+    const defaultApiKeyEnv = useDeepSeekDefaults ? "DEEPSEEK_API_KEY" : "OPENAI_API_KEY";
+    const defaultBaseUrl = useDeepSeekDefaults ? "https://api.deepseek.com" : "https://api.openai.com/v1";
+    const defaultModel = useDeepSeekDefaults ? "deepseek-chat" : "gpt-4.1-mini";
 
     return {
       kind: "openai-compatible",
@@ -75,8 +90,4 @@ export function resolveManagedMnaProviderConfig(
     model: explicitModel || "qwen2.5-coder",
     baseUrl: explicitBaseUrl || "http://127.0.0.1:11434",
   };
-}
-
-function hasAnyThirdPartyProvider(env: NodeJS.ProcessEnv) {
-  return Boolean(env.DEEPSEEK_API_KEY || env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY);
 }

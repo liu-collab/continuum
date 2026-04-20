@@ -22,7 +22,11 @@ import {
   pathExists,
   vendorPath
 } from "./utils.js";
-import { resolveManagedMnaProviderConfig } from "./mna-provider-config.js";
+import {
+  hasManagedMnaProviderOptionOverrides,
+  resolveManagedMnaProviderConfig,
+  type ManagedMnaProviderConfig,
+} from "./mna-provider-config.js";
 
 export const DEFAULT_MNA_URL = "http://127.0.0.1:4193";
 export const DEFAULT_MNA_HOST = "127.0.0.1";
@@ -81,6 +85,18 @@ function parseMnaPort(options: Record<string, string | boolean>) {
 
 function parseMnaHome(options: Record<string, string | boolean>) {
   return typeof options["mna-home"] === "string" ? options["mna-home"] : DEFAULT_MNA_HOME_DIR;
+}
+
+function isUiManagedProviderConfig(config: ManagedMnaProviderConfig | null) {
+  if (!config) {
+    return false;
+  }
+
+  if (config.kind === "demo" || config.kind === "ollama") {
+    return true;
+  }
+
+  return Boolean(config.apiKey);
 }
 
 async function waitForHealthy(url: string, timeoutMs: number) {
@@ -246,11 +262,14 @@ export async function startManagedMna(
   const port = parseMnaPort(options);
   const homeDir = parseMnaHome(options);
   const runtimeUrl = typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
+  const hasProviderOverrides = hasManagedMnaProviderOptionOverrides(options);
   const persistedProviderConfig = await readManagedMnaProviderConfig(homeDir);
-  const providerConfig =
-    Object.keys(options).some((key) => key.startsWith("provider-"))
-      ? resolveManagedMnaProviderConfig(options, process.env)
-      : persistedProviderConfig ?? resolveManagedMnaProviderConfig(options, process.env);
+  const uiManagedProviderConfig = isUiManagedProviderConfig(persistedProviderConfig)
+    ? persistedProviderConfig
+    : null;
+  const providerConfig = hasProviderOverrides
+    ? resolveManagedMnaProviderConfig(options)
+    : uiManagedProviderConfig ?? resolveManagedMnaProviderConfig({});
   const url = `http://${host}:${port}`;
   const logPath = path.join(continuumLogsDir(), "mna.log");
   const tokenPath = path.join(homeDir, "token.txt");
@@ -258,7 +277,9 @@ export async function startManagedMna(
 
   await mkdir(continuumLogsDir(), { recursive: true });
   await mkdir(homeDir, { recursive: true });
-  await writeManagedMnaProviderConfig(homeDir, providerConfig);
+  if (!hasProviderOverrides) {
+    await writeManagedMnaProviderConfig(homeDir, providerConfig);
+  }
   const stdoutHandle = await open(logPath, "a");
   const stderrHandle = await open(logPath, "a");
 
@@ -273,6 +294,7 @@ export async function startManagedMna(
       MNA_HOST: host,
       MNA_PORT: String(port),
       MNA_HOME: homeDir,
+      MNA_WORKSPACE_CWD: process.cwd(),
       RUNTIME_BASE_URL: runtimeUrl,
       MNA_PROVIDER_KIND: providerConfig.kind,
       MNA_PROVIDER_MODEL: providerConfig.model,
