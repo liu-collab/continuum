@@ -204,6 +204,7 @@ async function buildStackImage(stageDir: string) {
 async function startStackContainer(
   port: number,
   bindHost: string,
+  publicHost: string,
   embeddingConfigPath: string,
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
@@ -259,7 +260,9 @@ async function startStackContainer(
     "-e",
     `RUNTIME_API_BASE_URL=${DEFAULT_RUNTIME_URL}`,
     "-e",
-    `NEXT_PUBLIC_MNA_BASE_URL=http://host.docker.internal:${DEFAULT_MNA_PORT}`,
+    `NEXT_PUBLIC_MNA_BASE_URL=http://${publicHost}:${DEFAULT_MNA_PORT}`,
+    "-e",
+    `MNA_INTERNAL_BASE_URL=http://host.docker.internal:${DEFAULT_MNA_PORT}`,
     "-e",
     "MNA_TOKEN_PATH=/opt/continuum/managed/mna/token.txt",
     "-e",
@@ -311,7 +314,7 @@ export async function runStartCommand(
     () => undefined,
   );
 
-  await startStackContainer(postgresPort, bindHost, embeddingConfigPath);
+  await startStackContainer(postgresPort, bindHost, accessibleHost, embeddingConfigPath);
 
   await waitForHealthy(`${storageUrl}/health`, 120_000);
   await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);

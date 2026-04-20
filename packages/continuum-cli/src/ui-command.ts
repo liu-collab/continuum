@@ -75,6 +75,8 @@ export async function runUiCommand(
       : process.env.STORAGE_READ_MODEL_DSN ?? process.env.DATABASE_URL ?? "";
   const mnaBaseUrl =
     typeof options["mna-url"] === "string" ? options["mna-url"] : process.env.NEXT_PUBLIC_MNA_BASE_URL ?? DEFAULT_MNA_URL;
+  const mnaInternalBaseUrl =
+    process.env.MNA_INTERNAL_BASE_URL ?? mnaBaseUrl;
   const mnaTokenPath =
     typeof options["mna-token-path"] === "string"
       ? options["mna-token-path"]
@@ -92,6 +94,7 @@ export async function runUiCommand(
       RUNTIME_API_BASE_URL: runtimeUrl,
       STORAGE_READ_MODEL_DSN: readModelDsn,
       NEXT_PUBLIC_MNA_BASE_URL: mnaBaseUrl,
+      MNA_INTERNAL_BASE_URL: mnaInternalBaseUrl,
       MNA_TOKEN_PATH: mnaTokenPath,
     },
   });

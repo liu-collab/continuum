@@ -10,6 +10,7 @@
     "offlineTitle": "agent 离线",
     "offlineDescription": "请先启动 memory-native-agent，然后刷新页面。建议命令：`continuum start`。",
     "bootstrap": {
+      "loadingTitle": "正在初始化",
       "loading": "正在初始化 agent 连接。",
       "mna_not_running": "未检测到 memory-native-agent，请先启动本地服务。",
       "token_missing": "未找到可用 token，请确认 mna 已启动并已生成 token 文件。",

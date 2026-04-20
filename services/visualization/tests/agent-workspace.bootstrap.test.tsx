@@ -13,7 +13,7 @@ import { useAgentWorkspace } from "@/app/agent/_hooks/use-agent-workspace";
 
 const mockedUseAgentWorkspace = vi.mocked(useAgentWorkspace);
 
-function createWorkspaceState(status: "mna_not_running" | "token_missing" | "token_invalid") {
+function createWorkspaceState(status: "loading" | "mna_not_running" | "token_missing" | "token_invalid") {
   return {
     state: {
       bootstrapStatus: status,
@@ -65,6 +65,22 @@ function createWorkspaceState(status: "mna_not_running" | "token_missing" | "tok
 }
 
 describe("AgentWorkspace bootstrap states", () => {
+  it("shows a neutral bootstrap state while agent is initializing", () => {
+    mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("loading") as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-bootstrap-loading-state")).toHaveTextContent("正在初始化");
+    expect(screen.getByTestId("agent-bootstrap-loading-state")).toHaveTextContent(
+      "正在初始化 agent 连接。"
+    );
+    expect(screen.queryByTestId("agent-offline-state")).not.toBeInTheDocument();
+  });
+
   it("shows a specific message when mna is not running", () => {
     mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("mna_not_running") as never);
 

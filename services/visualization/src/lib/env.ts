@@ -10,6 +10,7 @@ const envSchema = z.object({
     .string()
     .default("Structured memory catalog, run trace, and metrics dashboard"),
   NEXT_PUBLIC_MNA_BASE_URL: z.string().url().default("http://127.0.0.1:4193"),
+  MNA_INTERNAL_BASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_MNA_DEFAULT_LOCALE: z.enum(["zh-CN", "en-US"]).default("zh-CN"),
   STORAGE_READ_MODEL_DSN: z.string().optional(),
   STORAGE_READ_MODEL_SCHEMA: identifierSchema.default("storage_shared_v1"),
@@ -32,6 +33,7 @@ type RawEnv = {
   NEXT_PUBLIC_APP_NAME?: string;
   NEXT_PUBLIC_APP_DESCRIPTION?: string;
   NEXT_PUBLIC_MNA_BASE_URL?: string;
+  MNA_INTERNAL_BASE_URL?: string;
   NEXT_PUBLIC_MNA_DEFAULT_LOCALE?: string;
   STORAGE_READ_MODEL_DSN?: string;
   STORAGE_READ_MODEL_SCHEMA?: string;
@@ -64,6 +66,7 @@ function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
     NEXT_PUBLIC_APP_NAME: env.NEXT_PUBLIC_APP_NAME,
     NEXT_PUBLIC_APP_DESCRIPTION: env.NEXT_PUBLIC_APP_DESCRIPTION,
     NEXT_PUBLIC_MNA_BASE_URL: env.NEXT_PUBLIC_MNA_BASE_URL,
+    MNA_INTERNAL_BASE_URL: env.MNA_INTERNAL_BASE_URL,
     NEXT_PUBLIC_MNA_DEFAULT_LOCALE: env.NEXT_PUBLIC_MNA_DEFAULT_LOCALE,
     STORAGE_READ_MODEL_DSN: env.STORAGE_READ_MODEL_DSN || undefined,
     STORAGE_READ_MODEL_SCHEMA: env.STORAGE_READ_MODEL_SCHEMA,

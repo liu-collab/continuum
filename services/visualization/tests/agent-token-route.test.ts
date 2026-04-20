@@ -16,7 +16,8 @@ vi.mock("@/lib/env", () => ({
   getAppConfig: () => ({
     values: {
       MNA_TOKEN_PATH: "~/.mna/token.txt",
-      NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:4193"
+      NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:4193",
+      MNA_INTERNAL_BASE_URL: "http://host.docker.internal:4193"
     },
     issues: []
   })
@@ -50,6 +51,13 @@ describe("agent token route", () => {
       reason: null,
       mnaBaseUrl: "http://127.0.0.1:4193"
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL("/healthz", "http://host.docker.internal:4193/"),
+      expect.objectContaining({
+        method: "GET",
+        cache: "no-store"
+      })
+    );
   });
 
   it("returns mna_not_running when token file is missing", async () => {

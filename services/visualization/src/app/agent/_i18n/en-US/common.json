@@ -10,6 +10,7 @@
     "offlineTitle": "Agent offline",
     "offlineDescription": "Start memory-native-agent first, then refresh this page. Suggested command: `continuum start`.",
     "bootstrap": {
+      "loadingTitle": "Initializing",
       "loading": "Initializing the agent connection.",
       "mna_not_running": "memory-native-agent was not detected. Start the local service first.",
       "token_missing": "No usable token was found. Make sure mna is running and the token file exists.",

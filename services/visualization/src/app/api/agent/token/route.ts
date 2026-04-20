@@ -58,6 +58,7 @@ async function probeMna(baseUrl: string) {
 export async function GET() {
   const { values } = getAppConfig();
   const tokenPath = resolveTokenPath(values.MNA_TOKEN_PATH);
+  const browserMnaBaseUrl = values.NEXT_PUBLIC_MNA_BASE_URL;
 
   try {
     const token = (await withTimeout(fs.readFile(tokenPath, "utf8"), TOKEN_READ_TIMEOUT_MS)).trim();
@@ -67,7 +68,7 @@ export async function GET() {
         status: "token_missing",
         token: null,
         reason: "token 文件为空。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+        mnaBaseUrl: browserMnaBaseUrl
       });
     }
 
@@ -76,25 +77,20 @@ export async function GET() {
         status: "token_invalid",
         token: null,
         reason: "token 文件格式不合法。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+        mnaBaseUrl: browserMnaBaseUrl
       });
     }
 
-    const mnaReachable = await probeMna(values.NEXT_PUBLIC_MNA_BASE_URL);
-    if (!mnaReachable) {
-      return json({
-        status: "mna_not_running",
-        token: null,
-        reason: "memory-native-agent 当前不可访问，请先确认服务已经启动。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
-      });
-    }
+    // Do not hard-block the browser bootstrap on server-side probe results.
+    // In managed mode, visualization may run inside Docker while mna runs on the host
+    // and only binds 127.0.0.1, which makes container-side probing unreliable.
+    void probeMna(values.MNA_INTERNAL_BASE_URL ?? browserMnaBaseUrl).catch(() => false);
 
     return json({
       status: "ok",
       token,
       reason: null,
-      mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+      mnaBaseUrl: browserMnaBaseUrl
     });
   } catch (error) {
     if (error instanceof Error && error.message === "TOKEN_READ_TIMEOUT") {
@@ -102,7 +98,7 @@ export async function GET() {
         status: "token_missing",
         token: null,
         reason: "读取 token 文件超时。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+        mnaBaseUrl: browserMnaBaseUrl
       });
     }
 
@@ -111,7 +107,7 @@ export async function GET() {
         status: "mna_not_running",
         token: null,
         reason: "未找到 token 文件，请先启动 memory-native-agent。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+        mnaBaseUrl: browserMnaBaseUrl
       });
     }
 
@@ -120,7 +116,7 @@ export async function GET() {
         status: "token_invalid",
         token: null,
         reason: "没有权限读取 token 文件。",
-        mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+        mnaBaseUrl: browserMnaBaseUrl
       });
     }
 
@@ -128,7 +124,7 @@ export async function GET() {
       status: "token_invalid",
       token: null,
       reason: error instanceof Error ? error.message : "读取 token 文件失败。",
-      mnaBaseUrl: values.NEXT_PUBLIC_MNA_BASE_URL
+      mnaBaseUrl: browserMnaBaseUrl
     });
   }
 }

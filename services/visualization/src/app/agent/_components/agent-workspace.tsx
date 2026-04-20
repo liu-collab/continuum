@@ -34,7 +34,21 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     : null;
   const bootstrapDescription =
     workspace.state.bootstrapReason ??
-    resolveBootstrapDescription(workspace.state.bootstrapStatus, t);
+    (workspace.state.bootstrapStatus === "loading"
+      ? t("workspace.bootstrap.loading")
+      : resolveBootstrapDescription(workspace.state.bootstrapStatus, t));
+
+  if (workspace.state.bootstrapStatus === "loading") {
+    return (
+      <div className="space-y-6">
+        <EmptyState
+          testId="agent-bootstrap-loading-state"
+          title={t("workspace.bootstrap.loadingTitle")}
+          description={bootstrapDescription}
+        />
+      </div>
+    );
+  }
 
   if (workspace.state.bootstrapStatus !== "ok") {
     return (
@@ -274,8 +288,6 @@ function resolveBootstrapDescription(
   t: (key: string) => string
 ) {
   switch (status) {
-    case "loading":
-      return t("workspace.bootstrap.loading");
     case "mna_not_running":
       return t("workspace.bootstrap.mna_not_running");
     case "token_missing":
