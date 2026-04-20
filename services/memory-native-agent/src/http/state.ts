@@ -41,6 +41,10 @@ export interface ServerMetrics {
   streamFlushedEventsTotal: number;
   streamDroppedAfterAbortTotal: number;
   runtimeErrorsTotal: Record<string, number>;
+  latencySamples: {
+    prepareContextMs: number[];
+    providerFirstTokenMs: number[];
+  };
 }
 
 export interface MnaRuntimeState {
@@ -108,6 +112,10 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
       streamFlushedEventsTotal: 0,
       streamDroppedAfterAbortTotal: 0,
       runtimeErrorsTotal: {},
+      latencySamples: {
+        prepareContextMs: [],
+        providerFirstTokenMs: [],
+      },
     },
     artifactsRoot,
   };
@@ -291,12 +299,24 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
     },
     emitError(scope, err) {
       incrementCounter(state.metrics.runtimeErrorsTotal, err.code ?? "unknown");
+      if (isProviderErrorCode(err.code)) {
+        incrementCounter(state.metrics.providerErrorsTotal, normalizeProviderErrorCode(err.code));
+      }
       pushSessionEvent(session, {
         kind: "error",
         scope,
         code: err.code ?? "unknown",
         message: err.message,
       });
+    },
+    recordPrepareContextLatency(_phase, latencyMs) {
+      pushLatencySample(state.metrics.latencySamples.prepareContextMs, latencyMs);
+    },
+    recordProviderCall(providerKey) {
+      incrementCounter(state.metrics.providerCallsTotal, providerKey);
+    },
+    recordProviderFirstTokenLatency(_providerKey, latencyMs) {
+      pushLatencySample(state.metrics.latencySamples.providerFirstTokenMs, latencyMs);
     },
     emitStreamMetrics(_turnId, metrics) {
       state.metrics.streamDroppedAfterAbortTotal += metrics.dropped_after_abort_total;
@@ -346,6 +366,36 @@ function buildSessionRunner(state: MnaRuntimeState, session: SessionState): Agen
 
 function incrementCounter(target: Record<string, number>, key: string) {
   target[key] = (target[key] ?? 0) + 1;
+}
+
+function pushLatencySample(target: number[], value: number) {
+  if (!Number.isFinite(value) || value < 0) {
+    return;
+  }
+
+  target.push(Math.round(value));
+  if (target.length > 512) {
+    target.splice(0, target.length - 512);
+  }
+}
+
+function isProviderErrorCode(code?: string) {
+  return code === "provider_rate_limited" || code === "provider_unavailable" || code === "provider_timeout" || code === "provider_stream_error";
+}
+
+function normalizeProviderErrorCode(code?: string) {
+  switch (code) {
+    case "provider_rate_limited":
+      return "rate_limited";
+    case "provider_timeout":
+      return "timeout";
+    case "provider_stream_error":
+      return "stream_error";
+    case "provider_unavailable":
+      return "unavailable";
+    default:
+      return "unknown";
+  }
 }
 
 function pruneSessionEvents(session: SessionState, now: number) {

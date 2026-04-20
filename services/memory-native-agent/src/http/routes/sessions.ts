@@ -71,12 +71,24 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
 
   app.get("/v1/agent/sessions/:id", async (request, reply) => {
     const params = sessionParamsSchema.parse(request.params);
+    const query = z.object({
+      workspace_id: z.string().optional(),
+    }).parse(request.query ?? {});
     const session = app.runtimeState.store.getSession(params.id);
     if (!session) {
       return reply.code(404).send({
         error: {
           code: "session_not_found",
           message: "Session not found.",
+        },
+      });
+    }
+
+    if (query.workspace_id && session.workspace_id !== query.workspace_id) {
+      return reply.code(409).send({
+        error: {
+          code: "workspace_mismatch",
+          message: "Session workspace does not match the requested workspace.",
         },
       });
     }

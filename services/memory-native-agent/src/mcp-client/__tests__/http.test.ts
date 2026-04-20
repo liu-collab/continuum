@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod/v4";
 
 import { McpRegistry } from "../index.js";
+import { McpToolCallError, McpServerUnavailableError } from "../types.js";
 
 type RunningHttpServer = {
   close(): Promise<void>;
@@ -27,6 +28,7 @@ type TestResponse = http.ServerResponse<http.IncomingMessage> & {
 async function startHttpFixture(): Promise<RunningHttpServer> {
   const app = createMcpExpressApp();
   const transports = new Map<string, StreamableHTTPServerTransport>();
+  let closed = false;
 
   app.post("/mcp", async (req: TestRequest, res: TestResponse) => {
     const rawSessionId = req.headers["mcp-session-id"];
@@ -99,10 +101,18 @@ async function startHttpFixture(): Promise<RunningHttpServer> {
   return {
     url: `http://127.0.0.1:${address.port}/mcp`,
     async close() {
+      if (closed) {
+        return;
+      }
+      closed = true;
       await Promise.all([...transports.values()].map((transport) => transport.close().catch(() => undefined)));
       await new Promise<void>((resolve, reject) => {
         server.close((error?: Error) => {
           if (error) {
+            if (String(error.message).includes("Server is not running")) {
+              resolve();
+              return;
+            }
             reject(error);
             return;
           }
@@ -200,5 +210,64 @@ describe("McpRegistry http transport", () => {
     await registry.restartServer("http-fixture");
     expect(registry.getServerStatus("http-fixture").state).toBe("ok");
     expect(registry.listTools()).toHaveLength(1);
+  });
+
+  it("fails a crashed server call without affecting other HTTP servers", async () => {
+    const unstableServer = await startHttpFixture();
+    const healthyServer = await startHttpFixture();
+    servers.push(unstableServer, healthyServer);
+
+    const registry = new McpRegistry();
+    registries.push(registry);
+
+    await registry.addServer({
+      name: "unstable-http",
+      transport: "http",
+      url: unstableServer.url,
+    });
+    await registry.addServer({
+      name: "healthy-http",
+      transport: "http",
+      url: healthyServer.url,
+    });
+
+    await unstableServer.close();
+
+    await expect(registry.callTool("unstable-http", "echo_text", { text: "boom" })).rejects.toBeInstanceOf(McpToolCallError);
+    expect(registry.getServerStatus("healthy-http").state).toBe("ok");
+
+    const result = await registry.callTool("healthy-http", "echo_text", { text: "still-ok" });
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: "http:still-ok",
+      },
+    ]);
+  });
+
+  it("rejects tool calls while server is disabled and recovers after restart", async () => {
+    const server = await startHttpFixture();
+    servers.push(server);
+
+    const registry = new McpRegistry();
+    registries.push(registry);
+
+    await registry.addServer({
+      name: "http-fixture",
+      transport: "http",
+      url: server.url,
+    });
+
+    registry.disableServer("http-fixture");
+    await expect(registry.callTool("http-fixture", "echo_text", { text: "blocked" })).rejects.toBeInstanceOf(McpServerUnavailableError);
+
+    await registry.restartServer("http-fixture");
+    const result = await registry.callTool("http-fixture", "echo_text", { text: "back" });
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: "http:back",
+      },
+    ]);
   });
 });

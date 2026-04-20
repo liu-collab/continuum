@@ -370,6 +370,27 @@ async function startStubProviderServer() {
       .map((tool) => tool.function?.name)
       .filter((name): name is string => typeof name === "string");
 
+    if (normalizedInput.includes("中途报错") || normalizedInput.includes("mid-stream error")) {
+      if (body.stream) {
+        reply.type("application/x-ndjson");
+        reply.raw.write(
+          `${JSON.stringify({
+            model: "test-model",
+            message: {
+              role: "assistant",
+              content: "先返回一段内容，",
+            },
+            done: false,
+          })}\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        reply.raw.destroy(new Error("stub provider mid-stream failure"));
+        return reply;
+      }
+
+      throw new Error("stub provider mid-stream failure");
+    }
+
     if (!toolMessages.length) {
       const plannedTool = decideStubToolCall(normalizedInput, availableToolNames);
       if (plannedTool) {

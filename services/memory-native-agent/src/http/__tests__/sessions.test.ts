@@ -234,6 +234,7 @@ describe("http session routes", () => {
     expect(listPayload.next_cursor).toBeNull();
   });
 
+
   it("rejects requests without bearer token", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");
@@ -278,6 +279,45 @@ describe("http session routes", () => {
         code: "session_not_found",
         message: "Session not found."
       }
+    });
+  });
+
+  it("returns workspace_mismatch when the session belongs to another workspace", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+    const token = app.mnaToken;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/agent/sessions",
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+      payload: {
+        workspace_id: "project-alpha",
+      },
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const created = createResponse.json() as { session_id: string };
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/agent/sessions/${created.session_id}?workspace_id=project-beta`,
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        code: "workspace_mismatch",
+        message: "Session workspace does not match the requested workspace.",
+      },
     });
   });
 

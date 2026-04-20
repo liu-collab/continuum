@@ -214,6 +214,8 @@ describe("memory client", () => {
     const dependencyStatus = createDependencyStatus();
     const runtime = await startMockRuntime((app) => {
       app.get("/healthz", async () => ({
+        version: "0.1.0",
+        api_version: "v1",
         liveness: {
           status: "alive",
         },
@@ -233,6 +235,8 @@ describe("memory client", () => {
 
     expect(health.liveness.status).toBe("alive");
     expect(health.readiness.status).toBe("ready");
+    expect(health.version).toBe("0.1.0");
+    expect(health.api_version).toBe("v1");
     expect(dependencies.read_model.status).toBe("healthy");
   });
 });

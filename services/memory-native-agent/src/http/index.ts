@@ -31,6 +31,7 @@ export function registerHttpRoutes(app: RuntimeFastifyInstance) {
     const statusCode =
       code === "token_invalid" ? 401
       : code === "session_not_found" || code === "turn_not_found" ? 404
+      : code === "workspace_mismatch" ? 409
       : code === "provider_not_registered" || code === "tool_denied_path" ? 400
       : 500;
 

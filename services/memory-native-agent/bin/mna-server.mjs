@@ -20,7 +20,32 @@ const { start, stop } = await loadEntrypoint();
 
 const port = Number.parseInt(process.env.MNA_PORT ?? "", 10) || 4193;
 const host = process.env.MNA_HOST || "127.0.0.1";
-const app = await start({ host, port });
+let app;
+
+try {
+  app = await start({ host, port });
+} catch (error) {
+  const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (error instanceof Error && "cause" in error && error.cause && typeof error.cause === "object" && "code" in error.cause && error.cause.code === "EADDRINUSE") {
+    console.error(`memory-native-agent 启动失败: 端口 ${port} 已被占用。`);
+    process.exit(3);
+  }
+
+  if (code === "api_version_mismatch") {
+    console.error(`memory-native-agent 启动失败: ${message}`);
+    process.exit(4);
+  }
+
+  if (error && typeof error === "object" && "code" in error && error.code === "EADDRINUSE") {
+    console.error(`memory-native-agent 启动失败: 端口 ${port} 已被占用。`);
+    process.exit(3);
+  }
+
+  console.error(`memory-native-agent 启动失败: ${message}`);
+  process.exit(1);
+}
 
 let closing = false;
 

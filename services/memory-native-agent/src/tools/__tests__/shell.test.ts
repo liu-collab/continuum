@@ -113,4 +113,41 @@ describe("shell_exec tool", () => {
     expect(timeout.ok).toBe(false);
     expect(timeout.error?.code).toBe("tool_timeout");
   });
+
+  it("aborts shell_exec and returns timeout-shaped error after killing the child", async () => {
+    const { root, artifactsRoot } = createWorkspace();
+    const dispatcher = createDispatcher();
+    const abortController = new AbortController();
+    const context = {
+      ...createContext(root, artifactsRoot),
+      abort: abortController.signal,
+    };
+
+    const slowCommand = process.platform === "win32"
+      ? "powershell -NoLogo -NoProfile -Command Start-Sleep -Milliseconds 1000"
+      : "sleep 1";
+
+    const invocation = dispatcher.invoke(
+      {
+        id: "call-abort",
+        name: "shell_exec",
+        args: {
+          command: slowCommand,
+          timeout_ms: 5_000,
+        },
+      },
+      {
+        ...context,
+        callId: "call-abort",
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    abortController.abort();
+    const result = await invocation;
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("tool_timeout");
+    expect(result.error?.message).toContain("aborted");
+  });
 });

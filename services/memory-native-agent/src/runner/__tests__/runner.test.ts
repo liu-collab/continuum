@@ -13,6 +13,9 @@ function createIo() {
     emitTaskChange: vi.fn(),
     emitTurnEnd: vi.fn(),
     emitError: vi.fn(),
+    recordPrepareContextLatency: vi.fn(),
+    recordProviderCall: vi.fn(),
+    recordProviderFirstTokenLatency: vi.fn(),
     requestConfirm: vi.fn(async () => "allow" as const),
   };
 }
@@ -151,6 +154,9 @@ describe("AgentRunner", () => {
     expect(io.emitInjectionBanner).toHaveBeenCalled();
     expect(io.emitAssistantDelta).toHaveBeenCalled();
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-1", "stop");
+    expect(io.recordPrepareContextLatency).toHaveBeenCalledWith("before_response", expect.any(Number));
+    expect(io.recordProviderCall).toHaveBeenCalledWith("ollama");
+    expect(io.recordProviderFirstTokenLatency).toHaveBeenCalledWith("ollama", expect.any(Number));
   });
 
   it("runs task_switch, task_start, before_plan, and before_response in order", async () => {
@@ -382,6 +388,8 @@ describe("AgentRunner", () => {
     );
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-error", "error");
     expect(io.emitError.mock.invocationCallOrder[0]!).toBeLessThan(io.emitTurnEnd.mock.invocationCallOrder[0]!);
+    expect(io.recordProviderCall).toHaveBeenCalledWith("ollama");
+    expect(io.recordProviderFirstTokenLatency).toHaveBeenCalledWith("ollama", expect.any(Number));
   });
 
   it("emits a session error once when store writes fail but still completes the turn", async () => {

@@ -378,6 +378,26 @@ provider:
     expect(config.provider.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
   });
 
+  it("allows runtime env overrides for managed startup", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        RUNTIME_BASE_URL: "http://127.0.0.1:3999",
+        RUNTIME_REQUEST_TIMEOUT_MS: "1200",
+        RUNTIME_FINALIZE_TIMEOUT_MS: "3200",
+      },
+    });
+
+    expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3999");
+    expect(config.runtime.requestTimeoutMs).toBe(1200);
+    expect(config.runtime.finalizeTimeoutMs).toBe(3200);
+  });
+
   it("allows record-replay provider env overrides for fixture and target settings", () => {
     const homeDir = createTempDir("mna-home-");
     const workspaceDir = createTempDir("mna-workspace-");

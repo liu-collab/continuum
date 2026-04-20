@@ -209,6 +209,8 @@ describe("health routes", () => {
     app.runtimeState.metrics.streamFlushedEventsTotal = 5;
     app.runtimeState.metrics.streamDroppedAfterAbortTotal = 2;
     app.runtimeState.metrics.runtimeErrorsTotal.runtime_unavailable = 1;
+    app.runtimeState.metrics.latencySamples.prepareContextMs.push(20, 40, 60, 80);
+    app.runtimeState.metrics.latencySamples.providerFirstTokenMs.push(100, 200, 300, 400);
 
     try {
       const response = await app.inject({
@@ -242,6 +244,14 @@ describe("health routes", () => {
         stream_dropped_after_abort_total: 2,
         runtime_errors_total: {
           runtime_unavailable: 1
+        },
+        latency_p50_ms: {
+          prepare_context: 40,
+          provider_first_token: 200
+        },
+        latency_p95_ms: {
+          prepare_context: 80,
+          provider_first_token: 400
         }
       });
     } finally {
@@ -278,6 +288,107 @@ describe("health routes", () => {
       });
       expect((response.json() as { stream_dropped_after_abort_total: number }).stream_dropped_after_abort_total)
         .toBeGreaterThanOrEqual(initialCount);
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("increments provider error buckets by normalized provider code", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    app.runtimeState.metrics.providerErrorsTotal.rate_limited = 1;
+    app.runtimeState.metrics.providerErrorsTotal.stream_error = 2;
+    app.runtimeState.metrics.providerErrorsTotal.unavailable = 3;
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/agent/metrics",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        provider_errors_total: {
+          rate_limited: 1,
+          stream_error: 2,
+          unavailable: 3
+        }
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes all normalized provider error buckets in metrics", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    app.runtimeState.metrics.providerErrorsTotal.rate_limited = 2;
+    app.runtimeState.metrics.providerErrorsTotal.unavailable = 4;
+    app.runtimeState.metrics.providerErrorsTotal.timeout = 6;
+    app.runtimeState.metrics.providerErrorsTotal.stream_error = 8;
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/agent/metrics",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        provider_errors_total: {
+          rate_limited: 2,
+          unavailable: 4,
+          timeout: 6,
+          stream_error: 8,
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps published latency percentiles within the current performance thresholds when samples are in budget", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    app.runtimeState.metrics.latencySamples.prepareContextMs.push(120, 180, 220, 320, 480, 640, 790);
+    app.runtimeState.metrics.latencySamples.providerFirstTokenMs.push(300, 420, 650, 820, 1100, 1500, 1950);
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/agent/metrics",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const payload = response.json() as {
+        latency_p95_ms: {
+          prepare_context: number;
+          provider_first_token: number;
+        };
+      };
+      expect(payload.latency_p95_ms.prepare_context).toBeLessThanOrEqual(800);
+      expect(payload.latency_p95_ms.provider_first_token).toBeLessThanOrEqual(2000);
     } finally {
       await app.close();
       fs.rmSync(home, { recursive: true, force: true });

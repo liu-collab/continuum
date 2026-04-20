@@ -196,6 +196,8 @@ export const finalizeTurnResultSchema = z.object({
 });
 
 export const healthEndpointSchema = z.object({
+  version: z.string().optional(),
+  api_version: z.string().optional(),
   liveness: z.object({
     status: z.enum(["alive"]),
   }),

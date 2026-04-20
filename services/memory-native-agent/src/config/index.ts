@@ -267,6 +267,32 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
   let effectiveConfig = parsed.data;
 
   if (
+    env.RUNTIME_BASE_URL
+    || env.RUNTIME_REQUEST_TIMEOUT_MS
+    || env.RUNTIME_FINALIZE_TIMEOUT_MS
+  ) {
+    const reparsed = mergedConfigSchema.safeParse({
+      ...effectiveConfig,
+      runtime: {
+        ...effectiveConfig.runtime,
+        base_url: env.RUNTIME_BASE_URL?.trim() || effectiveConfig.runtime.base_url,
+        request_timeout_ms:
+          env.RUNTIME_REQUEST_TIMEOUT_MS && env.RUNTIME_REQUEST_TIMEOUT_MS.trim().length > 0
+            ? Number(env.RUNTIME_REQUEST_TIMEOUT_MS)
+            : effectiveConfig.runtime.request_timeout_ms,
+        finalize_timeout_ms:
+          env.RUNTIME_FINALIZE_TIMEOUT_MS && env.RUNTIME_FINALIZE_TIMEOUT_MS.trim().length > 0
+            ? Number(env.RUNTIME_FINALIZE_TIMEOUT_MS)
+            : effectiveConfig.runtime.finalize_timeout_ms,
+      },
+    });
+    if (!reparsed.success) {
+      throw new Error(formatValidationError("Invalid runtime env override", reparsed.error));
+    }
+    effectiveConfig = reparsed.data;
+  }
+
+  if (
     env.MNA_PROVIDER_KIND
     || env.MNA_PROVIDER_MODEL
     || env.MNA_PROVIDER_BASE_URL

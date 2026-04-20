@@ -70,5 +70,23 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
     stream_flushed_events_total: app.runtimeState.metrics.streamFlushedEventsTotal,
     stream_dropped_after_abort_total: app.runtimeState.metrics.streamDroppedAfterAbortTotal,
     runtime_errors_total: app.runtimeState.metrics.runtimeErrorsTotal,
+    latency_p50_ms: {
+      prepare_context: percentile(app.runtimeState.metrics.latencySamples.prepareContextMs, 0.5),
+      provider_first_token: percentile(app.runtimeState.metrics.latencySamples.providerFirstTokenMs, 0.5),
+    },
+    latency_p95_ms: {
+      prepare_context: percentile(app.runtimeState.metrics.latencySamples.prepareContextMs, 0.95),
+      provider_first_token: percentile(app.runtimeState.metrics.latencySamples.providerFirstTokenMs, 0.95),
+    },
   }));
+}
+
+function percentile(values: number[], ratio: number) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
+  return sorted[index] ?? 0;
 }
