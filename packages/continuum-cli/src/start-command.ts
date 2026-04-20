@@ -177,6 +177,19 @@ async function stopLegacyPostgresContainer() {
   );
 }
 
+async function cleanupManagedStackContainer() {
+  try {
+    await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("No such container")) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function prepareStackContext(packageRoot: string) {
   const stageDir = path.join(continuumHomeDir(), STAGE_DIR_NAME);
   await rm(stageDir, { recursive: true, force: true });
@@ -310,51 +323,57 @@ export async function runStartCommand(
   await buildStackImage(stageDir);
 
   // Remove old container only after successful build
-  await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]).catch(
-    () => undefined,
-  );
+  await cleanupManagedStackContainer().catch(() => undefined);
 
-  await startStackContainer(postgresPort, bindHost, accessibleHost, embeddingConfigPath);
+  try {
+    await startStackContainer(postgresPort, bindHost, accessibleHost, embeddingConfigPath);
 
-  await waitForHealthy(`${storageUrl}/health`, 120_000);
-  await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
-  await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
-  const mna = await startManagedMna(
-    {
-      ...options,
-      "runtime-url": runtimeUrl,
-    },
-    importMetaUrl,
-  );
-
-  await writeManagedState({
-    version: 1,
-    postgres: {
-      containerName: DEFAULT_MANAGED_STACK_CONTAINER,
-      port: postgresPort,
-      database: DEFAULT_MANAGED_DATABASE_NAME,
-      username: DEFAULT_MANAGED_DATABASE_USER,
-    },
-    services: (await readManagedState()).services,
-  });
-
-  process.stdout.write("Continuum 已启动。\n");
-  process.stdout.write(`container: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
-  process.stdout.write(`bind-host: ${bindHost}\n`);
-  process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
-  process.stdout.write(`storage: ${storageUrl}\n`);
-  process.stdout.write(`runtime: ${runtimeUrl}\n`);
-  process.stdout.write(`visualization: ${uiUrl}\n`);
-  process.stdout.write(`memory-native-agent: ${mna.url}\n`);
-  if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
-    process.stdout.write(
-      `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
+    await waitForHealthy(`${storageUrl}/health`, 120_000);
+    await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
+    await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
+    const mna = await startManagedMna(
+      {
+        ...options,
+        "runtime-url": runtimeUrl,
+      },
+      importMetaUrl,
     );
-  } else {
-    process.stdout.write("third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。\n");
-  }
 
-  if (open) {
-    await openBrowser(uiUrl);
+    await writeManagedState({
+      version: 1,
+      postgres: {
+        containerName: DEFAULT_MANAGED_STACK_CONTAINER,
+        port: postgresPort,
+        database: DEFAULT_MANAGED_DATABASE_NAME,
+        username: DEFAULT_MANAGED_DATABASE_USER,
+      },
+      services: (await readManagedState()).services,
+    });
+
+    process.stdout.write("Continuum 已启动。\n");
+    process.stdout.write(`container: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
+    process.stdout.write(`bind-host: ${bindHost}\n`);
+    process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
+    process.stdout.write(`storage: ${storageUrl}\n`);
+    process.stdout.write(`runtime: ${runtimeUrl}\n`);
+    process.stdout.write(`visualization: ${uiUrl}\n`);
+    process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
+      process.stdout.write(
+        `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
+      );
+    } else {
+      process.stdout.write("third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。\n");
+    }
+
+    if (open) {
+      await openBrowser(uiUrl);
+    }
+  } catch (error) {
+    const cleaned = await cleanupManagedStackContainer().catch(() => false);
+    if (cleaned) {
+      process.stderr.write(`Continuum 启动失败，已清理未完成容器: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
+    }
+    throw error;
   }
 }
