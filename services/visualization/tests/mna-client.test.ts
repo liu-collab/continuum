@@ -150,6 +150,12 @@ describe("MnaClient", () => {
             model: null,
             api_key: null,
           },
+          writeback_llm: {
+            base_url: null,
+            model: "claude-haiku-4-5-20251001",
+            api_key: null,
+            timeout_ms: 5000,
+          },
           mcp: {
             servers: [],
           },
@@ -173,6 +179,11 @@ describe("MnaClient", () => {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
       },
+      writeback_llm: {
+        base_url: "https://api.anthropic.com",
+        model: "claude-haiku-4-5-20251001",
+        timeout_ms: 8000,
+      },
       mcp: {
         servers: [],
       },
@@ -190,10 +201,49 @@ describe("MnaClient", () => {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
       },
+      writeback_llm: {
+        base_url: "https://api.anthropic.com",
+        model: "claude-haiku-4-5-20251001",
+        timeout_ms: 8000,
+      },
       mcp: {
         servers: [],
       },
     });
+  });
+
+  it("triggers an active embedding health check", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: "embeddings",
+          status: "healthy",
+          detail: "embedding request completed",
+          last_checked_at: "2026-04-21T12:00:00.000Z",
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.checkEmbeddings();
+
+    expect(payload.status).toBe("healthy");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:4193/v1/agent/dependency-status/embeddings/check",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
   });
 
   it("loads the imported skill list", async () => {
@@ -299,6 +349,47 @@ describe("MnaClient", () => {
       "http://127.0.0.1:4193/v1/agent/workspaces",
       expect.objectContaining({
         method: "POST",
+      }),
+    );
+  });
+
+  it("accepts proxied workspace payload without re-registering", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          cancelled: false,
+          workspace: {
+            workspace_id: "workspace-2",
+            short_id: "abcd1234",
+            cwd: "C:/workspace/proxied",
+            label: "proxied",
+            is_current: false,
+          },
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.pickWorkspace();
+
+    expect(payload).toEqual({
+      cancelled: false,
+      workspace: {
+        workspace_id: "workspace-2",
+        short_id: "abcd1234",
+        cwd: "C:/workspace/proxied",
+        label: "proxied",
+        is_current: false,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/agent/workspaces/pick",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
       }),
     );
   });

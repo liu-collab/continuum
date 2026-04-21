@@ -23,12 +23,17 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Dependency status",
         },
       },
+      "/v1/agent/dependency-status/embeddings/check": {
+        post: {
+          summary: "Run an active embedding dependency check",
+        },
+      },
       "/v1/agent/config": {
         get: {
-          summary: "Read current agent and embedding config",
+          summary: "Read current agent, embedding, and writeback llm config",
         },
         post: {
-          summary: "Update current agent and embedding config",
+          summary: "Update current agent, embedding, and writeback llm config",
         },
       },
       "/v1/skills": {
@@ -93,6 +98,19 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
       "/v1/agent/fs/file": {
         get: {
           summary: "Read workspace file",
+        },
+      },
+      "/v1/agent/workspaces": {
+        get: {
+          summary: "List known workspaces",
+        },
+        post: {
+          summary: "Register a workspace directory",
+        },
+      },
+      "/v1/agent/workspaces/pick": {
+        post: {
+          summary: "Open a native folder picker and register the selected workspace",
         },
       },
       "/v1/agent/artifacts/{sessionId}/{file}": {

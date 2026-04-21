@@ -17,6 +17,10 @@ import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js"
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
 import { hasCompleteRuntimeEmbeddingConfig } from "./embedding-config.js";
+import {
+  hasCompleteRuntimeWritebackLlmConfig,
+  resolveRuntimeWritebackLlmConfig,
+} from "./writeback-llm-config.js";
 import { nowIso } from "./shared/utils.js";
 
 async function main() {
@@ -31,19 +35,30 @@ async function main() {
   const readModelRepository = new PostgresReadModelRepository(config);
   const embeddingsClient = new HttpEmbeddingsClient(config);
   const storageClient = new HttpStorageWritebackClient(config);
-  const llmExtractor = config.WRITEBACK_LLM_BASE_URL ? new HttpLlmExtractor(config) : undefined;
+  const activeWritebackLlmConfig = resolveRuntimeWritebackLlmConfig(config);
+  const llmExtractor = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpLlmExtractor({
+        ...config,
+        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+      })
+    : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
   const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
 
   const runtimeService = new RetrievalRuntimeService(
     new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+    embeddingsClient,
     new InjectionEngine(config),
     new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
+    config.EMBEDDING_TIMEOUT_MS,
   );
 
   if (!hasCompleteRuntimeEmbeddingConfig(config)) {

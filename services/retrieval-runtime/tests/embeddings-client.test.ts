@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../src/config.js";
 import { HttpEmbeddingsClient } from "../src/query/embeddings-client.js";
+import { hasCompleteRuntimeWritebackLlmConfig, resolveRuntimeWritebackLlmConfig } from "../src/writeback-llm-config.js";
 
 describe("retrieval-runtime embeddings client", () => {
   const originalFetch = globalThis.fetch;
@@ -83,6 +84,7 @@ describe("retrieval-runtime embeddings client", () => {
 
     expect(config.EMBEDDING_BASE_URL).toBeUndefined();
     expect(config.EMBEDDING_MODEL).toBe("text-embedding-3-small");
+    expect(config.EMBEDDING_TIMEOUT_MS).toBe(30_000);
   });
 
   it("reports not configured before managed embedding config is added", () => {
@@ -186,6 +188,43 @@ describe("retrieval-runtime embeddings client", () => {
       expect(client.isConfigured()).toBe(true);
       await expect(client.embedText("hello")).resolves.toEqual([0.1, 0.2, 0.3]);
       expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads managed writeback llm config from a shared file", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-writeback-"));
+    const configPath = path.join(tempDir, "writeback-llm-config.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-haiku-4-5-20251001",
+        apiKey: "writeback-key",
+        timeoutMs: 8000,
+      }),
+      "utf8",
+    );
+
+    try {
+      const resolved = resolveRuntimeWritebackLlmConfig({
+        WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
+        CONTINUUM_WRITEBACK_LLM_CONFIG_PATH: configPath,
+      });
+
+      expect(resolved).toEqual({
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-haiku-4-5-20251001",
+        apiKey: "writeback-key",
+        timeoutMs: 8000,
+      });
+      expect(
+        hasCompleteRuntimeWritebackLlmConfig({
+          CONTINUUM_WRITEBACK_LLM_CONFIG_PATH: configPath,
+        }),
+      ).toBe(true);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

@@ -24,6 +24,7 @@ type UseAgentWorkspaceOptions = {
 const FILE_TREE_PATH_STORAGE_KEY = "continuum.agent.fileTree.path";
 const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "continuum.agent.fileTree.selectedFile";
 const FILE_TREE_WORKSPACE_STORAGE_KEY = "continuum.agent.fileTree.workspace";
+const LAST_SESSION_ID_STORAGE_KEY = "continuum.agent.lastSessionId";
 
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();
@@ -47,6 +48,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [promptInspector, setPromptInspector] = useState<MnaPromptInspectorResponse | null>(null);
   const [promptInspectorOpen, setPromptInspectorOpen] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const [sessionCatalogLoaded, setSessionCatalogLoaded] = useState(false);
   const streamRef = useRef<ReturnType<typeof client.connectSessionStream> | null>(null);
   const streamGenerationRef = useRef(0);
 
@@ -66,6 +68,14 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     setSelectedFilePath(savedSelectedFile);
     setSelectedWorkspaceId(savedWorkspaceId);
   }, []);
+
+  useEffect(() => {
+    if (!state.sessionId) {
+      return;
+    }
+
+    window.localStorage.setItem(LAST_SESSION_ID_STORAGE_KEY, state.sessionId);
+  }, [state.sessionId]);
 
   function toAgentRoute(sessionId: string) {
     return `/agent/${sessionId}` as Route;
@@ -95,6 +105,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   useEffect(() => {
     let cancelled = false;
+    setSessionCatalogLoaded(false);
 
     const bootstrap = async () => {
       const bootstrapResult = await client.bootstrap();
@@ -123,6 +134,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
       setWorkspaceList(workspaces.items);
       setSkillList(skills.items);
+      setSessionCatalogLoaded(true);
       dispatch({
         type: "session_list_loaded",
         items: sessionList.items
@@ -191,7 +203,14 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
 
-      const existingSessionId = state.sessionList[0]?.id;
+      if (!sessionCatalogLoaded) {
+        return;
+      }
+
+      const lastSessionId = window.localStorage.getItem(LAST_SESSION_ID_STORAGE_KEY);
+      const existingSessionId =
+        (lastSessionId ? state.sessionList.find((item) => item.id === lastSessionId)?.id : undefined) ??
+        state.sessionList[0]?.id;
       if (existingSessionId) {
         router.replace(toAgentRoute(existingSessionId));
         return;
@@ -222,7 +241,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return () => {
       cancelled = true;
     };
-  }, [client, options.sessionId, options.uiLocale, router, state.bootstrapStatus, state.sessionList]);
+  }, [client, options.sessionId, options.uiLocale, router, sessionCatalogLoaded, state.bootstrapStatus, state.sessionList]);
 
   useEffect(() => {
     if (state.bootstrapStatus === "ok" || state.bootstrapStatus === "loading") {
@@ -268,6 +287,27 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return payload.items;
   }
 
+  function persistWorkspaceSelection(workspaceId: string | null) {
+    setSelectedWorkspaceId(workspaceId);
+    setTreePath(".");
+    setFileTree({
+      path: ".",
+      entries: []
+    });
+    setSelectedFilePath(null);
+    setSelectedFile(null);
+    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+
+    if (workspaceId) {
+      window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, workspaceId);
+      window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
+      return;
+    }
+
+    window.localStorage.removeItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
+    window.localStorage.removeItem(FILE_TREE_PATH_STORAGE_KEY);
+  }
+
   async function refreshFileTree(nextPath = treePath, workspaceId = selectedWorkspaceId) {
     if (!workspaceId) {
       setTreePath(".");
@@ -296,19 +336,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   }
 
   function selectWorkspace(workspaceId: string | null) {
-    setSelectedWorkspaceId(workspaceId);
-    setTreePath(".");
-    setFileTree({
-      path: ".",
-      entries: []
-    });
-    setSelectedFilePath(null);
-    setSelectedFile(null);
-    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    persistWorkspaceSelection(workspaceId);
 
     if (workspaceId) {
-      window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, workspaceId);
-      window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
       void client.getFileTree(".", workspaceId).then((payload) => {
         setTreePath(payload.path);
         setFileTree(payload);
@@ -319,29 +349,52 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
           entries: []
         });
       });
-      return;
+    }
+  }
+
+  async function openOrCreateSessionForWorkspace(workspaceId: string) {
+    const knownSessionId = state.sessionList.find((item) => item.workspace_id === workspaceId)?.id;
+    if (knownSessionId) {
+      await openSession(knownSessionId);
+      return knownSessionId;
     }
 
-    window.localStorage.removeItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
-    window.localStorage.removeItem(FILE_TREE_PATH_STORAGE_KEY);
+    const scopedSessions = await client.listSessions(workspaceId);
+    const existingSessionId = scopedSessions.items[0]?.id;
+    if (existingSessionId) {
+      const allSessions = await client.listSessions();
+      dispatch({
+        type: "session_list_loaded",
+        items: allSessions.items
+      });
+      await openSession(existingSessionId);
+      return existingSessionId;
+    }
+
+    const created = await client.createSession({
+      workspace_id: workspaceId,
+      locale: options.uiLocale
+    });
+    const allSessions = await client.listSessions();
+    dispatch({
+      type: "session_list_loaded",
+      items: allSessions.items
+    });
+    router.push(toAgentRoute(created.session_id));
+    return created.session_id;
   }
 
   async function registerWorkspace(cwd: string) {
     const payload = await client.registerWorkspace(cwd);
     const nextItems = await refreshWorkspaceList();
     const targetWorkspaceId = payload.workspace.workspace_id;
-    setSelectedWorkspaceId(targetWorkspaceId);
-    window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, targetWorkspaceId);
-    window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
-    setSelectedFilePath(null);
-    setSelectedFile(null);
-    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    persistWorkspaceSelection(targetWorkspaceId);
 
     if (!nextItems.some((item) => item.workspace_id === targetWorkspaceId)) {
       setWorkspaceList((current) => [...current, payload.workspace]);
     }
 
-    await refreshFileTree(".", targetWorkspaceId);
+    await openOrCreateSessionForWorkspace(targetWorkspaceId);
   }
 
   async function pickWorkspace() {
@@ -361,18 +414,13 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
     const nextItems = await refreshWorkspaceList();
     const targetWorkspaceId = payload.workspace.workspace_id;
-    setSelectedWorkspaceId(targetWorkspaceId);
-    window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, targetWorkspaceId);
-    window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
-    setSelectedFilePath(null);
-    setSelectedFile(null);
-    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    persistWorkspaceSelection(targetWorkspaceId);
 
     if (!nextItems.some((item) => item.workspace_id === targetWorkspaceId)) {
       setWorkspaceList((current) => [...current, payload.workspace]);
     }
 
-    await refreshFileTree(".", targetWorkspaceId);
+    await openOrCreateSessionForWorkspace(targetWorkspaceId);
     return payload.workspace;
   }
 
@@ -421,8 +469,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     }
 
     const requestedWorkspaceId =
-      state.session?.workspace_id
-      ?? state.sessionList.find((item) => item.id === sessionId)?.workspace_id
+      state.sessionList.find((item) => item.id === sessionId)?.workspace_id
+      ?? selectedWorkspaceId
+      ?? state.session?.workspace_id
       ?? state.sessionList[0]?.workspace_id;
     const detail = await client.getSession(sessionId, requestedWorkspaceId);
     dispatch({
@@ -431,31 +480,26 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       messages: detail.messages
     });
 
-    const knownWorkspaces = workspaceList.length > 0 ? workspaceList : await refreshWorkspaceList();
-    const storedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
-    const nextWorkspaceId =
-      storedWorkspaceId && knownWorkspaces.some((item) => item.workspace_id === storedWorkspaceId)
-        ? storedWorkspaceId
-        : null;
-    setSelectedWorkspaceId(nextWorkspaceId);
-    if (nextWorkspaceId) {
-      window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, nextWorkspaceId);
-    } else {
-      window.localStorage.removeItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
-    }
+    const nextWorkspaceId = detail.session.workspace_id;
+    persistWorkspaceSelection(nextWorkspaceId);
 
     await bindSessionStream(sessionId, detail.latest_event_id);
-    const storedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY) ?? treePath ?? ".";
+    const storedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
+    const canReuseStoredPath = storedWorkspaceId === detail.session.workspace_id;
+    const storedTreePath =
+      canReuseStoredPath
+        ? window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY) ?? treePath ?? "."
+        : ".";
     const storedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
     await Promise.allSettled([
-      nextWorkspaceId ? refreshFileTree(storedTreePath, nextWorkspaceId) : Promise.resolve(),
+      refreshFileTree(storedTreePath, nextWorkspaceId),
       refreshMetrics(),
       refreshDependencyStatus(),
       refreshAgentConfig(),
       refreshMcpState()
     ]);
 
-    if (storedSelectedFile) {
+    if (canReuseStoredPath && storedSelectedFile) {
       await openFile(storedSelectedFile, nextWorkspaceId).catch(() => {
         window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
         setSelectedFilePath(null);
@@ -466,6 +510,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function createNewSession() {
     const created = await client.createSession({
+      workspace_id: selectedWorkspaceId ?? undefined,
       locale: options.uiLocale
     });
     router.push(toAgentRoute(created.session_id));
@@ -536,6 +581,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function deleteSession(sessionId: string) {
     await client.deleteSession(sessionId, true);
+    if (window.localStorage.getItem(LAST_SESSION_ID_STORAGE_KEY) === sessionId) {
+      window.localStorage.removeItem(LAST_SESSION_ID_STORAGE_KEY);
+    }
     dispatch({
       type: "session_removed",
       sessionId
@@ -587,6 +635,12 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       model?: string;
       api_key?: string;
     };
+    writeback_llm?: {
+      base_url?: string;
+      model?: string;
+      api_key?: string;
+      timeout_ms?: number;
+    };
     mcp?: {
       servers: Array<{
         name: string;
@@ -606,6 +660,12 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     await client.updateConfig(payload);
     await Promise.all([refreshAgentConfig(), refreshDependencyStatus()]);
     await refreshMcpState();
+  }
+
+  async function checkEmbeddings() {
+    const result = await client.checkEmbeddings();
+    await refreshDependencyStatus();
+    return result;
   }
 
   async function openPromptInspector(turnId: string) {
@@ -649,6 +709,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     deleteSession,
     updateProvider,
     updateRuntimeConfig,
+    checkEmbeddings,
     refreshMetrics,
     refreshDependencyStatus,
     refreshAgentConfig,

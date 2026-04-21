@@ -13,7 +13,6 @@ export type MnaApiError = {
 export type MnaSessionSummary = {
   id: string;
   workspace_id: string;
-  user_id: string;
   title: string | null;
   memory_mode: AgentMemoryMode;
   locale: AgentLocale;
@@ -197,6 +196,13 @@ export type MnaDependencyStatusResponse = {
   provider_key: string;
 };
 
+export type MnaDependencyProbeResponse = {
+  name: "read_model" | "embeddings" | "storage_writeback";
+  status: "healthy" | "degraded" | "unavailable" | "unknown";
+  detail: string;
+  last_checked_at: string;
+};
+
 export type MnaAgentConfigResponse = {
   provider: {
     kind: "demo" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
@@ -211,6 +217,12 @@ export type MnaAgentConfigResponse = {
     base_url: string | null;
     model: string | null;
     api_key: string | null;
+  };
+  writeback_llm: {
+    base_url: string | null;
+    model: string | null;
+    api_key: string | null;
+    timeout_ms: number | null;
   };
   mcp: {
     servers: Array<{

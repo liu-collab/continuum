@@ -208,12 +208,14 @@ function createRuntime(overrides?: {
   const service = new RetrievalRuntimeService(
     new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+    embeddingsClient,
     new InjectionEngine(config),
     new WritebackEngine(config, storageClient, dependencyGuard, overrides?.llmExtractor),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
+    config.EMBEDDING_TIMEOUT_MS,
   );
 
   return { service, repository, storageClient };
@@ -284,6 +286,34 @@ describe("retrieval-runtime service", () => {
     expect(response.dependency_status.embeddings.status).not.toBe("healthy");
   });
 
+  it("actively checks embeddings health and records a healthy status", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.checkEmbeddings();
+    const dependencies = await service.getDependencies();
+
+    expect(response).toMatchObject({
+      name: "embeddings",
+      status: "healthy",
+      detail: "embedding request completed",
+    });
+    expect(dependencies.embeddings.status).toBe("healthy");
+  });
+
+  it("returns the concrete embedding failure reason during active health check", async () => {
+    const { service } = createRuntime({
+      embeddingsClient: new StubEmbeddingsClient([1, 0, 0], true),
+    });
+
+    const response = await service.checkEmbeddings();
+
+    expect(response).toMatchObject({
+      name: "embeddings",
+      status: "unavailable",
+      detail: "embeddings unavailable",
+    });
+  });
+
   it("trims injection records when budget is exceeded", async () => {
     const { service } = createRuntime({
       config: {
@@ -336,6 +366,56 @@ describe("retrieval-runtime service", () => {
       response.write_back_candidates.filter((candidate) => candidate.candidate_type === "fact_preference").map((candidate) => candidate.scope),
     ).toEqual(["user"]);
     expect(response.memory_mode).toBe("workspace_plus_global");
+  });
+
+  it("extracts long-term preference memory from remember-style user input", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-remember-pref",
+      current_input: "请记住：以后默认用中文回答，除非我明确要求英文。这是长期偏好。",
+      assistant_output: "已记住：以后默认使用中文回答，除非你明确要求英文。这会作为你的长期偏好来遵循。",
+    });
+
+    expect(response.candidate_count).toBeGreaterThan(0);
+    expect(
+      response.write_back_candidates.some(
+        (candidate) =>
+          candidate.candidate_type === "fact_preference"
+          && candidate.scope === "user"
+          && candidate.summary.includes("以后默认用中文回答"),
+      ),
+    ).toBe(true);
+    expect(response.filtered_reasons).not.toContain("no_stable_preference_detected");
+  });
+
+  it("extracts long-term preference memory from default-preference phrasing without remember keywords", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-default-pref",
+      current_input: "以后默认用中文回答，除非我明确要求英文。这是长期偏好。",
+      assistant_output: "好的，已记住：以后默认使用中文回答，除非你明确要求英文。",
+    });
+
+    expect(response.candidate_count).toBeGreaterThan(0);
+    expect(
+      response.write_back_candidates.some(
+        (candidate) =>
+          candidate.candidate_type === "fact_preference"
+          && candidate.scope === "user"
+          && candidate.summary.includes("默认用中文回答"),
+      ),
+    ).toBe(true);
+    expect(response.filtered_reasons).not.toContain("no_stable_preference_detected");
   });
 
   it("uses configured llm extraction before falling back to rules", async () => {
@@ -807,16 +887,19 @@ describe("retrieval-runtime service", () => {
     const readModelRepository = new InMemoryReadModelRepository(sampleRecords);
     const storageClient = new StubStorageClient();
     const config = { ...baseConfig };
+    const embeddingsClient = new StubEmbeddingsClient();
 
     const firstService = new RetrievalRuntimeService(
-      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
-      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
+      config.EMBEDDING_TIMEOUT_MS,
     );
 
     const request = {
@@ -833,14 +916,16 @@ describe("retrieval-runtime service", () => {
     expect(llmExtractor.callCount).toBe(1);
 
     const secondService = new RetrievalRuntimeService(
-      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
-      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
+      config.EMBEDDING_TIMEOUT_MS,
     );
 
     const second = await secondService.finalizeTurn(request);
@@ -930,12 +1015,21 @@ describe("retrieval-runtime service", () => {
       method: "GET",
       url: "/v1/runtime/health/dependencies",
     });
+    const embeddingCheckResponse = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/dependency-status/embeddings/check",
+    });
 
     expect(prepareResponse.statusCode).toBe(200);
     expect(finalizeResponse.statusCode).toBe(200);
+    expect(embeddingCheckResponse.statusCode).toBe(200);
     expect(livenessResponse.json()).toEqual({ status: "alive" });
     expect(readinessResponse.json()).toEqual({ status: "ready" });
     expect(dependenciesResponse.json()).toHaveProperty("read_model");
+    expect(embeddingCheckResponse.json()).toMatchObject({
+      name: "embeddings",
+      status: "healthy",
+    });
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();
     expect(finalizeResponse.json().write_back_candidates.length).toBeGreaterThan(0);
   });

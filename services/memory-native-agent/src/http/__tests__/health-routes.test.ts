@@ -15,6 +15,12 @@ const runtimeCalls = {
     embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
     storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
   })),
+  checkEmbeddings: vi.fn(async () => ({
+    name: "embeddings" as const,
+    status: "healthy" as const,
+    detail: "embedding request completed",
+    last_checked_at: "now",
+  })),
   sessionStartContext: vi.fn(async () => null),
   prepareContext: vi.fn(async () => null),
   finalizeTurn: vi.fn(async () => null)
@@ -259,6 +265,12 @@ describe("health routes", () => {
           model: null,
           api_key: null
         },
+        writeback_llm: {
+          base_url: null,
+          model: "claude-haiku-4-5-20251001",
+          api_key: null,
+          timeout_ms: 5000,
+        },
         mcp: {
           servers: []
         }
@@ -281,6 +293,12 @@ describe("health routes", () => {
             base_url: "https://api.openai.com/v1",
             model: "text-embedding-3-small",
             api_key: "embed-key"
+          },
+          writeback_llm: {
+            base_url: "https://api.anthropic.com",
+            model: "claude-haiku-4-5-20251001",
+            api_key: "writeback-key",
+            timeout_ms: 8000,
           },
           mcp: {
             servers: [
@@ -324,6 +342,14 @@ describe("health routes", () => {
         model: "text-embedding-3-small",
         apiKey: "embed-key"
       });
+      const writebackLlmConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "writeback-llm-config.json");
+      expect(JSON.parse(fs.readFileSync(writebackLlmConfigPath, "utf8"))).toEqual({
+        version: 1,
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-haiku-4-5-20251001",
+        apiKey: "writeback-key",
+        timeoutMs: 8000,
+      });
 
       const configResponse = await app.inject({
         method: "GET",
@@ -345,6 +371,12 @@ describe("health routes", () => {
           base_url: "https://api.openai.com/v1",
           model: "text-embedding-3-small",
           api_key: "embed-key"
+        },
+        writeback_llm: {
+          base_url: "https://api.anthropic.com",
+          model: "claude-haiku-4-5-20251001",
+          api_key: "writeback-key",
+          timeout_ms: 8000,
         },
         mcp: {
           servers: [
@@ -373,6 +405,36 @@ describe("health routes", () => {
           status: "configured"
         },
         provider_key: "openai-compatible:deepseek-chat"
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("proxies an active embedding health check", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/embeddings/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(runtimeCalls.checkEmbeddings).toHaveBeenCalledTimes(1);
+      expect(response.json()).toEqual({
+        name: "embeddings",
+        status: "healthy",
+        detail: "embedding request completed",
+        last_checked_at: "now",
       });
     } finally {
       await app.close();
@@ -529,7 +591,7 @@ describe("health routes", () => {
     fs.mkdirSync(workspaceRoot, { recursive: true });
 
     const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
-    const session = createSessionState(app.runtimeState, "session-metrics-abort");
+    const session = await createSessionState(app.runtimeState, "session-metrics-abort");
     const initialCount = app.runtimeState.metrics.streamDroppedAfterAbortTotal;
 
     try {

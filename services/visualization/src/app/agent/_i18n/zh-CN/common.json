@@ -94,6 +94,12 @@
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY（可选）",
+    "writebackLlmTitle": "Writeback LLM 配置",
+    "writebackLlmDescription": "这里配置写回提取模型。配置完成后，运行时会优先用它来提取长期偏好、任务状态和可复用事实。",
+    "writebackLlmBaseUrl": "WRITEBACK_LLM_BASE_URL",
+    "writebackLlmModel": "WRITEBACK_LLM_MODEL",
+    "writebackLlmApiKey": "WRITEBACK_LLM_API_KEY（可选）",
+    "writebackLlmTimeoutMs": "WRITEBACK_LLM_TIMEOUT_MS",
     "providerTitle": "memory-native-agent 模型配置",
     "providerDescription": "按聊天产品常见方式直接填写模型地址、模型名和 API Key。页面里不再暴露环境变量式字段。",
     "mcpTitle": "MCP 服务配置",
@@ -111,12 +117,17 @@
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
+    "checkEmbedding": "检查 embedding 配置",
+    "checkingEmbedding": "检查中...",
+    "saveBeforeCheck": "请先保存当前 embedding 配置，再执行检查。",
     "save": "保存配置",
     "errors": {
       "providerModelRequired": "provider model 不能为空。",
       "providerBaseUrlRequired": "当前 provider 需要填写 base_url。",
       "providerApiKeyRequired": "当前 provider 需要填写 api_key。",
-      "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。"
+      "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
+      "writebackLlmModelRequired": "填写 WRITEBACK_LLM_BASE_URL 后，还需要填写 WRITEBACK_LLM_MODEL。",
+      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS 需要是正整数。"
     }
   },
   "costBar": {
@@ -139,7 +150,10 @@
     "workspaceLabel": "工作区",
     "workspacePlaceholder": "先选择工作区",
     "selectedWorkspace": "当前文件树工作区：{label}",
-    "sessionWorkspace": "当前会话绑定工作区：{label}",
+    "selectedFolderLabel": "已选文件夹",
+    "workspaceIdLabel": "ID",
+    "uploadHint": "点击选择文件夹，下面会直接展开当前文件夹内容。",
+    "clearFolderAction": "移除当前文件夹",
     "pickFolderAction": "选择文件夹",
     "pickFolderPendingAction": "正在打开...",
     "pickFolderPendingHint": "正在打开系统文件夹选择框，如果没有看到弹窗，请检查是否被其他窗口遮挡。",

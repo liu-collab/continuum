@@ -13,13 +13,15 @@ import type {
   MnaAgentConfigResponse,
   MnaMcpServersResponse,
   MnaMetricsResponse,
+  MnaPickWorkspaceResponse,
   MnaPromptInspectorResponse,
   MnaServerEventEnvelope,
   MnaSessionDetailResponse,
   MnaSessionListResponse,
   MnaCreateWorkspaceResponse,
   MnaWorkspaceListResponse,
-  MnaSkillListResponse
+  MnaSkillListResponse,
+  MnaDependencyProbeResponse
 } from "./openapi-types";
 
 export async function getMnaBootstrap(): Promise<AgentTokenBootstrapResponse> {
@@ -172,12 +174,27 @@ export class MnaClient {
       );
     }
 
-    const payload = (await response.json()) as {
-      cancelled: boolean;
-      cwd: string | null;
-    };
+    const payload = (await response.json()) as
+      | MnaPickWorkspaceResponse
+      | {
+          cancelled: boolean;
+          cwd: string | null;
+        };
 
-    if (payload.cancelled || !payload.cwd) {
+    if (payload.cancelled) {
+      return {
+        cancelled: true as const
+      };
+    }
+
+    if ("workspace" in payload && payload.workspace) {
+      return {
+        cancelled: false as const,
+        workspace: payload.workspace
+      };
+    }
+
+    if (!("cwd" in payload) || !payload.cwd) {
       return {
         cancelled: true as const
       };
@@ -218,6 +235,12 @@ export class MnaClient {
     return this.requestJson<MnaDependencyStatusResponse>("/v1/agent/dependency-status");
   }
 
+  async checkEmbeddings() {
+    return this.requestJson<MnaDependencyProbeResponse>("/v1/agent/dependency-status/embeddings/check", {
+      method: "POST",
+    });
+  }
+
   async getConfig() {
     return this.requestJson<MnaAgentConfigResponse>("/v1/agent/config");
   }
@@ -236,6 +259,12 @@ export class MnaClient {
       base_url?: string;
       model?: string;
       api_key?: string;
+    };
+    writeback_llm?: {
+      base_url?: string;
+      model?: string;
+      api_key?: string;
+      timeout_ms?: number;
     };
     mcp?: {
       servers: Array<{

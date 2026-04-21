@@ -94,6 +94,12 @@
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY (optional)",
+    "writebackLlmTitle": "Writeback LLM config",
+    "writebackLlmDescription": "Configure the writeback extraction model here. Once saved, runtime will prefer it for durable preference, task-state, and fact extraction.",
+    "writebackLlmBaseUrl": "WRITEBACK_LLM_BASE_URL",
+    "writebackLlmModel": "WRITEBACK_LLM_MODEL",
+    "writebackLlmApiKey": "WRITEBACK_LLM_API_KEY (optional)",
+    "writebackLlmTimeoutMs": "WRITEBACK_LLM_TIMEOUT_MS",
     "providerTitle": "memory-native-agent model config",
     "providerDescription": "Use the familiar chat-product style setup: base URL, model, and API key. No environment-variable style field in the page.",
     "mcpTitle": "MCP server config",
@@ -111,12 +117,17 @@
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
+    "checkEmbedding": "Check embedding config",
+    "checkingEmbedding": "Checking...",
+    "saveBeforeCheck": "Save the current embedding config before running the check.",
     "save": "Save config",
     "errors": {
       "providerModelRequired": "provider model is required.",
       "providerBaseUrlRequired": "base_url is required for the selected provider.",
       "providerApiKeyRequired": "api_key is required for the selected provider.",
-      "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set."
+      "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
+      "writebackLlmModelRequired": "WRITEBACK_LLM_MODEL is required when WRITEBACK_LLM_BASE_URL is set.",
+      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS must be a positive integer."
     }
   },
   "costBar": {
@@ -139,7 +150,10 @@
     "workspaceLabel": "Workspace",
     "workspacePlaceholder": "Select a workspace first",
     "selectedWorkspace": "Current file-tree workspace: {label}",
-    "sessionWorkspace": "Current session workspace: {label}",
+    "selectedFolderLabel": "Selected folder",
+    "workspaceIdLabel": "ID",
+    "uploadHint": "Pick a folder and its contents will render below immediately.",
+    "clearFolderAction": "Remove current folder",
     "pickFolderAction": "Pick folder",
     "pickFolderPendingAction": "Opening...",
     "pickFolderPendingHint": "The native folder picker is opening. If no dialog is visible, check whether another window is covering it.",

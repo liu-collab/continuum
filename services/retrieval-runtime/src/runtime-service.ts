@@ -6,6 +6,7 @@ import { buildMemoryPacket } from "./injection/packet-builder.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
 import type {
+  DependencyStatus,
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   FinalizeTurnInput,
@@ -16,6 +17,7 @@ import type {
   SessionStartResponse,
   TriggerContext,
 } from "./shared/types.js";
+import type { EmbeddingsClient } from "./query/embeddings-client.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
@@ -88,12 +90,14 @@ export class RetrievalRuntimeService {
   constructor(
     private readonly triggerEngine: TriggerEngine,
     private readonly queryEngine: QueryEngine,
+    private readonly embeddingsClient: EmbeddingsClient,
     private readonly injectionEngine: InjectionEngine,
     private readonly writebackEngine: WritebackEngine,
     private readonly repository: RuntimeRepository,
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
     private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
+    private readonly embeddingTimeoutMs = 800,
   ) {}
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
@@ -414,6 +418,53 @@ export class RetrievalRuntimeService {
 
   async getDependencies(): Promise<DependencyStatusSnapshot> {
     return this.dependencyGuard.snapshot();
+  }
+
+  async checkEmbeddings(): Promise<DependencyStatus> {
+    const controller = new AbortController();
+    let rejectTimeout: ((error: Error) => void) | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      rejectTimeout = reject;
+    });
+    const timeoutHandle = setTimeout(() => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      controller.abort("timeout");
+      rejectTimeout?.(new Error("embeddings timed out"));
+    }, this.embeddingTimeoutMs);
+
+    try {
+      await Promise.race([
+        this.embeddingsClient.embedText("embedding health check", controller.signal),
+        timeoutPromise,
+      ]);
+      const status: DependencyStatus = {
+        name: "embeddings",
+        status: "healthy",
+        detail: "embedding request completed",
+        last_checked_at: nowIso(),
+      };
+      await this.repository.updateDependencyStatus(status);
+      return status;
+    } catch (error) {
+      const status: DependencyStatus = {
+        name: "embeddings",
+        status: controller.signal.aborted ? "degraded" : "unavailable",
+        detail:
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : controller.signal.aborted
+              ? "embeddings timed out"
+              : "embeddings unavailable",
+        last_checked_at: nowIso(),
+      };
+      await this.repository.updateDependencyStatus(status);
+      this.logger.warn({ dependency: "embeddings", err: error }, "embedding health check failed");
+      return status;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
   }
 
   async getRuns(filters?: ObserveRunsFilters) {
