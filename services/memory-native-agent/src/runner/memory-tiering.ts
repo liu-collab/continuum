@@ -92,7 +92,7 @@ export function tierMemoryInjection(
     dropped.push({ id: record.id, reason: "score" });
   }
 
-  const summary = buildSummary(input.memory_summary, summaryCandidates);
+  const summary = buildSummary(input.memory_summary, summaryCandidates, high.length + medium.length > 0);
 
   return {
     phase: input.phase,
@@ -168,13 +168,13 @@ function normalizeSummary(summary: string) {
   return summary.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function buildSummary(memorySummary: string, records: TieredInjectionRecord[]) {
+function buildSummary(memorySummary: string, records: TieredInjectionRecord[], hasPrimaryRecords: boolean) {
   const snippets = records
     .map((record) => record.summary.replace(/\s+/g, " ").trim())
     .filter(Boolean);
 
   if (snippets.length === 0) {
-    return memorySummary.trim() || null;
+    return hasPrimaryRecords ? null : memorySummary.trim() || null;
   }
 
   return `${memorySummary.trim()}\n- ${snippets.join("\n- ")}`.trim();

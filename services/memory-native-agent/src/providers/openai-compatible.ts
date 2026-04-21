@@ -19,6 +19,7 @@ import {
   mapStatusToError,
   mergeUsage,
   parseJsonObject,
+  buildProviderUserAgent,
   resolveRuntimeSettings,
   retryDelayMs,
   sleep,
@@ -255,6 +256,7 @@ export class OpenAICompatibleProvider implements IModelProvider {
           method: "POST",
           headers: {
             "content-type": "application/json",
+            "user-agent": buildProviderUserAgent(this.id()),
             ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
             ...(this.options.organization ? { "OpenAI-Organization": this.options.organization } : {}),
           },

@@ -12,8 +12,10 @@ describe("OpenAICompatibleProvider", () => {
   });
 
   it("streams text deltas and emits final usage", async () => {
+    let requestUserAgent: string | undefined;
     const server = await startProviderMock((app) => {
-      app.post("/v1/chat/completions", async (_request, reply) => {
+      app.post("/v1/chat/completions", async (request, reply) => {
+        requestUserAgent = request.headers["user-agent"];
         reply.header("content-type", "text/event-stream");
         return reply.send(
           sseStream([
@@ -44,6 +46,7 @@ describe("OpenAICompatibleProvider", () => {
       { type: "text_delta", text: "，世界" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 11, completion_tokens: 7 } },
     ]);
+    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=openai-compatible)");
   });
 
   it("buffers tool call arguments until a complete call is available", async () => {

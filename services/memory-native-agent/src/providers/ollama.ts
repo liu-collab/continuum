@@ -13,6 +13,7 @@ import {
 import {
   buildBaseUrl,
   createCompositeAbortController,
+  buildProviderUserAgent,
   emptyUsage,
   mapStatusToError,
   parseJsonObject,
@@ -188,6 +189,7 @@ export class OllamaProvider implements IModelProvider {
           method: "POST",
           headers: {
             "content-type": "application/json",
+            "user-agent": buildProviderUserAgent(this.id()),
           },
           body: JSON.stringify({
             model: options.request.model ?? this.options.model,

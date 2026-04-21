@@ -12,8 +12,10 @@ describe("OllamaProvider", () => {
   });
 
   it("streams NDJSON text responses", async () => {
+    let requestUserAgent: string | undefined;
     const server = await startProviderMock((app) => {
-      app.post("/api/chat", async (_request, reply) => {
+      app.post("/api/chat", async (request, reply) => {
+        requestUserAgent = request.headers["user-agent"];
         reply.header("content-type", "application/x-ndjson");
         return reply.send(
           ndjsonStream([
@@ -37,6 +39,7 @@ describe("OllamaProvider", () => {
       { type: "text_delta", text: "，Ollama" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 4, completion_tokens: 5 } },
     ]);
+    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=ollama)");
   });
 
   it("emits tool calls when Ollama returns tool_calls blocks", async () => {

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS dispatched_messages (
   messages_json TEXT NOT NULL,
   tools_json TEXT NOT NULL,
   prompt_segments_json TEXT,
+  phase_results_json TEXT,
   provider_id TEXT NOT NULL,
   model TEXT NOT NULL,
   round INTEGER NOT NULL DEFAULT 1,

@@ -244,8 +244,10 @@ describe("ChatPanel", () => {
               toolCalls: [],
               phases: [],
               injection: {
-                memory_ids: ["mem-1"],
-                memory_summary: "这里是一段注入摘要，不应该在中间聊天区重复渲染。"
+                phase: "before_response",
+                injection_reason: "history reference",
+                memory_summary: "这里是一段注入摘要，不应该在中间聊天区重复渲染。",
+                memory_records: [],
               },
               finishReason: "stop",
               promptAvailable: true,

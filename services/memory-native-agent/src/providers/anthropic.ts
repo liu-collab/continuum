@@ -14,6 +14,7 @@ import {
   buildBaseUrl,
   createCompositeAbortController,
   emptyUsage,
+  buildProviderUserAgent,
   mapStatusToError,
   mergeUsage,
   parseJsonObject,
@@ -256,6 +257,7 @@ export class AnthropicProvider implements IModelProvider {
           method: "POST",
           headers: {
             "content-type": "application/json",
+            "user-agent": buildProviderUserAgent(this.id()),
             "anthropic-version": "2023-06-01",
             "x-api-key": this.options.apiKey,
           },

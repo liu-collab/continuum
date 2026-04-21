@@ -271,6 +271,7 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       round: payload.round,
       messages: JSON.parse(payload.messages_json),
       prompt_segments: payload.prompt_segments_json ? JSON.parse(payload.prompt_segments_json) : [],
+      phase_results: payload.phase_results_json ? JSON.parse(payload.phase_results_json) : [],
       tools: JSON.parse(payload.tools_json),
     };
   });

@@ -12,8 +12,10 @@ describe("AnthropicProvider", () => {
   });
 
   it("streams text deltas from SSE events", async () => {
+    let requestUserAgent: string | undefined;
     const server = await startProviderMock((app) => {
-      app.post("/v1/messages", async (_request, reply) => {
+      app.post("/v1/messages", async (request, reply) => {
+        requestUserAgent = request.headers["user-agent"];
         reply.header("content-type", "text/event-stream");
         return reply.send(
           sseStream([
@@ -45,6 +47,7 @@ describe("AnthropicProvider", () => {
       { type: "text_delta", text: "，Anthropic" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 13, completion_tokens: 8 } },
     ]);
+    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=anthropic)");
   });
 
   it("buffers tool_use input until a complete JSON object can be emitted", async () => {

@@ -68,6 +68,7 @@ describe("SqliteSessionStore message append", () => {
       messages_json: "[{\"role\":\"user\",\"content\":\"hello\"}]",
       tools_json: "[]",
       prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
+      phase_results_json: "[{\"phase\":\"before_response\",\"trace_id\":\"trace-1\",\"degraded\":false}]",
       provider_id: "openai-compatible",
       model: "gpt-test",
       round: 1,
@@ -81,6 +82,7 @@ describe("SqliteSessionStore message append", () => {
       provider_id: "openai-compatible",
       round: 1,
       prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
+      phase_results_json: "[{\"phase\":\"before_response\",\"trace_id\":\"trace-1\",\"degraded\":false}]",
     });
 
     const messages = store.getMessages("sess-1");

@@ -1011,10 +1011,23 @@ describe("http session routes", () => {
     const payload = response.json() as {
       messages: Array<{ role: string; content: string }>;
       prompt_segments: Array<{ kind: string; priority: string }>;
+      phase_results: Array<{ phase: string; degraded: boolean }>;
       tools: Array<Record<string, unknown>>;
     };
     expect(payload.messages.at(0)?.role).toBe("system");
     expect(payload.prompt_segments.length).toBeGreaterThan(0);
+    expect(payload.phase_results).toEqual([
+      {
+        phase: "task_start",
+        trace_id: "trace-task_start",
+        degraded: false,
+      },
+      {
+        phase: "before_response",
+        trace_id: "trace-before_response",
+        degraded: false,
+      },
+    ]);
     expect(payload.prompt_segments[0]).toMatchObject({
       kind: "core_system",
       priority: "fixed",
@@ -1050,6 +1063,7 @@ describe("http session routes", () => {
       messages_json: "[{\"role\":\"user\",\"content\":\"读取 README\"}]",
       tools_json: "[]",
       prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
+      phase_results_json: "[{\"phase\":\"before_response\",\"trace_id\":\"trace-1\",\"degraded\":false}]",
       provider_id: "ollama",
       model: "qwen2.5-coder",
       round: 2,
@@ -1067,6 +1081,13 @@ describe("http session routes", () => {
     expect(response.json()).toMatchObject({
       turn_id: "turn-tool-round",
       round: 2,
+      phase_results: [
+        {
+          phase: "before_response",
+          trace_id: "trace-1",
+          degraded: false,
+        },
+      ],
       prompt_segments: [
         {
           kind: "core_system",

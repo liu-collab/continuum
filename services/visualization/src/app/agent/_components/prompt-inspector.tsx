@@ -19,6 +19,8 @@ type PromptInspectorProps = {
 
 export function PromptInspector({ open, payload, onClose }: PromptInspectorProps) {
   const { t } = useAgentI18n();
+  const promptSegments = payload?.prompt_segments ?? [];
+  const phaseResults = payload?.phase_results ?? [];
 
   if (!open) {
     return null;
@@ -82,9 +84,9 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-0.5 text-foreground">{payload?.tools.length ?? 0}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Prompt Segments</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.finalPrompt")}</dt>
                 <dd className="mt-1 space-y-2">
-                  {(payload?.prompt_segments ?? []).map((segment, index) => (
+                  {promptSegments.map((segment, index) => (
                     <div key={`${segment.kind}-${segment.phase ?? "none"}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2">
                       <div className="text-xs font-medium text-foreground">
                         {segment.kind} · {segment.priority}
@@ -95,8 +97,30 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                       <div className="mt-1 text-xs leading-5 text-foreground">{segment.preview}</div>
                     </div>
                   ))}
-                  {payload && payload.prompt_segments.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">No prompt segments</div>
+                  {payload && promptSegments.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.noPromptSegments")}</div>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.phaseHits")}</dt>
+                <dd className="mt-1 space-y-2">
+                  {phaseResults.map((result, index) => (
+                    <div key={`${result.phase}-${result.trace_id ?? "none"}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2">
+                      <div className="text-xs font-medium text-foreground">
+                        {result.phase}
+                        {result.degraded ? " · degraded" : ""}
+                      </div>
+                      {result.trace_id ? (
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">trace: {result.trace_id}</div>
+                      ) : null}
+                      <div className="mt-1 text-xs leading-5 text-foreground">
+                        {result.injection_summary?.trim() || t("promptInspector.noInjection")}
+                      </div>
+                    </div>
+                  ))}
+                  {payload && phaseResults.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.noPhaseHits")}</div>
                   ) : null}
                 </dd>
               </div>

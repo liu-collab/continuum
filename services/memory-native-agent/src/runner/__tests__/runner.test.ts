@@ -740,6 +740,97 @@ describe("AgentRunner", () => {
     );
   });
 
+  it("deduplicates repeated memory records across phases before building the prompt", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.prepareContext.mockImplementation((async ({ phase }: { phase: string }) => ({
+      trace_id: `trace-${phase}`,
+      trigger: true,
+      trigger_reason: phase,
+      memory_packet: null,
+      injection_block: {
+        injection_reason: "history reference",
+        memory_summary: "用户长期偏好与当前任务上下文",
+        memory_records: [
+          {
+            id: "pref-1",
+            memory_type: "fact_preference",
+            scope: "workspace",
+            summary: "默认用中文回答",
+            importance: 0.95,
+            confidence: 0.98,
+          },
+        ],
+        token_estimate: 0,
+        memory_mode: "workspace_plus_global" as const,
+        requested_scopes: ["workspace"],
+        selected_scopes: ["workspace"],
+        trimmed_record_ids: [],
+        trim_reasons: [],
+      },
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+      budget_used: 0,
+      memory_packet_ids: [],
+    })) as never);
+    const saveDispatchedMessages = vi.fn();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages,
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("帮我规划一下支付链路重构", "turn-dedupe");
+
+    expect(saveDispatchedMessages).toHaveBeenCalled();
+    const payload = saveDispatchedMessages.mock.calls[0]?.[1] as {
+      messages_json: string;
+      prompt_segments_json: string;
+      phase_results_json: string;
+    };
+    const promptSegments = JSON.parse(payload.prompt_segments_json) as Array<{ kind: string }>;
+    const messages = JSON.parse(payload.messages_json) as Array<{ role: string }>;
+    const phaseResults = JSON.parse(payload.phase_results_json) as Array<{ phase: string; injection_summary?: string }>;
+
+    expect(promptSegments.filter((segment) => segment.kind === "memory_high")).toHaveLength(1);
+    expect(promptSegments.some((segment) => segment.kind === "memory_summary")).toBe(false);
+    expect(messages.filter((message) => message.role === "system")).toHaveLength(2);
+    expect(phaseResults.map((result) => result.phase)).toEqual(["task_start", "before_plan", "before_response"]);
+    expect(phaseResults.every((result) => result.injection_summary === "用户长期偏好与当前任务上下文")).toBe(true);
+  });
+
   it("injects skill context and forwards model override plus preapproved tools", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();
