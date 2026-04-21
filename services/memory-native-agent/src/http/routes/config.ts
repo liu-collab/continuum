@@ -73,17 +73,9 @@ const embeddingPayloadSchema = z.object({
   api_key: z.string().trim().optional(),
 });
 
-const writebackLlmPayloadSchema = z.object({
-  base_url: z.string().trim().url().optional(),
-  model: z.string().trim().min(1).optional(),
-  api_key: z.string().trim().optional(),
-  timeout_ms: z.number().int().min(100).max(120_000).optional(),
-});
-
 const updateConfigSchema = z.object({
   provider: providerPayloadSchema.optional(),
   embedding: embeddingPayloadSchema.optional(),
-  writeback_llm: writebackLlmPayloadSchema.optional(),
   mcp: z.object({
     servers: z.array(mcpServerPayloadSchema),
   }).optional(),
@@ -98,11 +90,6 @@ function formatZodIssues(error: z.ZodError) {
 function resolveManagedEmbeddingConfigPath(app: RuntimeFastifyInstance) {
   return process.env.CONTINUUM_EMBEDDING_CONFIG_PATH?.trim()
     || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
-}
-
-function resolveManagedWritebackLlmConfigPath(app: RuntimeFastifyInstance) {
-  return process.env.CONTINUUM_WRITEBACK_LLM_CONFIG_PATH?.trim()
-    || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "writeback-llm-config.json");
 }
 
 function resolveProviderConfigPath(app: RuntimeFastifyInstance) {
@@ -130,12 +117,6 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       model?: string;
       apiKey?: string;
     }>(resolveManagedEmbeddingConfigPath(app));
-    const writebackLlm = await readJson<{
-      baseUrl?: string;
-      model?: string;
-      apiKey?: string;
-      timeoutMs?: number;
-    }>(resolveManagedWritebackLlmConfigPath(app));
 
     return {
       provider: {
@@ -151,16 +132,6 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         base_url: embedding?.baseUrl ?? process.env.EMBEDDING_BASE_URL ?? null,
         model: embedding?.model ?? process.env.EMBEDDING_MODEL ?? null,
         api_key: embedding?.apiKey ?? process.env.EMBEDDING_API_KEY ?? null,
-      },
-      writeback_llm: {
-        base_url: writebackLlm?.baseUrl ?? process.env.WRITEBACK_LLM_BASE_URL ?? null,
-        model: writebackLlm?.model ?? process.env.WRITEBACK_LLM_MODEL ?? "claude-haiku-4-5-20251001",
-        api_key: writebackLlm?.apiKey ?? process.env.WRITEBACK_LLM_API_KEY ?? null,
-        timeout_ms: writebackLlm?.timeoutMs ?? (
-          process.env.WRITEBACK_LLM_TIMEOUT_MS?.trim()
-            ? Number(process.env.WRITEBACK_LLM_TIMEOUT_MS)
-            : 5000
-        ),
       },
       mcp: {
         servers: app.runtimeState.config.mcp.servers,
@@ -187,16 +158,6 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         ...(payload.embedding.base_url ? { baseUrl: payload.embedding.base_url } : {}),
         ...(payload.embedding.model ? { model: payload.embedding.model } : {}),
         ...(payload.embedding.api_key ? { apiKey: payload.embedding.api_key } : {}),
-      });
-    }
-
-    if (payload.writeback_llm) {
-      await writeJson(resolveManagedWritebackLlmConfigPath(app), {
-        version: 1,
-        ...(payload.writeback_llm.base_url ? { baseUrl: payload.writeback_llm.base_url } : {}),
-        ...(payload.writeback_llm.model ? { model: payload.writeback_llm.model } : {}),
-        ...(payload.writeback_llm.api_key ? { apiKey: payload.writeback_llm.api_key } : {}),
-        ...(payload.writeback_llm.timeout_ms ? { timeoutMs: payload.writeback_llm.timeout_ms } : {}),
       });
     }
 
@@ -256,9 +217,5 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     return {
       ok: true,
     };
-  });
-
-  app.post("/v1/agent/dependency-status/embeddings/check", async () => {
-    return app.runtimeState.memoryClient.checkEmbeddings();
   });
 }

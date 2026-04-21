@@ -47,12 +47,6 @@ type SettingsModalProps = {
       model?: string;
       api_key?: string;
     };
-    writeback_llm: {
-      base_url?: string;
-      model?: string;
-      api_key?: string;
-      timeout_ms?: number;
-    };
     mcp: {
       servers: Array<{
         name: string;
@@ -69,10 +63,6 @@ type SettingsModalProps = {
       }>;
     };
   }): Promise<void>;
-  onCheckEmbeddings(): Promise<{
-    status: string;
-    detail: string;
-  }>;
 };
 
 function resolveStatusTone(status: string | undefined) {
@@ -89,8 +79,7 @@ export function SettingsModal({
   dependencyStatus,
   memoryMode,
   onMemoryModeChange,
-  onSaveRuntime,
-  onCheckEmbeddings
+  onSaveRuntime
 }: SettingsModalProps) {
   const { formatMemoryModeLabel, locale, setLocale, t } = useAgentI18n();
 
@@ -104,15 +93,9 @@ export function SettingsModal({
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
-  const [writebackLlmBaseUrl, setWritebackLlmBaseUrl] = useState("");
-  const [writebackLlmModel, setWritebackLlmModel] = useState("");
-  const [writebackLlmApiKey, setWritebackLlmApiKey] = useState("");
-  const [writebackLlmTimeoutMs, setWritebackLlmTimeoutMs] = useState("");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
 
   useEffect(() => {
     if (!config) {
@@ -128,15 +111,9 @@ export function SettingsModal({
     setEmbeddingBaseUrl(config.embedding.base_url ?? "");
     setEmbeddingModel(config.embedding.model ?? "");
     setEmbeddingApiKey(config.embedding.api_key ?? "");
-    setWritebackLlmBaseUrl(config.writeback_llm.base_url ?? "");
-    setWritebackLlmModel(config.writeback_llm.model ?? "");
-    setWritebackLlmApiKey(config.writeback_llm.api_key ?? "");
-    setWritebackLlmTimeoutMs(config.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "");
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
-    setFeedbackMessage(null);
     setSaving(false);
-    setCheckingEmbeddings(false);
   }, [config, open]);
 
   const providerRequiresBaseUrl = useMemo(
@@ -161,10 +138,6 @@ export function SettingsModal({
     const trimmedProviderApiKey = providerApiKey.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
-    const trimmedWritebackLlmBaseUrl = writebackLlmBaseUrl.trim();
-    const trimmedWritebackLlmModel = writebackLlmModel.trim();
-    const trimmedWritebackLlmApiKey = writebackLlmApiKey.trim();
-    const trimmedWritebackLlmTimeoutMs = writebackLlmTimeoutMs.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
@@ -186,18 +159,7 @@ export function SettingsModal({
       return;
     }
 
-    if (trimmedWritebackLlmBaseUrl && !trimmedWritebackLlmModel) {
-      setErrorMessage(t("runtimeConfig.errors.writebackLlmModelRequired"));
-      return;
-    }
-
-    if (trimmedWritebackLlmTimeoutMs && !/^\d+$/.test(trimmedWritebackLlmTimeoutMs)) {
-      setErrorMessage(t("runtimeConfig.errors.writebackLlmTimeoutInvalid"));
-      return;
-    }
-
     setErrorMessage(null);
-    setFeedbackMessage(null);
     setSaving(true);
     try {
       const currentProviderKind: ProviderKind =
@@ -214,12 +176,6 @@ export function SettingsModal({
           ...(trimmedEmbeddingModel ? { model: trimmedEmbeddingModel } : {}),
           ...(embeddingApiKey.trim() ? { api_key: embeddingApiKey.trim() } : {})
         },
-        writeback_llm: {
-          ...(trimmedWritebackLlmBaseUrl ? { base_url: trimmedWritebackLlmBaseUrl } : {}),
-          ...(trimmedWritebackLlmModel ? { model: trimmedWritebackLlmModel } : {}),
-          ...(trimmedWritebackLlmApiKey ? { api_key: trimmedWritebackLlmApiKey } : {}),
-          ...(trimmedWritebackLlmTimeoutMs ? { timeout_ms: Number(trimmedWritebackLlmTimeoutMs) } : {}),
-        },
         mcp: {
           servers: mcpServers.map((server) => ({
             ...server,
@@ -235,37 +191,6 @@ export function SettingsModal({
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleCheckEmbeddings() {
-    setErrorMessage(null);
-    setFeedbackMessage(null);
-    const currentBaseUrl = config?.embedding.base_url?.trim() ?? "";
-    const currentModel = config?.embedding.model?.trim() ?? "";
-    const currentApiKey = config?.embedding.api_key?.trim() ?? "";
-    if (
-      embeddingBaseUrl.trim() !== currentBaseUrl ||
-      embeddingModel.trim() !== currentModel ||
-      embeddingApiKey.trim() !== currentApiKey
-    ) {
-      setFeedbackMessage({
-        tone: "warning",
-        text: t("runtimeConfig.saveBeforeCheck"),
-      });
-      return;
-    }
-    setCheckingEmbeddings(true);
-    try {
-      const result = await onCheckEmbeddings();
-      setFeedbackMessage({
-        tone: result.status === "healthy" ? "success" : "warning",
-        text: `${result.status}: ${result.detail}`,
-      });
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setCheckingEmbeddings(false);
     }
   }
 
@@ -330,19 +255,6 @@ export function SettingsModal({
                 {dependencyStatus.runtime.embeddings.detail}
               </p>
             ) : null}
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleCheckEmbeddings();
-                }}
-                disabled={checkingEmbeddings}
-                className="btn-outline"
-                data-testid="runtime-config-check-embeddings"
-              >
-                {checkingEmbeddings ? t("runtimeConfig.checkingEmbedding") : t("runtimeConfig.checkEmbedding")}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -373,7 +285,7 @@ export function SettingsModal({
           </label>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
             <div>
               <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.providerTitle")}</div>
@@ -462,53 +374,6 @@ export function SettingsModal({
                 onChange={(event) => setEmbeddingApiKey(event.target.value)}
                 placeholder={t("runtimeConfig.embeddingApiKey")}
                 className="field mt-1"
-              />
-            </label>
-          </div>
-
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.writebackLlmTitle")}</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.writebackLlmDescription")}
-              </div>
-            </div>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmBaseUrl")}</span>
-              <input
-                value={writebackLlmBaseUrl}
-                onChange={(event) => setWritebackLlmBaseUrl(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmBaseUrl")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmModel")}</span>
-              <input
-                value={writebackLlmModel}
-                onChange={(event) => setWritebackLlmModel(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmModel")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmApiKey")}</span>
-              <input
-                type="password"
-                value={writebackLlmApiKey}
-                onChange={(event) => setWritebackLlmApiKey(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmApiKey")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmTimeoutMs")}</span>
-              <input
-                value={writebackLlmTimeoutMs}
-                onChange={(event) => setWritebackLlmTimeoutMs(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmTimeoutMs")}
-                className="field mt-1"
-                inputMode="numeric"
               />
             </label>
           </div>
@@ -665,14 +530,6 @@ export function SettingsModal({
         {errorMessage ? (
           <p className="text-sm text-rose-600" data-testid="runtime-config-error">
             {errorMessage}
-          </p>
-        ) : null}
-        {feedbackMessage ? (
-          <p
-            className={feedbackMessage.tone === "success" ? "text-sm text-emerald-600" : "text-sm text-amber-600"}
-            data-testid="runtime-config-feedback"
-          >
-            {feedbackMessage.text}
           </p>
         ) : null}
       </div>

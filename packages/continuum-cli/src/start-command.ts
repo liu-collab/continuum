@@ -35,7 +35,6 @@ import {
   continuumManagedEmbeddingConfigPath,
   readManagedEmbeddingConfig,
   writeManagedEmbeddingConfig,
-  writeManagedWritebackLlmConfig,
 } from "./managed-config.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
@@ -221,7 +220,6 @@ async function startStackContainer(
   bindHost: string,
   publicHost: string,
   embeddingConfigPath: string,
-  writebackLlmConfigPath: string,
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const managedDir = continuumManagedDir();
@@ -283,8 +281,6 @@ async function startStackContainer(
     "MNA_TOKEN_PATH=/opt/continuum/managed/mna/token.txt",
     "-e",
     `CONTINUUM_EMBEDDING_CONFIG_PATH=${embeddingConfigPath}`,
-    "-e",
-    `CONTINUUM_WRITEBACK_LLM_CONFIG_PATH=${writebackLlmConfigPath}`,
   ];
 
   dockerArgs.push(DEFAULT_MANAGED_STACK_IMAGE);
@@ -309,7 +305,6 @@ export async function runStartCommand(
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
-  const writebackLlmConfigPath = "/opt/continuum/managed/writeback-llm-config.json";
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
   const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options);
   const mergedEmbeddingConfig = {
@@ -319,7 +314,6 @@ export async function runStartCommand(
   };
 
   await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
-  await writeManagedWritebackLlmConfig({ version: 1 });
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();
@@ -340,13 +334,7 @@ export async function runStartCommand(
   await cleanupManagedStackContainer().catch(() => undefined);
 
   try {
-    await startStackContainer(
-      postgresPort,
-      bindHost,
-      accessibleHost,
-      embeddingConfigPath,
-      writebackLlmConfigPath,
-    );
+    await startStackContainer(postgresPort, bindHost, accessibleHost, embeddingConfigPath);
 
     await waitForHealthy(`${storageUrl}/health`, 120_000);
     await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);

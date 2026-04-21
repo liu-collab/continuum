@@ -12,14 +12,6 @@ export type ManagedEmbeddingConfig = {
   apiKey?: string;
 };
 
-export type ManagedWritebackLlmConfig = {
-  version: 1;
-  baseUrl?: string;
-  model?: string;
-  apiKey?: string;
-  timeoutMs?: number;
-};
-
 export type ManagedProviderOverride = {
   provider: {
     kind: ManagedMnaProviderConfig["kind"];
@@ -35,10 +27,6 @@ export type ManagedProviderOverride = {
 
 export function continuumManagedEmbeddingConfigPath() {
   return path.join(continuumManagedDir(), "embedding-config.json");
-}
-
-export function continuumManagedWritebackLlmConfigPath() {
-  return path.join(continuumManagedDir(), "writeback-llm-config.json");
 }
 
 export function managedMnaProviderConfigPath(mnaHomeDir: string) {
@@ -57,22 +45,6 @@ export async function readManagedEmbeddingConfig(): Promise<ManagedEmbeddingConf
 
 export async function writeManagedEmbeddingConfig(config: ManagedEmbeddingConfig) {
   const filePath = continuumManagedEmbeddingConfigPath();
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(config, null, 2), "utf8");
-}
-
-export async function readManagedWritebackLlmConfig(): Promise<ManagedWritebackLlmConfig | null> {
-  const filePath = continuumManagedWritebackLlmConfigPath();
-  if (!(await pathExists(filePath))) {
-    return null;
-  }
-
-  const content = await readFile(filePath, "utf8");
-  return JSON.parse(content) as ManagedWritebackLlmConfig;
-}
-
-export async function writeManagedWritebackLlmConfig(config: ManagedWritebackLlmConfig) {
-  const filePath = continuumManagedWritebackLlmConfigPath();
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, JSON.stringify(config, null, 2), "utf8");
 }

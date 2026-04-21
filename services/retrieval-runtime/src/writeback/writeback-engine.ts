@@ -36,38 +36,12 @@ const PREFERENCE_PATTERNS = [
   /(?:我一般|我喜欢|我偏好|我习惯|一直用的是|prefer|i usually|i always|my convention is|my default is)\s*[:：]?\s*(.+)/i,
 ];
 
-const REMEMBER_PREFERENCE_PATTERNS = [
-  /(?:请记住|记住|记一下|remember(?: this)?)\s*[:：,-]?\s*(.+)/i,
-];
-
-const DEFAULT_PREFERENCE_PATTERNS = [
-  /((?:以后|之后|后续)?\s*默认\s*.+)/i,
-  /(.+?)\s*(?:这是|属于|算是)?\s*长期偏好/i,
-];
-
-const ASSISTANT_CONFIRM_PREFERENCE_PATTERNS = [
-  /(?:已记住|记住了|好的，已记住|收到，已记住|i'?ve noted|noted)\s*[:：]?\s*(.+)$/i,
-];
-
 const COMMITMENT_PATTERNS = [
   /(?:我会|i will)\s+(?:在|after|before|每次|always|每天).{8,}/i,
   /(?:承诺|commit to|保证)\s*[:：]?\s*(.+)/i,
 ];
 
 const TRIVIAL_TOOL_PATTERNS = /^(exit code|success|ok|done|completed|finished)\b/i;
-const STABLE_PREFERENCE_HINTS = [
-  "默认",
-  "以后",
-  "长期偏好",
-  "偏好",
-  "习惯",
-  "通常",
-  "prefer",
-  "preferred",
-  "default",
-  "usually",
-  "always",
-];
 
 function extractPreferenceDetails(text: string): Record<string, unknown> {
   const normalized = normalizeText(text);
@@ -76,73 +50,6 @@ function extractPreferenceDetails(text: string): Record<string, unknown> {
     predicate: normalized,
     stability: "long_term",
   };
-}
-
-function cleanupPreferenceSummary(text: string): string {
-  return normalizeText(
-    text
-      .replace(/^(?:请记住|记住|记一下|remember(?: this)?)\s*[:：,-]?\s*/i, "")
-      .replace(/^(?:已记住|记住了|好的，已记住|收到，已记住)\s*[:：,-]?\s*/i, "")
-      .replace(/[。.!?]\s*(?:这是|这属于|算是)?\s*长期偏好\s*$/i, "")
-      .replace(/[。.!?]\s*(?:这会|我会)?\s*作为你的长期偏好来遵循\s*$/i, "")
-      .replace(/[。.!?]\s*(?:我会|会)\s*按这个长期偏好执行\s*$/i, "")
-      .replace(/[。.!?]\s*(?:请长期记住|请记住)\s*$/i, ""),
-  );
-}
-
-function containsStablePreferenceHint(text: string): boolean {
-  const normalized = normalizeText(text).toLowerCase();
-  return STABLE_PREFERENCE_HINTS.some((hint) => normalized.includes(hint.toLowerCase()));
-}
-
-function extractStablePreferenceFromUserInput(text: string): string | null {
-  const directMatch = PREFERENCE_PATTERNS.map((pattern) => text.match(pattern)).find((match) => match?.[1]);
-  if (directMatch?.[1]) {
-    return cleanupPreferenceSummary(directMatch[1]);
-  }
-
-  const defaultMatch = DEFAULT_PREFERENCE_PATTERNS.map((pattern) => text.match(pattern)).find((match) => match?.[1]);
-  if (defaultMatch?.[1]) {
-    const summary = cleanupPreferenceSummary(defaultMatch[1]);
-    if (summary && containsStablePreferenceHint(summary)) {
-      return summary;
-    }
-  }
-
-  const rememberMatch = REMEMBER_PREFERENCE_PATTERNS
-    .map((pattern) => text.match(pattern))
-    .find((match) => match?.[1]);
-  if (!rememberMatch?.[1]) {
-    return null;
-  }
-
-  const summary = cleanupPreferenceSummary(rememberMatch[1]);
-  if (!summary || !containsStablePreferenceHint(summary)) {
-    return null;
-  }
-
-  return summary;
-}
-
-function extractConfirmedPreferenceFromAssistantOutput(text: string): string | null {
-  const confirmedMatch = text.match(/(?:已确认|确定|confirmed)\s*[:：]?\s*(.+)$/i);
-  if (confirmedMatch?.[1]) {
-    return cleanupPreferenceSummary(confirmedMatch[1]);
-  }
-
-  const rememberMatch = ASSISTANT_CONFIRM_PREFERENCE_PATTERNS
-    .map((pattern) => text.match(pattern))
-    .find((match) => match?.[1]);
-  if (!rememberMatch?.[1]) {
-    return null;
-  }
-
-  const summary = cleanupPreferenceSummary(rememberMatch[1]);
-  if (!summary || !containsStablePreferenceHint(summary)) {
-    return null;
-  }
-
-  return summary;
 }
 
 function buildCandidate(
@@ -236,17 +143,17 @@ export class WritebackEngine {
     const normalizedTools = normalizeText(input.tool_results_summary ?? "");
     let preferenceFromUserInput = false;
 
-    const stablePreferenceSummary = extractStablePreferenceFromUserInput(normalizedUser);
-    if (stablePreferenceSummary) {
+    const preferenceMatch = PREFERENCE_PATTERNS.map((pattern) => normalizedUser.match(pattern)).find((match) => match?.[1]);
+    if (preferenceMatch?.[1]) {
       preferenceFromUserInput = true;
       rawCandidates.push({
         candidate_type: "fact_preference",
         scope: "user",
-        summary: stablePreferenceSummary,
+        summary: preferenceMatch[1],
         details: {
           user_prompt: normalizedUser,
           extraction_method: "rules",
-          ...extractPreferenceDetails(stablePreferenceSummary),
+          ...extractPreferenceDetails(preferenceMatch[1]),
         },
         importance: 4,
         confidence: 0.9,
@@ -260,16 +167,16 @@ export class WritebackEngine {
       filteredReasons.push("no_stable_preference_detected");
     }
 
-    const confirmedPreferenceSummary = extractConfirmedPreferenceFromAssistantOutput(normalizedAssistant);
-    if (confirmedPreferenceSummary && !preferenceFromUserInput) {
+    const factMatch = normalizedAssistant.match(/(?:已确认|确定|confirmed)\s*[:：]?\s*(.+)$/i);
+    if (factMatch?.[1] && !preferenceFromUserInput) {
       rawCandidates.push({
         candidate_type: "fact_preference",
         scope: "user",
-        summary: confirmedPreferenceSummary,
+        summary: factMatch[1],
         details: {
           assistant_output: normalizedAssistant,
           extraction_method: "rules",
-          ...extractPreferenceDetails(confirmedPreferenceSummary),
+          ...extractPreferenceDetails(factMatch[1]),
         },
         importance: 4,
         confidence: 0.8,
