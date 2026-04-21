@@ -96,11 +96,11 @@ describe("runStopCommand", () => {
       expect.objectContaining({ recursive: true, force: true }),
     );
     expect(rmMock).toHaveBeenCalledWith(
-      path.join("C:/Users/test/.continuum/managed", "mna", ".mna", "sessions.db"),
+      path.join("C:/Users/test/.continuum/managed", "mna", "sessions.db"),
       expect.objectContaining({ recursive: true, force: true }),
     );
     expect(rmMock).toHaveBeenCalledWith(
-      path.join("C:/Users/test/.continuum/managed", "mna", ".mna", "artifacts"),
+      path.join("C:/Users/test/.continuum/managed", "mna", "artifacts"),
       expect.objectContaining({ recursive: true, force: true }),
     );
     expect(rmMock).toHaveBeenCalledWith(

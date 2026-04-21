@@ -12,6 +12,7 @@ import { SkillRegistry } from "../skills/index.js";
 import { createDefaultToolDispatcher, type ToolDispatcher, type ToolResult } from "../tools/index.js";
 import type { MemoryMode } from "../config/schema.js";
 import { resolveArtifactsRoot, resolveMnaHomeDirectory } from "../shared/token.js";
+import { resolveWorkspaceRoot } from "./workspace-resolution.js";
 
 export interface ServerEventEnvelope {
   id: number;
@@ -22,6 +23,7 @@ export interface ServerEventEnvelope {
 export interface SessionState {
   sessionId: string;
   workspaceId: string;
+  workspaceRoot: string;
   memoryMode: MemoryMode;
   locale: AgentConfig["locale"];
   runner: AgentRunner;
@@ -51,6 +53,7 @@ export interface ServerMetrics {
 export interface MnaRuntimeState {
   config: AgentConfig;
   env: NodeJS.ProcessEnv;
+  mnaHomeDirectory: string;
   memoryClient: MemoryClient;
   provider: IModelProvider;
   mcpRegistry: McpRegistry;
@@ -81,9 +84,10 @@ function resolveSkillConfig(config: AgentConfig) {
 export function createRuntimeState(config: AgentConfig, options: RuntimeStateOptions = {}): MnaRuntimeState {
   const artifactsRoot = resolveArtifactsRoot(options.homeDirectory);
   fs.mkdirSync(artifactsRoot, { recursive: true });
+  const mnaHomeDirectory = resolveMnaHomeDirectory(options.homeDirectory);
 
   const store = new SqliteSessionStore({
-    dbPath: path.join(resolveMnaHomeDirectory(options.homeDirectory), "sessions.db"),
+    dbPath: path.join(mnaHomeDirectory, "sessions.db"),
     artifactsRoot,
   });
   store.markInterruptedTurnsAsCrashed();
@@ -93,9 +97,8 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
     void mcpRegistry.addServer(server).catch(() => undefined);
   }
 
-  const mnaHome = resolveMnaHomeDirectory(options.homeDirectory);
   const skills = new SkillRegistry({
-    persistencePath: path.join(mnaHome, "skills", "registry.json"),
+    persistencePath: path.join(mnaHomeDirectory, "skills", "registry.json"),
   });
   const skillConfig = resolveSkillConfig(config);
   if (skillConfig.enabled) {
@@ -108,6 +111,7 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
   return {
     config,
     env: options.env ?? process.env,
+    mnaHomeDirectory,
     memoryClient: new MemoryClient({
       baseUrl: config.runtime.baseUrl,
       requestTimeoutMs: config.runtime.requestTimeoutMs,
@@ -144,14 +148,16 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
   };
 }
 
-export function createSessionState(state: MnaRuntimeState, sessionId: string): SessionState {
+export async function createSessionState(state: MnaRuntimeState, sessionId: string): Promise<SessionState> {
   const persistedSession = state.store.getSession(sessionId);
   const memoryMode = persistedSession?.memory_mode ?? state.config.memory.mode;
   const workspaceId = persistedSession?.workspace_id ?? state.config.memory.workspaceId;
+  const workspaceRoot = (await resolveWorkspaceRoot(state, workspaceId)) ?? state.config.memory.cwd;
   const locale = persistedSession?.locale ?? state.config.locale;
   const session: SessionState = {
     sessionId,
     workspaceId,
+    workspaceRoot,
     memoryMode,
     locale,
     runner: null as unknown as AgentRunner,
@@ -406,6 +412,7 @@ function buildSessionRunner(state: MnaRuntimeState, session: SessionState): Agen
         ...state.config.memory,
         mode: session.memoryMode,
         workspaceId: session.workspaceId,
+        cwd: session.workspaceRoot,
       },
       locale: session.locale,
     },

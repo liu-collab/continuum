@@ -192,16 +192,23 @@ describe("continuum mna command", () => {
         version: "0.1.1"
       }
     });
-    fetchJsonMock.mockResolvedValueOnce({
+    const originalFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      body: {
+      status: 200,
+      json: vi.fn().mockResolvedValue({
         runtime: {
           status: "healthy"
         }
-      }
-    });
+      })
+    }) as typeof fetch;
 
-    const result = await startManagedMna({}, import.meta.url);
+    let result;
+    try {
+      result = await startManagedMna({}, import.meta.url);
+    } finally {
+      global.fetch = originalFetch;
+    }
 
     expect(result).toEqual({
       url: "http://127.0.0.1:4193",

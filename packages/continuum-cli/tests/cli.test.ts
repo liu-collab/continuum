@@ -179,6 +179,59 @@ describe("continuum cli", () => {
     expect(payload.mna).toHaveProperty("dependency");
   });
 
+  it("marks mna as degraded when health is ok but token authorization fails", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    getManagedMnaStatusMock.mockResolvedValue({
+      record: {
+        name: "memory-native-agent",
+        pid: 123,
+        logPath: "C:/tmp/.continuum/logs/mna.log",
+        url: "http://127.0.0.1:4193",
+        tokenPath: "C:/tmp/.mna/token.txt",
+        artifactsPath: "C:/tmp/.mna/artifacts",
+        version: "0.1.0"
+      },
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.mna/token.txt",
+      artifactsPath: "C:/tmp/.mna/artifacts",
+      health: {
+        ok: true,
+        status: 200,
+        body: {
+          version: "0.1.0"
+        }
+      },
+      dependency: {
+        ok: false,
+        status: 401,
+        body: {
+          error: {
+            code: "token_invalid"
+          }
+        }
+      }
+    });
+
+    const exitCode = await runStatusCommand({
+      json: true,
+      strict: false,
+      "runtime-url": "http://127.0.0.1:39992",
+      "storage-url": "http://127.0.0.1:39991",
+      "ui-url": "http://127.0.0.1:39993",
+      timeout: "50",
+    });
+
+    expect(exitCode).toBe(1);
+    const payload = JSON.parse(String(stdoutSpy.mock.calls[0]?.[0])) as {
+      checks: Array<{ name: string; status: string; detail: string }>;
+    };
+    expect(payload.checks.find((item) => item.name === "memory-native-agent")).toEqual({
+      name: "memory-native-agent",
+      status: "degraded",
+      detail: "token mismatch between continuum and running memory-native-agent",
+    });
+  });
+
   it("allows managed start to proceed without third-party embedding config", () => {
     expect(resolveOptionalThirdPartyEmbeddingConfig({}, {})).toEqual({});
   });

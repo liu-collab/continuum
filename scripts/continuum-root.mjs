@@ -22,6 +22,7 @@ const lifecycleLockPath = path.join(continuumHome, "lifecycle.lock");
 const sharedEnv = {
   ...process.env,
   DATABASE_URL: process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/agent_memory",
+  CONTINUUM_REPO_ROOT: process.env.CONTINUUM_REPO_ROOT ?? repoRoot,
 };
 
 function npmCommand() {

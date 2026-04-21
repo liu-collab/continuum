@@ -56,8 +56,8 @@ async function clearManagedRuntimeState() {
   const managedDir = continuumManagedDir();
   const targets = [
     path.join(managedDir, "mna", "token.txt"),
-    path.join(managedDir, "mna", ".mna", "sessions.db"),
-    path.join(managedDir, "mna", ".mna", "artifacts"),
+    path.join(managedDir, "mna", "sessions.db"),
+    path.join(managedDir, "mna", "artifacts"),
     continuumLogsDir(),
   ];
 

@@ -2,17 +2,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("process cleanup", () => {
   afterEach(() => {
+    delete process.env.CONTINUUM_REPO_ROOT;
     vi.restoreAllMocks();
     vi.resetModules();
   });
 
   it("normalizes windows command lines before matching managed services", async () => {
+    process.env.CONTINUUM_REPO_ROOT = "C:\\workspace\\work\\agent-memory";
     const { buildWindowsLegacyContinuumCleanupScript } = await import("../src/process-cleanup.js");
     const script = buildWindowsLegacyContinuumCleanupScript();
 
     expect(script).toContain("-replace '\\\\','/'");
-    expect(script).toContain("vendor/(storage/dist/src/server\\.js|storage/dist/src/worker\\.js|runtime/dist/src/index\\.js|visualization/standalone/server\\.js)");
+    expect(script).toContain("vendor/(storage/dist/src/server\\.js|storage/dist/src/worker\\.js|runtime/dist/src/index\\.js|visualization/standalone/server\\.js|memory-native-agent/bin/mna-server\\.mjs)");
     expect(script).toContain("local-embedding-service\\.js");
+    expect(script).toContain("c:/workspace/work/agent-memory/services/");
   });
 
   it("invokes powershell directly on windows cleanup", async () => {

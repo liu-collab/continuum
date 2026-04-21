@@ -157,7 +157,7 @@ function serviceDefinitions(packageDir) {
     "memory-native-agent": {
       serviceDir: path.join(repoRoot, "services", "memory-native-agent"),
       buildInputs: ["bin", "src", "scripts", "package.json", "package-lock.json", "tsconfig.json"],
-      entryInputs: ["bin", "dist", "package.json", "README.md"],
+      entryInputs: ["bin", "src", "scripts", "package.json", "package-lock.json", "tsconfig.json", "README.md"],
       buildOutputs: ["dist/src/index.js"],
       vendorOutputs: [path.join(packageDir, "vendor", "memory-native-agent", "bin", "mna-server.mjs")],
     },

@@ -717,16 +717,19 @@ describe("retrieval-runtime remediation", () => {
     const readModelRepository = new InMemoryReadModelRepository(candidateRecords);
     const storageClient = new StubStorageClient();
     const llmExtractor = new CountingLlmExtractor();
+    const embeddingsClient = new StubEmbeddingsClient();
 
     const firstService = new RetrievalRuntimeService(
-      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
-      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
+      config.EMBEDDING_TIMEOUT_MS,
     );
 
     const request = {
@@ -742,14 +745,16 @@ describe("retrieval-runtime remediation", () => {
     const first = await firstService.finalizeTurn(request);
 
     const secondService = new RetrievalRuntimeService(
-      new TriggerEngine(config, new StubEmbeddingsClient(), readModelRepository, dependencyGuard, logger),
-      new QueryEngine(config, readModelRepository, new StubEmbeddingsClient(), dependencyGuard, logger),
+      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
+      config.EMBEDDING_TIMEOUT_MS,
     );
 
     const second = await secondService.finalizeTurn(request);

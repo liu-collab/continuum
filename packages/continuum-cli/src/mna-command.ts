@@ -162,6 +162,15 @@ async function fetchMnaDependency(url: string, tokenPath: string, timeoutMs: num
   }
 }
 
+function isDependencyAuthorized(dependency: {
+  ok: boolean;
+  status?: number;
+  body?: unknown;
+  error?: string;
+}) {
+  return dependency.status !== 401 && dependency.error !== "missing token";
+}
+
 async function isProcessAlive(pid: number) {
   if (process.platform === "win32") {
     const child = spawn("powershell", [
@@ -245,7 +254,7 @@ export async function startManagedMna(
   }
 
   const existing = await getManagedMnaStatus(options);
-  if (existing.health.ok && existing.record) {
+  if (existing.health.ok && existing.record && isDependencyAuthorized(existing.dependency)) {
     return {
       url: existing.url,
       tokenPath: existing.tokenPath,
@@ -255,7 +264,10 @@ export async function startManagedMna(
   }
 
   if (existing.record && (await isProcessAlive(existing.record.pid))) {
-    throw new Error(`memory-native-agent 端口已被占用或已有进程仍在运行: pid=${existing.record.pid}`);
+    await terminateProcess(existing.record.pid);
+    await writeManagedMnaRecord(null);
+  } else if (existing.record) {
+    await writeManagedMnaRecord(null);
   }
 
   const host = parseMnaHost(options);

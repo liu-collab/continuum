@@ -162,7 +162,8 @@ export async function runStatusCommand(options: Record<string, string | boolean>
     checkUi(uiUrl, timeoutMs),
     checkDatabase(databaseUrl, timeoutMs),
   ]);
-  const mnaResult: StatusCheckResult = mnaStatus.health.ok
+  const mnaAuthorized = mnaStatus.health.ok && mnaStatus.dependency.ok && mnaStatus.dependency.status !== 401;
+  const mnaResult: StatusCheckResult = mnaAuthorized
     ? {
         name: "memory-native-agent",
         status: "healthy",
@@ -171,7 +172,10 @@ export async function runStatusCommand(options: Record<string, string | boolean>
     : {
         name: "memory-native-agent",
         status: mnaStatus.record ? "degraded" : "unavailable",
-        detail: mnaStatus.health.error ?? `http_${mnaStatus.health.status ?? "unknown"}`,
+        detail:
+          mnaStatus.dependency.status === 401
+            ? "token mismatch between continuum and running memory-native-agent"
+            : mnaStatus.health.error ?? mnaStatus.dependency.error ?? `http_${mnaStatus.health.status ?? "unknown"}`,
       };
   const allResults = [...results, mnaResult];
 
@@ -203,7 +207,7 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   for (const result of allResults) {
     process.stdout.write(`${formatLine(result)}\n`);
   }
-  if (mnaStatus.health.ok) {
+  if (mnaAuthorized) {
     process.stdout.write(`mna token path      ${mnaStatus.tokenPath}\n`);
     process.stdout.write(`mna artifacts path  ${mnaStatus.artifactsPath}\n`);
   }
