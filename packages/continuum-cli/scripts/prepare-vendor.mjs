@@ -5,6 +5,8 @@ import { cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { planVendorBuild, writeBuildState } from "./build-state.mjs";
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const packageDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(packageDir, "..", "..");
@@ -70,6 +72,23 @@ async function removeWithRetry(targetPath) {
         maxRetries: 10,
         retryDelay: 200,
       });
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+
+  throw lastError;
+}
+
+async function copyWithRetry(sourcePath, targetPath) {
+  let lastError;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await removeWithRetry(targetPath).catch(() => undefined);
+      await cp(sourcePath, targetPath, { recursive: true, force: true });
       return;
     } catch (error) {
       lastError = error;
@@ -157,8 +176,7 @@ async function replaceVendorDir() {
   for (const entry of entries) {
     const source = path.join(vendorStageDir, entry);
     const target = path.join(vendorDir, entry);
-    await removeWithRetry(target).catch(() => undefined);
-    await cp(source, target, { recursive: true, force: true });
+    await copyWithRetry(source, target);
   }
 
   await removeWithRetry(vendorStageDir).catch(() => undefined);
@@ -179,7 +197,7 @@ async function stopRunningVendorProcesses() {
       "-NoLogo",
       "-NoProfile",
       "-Command",
-      `Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $_.CommandLine -like '*packages\\\\continuum-cli\\\\vendor\\\\*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
+      `Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" | Where-Object { $line = [string]$_.CommandLine; $normalized = $line -replace '\\\\','/'; $normalized -like '*packages/continuum-cli/vendor/*' -or $normalized -like '*continuum/managed/mna/*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
     ], {
       stdio: "ignore",
       env: process.env,
@@ -191,23 +209,49 @@ async function stopRunningVendorProcesses() {
 }
 
 async function main() {
+  const plan = await planVendorBuild(packageDir);
+
+  if (!plan.needsRefresh) {
+    console.log("vendor 已是最新，跳过 prepare:vendor。");
+    return;
+  }
+
   await stopRunningVendorProcesses();
   await removeWithRetry(vendorStageDir);
-  await removeWithRetry(visualizationBuildDir);
   await mkdir(vendorStageDir, { recursive: true });
 
-  await run(npmCommand(), ["run", "build"], storageDir);
-  await run(npmCommand(), ["run", "build"], runtimeDir);
-  await run(npmCommand(), ["run", "build"], visualizationDir);
-  await run(npmCommand(), ["run", "build"], memoryNativeAgentDir);
+  if (plan.buildServices.includes("storage")) {
+    await run(npmCommand(), ["run", "build"], storageDir);
+  }
+  if (plan.buildServices.includes("runtime")) {
+    await run(npmCommand(), ["run", "build"], runtimeDir);
+  }
+  if (plan.buildServices.includes("visualization")) {
+    await removeWithRetry(visualizationBuildDir).catch(() => undefined);
+    await run(npmCommand(), ["run", "build"], visualizationDir);
+  }
+  if (plan.buildServices.includes("memory-native-agent")) {
+    await run(npmCommand(), ["run", "build"], memoryNativeAgentDir);
+  }
 
-  await copyStorageBundle();
-  await copyRuntimeBundle();
-  await copyVisualizationBundle();
-  await copyMemoryNativeAgentBundle();
-  await copyStackTemplate();
-  await copyStackSources();
+  if (plan.changedEntries.includes("storage")) {
+    await copyStorageBundle();
+  }
+  if (plan.changedEntries.includes("runtime")) {
+    await copyRuntimeBundle();
+  }
+  if (plan.changedEntries.includes("visualization")) {
+    await copyVisualizationBundle();
+  }
+  if (plan.changedEntries.includes("memory-native-agent")) {
+    await copyMemoryNativeAgentBundle();
+  }
+  if (plan.changedEntries.includes("stack")) {
+    await copyStackTemplate();
+    await copyStackSources();
+  }
   await replaceVendorDir();
+  await writeBuildState(plan.nextState);
 }
 
 void main();

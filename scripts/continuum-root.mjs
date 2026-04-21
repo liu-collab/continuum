@@ -4,6 +4,8 @@ import os from "node:os";
 import process from "node:process";
 import path from "node:path";
 
+import { planCliBuild, planVendorBuild, writeBuildState } from "../packages/continuum-cli/scripts/build-state.mjs";
+
 const command = process.argv[2];
 const passthroughArgs = process.argv.slice(3);
 
@@ -66,10 +68,18 @@ function spawnCommand(commandName, args, options = {}) {
 }
 
 async function ensureCliBuilt() {
+  const plan = await planCliBuild(cliRoot);
+  if (!plan.needsBuild) {
+    console.log("continuum-cli 已是最新，跳过 build。");
+    return;
+  }
+
   const exitCode = await spawnCommand(npmCommand(), ["run", "build"], { cwd: cliRoot });
   if (exitCode !== 0) {
     throw new Error("continuum-cli build 失败。");
   }
+
+  await writeBuildState(plan.nextState);
 }
 
 async function prepareLatestVendor() {
@@ -154,7 +164,12 @@ async function run() {
 
   try {
     if (command === "start") {
-      await prepareLatestVendor();
+      const vendorPlan = await planVendorBuild(cliRoot);
+      if (vendorPlan.needsRefresh) {
+        await prepareLatestVendor();
+      } else {
+        console.log("vendor 已是最新，跳过 prepare:vendor。");
+      }
     }
 
     await ensureCliBuilt();
