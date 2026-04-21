@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Cog, Plus, RefreshCcw } from "lucide-react";
+import { Cog, Plus } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
@@ -12,7 +12,6 @@ import { useAgentWorkspace } from "../_hooks/use-agent-workspace";
 import { formatProviderKindLabel } from "../_lib/provider-kind";
 import { ChatPanel } from "./chat-panel";
 import { ConfirmDialog } from "./confirm-dialog";
-import { CostBar } from "./cost-bar";
 import { FilePreview } from "./file-preview";
 import { FileTree } from "./file-tree";
 import { McpPanel } from "./mcp-panel";
@@ -37,17 +36,16 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     (workspace.state.bootstrapStatus === "loading"
       ? t("workspace.bootstrap.loading")
       : resolveBootstrapDescription(workspace.state.bootstrapStatus, t));
-  const sessionWorkspace = workspace.workspaceList.find(
-    (item) => item.workspace_id === (workspace.state.session?.workspace_id ?? "")
-  );
   const currentTurnRunsHref = workspace.activeTurn?.turnId
     ? `/runs?turn_id=${encodeURIComponent(workspace.activeTurn.turnId)}`
     : null;
+  const providerLabel = workspace.dependencyStatus
+    ? `${formatProviderKindLabel(workspace.dependencyStatus.provider.id)} · ${workspace.dependencyStatus.provider.model}`
+    : null;
   const currentTurnMemoriesHref = buildMemoriesHref({
-    sessionId: workspace.state.session?.id ?? null,
     workspaceId: workspace.state.session?.workspace_id ?? null,
     taskId: workspace.state.activeTask?.taskId ?? null,
-    userId: workspace.state.session?.user_id ?? null
+    turnId: workspace.activeTurn?.turnId ?? null
   });
 
   if (workspace.state.bootstrapStatus === "loading") {
@@ -77,55 +75,20 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   return (
     <>
       <div className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Agent</h1>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {workspace.dependencyStatus
-                ? `${formatProviderKindLabel(workspace.dependencyStatus.provider.id)} · ${workspace.dependencyStatus.provider.model}`
-                : t("workspace.loading")}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <CostBar metrics={workspace.metrics} turnCount={workspace.state.turns.length} />
-            <button
-              type="button"
-              onClick={() => {
-                void workspace.refreshMetrics();
-                void workspace.refreshDependencyStatus();
-                void workspace.refreshMcpState();
-                void workspace.refreshWorkspaceList();
-              }}
-              className="btn-outline"
-              title={t("workspace.sessionsEyebrow")}
-            >
-              <RefreshCcw className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="btn-outline"
-            >
-              <Cog className="h-4 w-4" />
-              设置
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void workspace.createNewSession();
-              }}
-              className="btn-primary"
-            >
-              <Plus className="h-4 w-4" />
-              {t("workspace.newSession")}
-            </button>
-          </div>
-        </div>
-
         <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
           <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
-            <div className="border-b px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
+              <button
+                type="button"
+                onClick={() => {
+                  void workspace.createNewSession();
+                }}
+                className="btn-primary"
+              >
+                <Plus className="h-4 w-4" />
+                {t("workspace.newSession")}
+              </button>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-3">
               <SessionList
@@ -151,9 +114,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                   workspaces={workspace.workspaceList}
                   selectedWorkspaceId={workspace.selectedWorkspaceId}
                   selectedFilePath={workspace.selectedFilePath ?? null}
-                  sessionWorkspaceId={workspace.state.session?.workspace_id ?? null}
-                  sessionWorkspaceLabel={sessionWorkspace?.label ?? null}
                   onPickWorkspace={() => workspace.pickWorkspace().then(() => undefined)}
+                  onClearWorkspace={() => workspace.selectWorkspace(null)}
                   onOpenDirectory={(nextPath) => {
                     void workspace.refreshFileTree(nextPath);
                   }}
@@ -191,6 +153,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               connection={workspace.state.connection}
               degraded={workspace.state.degraded}
               activeTaskLabel={workspace.state.activeTask?.label ?? null}
+              providerLabel={providerLabel}
               skills={workspace.skillList}
               onSend={(text) => workspace.sendInput(text)}
               onAbort={() => workspace.abortCurrentTurn()}
@@ -201,8 +164,16 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           </div>
 
           <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
-            <div className="border-b px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="btn-outline"
+              >
+                <Cog className="h-4 w-4" />
+                设置
+              </button>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
               <MemoryPanel
@@ -283,6 +254,9 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onSaveRuntime={(payload) => {
           return workspace.updateRuntimeConfig(payload);
         }}
+        onCheckEmbeddings={() => {
+          return workspace.checkEmbeddings();
+        }}
       />
 
       <ConfirmDialog pendingConfirm={workspace.state.pendingConfirm} onDecision={workspace.confirmTool} />
@@ -327,23 +301,19 @@ function DependencyRow({
 }
 
 function buildMemoriesHref(input: {
-  sessionId: string | null;
   workspaceId: string | null;
   taskId: string | null;
-  userId: string | null;
+  turnId: string | null;
 }) {
   const params = new URLSearchParams();
-  if (input.sessionId) {
-    params.set("session_id", input.sessionId);
-  }
   if (input.workspaceId) {
     params.set("workspace_id", input.workspaceId);
   }
   if (input.taskId) {
     params.set("task_id", input.taskId);
   }
-  if (input.userId) {
-    params.set("user_id", input.userId);
+  if (input.turnId) {
+    params.set("source_ref", input.turnId);
   }
   if (!params.toString()) {
     return null;

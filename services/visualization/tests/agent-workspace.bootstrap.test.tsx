@@ -134,6 +134,7 @@ describe("AgentWorkspace bootstrap states", () => {
   });
 
   it("renders runtime config card and dependency status after bootstrap succeeds", () => {
+    const createNewSession = vi.fn();
     mockedUseAgentWorkspace.mockReturnValue({
       state: {
         bootstrapStatus: "ok",
@@ -208,7 +209,7 @@ describe("AgentWorkspace bootstrap states", () => {
       promptInspector: null,
       promptInspectorOpen: false,
       setPromptInspectorOpen: vi.fn(),
-      createNewSession: vi.fn(),
+      createNewSession,
       openSession: vi.fn(),
       sendInput: vi.fn(),
       abortCurrentTurn: vi.fn(),
@@ -240,11 +241,16 @@ describe("AgentWorkspace bootstrap states", () => {
     );
 
     expect(screen.getByText("openai · deepseek-chat")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · deepseek-chat");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("openai:deepseek-chat");
+    expect(screen.queryByText("轮次")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /设置/ }));
     expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /新建会话/ }));
+    expect(createNewSession).toHaveBeenCalledTimes(1);
   });
 });

@@ -17,6 +17,7 @@ type ChatPanelProps = {
   connection: AgentConnectionState;
   degraded: boolean;
   activeTaskLabel: string | null;
+  providerLabel?: string | null;
   skills: MnaSkillSummary[];
   onSend(text: string): void;
   onAbort(): void;
@@ -31,6 +32,7 @@ export function ChatPanel({
   connection,
   degraded,
   activeTaskLabel,
+  providerLabel,
   skills,
   onSend,
   onAbort,
@@ -137,8 +139,16 @@ export function ChatPanel({
   return (
     <div className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
-        <div className="min-w-0">
-          <div className="text-base font-semibold text-foreground">Continuum Agent</div>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
+          {providerLabel ? (
+            <div
+              data-testid="chat-provider-model"
+              className="truncate text-sm text-muted-foreground"
+            >
+              {providerLabel}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge

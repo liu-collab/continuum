@@ -193,6 +193,27 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("assistant-thread-viewport")).toBeInTheDocument();
   });
 
+  it("shows the selected provider model beside the Continuum Agent title", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          providerLabel="openai · gpt-5.4"
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByText("Continuum Agent")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · gpt-5.4");
+  });
+
   it("shows slash commands including imported skills when typing slash", async () => {
     const user = userEvent.setup();
 
