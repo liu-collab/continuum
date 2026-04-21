@@ -27,7 +27,10 @@
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "embeddingLabel": "embeddings",
-    "loading": "加载中"
+    "loading": "加载中",
+    "contextTitle": "当前会话上下文",
+    "currentTurnMemories": "查看本轮记忆",
+    "currentTurnRuns": "查看本轮运行"
   },
   "connectionStates": {
     "connecting": "连接中",
@@ -39,7 +42,6 @@
     "eyebrow": "Agent",
     "memoryDegraded": "记忆降级",
     "title": "直接在页面里和 `memory-native-agent` 对话。",
-    "description": "这里直接消费 mna 的 HTTP 和 WebSocket 接口。visualization 只负责渲染，不承接 agent 业务逻辑。",
     "emptyTitle": "还没有对话",
     "emptyDescription": "输入第一条消息后，这里会展示注入横幅、phase 轨迹、assistant 流式输出和工具调用日志。",
     "loadEarlier": "加载更早消息（还有 {count} 轮）",
@@ -129,7 +131,15 @@
     "deleteAria": "删除会话"
   },
   "fileTree": {
-    "title": "文件树"
+    "title": "文件树",
+    "workspaceLabel": "工作区",
+    "workspacePlaceholder": "先选择工作区",
+    "sessionWorkspace": "当前会话绑定工作区：{label}",
+    "pickFolderAction": "选择文件夹",
+    "addPathPlaceholder": "输入其他文件夹路径",
+    "addPathAction": "添加",
+    "pickError": "打开文件夹选择器失败，请改用手动输入路径。",
+    "registerError": "添加工作区失败，请检查路径是否存在。"
   },
   "filePreview": {
     "title": "文件预览"
@@ -147,7 +157,6 @@
     "description": "展示本轮实际注入的记忆摘要和命中记录。",
     "degraded": "记忆降级",
     "emptyTitle": "当前轮次没有注入块",
-    "emptyDescription": "如果本轮没有命中可注入的记忆，或者运行时处于降级模式，这里会保持为空。",
     "importanceConfidence": "importance {importance} / confidence {confidence}"
   },
   "phases": {

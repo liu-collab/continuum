@@ -2,7 +2,6 @@
 
 import React from "react";
 
-import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 
 import { useAgentI18n } from "../_i18n/provider";
@@ -13,22 +12,24 @@ type MemoryPanelProps = {
   degraded: boolean;
 };
 
-export function MemoryPanel({ activeTurn, degraded }: MemoryPanelProps) {
+export function MemoryPanel({
+  activeTurn,
+  degraded
+}: MemoryPanelProps) {
   const injection = activeTurn?.injection ?? null;
   const { formatPhaseLabel, t } = useAgentI18n();
 
   return (
-    <section className="rounded-lg border bg-surface">
+    <section className="rounded-[1.75rem] border bg-surface">
       <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
         <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
         {degraded ? <StatusBadge tone="warning">{t("memoryPanel.degraded")}</StatusBadge> : null}
       </div>
       <div className="space-y-3 px-4 py-3">
         {!injection ? (
-          <EmptyState
-            title={t("memoryPanel.emptyTitle")}
-            description={t("memoryPanel.emptyDescription")}
-          />
+          <div className="rounded-lg border border-dashed bg-surface-muted/40 px-6 py-10 text-center">
+            <h3 className="text-base font-semibold text-foreground">{t("memoryPanel.emptyTitle")}</h3>
+          </div>
         ) : (
           <>
             <div className="rounded-md border bg-surface-muted/40 p-3">

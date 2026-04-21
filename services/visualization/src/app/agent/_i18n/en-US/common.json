@@ -27,7 +27,10 @@
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "embeddingLabel": "embeddings",
-    "loading": "loading"
+    "loading": "loading",
+    "contextTitle": "Current session context",
+    "currentTurnMemories": "Open current-turn memories",
+    "currentTurnRuns": "Open current-turn run"
   },
   "connectionStates": {
     "connecting": "connecting",
@@ -39,7 +42,6 @@
     "eyebrow": "Agent",
     "memoryDegraded": "memory degraded",
     "title": "Talk to `memory-native-agent` directly from this page.",
-    "description": "This page consumes mna HTTP and WebSocket APIs directly. visualization only renders the UI and does not carry agent business logic.",
     "emptyTitle": "No conversation yet",
     "emptyDescription": "After the first message, this view will show the injection banner, phase trace, streamed assistant output, and tool logs.",
     "loadEarlier": "Load earlier messages ({count} more turns)",
@@ -129,7 +131,15 @@
     "deleteAria": "Delete session"
   },
   "fileTree": {
-    "title": "File tree"
+    "title": "File tree",
+    "workspaceLabel": "Workspace",
+    "workspacePlaceholder": "Select a workspace first",
+    "sessionWorkspace": "Current session workspace: {label}",
+    "pickFolderAction": "Pick folder",
+    "addPathPlaceholder": "Enter another folder path",
+    "addPathAction": "Add",
+    "pickError": "Failed to open the folder picker. Enter a local path manually instead.",
+    "registerError": "Failed to add workspace. Check whether the path exists."
   },
   "filePreview": {
     "title": "File preview"
@@ -147,7 +157,6 @@
     "description": "Shows the actual injected memory summary and matched records for the active turn.",
     "degraded": "memory degraded",
     "emptyTitle": "No injection block in the current turn",
-    "emptyDescription": "If nothing injectable was matched, or the runtime is degraded, this panel stays empty.",
     "importanceConfidence": "importance {importance} / confidence {confidence}"
   },
   "phases": {

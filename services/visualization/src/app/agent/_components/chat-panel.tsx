@@ -75,7 +75,6 @@ export function ChatPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
         <div className="min-w-0">
           <div className="text-base font-semibold text-foreground">Continuum Agent</div>
-          <div className="mt-1 text-xs text-muted-foreground">{t("chatPanel.description")}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge
