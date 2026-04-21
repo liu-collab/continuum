@@ -40,8 +40,9 @@ function readInt(input: SearchParamInput, key: string): number | undefined {
 export function parseMemoryCatalogFilters(input: SearchParamInput): MemoryCatalogFilters {
   return MemoryCatalogFiltersSchema.parse({
     workspaceId: readString(input, "workspace_id"),
-    userId: readString(input, "user_id"),
     taskId: readString(input, "task_id"),
+    sessionId: readString(input, "session_id"),
+    sourceRef: readString(input, "source_ref"),
     memoryViewMode: readString(input, "memory_view_mode"),
     memoryType: readString(input, "memory_type"),
     scope: readString(input, "scope"),
@@ -80,8 +81,9 @@ export function buildQueryString(params: Record<string, string | number | undefi
 export function toMemoryCatalogQuery(filters: MemoryCatalogFilters) {
   return buildQueryString({
     workspace_id: filters.workspaceId,
-    user_id: filters.userId,
     task_id: filters.taskId,
+    session_id: filters.sessionId,
+    source_ref: filters.sourceRef,
     memory_view_mode: filters.memoryViewMode,
     memory_type: filters.memoryType,
     scope: filters.scope,

@@ -27,7 +27,6 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
   fetchMemoryById: vi.fn(async (id: string) => ({
     id,
     workspace_id: "ws-1",
-    user_id: "user-1",
     task_id: "task-1",
     session_id: "session-1",
     memory_type: "fact_preference",
@@ -60,6 +59,8 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
 }));
 
 import {
+  buildMemoryCatalogQuickViews,
+  describeCatalogFilterHints,
   describeCatalogEmptyState,
   getMemoryCatalog,
   getMemoryDetail
@@ -75,8 +76,8 @@ describe("memory catalog service", () => {
       pageSize: 20,
       appliedFilters: {
         workspaceId: undefined,
-        userId: undefined,
         taskId: undefined,
+        sessionId: undefined,
         memoryViewMode: "workspace_plus_global",
         memoryType: undefined,
         scope: undefined,
@@ -114,8 +115,8 @@ describe("memory catalog service", () => {
     const detail = await getMemoryDetail("memory-1");
 
     expect(detail).not.toBeNull();
-    expect(detail?.scopeLabel).toBe("全局");
-    expect(detail?.scopeExplanation).toContain("全局记忆");
+    expect(detail?.scopeLabel).toBe("平台");
+    expect(detail?.scopeExplanation).toContain("平台级记忆");
     expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
@@ -142,8 +143,8 @@ describe("memory catalog service", () => {
 
     const response = await getMemoryCatalog({
       workspaceId: "ws-1",
-      userId: "user-1",
       taskId: undefined,
+      sessionId: undefined,
       memoryViewMode: "workspace_only",
       memoryType: undefined,
       scope: undefined,
@@ -179,8 +180,8 @@ describe("memory catalog service", () => {
 
     const response = await getMemoryCatalog({
       workspaceId: "ws-1",
-      userId: "user-1",
       taskId: undefined,
+      sessionId: undefined,
       memoryViewMode: "workspace_only",
       memoryType: undefined,
       scope: "user",
@@ -193,5 +194,122 @@ describe("memory catalog service", () => {
 
     expect(response.items).toEqual([]);
     expect(response.total).toBe(0);
+  });
+
+  it("includes session in the view summary when session_id is provided", async () => {
+    queryCatalogViewMock.mockResolvedValueOnce({
+      rows: [],
+      total: 0,
+      warnings: [],
+      status: {
+        name: "storage_read_model",
+        label: "Storage read model",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: new Date().toISOString(),
+        lastCheckedAt: new Date().toISOString(),
+        lastOkAt: new Date().toISOString(),
+        lastError: null,
+        responseTimeMs: 20,
+        detail: null
+      }
+    });
+
+    const response = await getMemoryCatalog({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: "session-1",
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(response.viewSummary).toContain("session-1");
+  });
+
+  it("exposes a visible quick view for global user memory", () => {
+    const views = buildMemoryCatalogQuickViews({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: "session-1",
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(views.some((view) => view.label === "全局记忆" && view.href.includes("scope=user"))).toBe(true);
+    expect(views.some((view) => view.label === "去掉会话限制")).toBe(true);
+  });
+
+  it("explains why session_id can hide global memory", () => {
+    const hints = describeCatalogFilterHints({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: "session-1",
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(hints.join(" ")).toContain("session_id");
+    expect(hints.join(" ")).toContain("全局记忆");
+  });
+
+  it("treats bare /memories as the implicit global view", () => {
+    const views = buildMemoryCatalogQuickViews({
+      workspaceId: undefined,
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    const globalView = views.find((view) => view.label === "全局记忆");
+    expect(globalView?.active).toBe(true);
+    expect(globalView?.href).toContain("scope=user");
+  });
+
+  it("tells users that bare /memories already shows global memory", () => {
+    const hints = describeCatalogFilterHints({
+      workspaceId: undefined,
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(hints.join(" ")).toContain("平台级记忆");
+    expect(hints.join(" ")).toContain("workspace_id");
   });
 });

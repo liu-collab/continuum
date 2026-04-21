@@ -57,6 +57,7 @@ export class JobWorker {
     }
 
     await this.processRefreshJobs();
+    await this.recoverEmbeddingDimensionDeadLetters();
     await this.projector.refreshPendingEmbeddings(this.options.batch_size);
     return jobs.length;
   }
@@ -96,6 +97,35 @@ export class JobWorker {
         }
 
         await this.repositories.readModel.markRefreshFailed(job.id, message);
+      }
+    }
+  }
+
+  private async recoverEmbeddingDimensionDeadLetters() {
+    const refreshJobs = await this.repositories.transaction((tx) =>
+      tx.readModel.claimRecoverableDeadLetterRefreshJobs({
+        limit: this.options.batch_size,
+        errorPattern: "expected 1536 dimensions",
+      }),
+    );
+
+    for (const job of refreshJobs) {
+      try {
+        const record = await this.repositories.records.findById(job.source_record_id);
+        if (!record) {
+          await this.repositories.readModel.markRefreshDeadLetter(job.id, "source record not found");
+          continue;
+        }
+
+        const outcome = await this.projector.project(record);
+        await this.repositories.readModel.markRefreshSucceeded(job.id, {
+          embedding_updated: false,
+          degradation_reason: outcome.degradation_reason,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "dead-letter recovery failed";
+        this.logger.error({ refreshJobId: job.id, error }, "read model dead-letter recovery failed");
+        await this.repositories.readModel.markRefreshDeadLetter(job.id, message);
       }
     }
   }

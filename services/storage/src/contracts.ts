@@ -390,6 +390,8 @@ export interface StorageMetrics {
   oldest_pending_embedding_age_seconds: number;
 }
 
+export const EXPECTED_SUMMARY_EMBEDDING_DIMENSION = 1536;
+
 export interface GovernanceAction {
   record_id: string;
   action_type: GovernanceActionType;

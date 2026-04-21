@@ -45,8 +45,9 @@ export type SourceStatus = z.infer<typeof SourceStatusSchema>;
 
 export const MemoryCatalogFiltersSchema = z.object({
   workspaceId: z.string().trim().optional(),
-  userId: z.string().trim().optional(),
   taskId: z.string().trim().optional(),
+  sessionId: z.string().trim().optional(),
+  sourceRef: z.string().trim().optional(),
   memoryViewMode: MemoryViewModeSchema.default("workspace_plus_global"),
   memoryType: MemoryTypeSchema.optional(),
   scope: ScopeSchema.optional(),
@@ -61,7 +62,6 @@ export type MemoryCatalogFilters = z.infer<typeof MemoryCatalogFiltersSchema>;
 export const MemoryCatalogItemSchema = z.object({
   id: z.string(),
   workspaceId: z.string().nullable(),
-  userId: z.string().nullable(),
   taskId: z.string().nullable(),
   sessionId: z.string().nullable(),
   memoryType: MemoryTypeSchema,
@@ -143,7 +143,6 @@ export const RunTurnSchema = z.object({
   traceId: z.string(),
   turnId: z.string(),
   workspaceId: z.string().nullable(),
-  userId: z.string().nullable(),
   taskId: z.string().nullable(),
   sessionId: z.string().nullable(),
   threadId: z.string().nullable(),

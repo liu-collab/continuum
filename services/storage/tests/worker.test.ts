@@ -218,6 +218,52 @@ describe("job worker", () => {
     expect(metrics.projector_failed_jobs).toBe(0);
   });
 
+  it("publishes the read model entry when embedding dimensions do not match", async () => {
+    const repositories = createMemoryRepositories();
+
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-embed-dimension-mismatch",
+      candidate_hash: normalizeCandidate(buildCandidate()).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: buildCandidate(),
+    });
+
+    const worker = new JobWorker(
+      repositories,
+      createLogger("silent"),
+      {
+        batch_size: 10,
+        max_retries: 3,
+        read_model_refresh_max_retries: 2,
+      },
+      {
+        async embedText() {
+          return Array.from({ length: 1024 }, (_, index) => index / 1000);
+        },
+      },
+    );
+
+    await worker.processAvailableJobs();
+
+    const records = await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: undefined,
+      task_id: undefined,
+      memory_type: undefined,
+      scope: undefined,
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+    const projected = await repositories.readModel.findById(records.items[0]!.id);
+    expect(projected?.summary_embedding).toBeNull();
+    expect(projected?.embedding_status).toBe("pending");
+
+    const metrics = await repositories.metrics.collect();
+    expect(metrics.projector_dead_letter_jobs).toBe(0);
+    expect(metrics.projector_embedding_degraded_jobs).toBe(0);
+  });
+
   it("refreshes pending embeddings in batch after service recovery", async () => {
     const repositories = createMemoryRepositories({
       readModel: [
@@ -496,6 +542,60 @@ describe("job worker", () => {
     const metrics = await repositories.metrics.collect();
     expect(metrics.projector_dead_letter_jobs).toBe(1);
     expect(metrics.projector_failed_jobs).toBe(0);
+  });
+
+  it("recovers dead-letter refresh jobs caused by embedding dimension mismatch", async () => {
+    const candidate = buildCandidate();
+    const normalized = normalizeCandidate(candidate);
+    const existing = buildRecordFromNormalized({
+      normalized,
+    });
+    const repositories = createMemoryRepositories({
+      records: [
+        {
+          ...existing,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          version: 1,
+        },
+      ],
+      refreshJobs: [
+        {
+          id: "refresh-job-dimension-mismatch",
+          source_record_id: existing.id,
+          refresh_type: "insert",
+          job_status: "dead_letter",
+          retry_count: 4,
+          error_message: "expected 1536 dimensions, not 1024",
+          created_at: new Date().toISOString(),
+          started_at: null,
+          finished_at: null,
+        },
+      ],
+    });
+
+    const worker = new JobWorker(
+      repositories,
+      createLogger("silent"),
+      {
+        batch_size: 10,
+        max_retries: 3,
+        read_model_refresh_max_retries: 2,
+      },
+      {
+        async embedText() {
+          return Array.from({ length: 1024 }, (_, index) => index / 1000);
+        },
+      },
+    );
+
+    await worker.processAvailableJobs();
+
+    const projected = await repositories.readModel.findById(existing.id);
+    const metrics = await repositories.metrics.collect();
+    expect(projected?.summary).toBe(existing.summary);
+    expect(projected?.summary_embedding).toBeNull();
+    expect(metrics.projector_dead_letter_jobs).toBe(0);
   });
 
   it("waits for the active cycle to finish before closing the database", async () => {

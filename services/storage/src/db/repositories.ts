@@ -116,6 +116,10 @@ export interface ReadModelRepository {
     refresh_type: "insert" | "update" | "delete";
   }): Promise<ReadModelRefreshJob>;
   claimRefreshJobs(limit: number): Promise<ReadModelRefreshJob[]>;
+  claimRecoverableDeadLetterRefreshJobs(input: {
+    limit: number;
+    errorPattern: string;
+  }): Promise<ReadModelRefreshJob[]>;
   markRefreshSucceeded(
     jobId: string,
     payload?: { embedding_updated: boolean; degradation_reason: string | undefined },
@@ -655,69 +659,85 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
   const table = tableName(session.sharedSchema, "memory_read_model_v1");
   const refreshTable = tableName(session.privateSchema, "memory_read_model_refresh_jobs");
 
+  const toReadModelParams = (entry: ReadModelEntry) => [
+    entry.id,
+    entry.workspace_id,
+    entry.user_id,
+    entry.task_id,
+    entry.session_id,
+    entry.memory_type,
+    entry.scope,
+    entry.status,
+    entry.summary,
+    JSON.stringify(entry.details),
+    entry.importance,
+    entry.confidence,
+    JSON.stringify(entry.source),
+    entry.last_confirmed_at,
+    entry.last_used_at,
+    entry.created_at,
+    entry.updated_at,
+    entry.summary_embedding ? `[${entry.summary_embedding.join(",")}]` : null,
+    entry.embedding_status ?? "ok",
+    entry.embedding_attempted_at ?? null,
+    entry.embedding_attempt_count ?? 0,
+  ];
+
+  const upsertSql = `
+    insert into ${table}
+      (
+        id, workspace_id, user_id, task_id, session_id, memory_type, scope, status,
+        summary, details, importance, confidence, source,
+        last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding,
+        embedding_status, embedding_attempted_at, embedding_attempt_count
+      )
+    values
+      (
+        $1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10::jsonb, $11, $12, $13::jsonb, $14,
+        $15, $16, $17, $18::vector, $19, $20, $21
+      )
+    on conflict (id) do update
+    set workspace_id = excluded.workspace_id,
+        user_id = excluded.user_id,
+        task_id = excluded.task_id,
+        session_id = excluded.session_id,
+        memory_type = excluded.memory_type,
+        scope = excluded.scope,
+        status = excluded.status,
+        summary = excluded.summary,
+        details = excluded.details,
+        importance = excluded.importance,
+        confidence = excluded.confidence,
+        source = excluded.source,
+        last_confirmed_at = excluded.last_confirmed_at,
+        last_used_at = excluded.last_used_at,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        summary_embedding = excluded.summary_embedding,
+        embedding_status = excluded.embedding_status,
+        embedding_attempted_at = excluded.embedding_attempted_at,
+        embedding_attempt_count = excluded.embedding_attempt_count
+  `;
+
   return {
     async upsert(entry) {
-      await session.query(
-        `
-          insert into ${table}
-            (
-              id, workspace_id, user_id, task_id, session_id, memory_type, scope, status,
-              summary, details, importance, confidence, source,
-              last_confirmed_at, last_used_at, created_at, updated_at, summary_embedding,
-              embedding_status, embedding_attempted_at, embedding_attempt_count
-            )
-          values
-            (
-              $1, $2, $3, $4, $5, $6, $7, $8,
-              $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-              $15, $16, $17, $18::vector, $19, $20, $21
-            )
-          on conflict (id) do update
-          set workspace_id = excluded.workspace_id,
-              user_id = excluded.user_id,
-              task_id = excluded.task_id,
-              session_id = excluded.session_id,
-              memory_type = excluded.memory_type,
-              scope = excluded.scope,
-              status = excluded.status,
-              summary = excluded.summary,
-              details = excluded.details,
-              importance = excluded.importance,
-              confidence = excluded.confidence,
-              source = excluded.source,
-              last_confirmed_at = excluded.last_confirmed_at,
-              last_used_at = excluded.last_used_at,
-              created_at = excluded.created_at,
-              updated_at = excluded.updated_at,
-              summary_embedding = excluded.summary_embedding,
-              embedding_status = excluded.embedding_status,
-              embedding_attempted_at = excluded.embedding_attempted_at,
-              embedding_attempt_count = excluded.embedding_attempt_count
-        `,
-        [
-          entry.id,
-          entry.workspace_id,
-          entry.user_id,
-          entry.task_id,
-          entry.session_id,
-          entry.memory_type,
-          entry.scope,
-          entry.status,
-          entry.summary,
-          JSON.stringify(entry.details),
-          entry.importance,
-          entry.confidence,
-          JSON.stringify(entry.source),
-          entry.last_confirmed_at,
-          entry.last_used_at,
-          entry.created_at,
-          entry.updated_at,
-          entry.summary_embedding ? `[${entry.summary_embedding.join(",")}]` : null,
-          entry.embedding_status ?? "ok",
-          entry.embedding_attempted_at ?? null,
-          entry.embedding_attempt_count ?? 0,
-        ],
-      );
+      try {
+        await session.query(upsertSql, toReadModelParams(entry));
+      } catch (error) {
+        if (!isEmbeddingDimensionMismatchError(error) || !entry.summary_embedding) {
+          throw error;
+        }
+
+        await session.query(
+          upsertSql,
+          toReadModelParams({
+            ...entry,
+            summary_embedding: null,
+            embedding_status: "pending",
+          }),
+        );
+      }
     },
 
     async delete(recordId) {
@@ -784,6 +804,32 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
       return result.rows.map(mapRefreshJob);
     },
 
+    async claimRecoverableDeadLetterRefreshJobs(input) {
+      const result = await session.query(
+        `
+          with jobs as (
+            select id
+            from ${refreshTable}
+            where job_status = 'dead_letter'
+              and error_message like $2
+            order by created_at asc
+            for update skip locked
+            limit $1
+          )
+          update ${refreshTable} target
+          set job_status = 'processing',
+              started_at = now(),
+              error_message = null
+          from jobs
+          where target.id = jobs.id
+          returning target.*
+        `,
+        [input.limit, `%${input.errorPattern}%`],
+      );
+
+      return result.rows.map(mapRefreshJob);
+    },
+
     async markRefreshSucceeded(jobId, payload) {
       await session.query(
         `
@@ -826,6 +872,14 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
       );
     },
   };
+}
+
+function isEmbeddingDimensionMismatchError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /expected\s+\d+\s+dimensions,\s+not\s+\d+/i.test(error.message);
 }
 
 function createMetricsRepository(session: DbSession): MetricsRepository {

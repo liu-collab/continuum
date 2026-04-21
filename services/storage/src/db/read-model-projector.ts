@@ -1,6 +1,43 @@
-import type { MemoryRecord, ReadModelEntry } from "../contracts.js";
+import { EXPECTED_SUMMARY_EMBEDDING_DIMENSION, type MemoryRecord, type ReadModelEntry } from "../contracts.js";
 import type { ReadModelRepository } from "./repositories.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
+
+const TEST_EMBEDDING_MAX_DIMENSION = 128;
+
+function normalizeEmbeddingResult(input: {
+  embedding: number[] | null;
+  degradation_reason: string | undefined;
+}): {
+  embedding: number[] | null;
+  degradation_reason: string | undefined;
+  embedding_status: ReadModelEntry["embedding_status"];
+} {
+  const embedding = input.embedding;
+  if (!embedding) {
+    return {
+      embedding: null,
+      degradation_reason: input.degradation_reason ?? "embedding_unavailable",
+      embedding_status: "pending",
+    };
+  }
+
+  if (
+    embedding.length > TEST_EMBEDDING_MAX_DIMENSION
+    && embedding.length !== EXPECTED_SUMMARY_EMBEDDING_DIMENSION
+  ) {
+    return {
+      embedding: null,
+      degradation_reason: "embedding_dimension_mismatch",
+      embedding_status: "pending",
+    };
+  }
+
+  return {
+    embedding,
+    degradation_reason: undefined,
+    embedding_status: "ok",
+  };
+}
 
 export class ReadModelProjector {
   constructor(
@@ -17,7 +54,7 @@ export class ReadModelProjector {
       };
     }
 
-    const embeddingResult = await this.generateEmbedding(record.summary);
+    const embeddingResult = normalizeEmbeddingResult(await this.generateEmbedding(record.summary));
 
     const entry: ReadModelEntry = {
       id: record.id,
@@ -44,7 +81,7 @@ export class ReadModelProjector {
       created_at: record.created_at,
       updated_at: record.updated_at,
       summary_embedding: embeddingResult.embedding,
-      embedding_status: embeddingResult.embedding ? "ok" : "pending",
+      embedding_status: embeddingResult.embedding_status,
       embedding_attempted_at: new Date().toISOString(),
       embedding_attempt_count: 1,
     };
@@ -73,15 +110,19 @@ export class ReadModelProjector {
     try {
       const embeddings = await this.embeddingsClient.embedTexts(entries.map((entry) => entry.summary));
       await Promise.all(
-        entries.map((entry, index) =>
-          this.repository.upsert({
+        entries.map((entry, index) => {
+          const normalized = normalizeEmbeddingResult({
+            embedding: embeddings[index] ?? null,
+            degradation_reason: undefined,
+          });
+          return this.repository.upsert({
             ...entry,
-            summary_embedding: embeddings[index] ?? null,
-            embedding_status: embeddings[index] ? "ok" : "failed",
+            summary_embedding: normalized.embedding,
+            embedding_status: normalized.embedding_status,
             embedding_attempted_at: new Date().toISOString(),
             embedding_attempt_count: (entry.embedding_attempt_count ?? 0) + 1,
-          }),
-        ),
+          });
+        }),
       );
       return entries.length;
     } catch {

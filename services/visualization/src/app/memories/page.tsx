@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -5,7 +7,12 @@ import { HealthModalButton } from "@/components/health-modal";
 import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { MemoryTable } from "@/features/memory-catalog/memory-table";
-import { describeCatalogEmptyState, getMemoryCatalog } from "@/features/memory-catalog/service";
+import {
+  buildMemoryCatalogQuickViews,
+  describeCatalogEmptyState,
+  describeCatalogFilterHints,
+  getMemoryCatalog
+} from "@/features/memory-catalog/service";
 import { memoryViewModeLabel } from "@/lib/format";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
 
@@ -18,6 +25,8 @@ export default async function MemoriesPage({
   const filters = parseMemoryCatalogFilters(params);
   const response = await getMemoryCatalog(filters);
   const emptyState = describeCatalogEmptyState(response);
+  const quickViews = buildMemoryCatalogQuickViews(filters);
+  const filterHints = describeCatalogFilterHints(filters);
 
   const activeFilterCount = Object.values(filters).filter((value) => Boolean(value)).length;
 
@@ -35,14 +44,15 @@ export default async function MemoriesPage({
           <FilterModalButton
             activeCount={activeFilterCount}
             title="筛选记忆"
-            description="按工作区、用户、任务、类型、作用域、状态与更新时间过滤。"
+            description="按工作区、任务、类型、作用域、状态与更新时间过滤。"
           >
             <SearchForm
               action="/memories"
               initialValues={{
                 workspace_id: filters.workspaceId,
-                user_id: filters.userId,
                 task_id: filters.taskId,
+                session_id: filters.sessionId,
+                source_ref: filters.sourceRef,
                 memory_view_mode: filters.memoryViewMode,
                 memory_type: filters.memoryType,
                 scope: filters.scope,
@@ -52,8 +62,9 @@ export default async function MemoriesPage({
               }}
             >
               <FormField label="工作区" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
-              <FormField label="用户" name="user_id" placeholder="user id" defaultValue={filters.userId} />
               <FormField label="任务" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
+              <FormField label="会话" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+              <FormField label="来源引用" name="source_ref" placeholder="turn id / source ref" defaultValue={filters.sourceRef} />
               <FormField
                 label="视图模式"
                 name="memory_view_mode"
@@ -80,7 +91,7 @@ export default async function MemoriesPage({
                 options={[
                   { label: "会话", value: "session" },
                   { label: "任务", value: "task" },
-                  { label: "全局", value: "user" },
+                  { label: "平台", value: "user" },
                   { label: "工作区", value: "workspace" }
                 ]}
               />
@@ -103,6 +114,39 @@ export default async function MemoriesPage({
           <HealthModalButton sources={[response.sourceStatus]} label="数据源" />
         </div>
       </div>
+
+      <section className="rounded-lg border bg-surface p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-sm font-medium text-foreground">快捷视图</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              不用手动改查询参数，直接切到常用的记忆视图。
+            </p>
+          </div>
+          {filterHints.length > 0 ? (
+            <div className="text-xs text-amber-700">
+              {filterHints.join(" ")}
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {quickViews.map((view) => (
+            <Link
+              key={view.key}
+              href={view.href}
+              className={`rounded-lg border px-4 py-3 text-left transition hover:border-border-strong ${
+                view.active ? "border-accent bg-accent-soft" : "bg-surface"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-foreground">{view.label}</span>
+                {view.active ? <StatusBadge tone="success">当前</StatusBadge> : null}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{view.description}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       {response.viewWarnings.length > 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

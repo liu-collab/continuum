@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { Route } from "next";
+
 import { MemoryCatalogDetail, MemoryCatalogFilters, MemoryCatalogItem, MemoryCatalogResponse } from "@/lib/contracts";
 import {
   memoryStatusExplanation,
@@ -10,11 +12,31 @@ import {
   scopeLabel,
   visibilitySummary
 } from "@/lib/format";
+import { toMemoryCatalogQuery } from "@/lib/query-params";
 import {
   fetchMemoryById,
   mapSource,
   queryCatalogView
 } from "@/lib/server/storage-read-model-client";
+
+export type MemoryCatalogQuickView = {
+  key: string;
+  label: string;
+  description: string;
+  href: Route;
+  active: boolean;
+};
+
+function isImplicitGlobalView(filters: MemoryCatalogFilters) {
+  return (
+    !filters.workspaceId
+    && !filters.taskId
+    && !filters.sessionId
+    && !filters.sourceRef
+    && !filters.scope
+    && filters.memoryViewMode === "workspace_plus_global"
+  );
+}
 
 function toCatalogItem(
   row: Awaited<ReturnType<typeof queryCatalogView>>["rows"][number],
@@ -29,7 +51,6 @@ function toCatalogItem(
   return {
     id: row.id,
     workspaceId: row.workspace_id,
-    userId: row.user_id,
     taskId: row.task_id,
     sessionId: row.session_id,
     memoryType,
@@ -62,13 +83,167 @@ function buildViewSummary(filters: MemoryCatalogFilters) {
 
   if (filters.memoryViewMode === "workspace_only") {
     return filters.workspaceId
-      ? `${base} 当前工作区：${filters.workspaceId}。`
+      ? `${base} 当前工作区：${filters.workspaceId}${filters.sessionId ? `，会话：${filters.sessionId}` : ""}${filters.sourceRef ? `，来源引用：${filters.sourceRef}` : ""}。`
       : `${base} 当前缺少 workspace_id，所以只能依赖显式筛选条件进一步收窄结果。`;
   }
 
-  return filters.workspaceId && filters.userId
-    ? `${base} 当前工作区：${filters.workspaceId}。全局记忆归属用户：${filters.userId}。`
-    : `${base} 当前缺少部分身份字段，所以页面结果可能不完整。`;
+  if (filters.scope === "user" || isImplicitGlobalView(filters)) {
+    return `${base} 当前正在查看平台级记忆，不需要 workspace_id。`;
+  }
+
+  return filters.workspaceId
+    ? `${base} 当前工作区：${filters.workspaceId}。${filters.sessionId ? `当前会话：${filters.sessionId}。` : ""}${filters.sourceRef ? `当前来源引用：${filters.sourceRef}。` : ""}`
+    : `${base} 当前缺少 workspace_id，所以页面结果可能不完整。`;
+}
+
+function buildQuickViewHref(filters: MemoryCatalogFilters) {
+  const query = toMemoryCatalogQuery(filters);
+  return (query ? `/memories?${query}` : "/memories") as Route;
+}
+
+function isQuickViewActive(current: MemoryCatalogFilters, target: MemoryCatalogFilters) {
+  const normalizedCurrent = isImplicitGlobalView(current)
+    ? { ...current, scope: "user" as const }
+    : current;
+  const normalizedTarget = isImplicitGlobalView(target)
+    ? { ...target, scope: "user" as const }
+    : target;
+
+  return (
+    normalizedCurrent.workspaceId === normalizedTarget.workspaceId
+    && normalizedCurrent.taskId === normalizedTarget.taskId
+    && normalizedCurrent.sessionId === normalizedTarget.sessionId
+    && normalizedCurrent.sourceRef === normalizedTarget.sourceRef
+    && normalizedCurrent.memoryViewMode === normalizedTarget.memoryViewMode
+    && normalizedCurrent.memoryType === normalizedTarget.memoryType
+    && normalizedCurrent.scope === normalizedTarget.scope
+    && normalizedCurrent.status === normalizedTarget.status
+    && normalizedCurrent.updatedFrom === normalizedTarget.updatedFrom
+    && normalizedCurrent.updatedTo === normalizedTarget.updatedTo
+  );
+}
+
+function createQuickView(
+  current: MemoryCatalogFilters,
+  key: string,
+  label: string,
+  description: string,
+  target: Partial<MemoryCatalogFilters>
+): MemoryCatalogQuickView {
+  const normalizedTarget: MemoryCatalogFilters = {
+    workspaceId: target.workspaceId,
+    taskId: target.taskId,
+    sessionId: target.sessionId,
+    sourceRef: target.sourceRef,
+    memoryViewMode: target.memoryViewMode ?? "workspace_plus_global",
+    memoryType: target.memoryType,
+    scope: target.scope,
+    status: target.status,
+    updatedFrom: target.updatedFrom,
+    updatedTo: target.updatedTo,
+    page: 1,
+    pageSize: current.pageSize
+  };
+
+  return {
+    key,
+    label,
+    description,
+    href: buildQuickViewHref(normalizedTarget),
+    active: isQuickViewActive(current, normalizedTarget)
+  };
+}
+
+export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): MemoryCatalogQuickView[] {
+  const views: MemoryCatalogQuickView[] = [
+    createQuickView(
+      filters,
+      "global-user",
+      "全局记忆",
+      "直接查看平台级偏好和长期事实，不受 session_id 限制。",
+      {
+        memoryViewMode: "workspace_plus_global",
+        scope: "user"
+      }
+    )
+  ];
+
+  if (filters.workspaceId) {
+    views.push(
+      createQuickView(
+        filters,
+        "workspace-plus-global",
+        "当前工作区 + 全局",
+        "查看当前工作区的工作区、任务、会话记忆，同时包含全局记忆。",
+        {
+          workspaceId: filters.workspaceId,
+          memoryViewMode: "workspace_plus_global"
+        }
+      ),
+      createQuickView(
+        filters,
+        "workspace-only",
+        "仅当前工作区",
+        "只看当前工作区下的工作区、任务、会话记忆，不包含全局记忆。",
+        {
+          workspaceId: filters.workspaceId,
+          memoryViewMode: "workspace_only"
+        }
+      )
+    );
+  }
+
+  if (filters.sourceRef) {
+    views.push(
+      createQuickView(
+        filters,
+        "turn-related",
+        "本轮相关",
+        "按来源引用查看这一轮写出来的相关记忆。",
+        {
+          workspaceId: filters.workspaceId,
+          sourceRef: filters.sourceRef,
+          memoryViewMode: "workspace_plus_global"
+        }
+      )
+    );
+  }
+
+  if (filters.sessionId) {
+    views.push(
+      createQuickView(
+        filters,
+        "clear-session",
+        "去掉会话限制",
+        "保留当前工作区，但不再用 session_id 限制结果，避免把全局记忆筛掉。",
+        {
+          workspaceId: filters.workspaceId,
+          memoryViewMode: filters.workspaceId ? "workspace_plus_global" : "workspace_plus_global",
+          sourceRef: filters.sourceRef
+        }
+      )
+    );
+  }
+
+  return views;
+}
+
+export function describeCatalogFilterHints(filters: MemoryCatalogFilters) {
+  const hints: string[] = [];
+
+  if (filters.sessionId) {
+    hints.push("当前带了 session_id，只会稳定命中会话级记录。平台级记忆通常没有 session_id，所以想看全局偏好时请直接点“全局记忆”。");
+  }
+
+  if (!filters.workspaceId) {
+    if (filters.scope === "user" || isImplicitGlobalView(filters)) {
+      hints.push("当前正在查看平台级记忆，不需要 workspace_id。");
+    } else {
+      hints.push("当前没有 workspace_id，页面只能稳定展示平台级记忆。要看工作区、任务或会话记忆，请补充 workspace_id。");
+    }
+  }
+
+  return hints;
 }
 
 export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<MemoryCatalogResponse> {
@@ -123,8 +298,9 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
 
   const filters = {
     workspaceId: record.workspace_id ?? undefined,
-    userId: record.user_id ?? undefined,
     taskId: record.task_id ?? undefined,
+    sessionId: record.session_id ?? undefined,
+    sourceRef: undefined,
     memoryViewMode: "workspace_plus_global" as const,
     memoryType: undefined,
     scope: undefined,

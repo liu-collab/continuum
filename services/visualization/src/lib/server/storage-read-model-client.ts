@@ -40,6 +40,8 @@ type QueryOptions = {
   workspaceId?: string;
   userId?: string;
   taskId?: string;
+  sessionId?: string;
+  sourceRef?: string;
   memoryType?: string;
   scope?: Scope;
   scopeIn?: Scope[];
@@ -139,6 +141,14 @@ function buildWhereClause(options: QueryOptions, params: Array<string | number |
     clauses.push(`task_id = ${pushParam(params, options.taskId)}`);
   }
 
+  if (options.sessionId) {
+    clauses.push(`session_id = ${pushParam(params, options.sessionId)}`);
+  }
+
+  if (options.sourceRef) {
+    clauses.push(`source->>'source_ref' = ${pushParam(params, options.sourceRef)}`);
+  }
+
   if (options.memoryType) {
     clauses.push(`memory_type = ${pushParam(params, options.memoryType)}`);
   }
@@ -231,10 +241,12 @@ function healthyStatus(responseTimeMs: number, warnings: string[] = []): SourceS
 }
 
 function buildQueryOptions(filters: MemoryCatalogFilters): QueryOptions {
+  const { values } = getAppConfig();
   return {
     workspaceId: filters.workspaceId,
-    userId: filters.userId,
+    userId: values.PLATFORM_USER_ID,
     taskId: filters.taskId,
+    sessionId: filters.sessionId,
     memoryType: filters.memoryType,
     scope: filters.scope,
     status: filters.status,
@@ -348,10 +360,6 @@ export async function queryCatalogView(
     );
   }
 
-  if (filters.memoryViewMode === "workspace_plus_global" && !filters.userId) {
-    warnings.push("当前缺少 user_id，无法在工作区 + 全局视图里包含全局记忆。");
-  }
-
   try {
     const workspaceScopes = filters.scope
       ? filters.scope === "user"
@@ -369,6 +377,8 @@ export async function queryCatalogView(
         ? {
             workspaceId: filters.workspaceId,
             taskId: filters.taskId,
+            sessionId: filters.sessionId,
+            sourceRef: filters.sourceRef,
             memoryType: filters.memoryType,
             status: filters.status,
             updatedFrom: filters.updatedFrom,
@@ -378,9 +388,11 @@ export async function queryCatalogView(
         : null;
 
     const globalQuery =
-      filters.memoryViewMode === "workspace_plus_global" && filters.userId && globalScopes.length > 0
+      filters.memoryViewMode === "workspace_plus_global" && values.PLATFORM_USER_ID && globalScopes.length > 0
         ? {
-            userId: filters.userId,
+            userId: values.PLATFORM_USER_ID,
+            sessionId: filters.sessionId,
+            sourceRef: filters.sourceRef,
             memoryType: filters.memoryType,
             status: filters.status,
             updatedFrom: filters.updatedFrom,

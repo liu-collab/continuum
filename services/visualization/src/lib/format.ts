@@ -71,7 +71,7 @@ export function scopeLabel(value: Scope) {
     case "task":
       return "任务";
     case "user":
-      return "全局";
+      return "平台";
     case "workspace":
       return "工作区";
   }
@@ -80,8 +80,8 @@ export function scopeLabel(value: Scope) {
 export function scopeExplanation(value: Scope, originWorkspaceId?: string | null) {
   if (value === "user") {
     return originWorkspaceId
-      ? `这是全局记忆。因为全局记忆在工作区之间共享，所以它会出现在当前工作区。来源工作区：${originWorkspaceId}。`
-      : "这是全局记忆。因为全局记忆在工作区之间共享，所以它会出现在当前工作区。";
+      ? `这是平台级记忆。它会在不同工作区之间共享显示。来源工作区：${originWorkspaceId}。`
+      : "这是平台级记忆。它会在不同工作区之间共享显示。";
   }
 
   if (value === "workspace") {
@@ -96,13 +96,13 @@ export function scopeExplanation(value: Scope, originWorkspaceId?: string | null
 }
 
 export function memoryViewModeLabel(value: MemoryViewMode) {
-  return value === "workspace_only" ? "仅工作区" : "工作区 + 全局";
+  return value === "workspace_only" ? "仅工作区" : "工作区 + 平台";
 }
 
 export function memoryViewModeExplanation(value: MemoryViewMode) {
   return value === "workspace_only"
     ? "只显示当前工作区内的工作区、任务和会话记忆。"
-    : "显示当前工作区内的工作区、任务和会话记忆，同时包含全局记忆。";
+    : "显示当前工作区内的工作区、任务和会话记忆，同时包含平台级记忆。";
 }
 
 export function visibilitySummary(
@@ -112,10 +112,10 @@ export function visibilitySummary(
 ) {
   if (scope === "user") {
     return memoryViewMode === "workspace_only"
-      ? "当前是仅工作区模式，所以这条全局记忆会被隐藏。"
+      ? "当前是仅工作区模式，所以这条平台级记忆会被隐藏。"
       : originWorkspaceId
-        ? `当前视图包含全局记忆，所以它会显示。来源工作区：${originWorkspaceId}。`
-        : "当前视图包含全局记忆，所以它会显示。";
+        ? `当前视图包含平台级记忆，所以它会显示。来源工作区：${originWorkspaceId}。`
+        : "当前视图包含平台级记忆，所以它会显示。";
   }
 
   if (scope === "workspace") {
@@ -165,7 +165,7 @@ export function memoryModeSummary(value: MemoryViewMode | null | undefined) {
   }
 
   if (value === "workspace_plus_global") {
-    return "当前模式包含工作区和全局记忆。";
+    return "当前模式包含工作区和平台级记忆。";
   }
 
   return "未记录记忆模式。";

@@ -17,7 +17,8 @@ vi.mock("@/lib/env", () => ({
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
       STORAGE_READ_MODEL_TIMEOUT_MS: 1000,
-      DATABASE_POOL_MAX: 5
+      DATABASE_POOL_MAX: 5,
+      PLATFORM_USER_ID: "00000000-0000-4000-8000-000000000001"
     },
     issues: []
   })
@@ -43,8 +44,8 @@ describe("storage read model catalog view", () => {
   it("workspace_only with scope=user returns no global rows", async () => {
     const result = await queryCatalogView({
       workspaceId: "ws-1",
-      userId: "user-1",
       taskId: undefined,
+      sessionId: undefined,
       memoryViewMode: "workspace_only",
       memoryType: undefined,
       scope: "user",
@@ -86,8 +87,8 @@ describe("storage read model catalog view", () => {
 
     const result = await queryCatalogView({
       workspaceId: "ws-1",
-      userId: "user-1",
       taskId: undefined,
+      sessionId: undefined,
       memoryViewMode: "workspace_plus_global",
       memoryType: undefined,
       scope: "user",
@@ -128,8 +129,8 @@ describe("storage read model catalog view", () => {
 
     const result = await queryCatalogView({
       workspaceId: "ws-1",
-      userId: "user-1",
       taskId: undefined,
+      sessionId: undefined,
       memoryViewMode: "workspace_plus_global",
       memoryType: undefined,
       scope: "workspace",
@@ -144,5 +145,58 @@ describe("storage read model catalog view", () => {
     expect(result.rows[0]?.scope).toBe("workspace");
     expect(result.total).toBe(1);
     expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes session_id through to the workspace query", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] });
+
+    await queryCatalogView({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: "session-1",
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    const firstCallParams = queryMock.mock.calls[0]?.[1] as unknown[];
+    expect(firstCallParams).toContain("session-1");
+  });
+
+  it("passes source_ref through to workspace and global queries", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] });
+
+    await queryCatalogView({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: "turn-123",
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    const firstCallParams = queryMock.mock.calls[0]?.[1] as unknown[];
+    const thirdCallParams = queryMock.mock.calls[2]?.[1] as unknown[];
+    expect(firstCallParams).toContain("turn-123");
+    expect(thirdCallParams).toContain("turn-123");
   });
 });

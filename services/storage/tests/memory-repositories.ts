@@ -12,6 +12,7 @@ import type {
   StorageMetrics,
   WriteBackCandidate,
 } from "../src/contracts.js";
+import { EXPECTED_SUMMARY_EMBEDDING_DIMENSION } from "../src/contracts.js";
 import type {
   ConflictRepository,
   GovernanceRepository,
@@ -302,11 +303,21 @@ export function createMemoryRepositories(
 
   const readModel: ReadModelRepository = {
     async upsert(entry) {
+      const normalizedEntry =
+        entry.summary_embedding &&
+        entry.summary_embedding.length >= 128 &&
+        entry.summary_embedding.length !== EXPECTED_SUMMARY_EMBEDDING_DIMENSION
+          ? {
+              ...entry,
+              summary_embedding: null,
+              embedding_status: "pending" as const,
+            }
+          : entry;
       const index = state.readModel.findIndex((item) => item.id === entry.id);
       if (index >= 0) {
-        state.readModel[index] = entry;
+        state.readModel[index] = normalizedEntry;
       } else {
-        state.readModel.push(entry);
+        state.readModel.push(normalizedEntry);
       }
     },
     async delete(recordId) {
@@ -342,6 +353,24 @@ export function createMemoryRepositories(
       const jobs = state.refreshJobs
         .filter((job) => job.job_status === "queued" || job.job_status === "failed")
         .slice(0, limit);
+
+      for (const job of jobs) {
+        job.job_status = "processing";
+        job.started_at = new Date().toISOString();
+        job.error_message = null;
+      }
+
+      return jobs;
+    },
+    async claimRecoverableDeadLetterRefreshJobs(input) {
+      const jobs = state.refreshJobs
+        .filter(
+          (job) =>
+            job.job_status === "dead_letter" &&
+            typeof job.error_message === "string" &&
+            job.error_message.includes(input.errorPattern),
+        )
+        .slice(0, input.limit);
 
       for (const job of jobs) {
         job.job_status = "processing";
