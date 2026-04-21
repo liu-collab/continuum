@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { mkdir, open, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import process from "node:process";
 import path from "node:path";
@@ -15,6 +15,8 @@ if (!command) {
 const repoRoot = process.cwd();
 const cliRoot = path.join(repoRoot, "packages", "continuum-cli");
 const isWindows = process.platform === "win32";
+const continuumHome = path.join(os.homedir(), ".continuum");
+const lifecycleLockPath = path.join(continuumHome, "lifecycle.lock");
 const sharedEnv = {
   ...process.env,
   DATABASE_URL: process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/agent_memory",
@@ -81,7 +83,7 @@ async function clearLocalCaches() {
   const targets = [
     path.join(cliRoot, "vendor-stage"),
     path.join(repoRoot, "services", "visualization", ".next"),
-    path.join(os.homedir(), ".continuum", "stack-stage"),
+    path.join(continuumHome, "stack-stage"),
   ];
 
   const failures = [];
@@ -105,21 +107,77 @@ async function clearLocalCaches() {
   }
 }
 
+async function acquireLifecycleLock() {
+  await mkdir(continuumHome, { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const handle = await open(lifecycleLockPath, "wx").catch((error) => {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) {
+        throw error;
+      }
+      return null;
+    });
+
+    if (handle) {
+      await handle.writeFile(String(process.pid), "utf8");
+      return handle;
+    }
+
+    const existingPid = Number.parseInt((await readFile(lifecycleLockPath, "utf8").catch(() => "")).trim(), 10);
+    const staleLock = Number.isFinite(existingPid) && !isProcessAlive(existingPid);
+    if (staleLock) {
+      await removePathIfExists(lifecycleLockPath).catch(() => undefined);
+      continue;
+    }
+
+    throw new Error("已有 start/stop 命令正在执行，请等待当前生命周期操作完成。");
+  }
+
+  throw new Error("无法创建生命周期锁文件。");
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function run() {
-  if (command === "start") {
-    await prepareLatestVendor();
+  const needsLifecycleLock = command === "start" || command === "stop";
+  const lifecycleLock = needsLifecycleLock ? await acquireLifecycleLock() : null;
+
+  try {
+    if (command === "start") {
+      await prepareLatestVendor();
+    }
+
+    await ensureCliBuilt();
+    const exitCode = await spawnCommand(process.execPath, ["dist/src/index.js", command, ...passthroughArgs], {
+      cwd: cliRoot,
+    });
+
+    if (command === "stop") {
+      await clearLocalCaches().catch((error) => {
+        if (exitCode === 0) {
+          throw error;
+        }
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    }
+
+    process.exitCode = exitCode;
+  } finally {
+    if (lifecycleLock) {
+      await lifecycleLock.close().catch(() => undefined);
+      await removePathIfExists(lifecycleLockPath).catch(() => undefined);
+    }
   }
-
-  await ensureCliBuilt();
-  const exitCode = await spawnCommand(process.execPath, ["dist/src/index.js", command, ...passthroughArgs], {
-    cwd: cliRoot,
-  });
-
-  if (command === "stop" && exitCode === 0) {
-    await clearLocalCaches();
-  }
-
-  process.exitCode = exitCode;
 }
 
 run().catch((error) => {

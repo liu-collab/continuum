@@ -199,6 +199,7 @@ async function main() {
   await run(npmCommand(), ["run", "build"], storageDir);
   await run(npmCommand(), ["run", "build"], runtimeDir);
   await run(npmCommand(), ["run", "build"], visualizationDir);
+  await run(npmCommand(), ["run", "build"], memoryNativeAgentDir);
 
   await copyStorageBundle();
   await copyRuntimeBundle();
