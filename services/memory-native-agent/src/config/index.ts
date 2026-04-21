@@ -31,6 +31,8 @@ export interface ProviderConfig {
   apiKey?: string;
   apiKeyEnv?: string;
   temperature: number;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  maxTokens?: number | null;
   organization?: string;
   keepAlive?: string | number;
   fixtureDir?: string;
@@ -346,6 +348,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       apiKey: effectiveConfig.provider.api_key,
       apiKeyEnv: effectiveConfig.provider.api_key_env,
       temperature: effectiveConfig.provider.temperature,
+      effort: effectiveConfig.provider.effort,
+      maxTokens: effectiveConfig.provider.max_tokens,
       organization: effectiveConfig.provider.organization,
       keepAlive: effectiveConfig.provider.keep_alive,
       fixtureDir: effectiveConfig.provider.fixture_dir,

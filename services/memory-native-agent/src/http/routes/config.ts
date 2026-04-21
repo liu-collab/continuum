@@ -43,6 +43,8 @@ const providerPayloadSchema = z.object({
   base_url: z.string().trim().url().optional(),
   api_key: z.string().trim().optional(),
   temperature: z.number().min(0).max(2).optional(),
+  effort: z.enum(["low", "medium", "high", "xhigh", "max"]).nullable().optional(),
+  max_tokens: z.number().int().min(1).nullable().optional(),
   organization: z.string().trim().optional(),
   keep_alive: z.union([z.string().trim().min(1), z.number().int().min(0)]).optional(),
 }).superRefine((value, context) => {
@@ -79,6 +81,8 @@ const writebackLlmPayloadSchema = z.object({
   api_key: z.string().trim().optional(),
   protocol: z.enum(["anthropic", "openai-compatible"]).optional(),
   timeout_ms: z.number().int().min(100).max(120_000).optional(),
+  effort: z.enum(["low", "medium", "high", "xhigh", "max"]).nullable().optional(),
+  max_tokens: z.number().int().min(1).nullable().optional(),
 });
 
 const updateConfigSchema = z.object({
@@ -137,6 +141,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       apiKey?: string;
       protocol?: "anthropic" | "openai-compatible";
       timeoutMs?: number;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      maxTokens?: number | null;
     }>(resolveManagedWritebackLlmConfigPath(app));
 
     return {
@@ -146,6 +152,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         base_url: app.runtimeState.config.provider.baseUrl,
         api_key: app.runtimeState.config.provider.apiKey,
         temperature: app.runtimeState.config.provider.temperature,
+        effort: app.runtimeState.config.provider.effort ?? null,
+        max_tokens: app.runtimeState.config.provider.maxTokens ?? null,
         organization: app.runtimeState.config.provider.organization,
         keep_alive: app.runtimeState.config.provider.keepAlive,
       },
@@ -167,6 +175,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
             ? Number(process.env.WRITEBACK_LLM_TIMEOUT_MS)
             : 5000
         ),
+        effort: writebackLlm?.effort ?? null,
+        max_tokens: writebackLlm?.maxTokens ?? null,
       },
       mcp: {
         servers: app.runtimeState.config.mcp.servers,
@@ -204,6 +214,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         ...(payload.writeback_llm.api_key ? { apiKey: payload.writeback_llm.api_key } : {}),
         ...(payload.writeback_llm.protocol ? { protocol: payload.writeback_llm.protocol } : {}),
         ...(payload.writeback_llm.timeout_ms ? { timeoutMs: payload.writeback_llm.timeout_ms } : {}),
+        ...(payload.writeback_llm.effort !== undefined ? { effort: payload.writeback_llm.effort } : {}),
+        ...(payload.writeback_llm.max_tokens !== undefined ? { maxTokens: payload.writeback_llm.max_tokens } : {}),
       });
     }
 
@@ -216,6 +228,12 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         apiKey: payload.provider.api_key || undefined,
         apiKeyEnv: undefined,
         temperature: payload.provider.temperature ?? app.runtimeState.config.provider.temperature,
+        effort: payload.provider.effort !== undefined
+          ? payload.provider.effort
+          : app.runtimeState.config.provider.effort,
+        maxTokens: payload.provider.max_tokens !== undefined
+          ? payload.provider.max_tokens
+          : app.runtimeState.config.provider.maxTokens,
         organization: payload.provider.organization || undefined,
         keepAlive: payload.provider.keep_alive,
       };
@@ -228,6 +246,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
           base_url: nextProvider.baseUrl,
           ...(nextProvider.apiKey ? { api_key: nextProvider.apiKey } : {}),
           temperature: nextProvider.temperature,
+          effort: nextProvider.effort ?? null,
+          max_tokens: nextProvider.maxTokens ?? null,
           ...(nextProvider.organization ? { organization: nextProvider.organization } : {}),
           ...(nextProvider.keepAlive !== undefined ? { keep_alive: nextProvider.keepAlive } : {}),
         },

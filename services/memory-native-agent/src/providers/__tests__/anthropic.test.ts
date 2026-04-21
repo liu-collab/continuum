@@ -300,6 +300,43 @@ describe("AnthropicProvider", () => {
     });
   });
 
+  it("maps configured effort into anthropic thinking payload", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/messages", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        return reply.send({
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 3,
+            output_tokens: 2,
+          },
+        });
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new AnthropicProvider({
+      baseUrl: server.baseUrl,
+      model: "claude-sonnet",
+      apiKey: "anthropic-key",
+      effort: "xhigh",
+      runtimeSettings: {
+        maxRetries: 0,
+      },
+    });
+
+    await collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] }));
+
+    expect(requestBody).toMatchObject({
+      thinking: {
+        type: "enabled",
+        budget_tokens: 8192,
+      },
+    });
+  });
+
   it("retries timeout errors in stream mode", async () => {
     let requestCount = 0;
     const server = await startProviderMock((app) => {

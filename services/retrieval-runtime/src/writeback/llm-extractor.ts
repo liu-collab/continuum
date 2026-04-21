@@ -108,7 +108,7 @@ export class HttpLlmExtractor implements LlmExtractor {
   }): Promise<LlmExtractionResult> {
     const payload = await this.request({
       ...input,
-      max_tokens: 600,
+      max_tokens: this.config.WRITEBACK_LLM_MAX_TOKENS ?? 600,
     });
     const text = extractResponseText(payload);
     const parsedJson = parseJsonPayload(text);
@@ -172,6 +172,7 @@ export class HttpLlmExtractor implements LlmExtractor {
                 model: this.config.WRITEBACK_LLM_MODEL,
                 system: WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
                 max_tokens: input.max_tokens,
+                thinking: mapAnthropicThinking(this.config.WRITEBACK_LLM_EFFORT),
                 messages: [
                   {
                     role: "user",
@@ -195,6 +196,7 @@ export class HttpLlmExtractor implements LlmExtractor {
                   type: "json_object",
                 },
                 max_tokens: input.max_tokens,
+                reasoning_effort: mapOpenAiReasoningEffort(this.config.WRITEBACK_LLM_EFFORT),
               },
         ),
         signal: controller.signal,
@@ -209,6 +211,41 @@ export class HttpLlmExtractor implements LlmExtractor {
       clearTimeout(timeoutHandle);
     }
   }
+}
+
+function mapOpenAiReasoningEffort(
+  effort: "low" | "medium" | "high" | "xhigh" | "max" | undefined,
+): "low" | "medium" | "high" | undefined {
+  if (!effort) {
+    return undefined;
+  }
+
+  if (effort === "low" || effort === "medium" || effort === "high") {
+    return effort;
+  }
+
+  return "high";
+}
+
+function mapAnthropicThinking(
+  effort: "low" | "medium" | "high" | "xhigh" | "max" | undefined,
+): { type: "enabled"; budget_tokens: number } | undefined {
+  if (!effort) {
+    return undefined;
+  }
+
+  const budgetMap = {
+    low: 1024,
+    medium: 2048,
+    high: 4096,
+    xhigh: 8192,
+    max: 16384,
+  } as const;
+
+  return {
+    type: "enabled",
+    budget_tokens: budgetMap[effort],
+  };
 }
 
 function extractResponseText(payload: AnthropicMessagesPayload | OpenAiChatPayload): string {

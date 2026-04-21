@@ -29,6 +29,8 @@ type AnthropicOptions = {
   baseUrl: string;
   model: string;
   apiKey: string;
+  effort?: ChatRequest["effort"];
+  maxTokens?: number;
   runtimeSettings?: Partial<ProviderRuntimeSettings>;
 };
 
@@ -267,7 +269,8 @@ export class AnthropicProvider implements IModelProvider {
             messages: mapAnthropicMessages(options.request.messages),
             tools: mapAnthropicTools(options.request.tools),
             temperature: options.request.temperature,
-            max_tokens: options.request.max_tokens ?? 4096,
+            max_tokens: options.request.max_tokens ?? this.options.maxTokens ?? 4096,
+            thinking: mapAnthropicThinking(options.request.effort ?? this.options.effort),
             stream: options.stream,
           }),
           signal: controller.signal,
@@ -318,6 +321,27 @@ export class AnthropicProvider implements IModelProvider {
 
     throw new ProviderStreamError("Anthropic provider request failed.");
   }
+}
+
+function mapAnthropicThinking(
+  effort: ChatRequest["effort"] | undefined,
+): { type: "enabled"; budget_tokens: number } | undefined {
+  if (!effort) {
+    return undefined;
+  }
+
+  const budgetMap: Record<NonNullable<ChatRequest["effort"]>, number> = {
+    low: 1024,
+    medium: 2048,
+    high: 4096,
+    xhigh: 8192,
+    max: 16384,
+  };
+
+  return {
+    type: "enabled",
+    budget_tokens: budgetMap[effort],
+  };
 }
 
 function isAbortLikeError(error: unknown, signalReason: unknown): boolean {

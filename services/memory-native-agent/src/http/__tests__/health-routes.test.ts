@@ -98,7 +98,9 @@ function createConfig(workspaceRoot: string): AgentConfig {
       kind: "ollama",
       model: "qwen2.5-coder",
       baseUrl: "http://127.0.0.1:11434",
-      temperature: 0.2
+      temperature: 0.2,
+      effort: null,
+      maxTokens: null,
     },
     memory: {
       mode: "workspace_plus_global",
@@ -269,7 +271,9 @@ describe("health routes", () => {
         provider: {
           kind: "ollama",
           model: "qwen2.5-coder",
-          base_url: "http://127.0.0.1:11434"
+          base_url: "http://127.0.0.1:11434",
+          effort: null,
+          max_tokens: null,
         },
         embedding: {
           base_url: null,
@@ -282,6 +286,8 @@ describe("health routes", () => {
           api_key: null,
           protocol: "openai-compatible",
           timeout_ms: 5000,
+          effort: null,
+          max_tokens: null,
         },
         mcp: {
           servers: []
@@ -299,7 +305,9 @@ describe("health routes", () => {
             kind: "openai-compatible",
             model: "deepseek-chat",
             base_url: "https://api.deepseek.com",
-            api_key: "demo-key"
+            api_key: "demo-key",
+            effort: "high",
+            max_tokens: 6000,
           },
           embedding: {
             base_url: "https://api.openai.com/v1",
@@ -312,6 +320,8 @@ describe("health routes", () => {
             api_key: "writeback-key",
             protocol: "anthropic",
             timeout_ms: 8000,
+            effort: "medium",
+            max_tokens: 1200,
           },
           mcp: {
             servers: [
@@ -335,7 +345,9 @@ describe("health routes", () => {
           model: "deepseek-chat",
           base_url: "https://api.deepseek.com",
           api_key: "demo-key",
-          temperature: 0.2
+          temperature: 0.2,
+          effort: "high",
+          max_tokens: 6000,
         },
         mcp: {
           servers: [
@@ -363,6 +375,8 @@ describe("health routes", () => {
         apiKey: "writeback-key",
         protocol: "anthropic",
         timeoutMs: 8000,
+        effort: "medium",
+        maxTokens: 1200,
       });
 
       const configResponse = await app.inject({
@@ -379,7 +393,9 @@ describe("health routes", () => {
           kind: "openai-compatible",
           model: "deepseek-chat",
           base_url: "https://api.deepseek.com",
-          api_key: "demo-key"
+          api_key: "demo-key",
+          effort: "high",
+          max_tokens: 6000,
         },
         embedding: {
           base_url: "https://api.openai.com/v1",
@@ -392,6 +408,8 @@ describe("health routes", () => {
           api_key: "writeback-key",
           protocol: "anthropic",
           timeout_ms: 8000,
+          effort: "medium",
+          max_tokens: 1200,
         },
         mcp: {
           servers: [

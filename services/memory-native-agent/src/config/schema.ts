@@ -7,6 +7,7 @@ export const providerKindSchema = z.enum(["openai-compatible", "anthropic", "oll
 const nonEmptyStringSchema = z.string().trim().min(1);
 const timeoutMsSchema = z.coerce.number().int().min(1);
 const probabilitySchema = z.coerce.number().min(0).max(2);
+const providerEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 const logLevelSchema = z.enum(["silent", "error", "warn", "info", "debug", "trace"]);
 const logFormatSchema = z.enum(["json", "pretty"]);
 const compactionStrategySchema = z.enum(["truncate", "summarize"]);
@@ -27,6 +28,8 @@ const partialProviderSchema = z
     api_key: nonEmptyStringSchema.optional(),
     api_key_env: nonEmptyStringSchema.optional(),
     temperature: probabilitySchema.optional(),
+    effort: providerEffortSchema.optional(),
+    max_tokens: z.coerce.number().int().min(1).nullable().optional(),
     organization: nonEmptyStringSchema.optional(),
     keep_alive: z.union([nonEmptyStringSchema, z.coerce.number().int().min(0)]).optional(),
     fixture_dir: nonEmptyStringSchema.optional(),
@@ -157,6 +160,8 @@ const mergedProviderSchema = z
     api_key: nonEmptyStringSchema.optional(),
     api_key_env: nonEmptyStringSchema.optional(),
     temperature: probabilitySchema,
+    effort: providerEffortSchema.nullable(),
+    max_tokens: z.coerce.number().int().min(1).nullable(),
     organization: nonEmptyStringSchema.optional(),
     keep_alive: z.union([nonEmptyStringSchema, z.coerce.number().int().min(0)]).optional(),
     fixture_dir: nonEmptyStringSchema.optional(),

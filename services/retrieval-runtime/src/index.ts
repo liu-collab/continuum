@@ -44,6 +44,8 @@ async function main() {
       WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
       WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
       WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+      WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+      WRITEBACK_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.WRITEBACK_LLM_MAX_TOKENS,
     })
     : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);

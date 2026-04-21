@@ -30,6 +30,8 @@ describe("createProvider", () => {
         model: "gpt-4.1-mini",
         baseUrl: "https://api.openai.com/v1",
         temperature: 0.2,
+        effort: "high",
+        maxTokens: 4096,
         apiKey: "inline-key",
       },
       {},

@@ -19,6 +19,8 @@ export type ManagedWritebackLlmConfig = {
   apiKey?: string;
   timeoutMs?: number;
   protocol?: "anthropic" | "openai-compatible";
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  maxTokens?: number | null;
 };
 
 export type ManagedProviderOverride = {

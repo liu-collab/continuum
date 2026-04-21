@@ -2,6 +2,7 @@ import {
   DEFAULT_PROVIDER_FIRST_TOKEN_TIMEOUT_MS,
   DEFAULT_PROVIDER_MAX_RETRIES,
 } from "../shared/constants.js";
+import { MNA_VERSION } from "../shared/types.js";
 import {
   ProviderAuthError,
   ProviderRateLimitedError,
@@ -26,6 +27,10 @@ export function resolveRuntimeSettings(
 
 export function buildBaseUrl(baseUrl: string, pathname: string): URL {
   return new URL(pathname, `${baseUrl.replace(/\/+$/, "")}/`);
+}
+
+export function buildProviderUserAgent(providerId: string): string {
+  return `continuum-mna/${MNA_VERSION} (+provider=${providerId})`;
 }
 
 export function emptyUsage(): Usage {

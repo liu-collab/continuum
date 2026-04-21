@@ -32,6 +32,8 @@ type OpenAICompatibleOptions = {
   model: string;
   apiKey?: string;
   organization?: string;
+  effort?: ChatRequest["effort"];
+  maxTokens?: number;
   runtimeSettings?: Partial<ProviderRuntimeSettings>;
 };
 
@@ -266,7 +268,8 @@ export class OpenAICompatibleProvider implements IModelProvider {
             tools: mapOpenAITools(options.request.tools),
             tool_choice: options.request.tools?.length ? "auto" : undefined,
             temperature: options.request.temperature,
-            max_tokens: options.request.max_tokens,
+            max_tokens: options.request.max_tokens ?? this.options.maxTokens,
+            reasoning_effort: mapOpenAiReasoningEffort(options.request.effort ?? this.options.effort),
             stream: options.stream,
             ...(options.stream ? { stream_options: { include_usage: true } } : {}),
           }),
@@ -319,6 +322,20 @@ export class OpenAICompatibleProvider implements IModelProvider {
 
     throw lastError ?? new ProviderStreamError("OpenAI-compatible provider request failed.");
   }
+}
+
+function mapOpenAiReasoningEffort(
+  effort: ChatRequest["effort"] | undefined,
+): "low" | "medium" | "high" | undefined {
+  if (!effort) {
+    return undefined;
+  }
+
+  if (effort === "low" || effort === "medium" || effort === "high") {
+    return effort;
+  }
+
+  return "high";
 }
 
 function isAbortLikeError(error: unknown, signalReason: unknown): boolean {

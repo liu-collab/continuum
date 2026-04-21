@@ -21,6 +21,7 @@
     "build": "tsc -p tsconfig.json && node ./scripts/copy-assets.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch bin/mna-server.mjs",
+    "memory:tiering": "tsx src/devtools/memory-tiering-cli.ts",
     "start": "node bin/mna-server.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

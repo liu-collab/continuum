@@ -42,6 +42,8 @@ describe("config loader", () => {
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3002");
     expect(config.provider.kind).toBe("demo");
     expect(config.provider.model).toBe("continuum-demo");
+    expect(config.provider.effort).toBeNull();
+    expect(config.provider.maxTokens).toBeNull();
     expect(config.memory.mode).toBe("workspace_plus_global");
     expect(config.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
     expect(config.cli.systemPrompt).toBeNull();
@@ -67,6 +69,8 @@ provider:
   kind: ollama
   model: qwen2.5-coder:7b
   base_url: http://127.0.0.1:11434
+  effort: high
+  max_tokens: 8192
 memory:
   mode: workspace_only
 tools:
@@ -103,6 +107,8 @@ tools:
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3999");
     expect(config.runtime.requestTimeoutMs).toBe(1200);
     expect(config.memory.mode).toBe("workspace_only");
+    expect(config.provider.effort).toBe("high");
+    expect(config.provider.maxTokens).toBe(8192);
     expect(config.tools.maxOutputChars).toBe(4096);
     expect(config.context.maxTokens).toBe(64000);
     expect(config.logging.level).toBe("debug");

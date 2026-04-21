@@ -22,6 +22,8 @@ const envSchema = z.object({
   WRITEBACK_LLM_API_KEY: z.string().optional(),
   WRITEBACK_LLM_PROTOCOL: z.enum(["anthropic", "openai-compatible"]).default("openai-compatible"),
   WRITEBACK_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  WRITEBACK_LLM_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  WRITEBACK_LLM_MAX_TOKENS: z.coerce.number().int().positive().optional(),
   WRITEBACK_MAX_CANDIDATES: z.coerce.number().int().positive().max(5).default(3),
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   WRITEBACK_OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(200).default(50),

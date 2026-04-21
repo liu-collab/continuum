@@ -48,6 +48,8 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
       model: config.model,
       apiKey,
       organization: config.organization,
+      effort: config.effort ?? undefined,
+      maxTokens: config.maxTokens ?? undefined,
     });
   }
 
@@ -64,6 +66,8 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
       baseUrl: config.baseUrl,
       model: config.model,
       apiKey,
+      effort: config.effort ?? undefined,
+      maxTokens: config.maxTokens ?? undefined,
     });
   }
 

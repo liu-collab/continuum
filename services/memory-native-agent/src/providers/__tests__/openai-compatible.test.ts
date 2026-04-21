@@ -307,4 +307,41 @@ describe("OpenAICompatibleProvider", () => {
       ],
     });
   });
+
+  it("maps configured effort into openai reasoning_effort", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/chat/completions", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        reply.header("content-type", "text/event-stream");
+        return reply.send(
+          sseStream([
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1}}\n",
+            "data: [DONE]\n",
+          ]),
+        );
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: server.baseUrl,
+      model: "deepseek-chat",
+      apiKey: "test-key",
+      effort: "xhigh",
+      maxTokens: 4096,
+    });
+
+    await collectChunks(
+      provider.chat({
+        messages: [{ role: "user", content: "继续" }],
+      }),
+    );
+
+    expect(requestBody).toMatchObject({
+      max_tokens: 4096,
+      reasoning_effort: "high",
+    });
+  });
 });

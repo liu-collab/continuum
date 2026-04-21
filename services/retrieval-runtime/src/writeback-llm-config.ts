@@ -6,6 +6,8 @@ type WritebackLlmConfigSource = {
   WRITEBACK_LLM_API_KEY?: string;
   WRITEBACK_LLM_TIMEOUT_MS?: number | string;
   WRITEBACK_LLM_PROTOCOL?: string;
+  WRITEBACK_LLM_EFFORT?: string;
+  WRITEBACK_LLM_MAX_TOKENS?: number | string;
   CONTINUUM_WRITEBACK_LLM_CONFIG_PATH?: string;
 };
 
@@ -17,6 +19,8 @@ export type RuntimeWritebackLlmConfig = {
   apiKey?: string;
   timeoutMs?: number;
   protocol?: RuntimeWritebackLlmProtocol;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  maxTokens?: number | null;
 };
 
 function readNonEmpty(value: string | undefined) {
@@ -69,6 +73,25 @@ function normalizeProtocol(value: string | undefined): RuntimeWritebackLlmProtoc
   return undefined;
 }
 
+function normalizeEffort(value: string | undefined): RuntimeWritebackLlmConfig["effort"] | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "low"
+    || normalized === "medium"
+    || normalized === "high"
+    || normalized === "xhigh"
+    || normalized === "max"
+  ) {
+    return normalized;
+  }
+
+  return undefined;
+}
+
 function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWritebackLlmConfig {
   if (!filePath || !fs.existsSync(filePath)) {
     return {};
@@ -81,6 +104,8 @@ function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWri
       apiKey?: string;
       timeoutMs?: number | string;
       protocol?: string;
+      effort?: string | null;
+      maxTokens?: number | string | null;
     };
 
     const baseUrl = normalizeUrl(readNonEmpty(payload.baseUrl));
@@ -88,6 +113,8 @@ function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWri
     const apiKey = readNonEmpty(payload.apiKey);
     const timeoutMs = normalizeTimeout(payload.timeoutMs);
     const protocol = normalizeProtocol(readNonEmpty(payload.protocol));
+    const effort = payload.effort === null ? null : normalizeEffort(readNonEmpty(payload.effort ?? undefined));
+    const maxTokens = payload.maxTokens === null ? null : normalizeTimeout(payload.maxTokens ?? undefined);
 
     return {
       ...(baseUrl ? { baseUrl } : {}),
@@ -95,6 +122,8 @@ function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWri
       ...(apiKey ? { apiKey } : {}),
       ...(timeoutMs ? { timeoutMs } : {}),
       ...(protocol ? { protocol } : {}),
+      ...(effort !== undefined ? { effort } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
     };
   } catch {
     return {};
@@ -109,6 +138,8 @@ export function resolveRuntimeWritebackLlmConfig(
   const envApiKey = readNonEmpty(source.WRITEBACK_LLM_API_KEY);
   const envTimeoutMs = normalizeTimeout(source.WRITEBACK_LLM_TIMEOUT_MS);
   const envProtocol = normalizeProtocol(readNonEmpty(source.WRITEBACK_LLM_PROTOCOL));
+  const envEffort = normalizeEffort(readNonEmpty(source.WRITEBACK_LLM_EFFORT));
+  const envMaxTokens = normalizeTimeout(source.WRITEBACK_LLM_MAX_TOKENS);
 
   return {
     ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
@@ -116,6 +147,8 @@ export function resolveRuntimeWritebackLlmConfig(
     ...(envApiKey ? { apiKey: envApiKey } : {}),
     ...(envTimeoutMs ? { timeoutMs: envTimeoutMs } : {}),
     ...(envProtocol ? { protocol: envProtocol } : {}),
+    ...(envEffort ? { effort: envEffort } : {}),
+    ...(envMaxTokens ? { maxTokens: envMaxTokens } : {}),
     ...readManagedWritebackLlmConfig(readNonEmpty(source.CONTINUUM_WRITEBACK_LLM_CONFIG_PATH)),
   };
 }

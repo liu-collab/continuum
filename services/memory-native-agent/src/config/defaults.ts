@@ -41,6 +41,8 @@ export const DEFAULT_RAW_CONFIG = {
     model: "continuum-demo",
     base_url: DEFAULT_DEMO_PROVIDER_BASE_URL,
     temperature: 0.2,
+    effort: null as "low" | "medium" | "high" | "xhigh" | "max" | null,
+    max_tokens: null as number | null,
   },
   memory: {
     mode: "workspace_plus_global",
