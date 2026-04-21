@@ -1,4 +1,5 @@
 import {
+  ProviderAuthError,
   ProviderRateLimitedError,
   ProviderStreamError,
   ProviderTimeoutError,
@@ -45,23 +46,32 @@ export class OllamaProvider implements IModelProvider {
   }
 
   async *chat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    let emittedChunks = 0;
+    for (let attempt = 0; attempt <= this.runtimeSettings.maxRetries; attempt += 1) {
+      let emittedChunks = 0;
 
-    try {
-      for await (const chunk of this.streamChat(request, (count) => {
-        emittedChunks = count;
-      })) {
-        yield chunk;
-      }
-    } catch (error) {
-      if (emittedChunks === 0 && (error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
-        for await (const chunk of this.nonStreamChat(request)) {
+      try {
+        for await (const chunk of this.streamChat(request, (count) => {
+          emittedChunks = count;
+        })) {
           yield chunk;
         }
         return;
-      }
+      } catch (error) {
+        if (request.signal?.aborted) {
+          throw error;
+        }
 
-      throw error;
+        if (emittedChunks > 0 || !(error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
+          throw error;
+        }
+
+        const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+        if (delayMs === null) {
+          throw error;
+        }
+
+        await sleep(delayMs, request.signal);
+      }
     }
   }
 
@@ -165,56 +175,6 @@ export class OllamaProvider implements IModelProvider {
     }
   }
 
-  private async *nonStreamChat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    const response = await this.executeRequest({
-      request,
-      stream: false,
-    });
-    const payload = (await response.json()) as {
-      message?: {
-        content?: string;
-        tool_calls?: Array<Record<string, unknown>>;
-      };
-      prompt_eval_count?: number;
-      eval_count?: number;
-      done_reason?: string;
-    };
-
-    if (typeof payload.message?.content === "string" && payload.message.content.length > 0) {
-      yield {
-        type: "text_delta",
-        text: payload.message.content,
-      };
-    }
-
-    for (const toolCall of payload.message?.tool_calls ?? []) {
-      const fn = (toolCall.function ?? {}) as Record<string, unknown>;
-      yield {
-        type: "tool_call",
-        call: {
-          id: typeof toolCall.id === "string" ? toolCall.id : "tool-call-0",
-          name: typeof fn.name === "string" ? fn.name : "",
-          args:
-            typeof fn.arguments === "string"
-              ? parseJsonObject(fn.arguments)
-              : ((fn.arguments as Record<string, unknown>) ?? {}),
-        },
-      };
-    }
-
-    yield {
-      type: "end",
-      finish_reason:
-        (payload.message?.tool_calls ?? []).length > 0
-          ? "tool_use"
-          : mapOllamaFinishReason(payload.done_reason),
-      usage: {
-        prompt_tokens: payload.prompt_eval_count ?? 0,
-        completion_tokens: payload.eval_count ?? 0,
-      },
-    };
-  }
-
   private async executeRequest(options: {
     request: ChatRequest;
     stream: boolean;
@@ -258,22 +218,28 @@ export class OllamaProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (
-          error instanceof ProviderRateLimitedError
-          || error instanceof ProviderTimeoutError
-          || error instanceof ProviderUnavailableError
-        ) {
+        if (error instanceof ProviderAuthError) {
           throw error;
         }
+        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+          const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+          if (delayMs === null) {
+            throw error;
+          }
+
+          await sleep(delayMs, options.request.signal);
+          continue;
+        }
+
+        if (error instanceof ProviderTimeoutError || error instanceof ProviderStreamError) {
+          throw error;
+        }
+
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Ollama provider timed out before response.", error);
         }
 
-        if (attempt >= this.runtimeSettings.maxRetries) {
-          throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));
-        }
-
-        await sleep(attempt === 0 ? 500 : 1000, options.request.signal);
+        throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));
       } finally {
         cleanup();
       }

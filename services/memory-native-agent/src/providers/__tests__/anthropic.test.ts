@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AnthropicProvider } from "../anthropic.js";
-import { ProviderUnavailableError } from "../types.js";
+import { ProviderTimeoutError, ProviderUnavailableError } from "../types.js";
 import { collectChunks, sseStream, startProviderMock } from "./test-helpers.js";
 
 describe("AnthropicProvider", () => {
@@ -91,26 +91,14 @@ describe("AnthropicProvider", () => {
     });
   });
 
-  it("falls back to non-stream responses when the stream payload is malformed", async () => {
+  it("retries stream responses when the stream payload is malformed", async () => {
     const seenStreamValues: boolean[] = [];
     const server = await startProviderMock((app) => {
       app.post("/v1/messages", async (request, reply) => {
         const body = request.body as { stream?: boolean };
         seenStreamValues.push(Boolean(body.stream));
-
-        if (body.stream) {
-          reply.header("content-type", "text/event-stream");
-          return reply.send(sseStream(["event: content_block_delta\n", "data: {not-json}\n\n"]));
-        }
-
-        return reply.send({
-          content: [{ type: "text", text: "非流式回退内容" }],
-          stop_reason: "end_turn",
-          usage: {
-            input_tokens: 6,
-            output_tokens: 7,
-          },
-        });
+        reply.header("content-type", "text/event-stream");
+        return reply.send(sseStream(["event: content_block_delta\n", "data: {not-json}\n\n"]));
       });
     });
     apps.push(server.app);
@@ -120,16 +108,14 @@ describe("AnthropicProvider", () => {
       model: "claude-sonnet",
       apiKey: "anthropic-key",
       runtimeSettings: {
-        maxRetries: 0,
+        maxRetries: 1,
       },
     });
 
-    const chunks = await collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] }));
-    expect(seenStreamValues).toEqual([true, false]);
-    expect(chunks).toEqual([
-      { type: "text_delta", text: "非流式回退内容" },
-      { type: "end", finish_reason: "stop", usage: { prompt_tokens: 6, completion_tokens: 7 } },
-    ]);
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toThrow("Anthropic provider returned invalid JSON in stream.");
+    expect(seenStreamValues).toEqual([true, true]);
   });
 
   it("throws unavailable errors for 5xx responses", async () => {
@@ -267,5 +253,31 @@ describe("AnthropicProvider", () => {
     expect(requestBody).toMatchObject({
       max_tokens: 4096,
     });
+  });
+
+  it("retries timeout errors in stream mode", async () => {
+    let requestCount = 0;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/messages", async () => {
+        requestCount += 1;
+        return new Promise(() => undefined);
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new AnthropicProvider({
+      baseUrl: server.baseUrl,
+      model: "claude-sonnet",
+      apiKey: "anthropic-key",
+      runtimeSettings: {
+        maxRetries: 1,
+        firstTokenTimeoutMs: 20,
+      },
+    });
+
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toBeInstanceOf(ProviderTimeoutError);
+    expect(requestCount).toBe(2);
   });
 });

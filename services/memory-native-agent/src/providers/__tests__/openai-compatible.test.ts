@@ -94,32 +94,14 @@ describe("OpenAICompatibleProvider", () => {
     });
   });
 
-  it("falls back to non-stream mode when stream payload is invalid before any chunk", async () => {
+  it("retries stream mode when stream payload is invalid before any chunk", async () => {
     const seenStreams: boolean[] = [];
     const server = await startProviderMock((app) => {
       app.post("/v1/chat/completions", async (request, reply) => {
         const body = request.body as { stream?: boolean };
         seenStreams.push(Boolean(body.stream));
-
-        if (body.stream) {
-          reply.header("content-type", "text/event-stream");
-          return reply.send(sseStream(["data: {not-json}\n"]));
-        }
-
-        return reply.send({
-          choices: [
-            {
-              finish_reason: "stop",
-              message: {
-                content: "降级后的完整输出",
-              },
-            },
-          ],
-          usage: {
-            prompt_tokens: 5,
-            completion_tokens: 6,
-          },
-        });
+        reply.header("content-type", "text/event-stream");
+        return reply.send(sseStream(["data: {not-json}\n"]));
       });
     });
     apps.push(server.app);
@@ -129,16 +111,14 @@ describe("OpenAICompatibleProvider", () => {
       model: "deepseek-chat",
       apiKey: "test-key",
       runtimeSettings: {
-        maxRetries: 0,
+        maxRetries: 1,
       },
     });
 
-    const chunks = await collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] }));
-    expect(seenStreams).toEqual([true, false]);
-    expect(chunks).toEqual([
-      { type: "text_delta", text: "降级后的完整输出" },
-      { type: "end", finish_reason: "stop", usage: { prompt_tokens: 5, completion_tokens: 6 } },
-    ]);
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toThrow("OpenAI-compatible provider returned invalid JSON in stream.");
+    expect(seenStreams).toEqual([true, true]);
   });
 
   it("throws rate-limited errors after the single retry is exhausted", async () => {
@@ -256,8 +236,12 @@ describe("OpenAICompatibleProvider", () => {
   });
 
   it("throws timeout errors when the first token never arrives", async () => {
+    let requestCount = 0;
     const server = await startProviderMock((app) => {
-      app.post("/v1/chat/completions", async () => new Promise(() => undefined));
+      app.post("/v1/chat/completions", async () => {
+        requestCount += 1;
+        return new Promise(() => undefined);
+      });
     });
     apps.push(server.app);
 
@@ -266,7 +250,7 @@ describe("OpenAICompatibleProvider", () => {
       model: "deepseek-chat",
       apiKey: "test-key",
       runtimeSettings: {
-        maxRetries: 0,
+        maxRetries: 1,
         firstTokenTimeoutMs: 20,
       },
     });
@@ -274,5 +258,6 @@ describe("OpenAICompatibleProvider", () => {
     await expect(
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
+    expect(requestCount).toBe(2);
   });
 });

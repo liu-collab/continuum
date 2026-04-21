@@ -1,4 +1,5 @@
 import {
+  ProviderAuthError,
   ProviderRateLimitedError,
   ProviderStreamError,
   ProviderTimeoutError,
@@ -52,23 +53,32 @@ export class AnthropicProvider implements IModelProvider {
   }
 
   async *chat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    let emittedChunks = 0;
+    for (let attempt = 0; attempt <= this.runtimeSettings.maxRetries; attempt += 1) {
+      let emittedChunks = 0;
 
-    try {
-      for await (const chunk of this.streamChat(request, (count) => {
-        emittedChunks = count;
-      })) {
-        yield chunk;
-      }
-    } catch (error) {
-      if (emittedChunks === 0 && (error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
-        for await (const chunk of this.nonStreamChat(request)) {
+      try {
+        for await (const chunk of this.streamChat(request, (count) => {
+          emittedChunks = count;
+        })) {
           yield chunk;
         }
         return;
-      }
+      } catch (error) {
+        if (request.signal?.aborted) {
+          throw error;
+        }
 
-      throw error;
+        if (emittedChunks > 0 || !(error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
+          throw error;
+        }
+
+        const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+        if (delayMs === null) {
+          throw error;
+        }
+
+        await sleep(delayMs, request.signal);
+      }
     }
   }
 
@@ -233,51 +243,6 @@ export class AnthropicProvider implements IModelProvider {
     }
   }
 
-  private async *nonStreamChat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    const response = await this.executeRequest({
-      request,
-      stream: false,
-    });
-
-    const payload = (await response.json()) as {
-      content?: Array<Record<string, unknown>>;
-      stop_reason?: string;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-      };
-    };
-
-    for (const block of payload.content ?? []) {
-      if (block.type === "text" && typeof block.text === "string") {
-        yield {
-          type: "text_delta",
-          text: block.text,
-        };
-      }
-
-      if (block.type === "tool_use") {
-        yield {
-          type: "tool_call",
-          call: {
-            id: typeof block.id === "string" ? block.id : "tool-use-0",
-            name: typeof block.name === "string" ? block.name : "",
-            args: (block.input as Record<string, unknown>) ?? {},
-          },
-        };
-      }
-    }
-
-    yield {
-      type: "end",
-      finish_reason: mapAnthropicFinishReason(payload.stop_reason, (payload.content ?? []).some((item) => item.type === "tool_use")),
-      usage: {
-        prompt_tokens: payload.usage?.input_tokens ?? 0,
-        completion_tokens: payload.usage?.output_tokens ?? 0,
-      },
-    };
-  }
-
   private async executeRequest(options: {
     request: ChatRequest;
     stream: boolean;
@@ -322,20 +287,28 @@ export class AnthropicProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (
-          error instanceof ProviderRateLimitedError
-          || error instanceof ProviderUnavailableError
-        ) {
+        if (error instanceof ProviderAuthError) {
           throw error;
         }
+        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+          const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+          if (delayMs === null) {
+            throw error;
+          }
+
+          await sleep(delayMs, options.request.signal);
+          continue;
+        }
+
+        if (error instanceof ProviderTimeoutError || error instanceof ProviderStreamError) {
+          throw error;
+        }
+
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Anthropic provider timed out before response.", error);
         }
-        if (attempt >= this.runtimeSettings.maxRetries) {
-          throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));
-        }
 
-        await sleep(attempt === 0 ? 500 : 1000, options.request.signal);
+        throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));
       } finally {
         cleanup();
       }

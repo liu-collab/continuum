@@ -76,26 +76,14 @@ describe("OllamaProvider", () => {
     });
   });
 
-  it("falls back to non-stream JSON when NDJSON parsing fails", async () => {
+  it("retries stream NDJSON when parsing fails", async () => {
     const seenStreamValues: boolean[] = [];
     const server = await startProviderMock((app) => {
       app.post("/api/chat", async (request, reply) => {
         const body = request.body as { stream?: boolean };
         seenStreamValues.push(Boolean(body.stream));
-
-        if (body.stream) {
-          reply.header("content-type", "application/x-ndjson");
-          return reply.send(ndjsonStream(["{not-json}\n"]));
-        }
-
-        return reply.send({
-          message: {
-            content: "回退后的完整结果",
-          },
-          prompt_eval_count: 3,
-          eval_count: 4,
-          done_reason: "stop",
-        });
+        reply.header("content-type", "application/x-ndjson");
+        return reply.send(ndjsonStream(["{not-json}\n"]));
       });
     });
     apps.push(server.app);
@@ -104,16 +92,14 @@ describe("OllamaProvider", () => {
       baseUrl: server.baseUrl,
       model: "qwen2.5-coder",
       runtimeSettings: {
-        maxRetries: 0,
+        maxRetries: 1,
       },
     });
 
-    const chunks = await collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] }));
-    expect(seenStreamValues).toEqual([true, false]);
-    expect(chunks).toEqual([
-      { type: "text_delta", text: "回退后的完整结果" },
-      { type: "end", finish_reason: "stop", usage: { prompt_tokens: 3, completion_tokens: 4 } },
-    ]);
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toThrow("Ollama provider returned invalid NDJSON.");
+    expect(seenStreamValues).toEqual([true, true]);
   });
 
   it("throws unavailable errors for 5xx responses", async () => {
@@ -138,8 +124,12 @@ describe("OllamaProvider", () => {
   });
 
   it("throws timeout errors when no response arrives before the configured timeout", async () => {
+    let requestCount = 0;
     const server = await startProviderMock((app) => {
-      app.post("/api/chat", async () => new Promise(() => undefined));
+      app.post("/api/chat", async () => {
+        requestCount += 1;
+        return new Promise(() => undefined);
+      });
     });
     apps.push(server.app);
 
@@ -147,7 +137,7 @@ describe("OllamaProvider", () => {
       baseUrl: server.baseUrl,
       model: "qwen2.5-coder",
       runtimeSettings: {
-        maxRetries: 0,
+        maxRetries: 1,
         firstTokenTimeoutMs: 20,
       },
     });
@@ -155,5 +145,6 @@ describe("OllamaProvider", () => {
     await expect(
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
+    expect(requestCount).toBe(2);
   });
 });

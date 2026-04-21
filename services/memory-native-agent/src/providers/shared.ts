@@ -71,6 +71,22 @@ export function retryDelayMs(
   maxRetries: number,
   retryAfterHeader?: string | null,
 ): number | null {
+  if (error instanceof ProviderTimeoutError) {
+    if (attempt >= maxRetries) {
+      return null;
+    }
+
+    return attempt === 0 ? 500 : 1000;
+  }
+
+  if (error instanceof ProviderStreamError) {
+    if (attempt >= maxRetries) {
+      return null;
+    }
+
+    return attempt === 0 ? 500 : 1000;
+  }
+
   if (error instanceof ProviderRateLimitedError) {
     if (attempt >= maxRetries) {
       return null;

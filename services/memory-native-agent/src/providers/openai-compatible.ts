@@ -56,23 +56,32 @@ export class OpenAICompatibleProvider implements IModelProvider {
   }
 
   async *chat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    let emittedChunks = 0;
+    for (let attempt = 0; attempt <= this.runtimeSettings.maxRetries; attempt += 1) {
+      let emittedChunks = 0;
 
-    try {
-      for await (const chunk of this.streamChat(request, (count) => {
-        emittedChunks = count;
-      })) {
-        yield chunk;
-      }
-    } catch (error) {
-      if (emittedChunks === 0 && (error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
-        for await (const chunk of this.nonStreamChat(request)) {
+      try {
+        for await (const chunk of this.streamChat(request, (count) => {
+          emittedChunks = count;
+        })) {
           yield chunk;
         }
         return;
-      }
+      } catch (error) {
+        if (request.signal?.aborted) {
+          throw error;
+        }
 
-      throw error;
+        if (emittedChunks > 0 || !(error instanceof ProviderStreamError || error instanceof ProviderTimeoutError)) {
+          throw error;
+        }
+
+        const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+        if (delayMs === null) {
+          throw error;
+        }
+
+        await sleep(delayMs, request.signal);
+      }
     }
   }
 
@@ -232,60 +241,6 @@ export class OpenAICompatibleProvider implements IModelProvider {
     }
   }
 
-  private async *nonStreamChat(request: ChatRequest): AsyncIterable<ChatChunk> {
-    const response = await this.executeRequest({
-      request,
-      stream: false,
-    });
-
-    const payload = (await response.json()) as {
-      choices?: Array<{
-        finish_reason?: string;
-        message?: {
-          content?: string;
-          tool_calls?: Array<{
-            id?: string;
-            function?: {
-              name?: string;
-              arguments?: string;
-            };
-          }>;
-        };
-      }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-      };
-    };
-
-    const choice = payload.choices?.[0];
-    const usage = mergeUsage(emptyUsage(), payload.usage);
-    const content = choice?.message?.content ?? "";
-    if (content) {
-      yield {
-        type: "text_delta",
-        text: content,
-      };
-    }
-
-    for (const toolCall of choice?.message?.tool_calls ?? []) {
-      yield {
-        type: "tool_call",
-        call: {
-          id: toolCall.id ?? "tool-call-0",
-          name: toolCall.function?.name ?? "",
-          args: parseJsonObject(toolCall.function?.arguments ?? "{}"),
-        },
-      };
-    }
-
-    yield {
-      type: "end",
-      finish_reason: mapOpenAIFinishReason(choice?.finish_reason ?? "stop", (choice?.message?.tool_calls ?? []).length > 0),
-      usage,
-    };
-  }
-
   private async executeRequest(options: {
     request: ChatRequest;
     stream: boolean;
@@ -332,32 +287,29 @@ export class OpenAICompatibleProvider implements IModelProvider {
         return response;
       } catch (error) {
         cancelTimeout();
-        if (
-          error instanceof ProviderAuthError
-          || error instanceof ProviderRateLimitedError
-          || error instanceof ProviderTimeoutError
-          || error instanceof ProviderUnavailableError
-        ) {
+        if (error instanceof ProviderAuthError) {
           throw error;
         }
+        if (error instanceof ProviderRateLimitedError || error instanceof ProviderUnavailableError) {
+          const delayMs = retryDelayMs(error, attempt, this.runtimeSettings.maxRetries);
+          if (delayMs === null) {
+            throw error;
+          }
+
+          await sleep(delayMs, options.request.signal);
+          continue;
+        }
+
+        if (error instanceof ProviderTimeoutError || error instanceof ProviderStreamError) {
+          throw error;
+        }
+
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("OpenAI-compatible provider timed out before response.", error);
         }
 
         lastError = error instanceof Error ? error : new Error(String(error));
-        const mappedError =
-          lastError instanceof ProviderTimeoutError
-            ? lastError
-            : new ProviderStreamError(lastError.message, lastError);
-        if (mappedError instanceof ProviderTimeoutError) {
-          throw mappedError;
-        }
-
-        if (attempt >= this.runtimeSettings.maxRetries) {
-          throw mappedError;
-        }
-
-        await sleep(attempt === 0 ? 500 : 1000, options.request.signal);
+        throw new ProviderStreamError(lastError.message, lastError);
       } finally {
         cleanup();
       }
