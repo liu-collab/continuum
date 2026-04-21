@@ -1,0 +1,70 @@
+import { describe, expect, it } from "vitest";
+
+import type { ReadModelEntry } from "../src/contracts.js";
+import { createRepositories } from "../src/db/repositories.js";
+
+type RecordedQuery = {
+  text: string;
+  values: unknown[] | undefined;
+};
+
+describe("storage repositories", () => {
+  it("binds read model upsert values to the current 21-column contract", async () => {
+    const queries: RecordedQuery[] = [];
+    const session = {
+      privateSchema: "storage_private",
+      sharedSchema: "storage_shared_v1",
+      async query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]) {
+        queries.push({ text, values });
+        return {
+          rows: [] as T[],
+          rowCount: 0,
+        };
+      },
+    };
+
+    const repositories = createRepositories({
+      session: () => session,
+      withTransaction: async <T>(callback: (tx: typeof session) => Promise<T>) => callback(session),
+    } as never);
+
+    const entry: ReadModelEntry = {
+      id: "11111111-1111-4111-8111-111111111111",
+      workspace_id: "22222222-2222-4222-8222-222222222222",
+      user_id: "33333333-3333-4333-8333-333333333333",
+      task_id: "44444444-4444-4444-8444-444444444444",
+      session_id: "55555555-5555-4555-8555-555555555555",
+      memory_type: "fact_preference",
+      scope: "user",
+      status: "active",
+      summary: "User prefers concise answers",
+      details: {
+        subject: "user",
+      },
+      importance: 5,
+      confidence: 0.9,
+      source: {
+        source_type: "user_input",
+      },
+      last_confirmed_at: "2026-04-21T00:00:00.000Z",
+      last_used_at: "2026-04-21T00:00:00.000Z",
+      created_at: "2026-04-21T00:00:00.000Z",
+      updated_at: "2026-04-21T00:00:00.000Z",
+      summary_embedding: [0.1, 0.2, 0.3],
+      embedding_status: "ok",
+      embedding_attempted_at: "2026-04-21T00:00:00.000Z",
+      embedding_attempt_count: 1,
+    };
+
+    await repositories.readModel.upsert(entry);
+
+    const upsertQuery = queries.find((query) => query.text.includes("insert into") && query.text.includes("memory_read_model_v1"));
+    expect(upsertQuery).toBeDefined();
+    expect(upsertQuery?.text).toContain("$18::vector, $19, $20, $21");
+    expect(upsertQuery?.values).toHaveLength(21);
+    expect(upsertQuery?.values?.[17]).toBe("[0.1,0.2,0.3]");
+    expect(upsertQuery?.values?.[18]).toBe("ok");
+    expect(upsertQuery?.values?.[19]).toBe("2026-04-21T00:00:00.000Z");
+    expect(upsertQuery?.values?.[20]).toBe(1);
+  });
+});

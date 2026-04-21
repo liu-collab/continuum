@@ -82,10 +82,10 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         AND memory_type = ANY($3::text[])
         AND importance >= $4
         AND (
-          (scope = 'workspace' AND workspace_id = $5)
-          OR (scope = 'user' AND user_id = $6)
-          OR (scope = 'task' AND workspace_id = $5 AND $7::text IS NOT NULL AND task_id = $7)
-          OR (scope = 'session' AND workspace_id = $5 AND session_id = $8)
+          (scope = 'workspace' AND workspace_id = $5::uuid)
+          OR (scope = 'user' AND user_id = $6::uuid)
+          OR (scope = 'task' AND workspace_id = $5::uuid AND $7::uuid IS NOT NULL AND task_id = $7::uuid)
+          OR (scope = 'session' AND workspace_id = $5::uuid AND session_id = $8::uuid)
         )
       ORDER BY importance DESC, confidence DESC, updated_at DESC
       LIMIT $9

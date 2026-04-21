@@ -362,6 +362,37 @@ describe("retrieval-runtime remediation", () => {
     expect(pool.clients[0]?.destroyed).toBe(true);
   });
 
+  it("casts uuid filters in the postgres read model query", async () => {
+    const pool = new FakePool([
+      {
+        ...baseCandidateRecord,
+        last_confirmed_at: "2026-04-15T10:00:00.000Z",
+      },
+    ]);
+    const repository = new PostgresReadModelRepository(config, pool as never);
+
+    await repository.searchCandidates({
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      memory_mode: "workspace_plus_global",
+      scope_filter: ["workspace", "user", "task", "session"],
+      memory_type_filter: ["fact_preference"],
+      status_filter: ["active"],
+      importance_threshold: 3,
+      semantic_query_text: "之前那个偏好",
+      candidate_limit: 10,
+    });
+
+    const selectQuery = pool.clients[0]?.queries.find((entry) => entry.text.includes("FROM"));
+    expect(selectQuery?.text).toContain("workspace_id = $5::uuid");
+    expect(selectQuery?.text).toContain("user_id = $6::uuid");
+    expect(selectQuery?.text).toContain("$7::uuid IS NOT NULL AND task_id = $7::uuid");
+    expect(selectQuery?.text).toContain("session_id = $8::uuid");
+  });
+
   it("records trigger stage separately and exposes real writeback filtering in observability", async () => {
     const repository = new InMemoryRuntimeRepository();
 

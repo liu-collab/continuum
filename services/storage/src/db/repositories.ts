@@ -670,7 +670,7 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
             (
               $1, $2, $3, $4, $5, $6, $7, $8,
               $9, $10::jsonb, $11, $12, $13::jsonb, $14,
-              $15, $16, $17, $18, $19::vector, $20, $21, $22
+              $15, $16, $17, $18::vector, $19, $20, $21
             )
           on conflict (id) do update
           set workspace_id = excluded.workspace_id,
