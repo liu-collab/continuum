@@ -5,8 +5,13 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { initialAgentState, reduceAgentEvent } from "../_lib/event-reducer";
-import type { AgentLocale, AgentMemoryMode, MnaPromptInspectorResponse } from "../_lib/openapi-types";
-import { MnaUnavailableError } from "../_lib/mna-client";
+import type {
+  AgentLocale,
+  AgentMemoryMode,
+  MnaPromptInspectorResponse,
+  MnaSessionSummary
+} from "../_lib/openapi-types";
+import { MnaRequestError, MnaUnavailableError } from "../_lib/mna-client";
 import { useAgentClient } from "./use-agent-client";
 
 type UseAgentWorkspaceOptions = {
@@ -58,6 +63,28 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return `/agent/${sessionId}` as Route;
   }
 
+  function isRecoverableSessionError(error: unknown) {
+    return (
+      error instanceof MnaRequestError &&
+      (error.code === "session_not_found" || error.code === "workspace_mismatch")
+    );
+  }
+
+  async function restoreAvailableSessionOrCreate(sessionItems: MnaSessionSummary[], fallbackSessionId?: string) {
+    const existingSessionId = fallbackSessionId
+      ? sessionItems.find((item) => item.id !== fallbackSessionId)?.id
+      : sessionItems[0]?.id;
+    if (existingSessionId) {
+      router.replace(toAgentRoute(existingSessionId));
+      return;
+    }
+
+    const created = await client.createSession({
+      locale: options.uiLocale
+    });
+    router.replace(toAgentRoute(created.session_id));
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -88,7 +115,17 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       });
 
       if (options.sessionId) {
-        await openSession(options.sessionId);
+        try {
+          await openSession(options.sessionId);
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+          if (!isRecoverableSessionError(error)) {
+            throw error;
+          }
+          await restoreAvailableSessionOrCreate(sessionList.items, options.sessionId);
+        }
         return;
       }
 
