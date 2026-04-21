@@ -1,4 +1,5 @@
 import { cp, mkdir, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
@@ -34,6 +35,7 @@ import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
   continuumManagedEmbeddingConfigPath,
   readManagedEmbeddingConfig,
+  readManagedWritebackLlmConfig,
   writeManagedEmbeddingConfig,
   writeManagedWritebackLlmConfig,
 } from "./managed-config.js";
@@ -43,6 +45,7 @@ import { loadBuildStateHelpers } from "./build-state-loader.js";
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
 const WILDCARD_BIND_HOST = "0.0.0.0";
+const POSTGRES_PORT_SCAN_LIMIT = 20;
 
 async function runForeground(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
@@ -142,6 +145,69 @@ function normalizeBindHost(rawValue: string | boolean | undefined) {
 
 function resolveAccessibleHost(bindHost: string) {
   return bindHost === WILDCARD_BIND_HOST ? LOOPBACK_BIND_HOST : bindHost;
+}
+
+async function isTcpPortAvailable(host: string, port: number) {
+  return await new Promise<boolean>((resolve) => {
+    const server = createServer();
+
+    server.once("error", () => {
+      server.close(() => resolve(false));
+    });
+
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+
+    server.listen({
+      host,
+      port,
+      exclusive: true,
+    });
+  });
+}
+
+export async function resolveManagedPostgresPort(
+  options: Record<string, string | boolean>,
+  bindHost: string,
+  probePort: (host: string, port: number) => Promise<boolean> = isTcpPortAvailable,
+) {
+  const requestedPort =
+    typeof options["postgres-port"] === "string"
+      ? Number(options["postgres-port"])
+      : DEFAULT_MANAGED_POSTGRES_PORT;
+  const explicitPort = typeof options["postgres-port"] === "string";
+
+  if (!Number.isInteger(requestedPort) || requestedPort <= 0 || requestedPort > 65_535) {
+    throw new Error(`不支持的 --postgres-port: ${options["postgres-port"]}`);
+  }
+
+  if (explicitPort) {
+    if (!(await probePort(bindHost, requestedPort))) {
+      throw new Error(`postgres 端口不可用: ${bindHost}:${requestedPort}。请改用其他 --postgres-port。`);
+    }
+
+    return requestedPort;
+  }
+
+  for (let offset = 0; offset <= POSTGRES_PORT_SCAN_LIMIT; offset += 1) {
+    const candidate = requestedPort + offset;
+    if (!(await probePort(bindHost, candidate))) {
+      continue;
+    }
+
+    if (candidate !== requestedPort) {
+      process.stdout.write(
+        `默认 postgres 端口 ${requestedPort} 不可用，自动切换到 ${candidate}。\n`,
+      );
+    }
+
+    return candidate;
+  }
+
+  throw new Error(
+    `未找到可用的 postgres 端口。已尝试 ${bindHost}:${requestedPort}-${requestedPort + POSTGRES_PORT_SCAN_LIMIT}。`,
+  );
 }
 
 async function ensureDockerDaemonReady() {
@@ -298,11 +364,8 @@ export async function runStartCommand(
 ) {
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const buildState = await loadBuildStateHelpers(packageRoot);
-  const postgresPort =
-    typeof options["postgres-port"] === "string"
-      ? Number(options["postgres-port"])
-      : DEFAULT_MANAGED_POSTGRES_PORT;
   const bindHost = normalizeBindHost(options["bind-host"]);
+  const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const accessibleHost = resolveAccessibleHost(bindHost);
   const open = options.open === true || options.open === "true";
   const storageUrl = `http://${accessibleHost}:3001`;
@@ -311,6 +374,7 @@ export async function runStartCommand(
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
   const writebackLlmConfigPath = "/opt/continuum/managed/writeback-llm-config.json";
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
+  const existingWritebackLlmConfig = await readManagedWritebackLlmConfig();
   const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options);
   const mergedEmbeddingConfig = {
     version: 1 as const,
@@ -319,7 +383,10 @@ export async function runStartCommand(
   };
 
   await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
-  await writeManagedWritebackLlmConfig({ version: 1 });
+  await writeManagedWritebackLlmConfig({
+    version: 1,
+    ...(existingWritebackLlmConfig ?? {}),
+  });
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();

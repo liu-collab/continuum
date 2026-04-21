@@ -20,6 +20,7 @@ const envSchema = z.object({
   WRITEBACK_LLM_BASE_URL: z.string().url("WRITEBACK_LLM_BASE_URL must be a valid URL").optional(),
   WRITEBACK_LLM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   WRITEBACK_LLM_API_KEY: z.string().optional(),
+  WRITEBACK_LLM_PROTOCOL: z.enum(["anthropic", "openai-compatible"]).default("openai-compatible"),
   WRITEBACK_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   WRITEBACK_MAX_CANDIDATES: z.coerce.number().int().positive().max(5).default(3),
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),

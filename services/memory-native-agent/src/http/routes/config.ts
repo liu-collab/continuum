@@ -77,6 +77,7 @@ const writebackLlmPayloadSchema = z.object({
   base_url: z.string().trim().url().optional(),
   model: z.string().trim().min(1).optional(),
   api_key: z.string().trim().optional(),
+  protocol: z.enum(["anthropic", "openai-compatible"]).optional(),
   timeout_ms: z.number().int().min(100).max(120_000).optional(),
 });
 
@@ -134,6 +135,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       baseUrl?: string;
       model?: string;
       apiKey?: string;
+      protocol?: "anthropic" | "openai-compatible";
       timeoutMs?: number;
     }>(resolveManagedWritebackLlmConfigPath(app));
 
@@ -156,6 +158,10 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         base_url: writebackLlm?.baseUrl ?? process.env.WRITEBACK_LLM_BASE_URL ?? null,
         model: writebackLlm?.model ?? process.env.WRITEBACK_LLM_MODEL ?? "claude-haiku-4-5-20251001",
         api_key: writebackLlm?.apiKey ?? process.env.WRITEBACK_LLM_API_KEY ?? null,
+        protocol:
+          writebackLlm?.protocol
+          ?? ((process.env.WRITEBACK_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined)
+            ?? "openai-compatible"),
         timeout_ms: writebackLlm?.timeoutMs ?? (
           process.env.WRITEBACK_LLM_TIMEOUT_MS?.trim()
             ? Number(process.env.WRITEBACK_LLM_TIMEOUT_MS)
@@ -196,6 +202,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         ...(payload.writeback_llm.base_url ? { baseUrl: payload.writeback_llm.base_url } : {}),
         ...(payload.writeback_llm.model ? { model: payload.writeback_llm.model } : {}),
         ...(payload.writeback_llm.api_key ? { apiKey: payload.writeback_llm.api_key } : {}),
+        ...(payload.writeback_llm.protocol ? { protocol: payload.writeback_llm.protocol } : {}),
         ...(payload.writeback_llm.timeout_ms ? { timeoutMs: payload.writeback_llm.timeout_ms } : {}),
       });
     }
@@ -260,5 +267,9 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
 
   app.post("/v1/agent/dependency-status/embeddings/check", async () => {
     return app.runtimeState.memoryClient.checkEmbeddings();
+  });
+
+  app.post("/v1/agent/dependency-status/writeback-llm/check", async () => {
+    return app.runtimeState.memoryClient.checkWritebackLlm();
   });
 }

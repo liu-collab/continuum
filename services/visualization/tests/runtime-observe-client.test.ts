@@ -206,6 +206,12 @@ describe("runtime observe contract parsing", () => {
           status: "healthy",
           detail: "ok",
           last_checked_at: "2026-04-16T00:00:00Z"
+        },
+        writeback_llm: {
+          name: "writeback_llm",
+          status: "healthy",
+          detail: "ok",
+          last_checked_at: "2026-04-16T00:00:00Z"
         }
       }
     };
@@ -244,11 +250,12 @@ describe("runtime observe contract parsing", () => {
       submittedCount: 1,
       resultState: "submitted"
     });
-    expect(snapshot.dependencyStatus).toHaveLength(3);
+    expect(snapshot.dependencyStatus).toHaveLength(4);
     expect(snapshot.dependencyStatus.map((item) => item.name)).toEqual([
       "read_model",
       "embeddings",
-      "storage_writeback"
+      "storage_writeback",
+      "writeback_llm"
     ]);
   });
 });

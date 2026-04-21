@@ -30,6 +30,12 @@ function createDependencyStatus() {
       detail: "ok",
       last_checked_at: "2026-04-18T12:00:00.000Z",
     },
+    writeback_llm: {
+      name: "writeback_llm" as const,
+      status: "healthy" as const,
+      detail: "ok",
+      last_checked_at: "2026-04-18T12:00:00.000Z",
+    },
   };
 }
 
@@ -258,6 +264,28 @@ describe("memory client", () => {
       name: "embeddings",
       status: "healthy",
       detail: "embedding request completed",
+      last_checked_at: "2026-04-21T12:00:00.000Z",
+    });
+  });
+
+  it("runs an active writeback llm health check with schema validation", async () => {
+    const runtime = await startMockRuntime((app) => {
+      app.post("/v1/runtime/dependency-status/writeback-llm/check", async () => ({
+        name: "writeback_llm",
+        status: "healthy",
+        detail: "writeback llm request completed",
+        last_checked_at: "2026-04-21T12:00:00.000Z",
+      }));
+    });
+    startedApps.push(runtime.app);
+
+    const client = new MemoryClient({ baseUrl: runtime.baseUrl });
+    const response = await client.checkWritebackLlm();
+
+    expect(response).toEqual({
+      name: "writeback_llm",
+      status: "healthy",
+      detail: "writeback llm request completed",
       last_checked_at: "2026-04-21T12:00:00.000Z",
     });
   });

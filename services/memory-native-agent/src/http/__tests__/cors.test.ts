@@ -11,7 +11,8 @@ const runtimeCalls = {
   dependencyStatus: vi.fn(async () => ({
     read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
     embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
-    storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
+    storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    writeback_llm: { name: "writeback_llm" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
   })),
   sessionStartContext: vi.fn(async () => ({
     trace_id: "trace-session",
@@ -22,7 +23,8 @@ const runtimeCalls = {
     dependency_status: {
       read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
       embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
-      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
+      storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+      writeback_llm: { name: "writeback_llm" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
     },
     degraded: false
   })),

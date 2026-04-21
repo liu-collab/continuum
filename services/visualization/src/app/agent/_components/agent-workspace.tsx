@@ -24,7 +24,7 @@ type AgentWorkspaceProps = {
   sessionId?: string;
 };
 
-const PANEL_HEIGHT_CLASS = "h-[calc(100vh-6.5rem)] min-h-[38rem] max-h-[calc(100vh-6.5rem)]";
+const PANEL_HEIGHT_CLASS = "h-full min-h-0";
 
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const { locale, t, formatAgentError } = useAgentI18n();
@@ -76,8 +76,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="space-y-5">
-        <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+      <div className="h-full min-h-0">
+        <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
           <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
@@ -220,6 +220,18 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                         value={String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
                       />
                     ) : null}
+                    {"writeback_llm" in workspace.dependencyStatus.runtime &&
+                    workspace.dependencyStatus.runtime.writeback_llm ? (
+                      <DependencyRow
+                        label={t("workspace.writebackLlmLabel")}
+                        tone={
+                          workspace.dependencyStatus.runtime.writeback_llm.status === "healthy"
+                            ? "success"
+                            : "warning"
+                        }
+                        value={String(workspace.dependencyStatus.runtime.writeback_llm.status ?? "unknown")}
+                      />
+                    ) : null}
                   </div>
                 </section>
               ) : (
@@ -258,6 +270,9 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         }}
         onCheckEmbeddings={() => {
           return workspace.checkEmbeddings();
+        }}
+        onCheckWritebackLlm={() => {
+          return workspace.checkWritebackLlm();
         }}
       />
 

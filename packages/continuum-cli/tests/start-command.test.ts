@@ -5,7 +5,9 @@ const fetchJsonMock = vi.hoisted(() => vi.fn());
 const openBrowserMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
 const readManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
+const readManagedWritebackLlmConfigMock = vi.hoisted(() => vi.fn());
 const writeManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
+const writeManagedWritebackLlmConfigMock = vi.hoisted(() => vi.fn());
 const readManagedStateMock = vi.hoisted(() => vi.fn());
 const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const startManagedMnaMock = vi.hoisted(() => vi.fn());
@@ -47,7 +49,9 @@ vi.mock("../src/utils.js", async (importOriginal) => {
 vi.mock("../src/managed-config.js", () => ({
   continuumManagedEmbeddingConfigPath: vi.fn(),
   readManagedEmbeddingConfig: readManagedEmbeddingConfigMock,
+  readManagedWritebackLlmConfig: readManagedWritebackLlmConfigMock,
   writeManagedEmbeddingConfig: writeManagedEmbeddingConfigMock,
+  writeManagedWritebackLlmConfig: writeManagedWritebackLlmConfigMock,
 }));
 
 vi.mock("../src/managed-state.js", async (importOriginal) => {
@@ -75,7 +79,7 @@ vi.mock("../src/build-state-loader.js", () => ({
   })),
 }));
 
-import { runStartCommand } from "../src/start-command.js";
+import { resolveManagedPostgresPort, runStartCommand } from "../src/start-command.js";
 
 function mockSuccessfulSpawn() {
   spawnMock.mockImplementation(() => ({
@@ -99,7 +103,9 @@ describe("runStartCommand", () => {
     openBrowserMock.mockReset();
     pathExistsMock.mockReset();
     readManagedEmbeddingConfigMock.mockReset();
+    readManagedWritebackLlmConfigMock.mockReset();
     writeManagedEmbeddingConfigMock.mockReset();
+    writeManagedWritebackLlmConfigMock.mockReset();
     readManagedStateMock.mockReset();
     writeManagedStateMock.mockReset();
     startManagedMnaMock.mockReset();
@@ -115,7 +121,9 @@ describe("runStartCommand", () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 1,
       services: [],
@@ -162,7 +170,9 @@ describe("runStartCommand", () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -207,5 +217,98 @@ describe("runStartCommand", () => {
     expect(
       spawnCommands.some((command) => command.includes("docker build -t continuum-local:latest")),
     ).toBe(false);
+  });
+
+  it("preserves managed writeback llm config when continuum start runs again", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedWritebackLlmConfigMock.mockResolvedValue({
+      version: 1,
+      baseUrl: "https://api.anthropic.com",
+      model: "claude-haiku-4-5-20251001",
+      apiKey: "writeback-key",
+      protocol: "anthropic",
+      timeoutMs: 8000,
+    });
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 2,
+      image: {
+        hash: "image-hash",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.continuum/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.continuum/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    expect(writeManagedWritebackLlmConfigMock).toHaveBeenCalledWith({
+      version: 1,
+      baseUrl: "https://api.anthropic.com",
+      model: "claude-haiku-4-5-20251001",
+      apiKey: "writeback-key",
+      protocol: "anthropic",
+      timeoutMs: 8000,
+    });
+  });
+
+  it("falls back to the next available managed postgres port when default is unavailable", async () => {
+    const probePort = vi
+      .fn<(_: string, __: number) => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const port = await resolveManagedPostgresPort({}, "127.0.0.1", probePort);
+
+    expect(port).toBe(54330);
+    expect(probePort).toHaveBeenNthCalledWith(1, "127.0.0.1", 54329);
+    expect(probePort).toHaveBeenNthCalledWith(2, "127.0.0.1", 54330);
+  });
+
+  it("keeps the explicit postgres port when it is available", async () => {
+    const probePort = vi.fn<(_: string, __: number) => Promise<boolean>>().mockResolvedValue(true);
+
+    const port = await resolveManagedPostgresPort(
+      { "postgres-port": "55432" },
+      "127.0.0.1",
+      probePort,
+    );
+
+    expect(port).toBe(55432);
+    expect(probePort).toHaveBeenCalledWith("127.0.0.1", 55432);
+  });
+
+  it("fails fast when an explicit postgres port is unavailable", async () => {
+    const probePort = vi.fn<(_: string, __: number) => Promise<boolean>>().mockResolvedValue(false);
+
+    await expect(
+      resolveManagedPostgresPort({ "postgres-port": "55432" }, "127.0.0.1", probePort),
+    ).rejects.toThrow(/postgres 端口不可用/);
   });
 });

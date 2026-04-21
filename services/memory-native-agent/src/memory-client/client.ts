@@ -76,6 +76,12 @@ function buildUnknownDependencySnapshot(detail: string): DependencyStatusSnapsho
       detail,
       last_checked_at: timestamp,
     },
+    writeback_llm: {
+      name: "writeback_llm",
+      status: "unknown",
+      detail,
+      last_checked_at: timestamp,
+    },
   };
 }
 
@@ -185,6 +191,16 @@ export class MemoryClient {
     return this.requestJson({
       method: "POST",
       path: "/v1/runtime/dependency-status/embeddings/check",
+      timeoutMs: this.requestTimeoutMs,
+      responseSchema: dependencyProbeResultSchema,
+      operation: "dependency_status",
+    });
+  }
+
+  async checkWritebackLlm(): Promise<DependencyProbeResult> {
+    return this.requestJson({
+      method: "POST",
+      path: "/v1/runtime/dependency-status/writeback-llm/check",
       timeoutMs: this.requestTimeoutMs,
       responseSchema: dependencyProbeResultSchema,
       operation: "dependency_status",

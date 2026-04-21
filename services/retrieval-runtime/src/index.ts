@@ -39,11 +39,12 @@ async function main() {
   const llmExtractor = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmExtractor({
         ...config,
-        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-      })
+      WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+      WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+      WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+      WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
+      WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+    })
     : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
   const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
@@ -59,6 +60,7 @@ async function main() {
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
+    llmExtractor,
   );
 
   if (!hasCompleteRuntimeEmbeddingConfig(config)) {
@@ -66,6 +68,15 @@ async function main() {
       name: "embeddings",
       status: "unavailable",
       detail: "embedding config is not complete",
+      last_checked_at: nowIso(),
+    });
+  }
+
+  if (!hasCompleteRuntimeWritebackLlmConfig(config)) {
+    await repository.updateDependencyStatus({
+      name: "writeback_llm",
+      status: "unavailable",
+      detail: "writeback llm is not configured",
       last_checked_at: nowIso(),
     });
   }

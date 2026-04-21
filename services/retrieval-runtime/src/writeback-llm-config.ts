@@ -5,14 +5,18 @@ type WritebackLlmConfigSource = {
   WRITEBACK_LLM_MODEL?: string;
   WRITEBACK_LLM_API_KEY?: string;
   WRITEBACK_LLM_TIMEOUT_MS?: number | string;
+  WRITEBACK_LLM_PROTOCOL?: string;
   CONTINUUM_WRITEBACK_LLM_CONFIG_PATH?: string;
 };
+
+export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible";
 
 export type RuntimeWritebackLlmConfig = {
   baseUrl?: string;
   model?: string;
   apiKey?: string;
   timeoutMs?: number;
+  protocol?: RuntimeWritebackLlmProtocol;
 };
 
 function readNonEmpty(value: string | undefined) {
@@ -52,6 +56,19 @@ function normalizeTimeout(value: number | string | undefined) {
   return Math.trunc(parsed);
 }
 
+function normalizeProtocol(value: string | undefined): RuntimeWritebackLlmProtocol | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "anthropic" || normalized === "openai-compatible") {
+    return normalized;
+  }
+
+  return undefined;
+}
+
 function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWritebackLlmConfig {
   if (!filePath || !fs.existsSync(filePath)) {
     return {};
@@ -63,18 +80,21 @@ function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWri
       model?: string;
       apiKey?: string;
       timeoutMs?: number | string;
+      protocol?: string;
     };
 
     const baseUrl = normalizeUrl(readNonEmpty(payload.baseUrl));
     const model = readNonEmpty(payload.model);
     const apiKey = readNonEmpty(payload.apiKey);
     const timeoutMs = normalizeTimeout(payload.timeoutMs);
+    const protocol = normalizeProtocol(readNonEmpty(payload.protocol));
 
     return {
       ...(baseUrl ? { baseUrl } : {}),
       ...(model ? { model } : {}),
       ...(apiKey ? { apiKey } : {}),
       ...(timeoutMs ? { timeoutMs } : {}),
+      ...(protocol ? { protocol } : {}),
     };
   } catch {
     return {};
@@ -88,12 +108,14 @@ export function resolveRuntimeWritebackLlmConfig(
   const envModel = readNonEmpty(source.WRITEBACK_LLM_MODEL);
   const envApiKey = readNonEmpty(source.WRITEBACK_LLM_API_KEY);
   const envTimeoutMs = normalizeTimeout(source.WRITEBACK_LLM_TIMEOUT_MS);
+  const envProtocol = normalizeProtocol(readNonEmpty(source.WRITEBACK_LLM_PROTOCOL));
 
   return {
     ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
     ...(envModel ? { model: envModel } : {}),
     ...(envApiKey ? { apiKey: envApiKey } : {}),
     ...(envTimeoutMs ? { timeoutMs: envTimeoutMs } : {}),
+    ...(envProtocol ? { protocol: envProtocol } : {}),
     ...readManagedWritebackLlmConfig(readNonEmpty(source.CONTINUUM_WRITEBACK_LLM_CONFIG_PATH)),
   };
 }

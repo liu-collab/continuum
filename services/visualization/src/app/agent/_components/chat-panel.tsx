@@ -26,7 +26,7 @@ type ChatPanelProps = {
 
 const INITIAL_VISIBLE_TURNS = 12;
 const LOAD_MORE_TURNS_STEP = 12;
-const PANEL_HEIGHT_CLASS = "h-[calc(100vh-6.5rem)] min-h-[38rem] max-h-[calc(100vh-6.5rem)]";
+const PANEL_HEIGHT_CLASS = "h-full min-h-0";
 
 export function ChatPanel({
   turns,

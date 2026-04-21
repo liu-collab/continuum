@@ -172,6 +172,10 @@ describe("AgentWorkspace bootstrap states", () => {
           embeddings: {
             status: "not_configured",
             detail: "embedding config is not complete"
+          },
+          writeback_llm: {
+            status: "unknown",
+            detail: "writeback llm is not configured"
           }
         },
         provider: {
@@ -197,6 +201,13 @@ describe("AgentWorkspace bootstrap states", () => {
           base_url: null,
           model: null,
           api_key: null
+        },
+        writeback_llm: {
+          base_url: null,
+          model: "claude-haiku-4-5-20251001",
+          api_key: null,
+          protocol: "openai-compatible",
+          timeout_ms: 5000
         },
         mcp: {
           servers: []
@@ -224,6 +235,8 @@ describe("AgentWorkspace bootstrap states", () => {
       refreshAgentConfig: vi.fn(),
       refreshMcpState: vi.fn(),
       refreshWorkspaceList: vi.fn(),
+      checkEmbeddings: vi.fn(),
+      checkWritebackLlm: vi.fn(),
       registerWorkspace: vi.fn(),
       pickWorkspace: vi.fn(),
       selectWorkspace: vi.fn(),

@@ -42,7 +42,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className={cn(sans.variable, mono.variable, "font-[var(--font-sans)] antialiased")}>
         <Providers>
-          <div className="flex min-h-screen flex-col">
+          <div className="flex h-screen flex-col overflow-hidden">
             <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
               <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
                 <Link href={"/" as Route} className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export default function RootLayout({
                 </nav>
               </div>
             </header>
-            <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
               {children}
             </main>
           </div>

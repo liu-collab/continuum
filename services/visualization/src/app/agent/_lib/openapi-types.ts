@@ -185,6 +185,10 @@ export type MnaDependencyStatusResponse = {
       status?: string;
       detail?: string;
     };
+    writeback_llm?: {
+      status?: string;
+      detail?: string;
+    };
   };
   provider: {
     id: string;
@@ -197,7 +201,7 @@ export type MnaDependencyStatusResponse = {
 };
 
 export type MnaDependencyProbeResponse = {
-  name: "read_model" | "embeddings" | "storage_writeback";
+  name: "read_model" | "embeddings" | "storage_writeback" | "writeback_llm";
   status: "healthy" | "degraded" | "unavailable" | "unknown";
   detail: string;
   last_checked_at: string;
@@ -222,6 +226,7 @@ export type MnaAgentConfigResponse = {
     base_url: string | null;
     model: string | null;
     api_key: string | null;
+    protocol: "anthropic" | "openai-compatible";
     timeout_ms: number | null;
   };
   mcp: {

@@ -639,6 +639,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       base_url?: string;
       model?: string;
       api_key?: string;
+      protocol?: "anthropic" | "openai-compatible";
       timeout_ms?: number;
     };
     mcp?: {
@@ -664,6 +665,12 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function checkEmbeddings() {
     const result = await client.checkEmbeddings();
+    await refreshDependencyStatus();
+    return result;
+  }
+
+  async function checkWritebackLlm() {
+    const result = await client.checkWritebackLlm();
     await refreshDependencyStatus();
     return result;
   }
@@ -710,6 +717,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     updateProvider,
     updateRuntimeConfig,
     checkEmbeddings,
+    checkWritebackLlm,
     refreshMetrics,
     refreshDependencyStatus,
     refreshAgentConfig,

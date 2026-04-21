@@ -28,6 +28,11 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Run an active embedding dependency check",
         },
       },
+      "/v1/agent/dependency-status/writeback-llm/check": {
+        post: {
+          summary: "Run an active writeback llm dependency check",
+        },
+      },
       "/v1/agent/config": {
         get: {
           summary: "Read current agent, embedding, and writeback llm config",

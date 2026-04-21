@@ -181,7 +181,7 @@ export interface SubmittedWriteBackJob {
 export type DependencyState = "healthy" | "degraded" | "unavailable" | "unknown";
 
 export interface DependencyStatus {
-  name: "read_model" | "embeddings" | "storage_writeback";
+  name: "read_model" | "embeddings" | "storage_writeback" | "writeback_llm";
   status: DependencyState;
   detail: string;
   last_checked_at: string;
@@ -191,6 +191,7 @@ export interface DependencyStatusSnapshot {
   read_model: DependencyStatus;
   embeddings: DependencyStatus;
   storage_writeback: DependencyStatus;
+  writeback_llm: DependencyStatus;
 }
 
 export interface PrepareContextResponse {

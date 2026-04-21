@@ -27,6 +27,10 @@ type SettingsModalProps = {
         status?: string;
         detail?: string;
       };
+      writeback_llm?: {
+        status?: string;
+        detail?: string;
+      };
     };
     provider: {
       status: string;
@@ -51,6 +55,7 @@ type SettingsModalProps = {
       base_url?: string;
       model?: string;
       api_key?: string;
+      protocol?: "anthropic" | "openai-compatible";
       timeout_ms?: number;
     };
     mcp: {
@@ -73,6 +78,10 @@ type SettingsModalProps = {
     status: string;
     detail: string;
   }>;
+  onCheckWritebackLlm(): Promise<{
+    status: string;
+    detail: string;
+  }>;
 };
 
 function resolveStatusTone(status: string | undefined) {
@@ -90,7 +99,8 @@ export function SettingsModal({
   memoryMode,
   onMemoryModeChange,
   onSaveRuntime,
-  onCheckEmbeddings
+  onCheckEmbeddings,
+  onCheckWritebackLlm
 }: SettingsModalProps) {
   const { formatMemoryModeLabel, locale, setLocale, t } = useAgentI18n();
 
@@ -107,12 +117,14 @@ export function SettingsModal({
   const [writebackLlmBaseUrl, setWritebackLlmBaseUrl] = useState("");
   const [writebackLlmModel, setWritebackLlmModel] = useState("");
   const [writebackLlmApiKey, setWritebackLlmApiKey] = useState("");
+  const [writebackLlmProtocol, setWritebackLlmProtocol] = useState<"anthropic" | "openai-compatible">("openai-compatible");
   const [writebackLlmTimeoutMs, setWritebackLlmTimeoutMs] = useState("");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
+  const [checkingWritebackLlm, setCheckingWritebackLlm] = useState(false);
 
   useEffect(() => {
     if (!config) {
@@ -131,12 +143,14 @@ export function SettingsModal({
     setWritebackLlmBaseUrl(config.writeback_llm.base_url ?? "");
     setWritebackLlmModel(config.writeback_llm.model ?? "");
     setWritebackLlmApiKey(config.writeback_llm.api_key ?? "");
+    setWritebackLlmProtocol(config.writeback_llm.protocol ?? "openai-compatible");
     setWritebackLlmTimeoutMs(config.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "");
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
     setCheckingEmbeddings(false);
+    setCheckingWritebackLlm(false);
   }, [config, open]);
 
   const providerRequiresBaseUrl = useMemo(
@@ -218,6 +232,7 @@ export function SettingsModal({
           ...(trimmedWritebackLlmBaseUrl ? { base_url: trimmedWritebackLlmBaseUrl } : {}),
           ...(trimmedWritebackLlmModel ? { model: trimmedWritebackLlmModel } : {}),
           ...(trimmedWritebackLlmApiKey ? { api_key: trimmedWritebackLlmApiKey } : {}),
+          protocol: writebackLlmProtocol,
           ...(trimmedWritebackLlmTimeoutMs ? { timeout_ms: Number(trimmedWritebackLlmTimeoutMs) } : {}),
         },
         mcp: {
@@ -266,6 +281,41 @@ export function SettingsModal({
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setCheckingEmbeddings(false);
+    }
+  }
+
+  async function handleCheckWritebackLlm() {
+    setErrorMessage(null);
+    setFeedbackMessage(null);
+    const currentBaseUrl = config?.writeback_llm.base_url?.trim() ?? "";
+    const currentModel = config?.writeback_llm.model?.trim() ?? "";
+    const currentApiKey = config?.writeback_llm.api_key?.trim() ?? "";
+    const currentProtocol = config?.writeback_llm.protocol ?? "openai-compatible";
+    const currentTimeout = config?.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "";
+    if (
+      writebackLlmBaseUrl.trim() !== currentBaseUrl ||
+      writebackLlmModel.trim() !== currentModel ||
+      writebackLlmApiKey.trim() !== currentApiKey ||
+      writebackLlmProtocol !== currentProtocol ||
+      writebackLlmTimeoutMs.trim() !== currentTimeout
+    ) {
+      setFeedbackMessage({
+        tone: "warning",
+        text: t("runtimeConfig.saveBeforeCheck"),
+      });
+      return;
+    }
+    setCheckingWritebackLlm(true);
+    try {
+      const result = await onCheckWritebackLlm();
+      setFeedbackMessage({
+        tone: result.status === "healthy" ? "success" : "warning",
+        text: `${result.status}: ${result.detail}`,
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCheckingWritebackLlm(false);
     }
   }
 
@@ -341,6 +391,32 @@ export function SettingsModal({
                 data-testid="runtime-config-check-embeddings"
               >
                 {checkingEmbeddings ? t("runtimeConfig.checkingEmbedding") : t("runtimeConfig.checkEmbedding")}
+              </button>
+            </div>
+          </div>
+          <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmStatus")}</span>
+              <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.writeback_llm?.status)}>
+                {dependencyStatus?.runtime.writeback_llm?.status ?? "unknown"}
+              </StatusBadge>
+            </div>
+            {dependencyStatus?.runtime.writeback_llm?.detail ? (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {dependencyStatus.runtime.writeback_llm.detail}
+              </p>
+            ) : null}
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCheckWritebackLlm();
+                }}
+                disabled={checkingWritebackLlm}
+                className="btn-outline"
+                data-testid="runtime-config-check-writeback-llm"
+              >
+                {checkingWritebackLlm ? t("runtimeConfig.checkingWritebackLlm") : t("runtimeConfig.checkWritebackLlm")}
               </button>
             </div>
           </div>
@@ -472,7 +548,21 @@ export function SettingsModal({
               <div className="mt-1 text-xs leading-5 text-muted-foreground">
                 {t("runtimeConfig.writebackLlmDescription")}
               </div>
+              <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                {t("runtimeConfig.writebackLlmProtocolHint")}
+              </div>
             </div>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmProtocol")}</span>
+              <select
+                value={writebackLlmProtocol}
+                onChange={(event) => setWritebackLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
+                className="field mt-1"
+              >
+                <option value="openai-compatible">{t("runtimeConfig.writebackLlmProtocolOptions.openai-compatible")}</option>
+                <option value="anthropic">{t("runtimeConfig.writebackLlmProtocolOptions.anthropic")}</option>
+              </select>
+            </label>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmBaseUrl")}</span>
               <input

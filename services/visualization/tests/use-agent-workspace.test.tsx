@@ -66,6 +66,7 @@ function createClientMock() {
     updateProvider: vi.fn(),
     updateConfig: vi.fn(),
     checkEmbeddings: vi.fn(),
+    checkWritebackLlm: vi.fn(),
     getPromptInspector: vi.fn(),
     restartMcpServer: vi.fn(),
     disableMcpServer: vi.fn()

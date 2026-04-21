@@ -231,6 +231,48 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("assistant-thread-viewport")).toBeInTheDocument();
   });
 
+  it("keeps only the injection status badge inside the chat message", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            {
+              turnId: "turn-injection",
+              userInput: "帮我回忆上下文",
+              assistantOutput: "我已经结合记忆继续回答。",
+              toolMessages: [],
+              toolCalls: [],
+              phases: [],
+              injection: {
+                memory_ids: ["mem-1"],
+                memory_summary: "这里是一段注入摘要，不应该在中间聊天区重复渲染。"
+              },
+              finishReason: "stop",
+              promptAvailable: true,
+              errors: [],
+              taskLabel: null,
+              status: "complete",
+            },
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("assistant-message-turn-injection")).toHaveTextContent(
+      "我已经结合记忆继续回答。",
+    );
+    expect(screen.getByText("注入已就绪")).toBeInTheDocument();
+    expect(screen.queryByTestId("injection-summary-turn-injection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Injection Banner")).not.toBeInTheDocument();
+  });
+
   it("shows the selected provider model beside the Continuum Agent title", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">

@@ -241,6 +241,12 @@ export class MnaClient {
     });
   }
 
+  async checkWritebackLlm() {
+    return this.requestJson<MnaDependencyProbeResponse>("/v1/agent/dependency-status/writeback-llm/check", {
+      method: "POST",
+    });
+  }
+
   async getConfig() {
     return this.requestJson<MnaAgentConfigResponse>("/v1/agent/config");
   }
@@ -264,6 +270,7 @@ export class MnaClient {
       base_url?: string;
       model?: string;
       api_key?: string;
+      protocol?: "anthropic" | "openai-compatible";
       timeout_ms?: number;
     };
     mcp?: {

@@ -154,6 +154,7 @@ describe("MnaClient", () => {
             base_url: null,
             model: "claude-haiku-4-5-20251001",
             api_key: null,
+            protocol: "openai-compatible",
             timeout_ms: 5000,
           },
           mcp: {
@@ -182,6 +183,7 @@ describe("MnaClient", () => {
       writeback_llm: {
         base_url: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
+        protocol: "anthropic",
         timeout_ms: 8000,
       },
       mcp: {
@@ -204,6 +206,7 @@ describe("MnaClient", () => {
       writeback_llm: {
         base_url: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
+        protocol: "anthropic",
         timeout_ms: 8000,
       },
       mcp: {
@@ -240,6 +243,40 @@ describe("MnaClient", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://127.0.0.1:4193/v1/agent/dependency-status/embeddings/check",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
+  it("triggers an active writeback llm health check", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: "writeback_llm",
+          status: "healthy",
+          detail: "writeback llm request completed",
+          last_checked_at: "2026-04-21T12:00:00.000Z",
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.checkWritebackLlm();
+
+    expect(payload.status).toBe("healthy");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:4193/v1/agent/dependency-status/writeback-llm/check",
       expect.objectContaining({
         method: "POST",
       }),

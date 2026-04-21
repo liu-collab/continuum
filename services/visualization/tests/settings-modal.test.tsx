@@ -25,6 +25,7 @@ const baseConfig = {
     base_url: "https://api.anthropic.com",
     model: "claude-haiku-4-5-20251001",
     api_key: "writeback-key",
+    protocol: "anthropic" as const,
     timeout_ms: 5000,
   },
   mcp: {
@@ -60,6 +61,10 @@ describe("SettingsModal", () => {
           onCheckEmbeddings={vi.fn(async () => ({
             status: "healthy",
             detail: "embedding request completed",
+          }))}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
           }))}
         />
       </AgentI18nProvider>,
@@ -103,6 +108,10 @@ describe("SettingsModal", () => {
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={vi.fn(async () => undefined)}
           onCheckEmbeddings={onCheckEmbeddings}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
+          }))}
         />
       </AgentI18nProvider>,
     );
@@ -133,6 +142,10 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
+          }))}
         />
       </AgentI18nProvider>,
     );
@@ -144,5 +157,81 @@ describe("SettingsModal", () => {
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
       "填写 WRITEBACK_LLM_BASE_URL 后，还需要填写 WRITEBACK_LLM_MODEL。",
     );
+  });
+
+  it("runs writeback llm health check with the saved config", async () => {
+    const user = userEvent.setup();
+    const onCheckWritebackLlm = vi.fn(async () => ({
+      status: "healthy",
+      detail: "writeback llm request completed",
+    }));
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={{
+            runtime: {
+              status: "unavailable",
+              embeddings: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+              writeback_llm: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+            },
+            provider: {
+              status: "configured",
+            },
+          }}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckWritebackLlm={onCheckWritebackLlm}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("runtime-config-check-writeback-llm"));
+
+    expect(onCheckWritebackLlm).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
+      "healthy: writeback llm request completed",
+    );
+  });
+
+  it("shows writeback llm protocol options and keeps saved protocol", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByDisplayValue("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText(/写回提取模型支持两种协议/)).toBeInTheDocument();
   });
 });

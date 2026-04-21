@@ -25,6 +25,7 @@ const baseConfig = {
     base_url: null,
     model: "claude-haiku-4-5-20251001",
     api_key: null,
+    protocol: "openai-compatible" as const,
     timeout_ms: 5000,
   },
   mcp: {

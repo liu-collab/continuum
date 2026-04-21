@@ -31,6 +31,7 @@ const baseConfig: AppConfig = {
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
+  WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 5000,
   WRITEBACK_MAX_CANDIDATES: 3,
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5_000,
@@ -216,6 +217,7 @@ function createRuntime(overrides?: {
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
+    overrides?.llmExtractor,
   );
 
   return { service, repository, storageClient };
@@ -311,6 +313,56 @@ describe("retrieval-runtime service", () => {
       name: "embeddings",
       status: "unavailable",
       detail: "embeddings unavailable",
+    });
+  });
+
+  it("actively checks writeback llm health and records a healthy status", async () => {
+    const { service } = createRuntime({
+      llmExtractor: {
+        extract: async () => ({ candidates: [] }),
+        healthCheck: async () => undefined,
+      },
+    });
+
+    const response = await service.checkWritebackLlm();
+    const dependencies = await service.getDependencies();
+
+    expect(response).toMatchObject({
+      name: "writeback_llm",
+      status: "healthy",
+      detail: "writeback llm request completed",
+    });
+    expect(dependencies.writeback_llm.status).toBe("healthy");
+  });
+
+  it("returns not configured style status when writeback llm is missing", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.checkWritebackLlm();
+
+    expect(response).toMatchObject({
+      name: "writeback_llm",
+      status: "unavailable",
+      detail: "writeback llm is not configured",
+    });
+  });
+
+  it("returns the concrete writeback llm failure reason during active health check", async () => {
+    const { service } = createRuntime({
+      llmExtractor: {
+        extract: async () => ({ candidates: [] }),
+        healthCheck: async () => {
+          throw new Error("writeback llm request failed with 401");
+        },
+      },
+    });
+
+    const response = await service.checkWritebackLlm();
+
+    expect(response).toMatchObject({
+      name: "writeback_llm",
+      status: "unavailable",
+      detail: "writeback llm request failed with 401",
     });
   });
 
@@ -1019,16 +1071,25 @@ describe("retrieval-runtime service", () => {
       method: "POST",
       url: "/v1/runtime/dependency-status/embeddings/check",
     });
+    const writebackLlmCheckResponse = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/dependency-status/writeback-llm/check",
+    });
 
     expect(prepareResponse.statusCode).toBe(200);
     expect(finalizeResponse.statusCode).toBe(200);
     expect(embeddingCheckResponse.statusCode).toBe(200);
+    expect(writebackLlmCheckResponse.statusCode).toBe(200);
     expect(livenessResponse.json()).toEqual({ status: "alive" });
     expect(readinessResponse.json()).toEqual({ status: "ready" });
     expect(dependenciesResponse.json()).toHaveProperty("read_model");
     expect(embeddingCheckResponse.json()).toMatchObject({
       name: "embeddings",
       status: "healthy",
+    });
+    expect(writebackLlmCheckResponse.json()).toMatchObject({
+      name: "writeback_llm",
+      status: "unavailable",
     });
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();
     expect(finalizeResponse.json().write_back_candidates.length).toBeGreaterThan(0);

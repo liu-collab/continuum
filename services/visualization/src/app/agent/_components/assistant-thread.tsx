@@ -200,18 +200,6 @@ function AssistantMessageBubble({
           )}
         </div>
 
-        {meta?.injection ? (
-          <div className="mt-4 rounded-2xl border bg-surface-muted/30 px-3 py-3">
-            <div className="text-xs font-medium text-muted-foreground">{t("chatPanel.injectionTitle")}</div>
-            <div
-              className="mt-1 text-sm leading-6 text-foreground"
-              data-testid={`injection-summary-${turnId}`}
-            >
-              {meta.injection.memory_summary}
-            </div>
-          </div>
-        ) : null}
-
         {meta?.phases.length ? (
           <div className="mt-4 flex flex-wrap gap-1.5">
             {meta.phases.map((phase) => (

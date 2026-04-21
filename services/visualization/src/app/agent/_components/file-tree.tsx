@@ -22,6 +22,16 @@ function getWorkspaceDisplayId(workspace: Pick<MnaWorkspaceSummary, "workspace_i
   return workspace.workspace_id.slice(0, 8).toLowerCase();
 }
 
+function getWorkspaceDisplayName(cwd: string | null) {
+  if (!cwd) {
+    return "";
+  }
+
+  const normalized = cwd.replace(/[\\/]+$/, "");
+  const segments = normalized.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] ?? normalized;
+}
+
 type FileTreeProps = {
   path: string;
   entries: MnaFileTreeEntry[];
@@ -53,6 +63,7 @@ export function FileTree({
     : null;
   const selectedWorkspacePath = selectedWorkspace?.cwd ?? null;
   const selectedWorkspaceDisplayId = selectedWorkspace ? getWorkspaceDisplayId(selectedWorkspace) : null;
+  const selectedWorkspaceDisplayName = getWorkspaceDisplayName(selectedWorkspacePath);
 
   return (
     <div className="rounded-[1.75rem] border bg-surface">
@@ -69,10 +80,10 @@ export function FileTree({
                   <div className="text-[11px] text-muted-foreground">{t("fileTree.selectedFolderLabel")}</div>
                   <div
                     data-testid="selected-workspace-path"
-                    className="mt-1 break-all text-sm font-medium text-foreground"
+                    className="mt-1 truncate text-sm font-medium text-foreground"
                     title={selectedWorkspacePath ?? undefined}
                   >
-                    {selectedWorkspacePath}
+                    {selectedWorkspaceDisplayName}
                   </div>
                   <div
                     data-testid="selected-workspace-id"

@@ -47,6 +47,7 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
   app.get("/v1/runtime/health/dependencies", async () => runtimeService.getDependencies());
   app.get("/v1/runtime/dependency-status", async () => runtimeService.getDependencies());
   app.post("/v1/runtime/dependency-status/embeddings/check", async () => runtimeService.checkEmbeddings());
+  app.post("/v1/runtime/dependency-status/writeback-llm/check", async () => runtimeService.checkWritebackLlm());
 
   app.post("/v1/runtime/session-start-context", async (request) => {
     const payloadSchema = z

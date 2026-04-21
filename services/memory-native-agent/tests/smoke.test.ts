@@ -10,7 +10,15 @@ describe("memory-native-agent smoke", () => {
   });
 
   it("starts the service and serves /healthz", async () => {
-    const app = await start({ port: 0 });
+    const app = await start({
+      port: 0,
+      config: {
+        env: {
+          ...process.env,
+          RUNTIME_BASE_URL: "http://127.0.0.1:9",
+        },
+      },
+    });
     startedApps.push(app);
 
     const address = app.server.address();
@@ -34,7 +42,7 @@ describe("memory-native-agent smoke", () => {
       api_version: "v1",
       runtime_min_version: "0.1.0",
       dependencies: {
-        retrieval_runtime: "reachable",
+        retrieval_runtime: "unreachable",
       },
     });
     expect(app.mnaToken).toMatch(/^[a-f0-9]{64}$/);

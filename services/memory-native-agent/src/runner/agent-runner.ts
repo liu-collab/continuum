@@ -530,6 +530,12 @@ export class AgentRunner {
             detail: error instanceof Error ? error.message : "memory unavailable",
             last_checked_at: new Date().toISOString(),
           },
+          writeback_llm: {
+            name: "writeback_llm",
+            status: "unknown",
+            detail: error instanceof Error ? error.message : "memory unavailable",
+            last_checked_at: new Date().toISOString(),
+          },
         },
         budget_used: 0,
         memory_packet_ids: [],

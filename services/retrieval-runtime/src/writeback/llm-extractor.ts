@@ -28,6 +28,24 @@ export interface LlmExtractor {
     tool_results_summary?: string;
     task_id?: string;
   }): Promise<LlmExtractionResult>;
+  healthCheck?(): Promise<void>;
+}
+
+type AnthropicMessagesPayload = {
+  content?: Array<{ type?: string; text?: string }>;
+  output_text?: string;
+};
+
+type OpenAiChatPayload = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+  }>;
+};
+
+function isOpenAiChatPayload(payload: AnthropicMessagesPayload | OpenAiChatPayload): payload is OpenAiChatPayload {
+  return "choices" in payload;
 }
 
 const WRITEBACK_EXTRACTION_SYSTEM_PROMPT = `
@@ -68,12 +86,50 @@ Examples of bad extractions:
 export class HttpLlmExtractor implements LlmExtractor {
   constructor(private readonly config: AppConfig) {}
 
+  async healthCheck(): Promise<void> {
+    if (!this.config.WRITEBACK_LLM_BASE_URL) {
+      throw new Error("WRITEBACK_LLM_BASE_URL is not configured");
+    }
+
+    await this.request({
+      current_input: "health check",
+      assistant_output: "health check",
+      tool_results_summary: "",
+      task_id: undefined,
+      max_tokens: 64,
+    });
+  }
+
   async extract(input: {
     current_input: string;
     assistant_output: string;
     tool_results_summary?: string;
     task_id?: string;
   }): Promise<LlmExtractionResult> {
+    const payload = await this.request({
+      ...input,
+      max_tokens: 600,
+    });
+    const text = extractResponseText(payload);
+    const parsedJson = parseJsonPayload(text);
+    const parsed = llmExtractionResultSchema.safeParse(parsedJson);
+
+    if (!parsed.success) {
+      throw new Error("writeback llm response did not match extraction schema");
+    }
+
+    return {
+      candidates: parsed.data.candidates.slice(0, this.config.WRITEBACK_MAX_CANDIDATES),
+    };
+  }
+
+  private async request(input: {
+    current_input: string;
+    assistant_output: string;
+    tool_results_summary?: string;
+    task_id?: string;
+    max_tokens: number;
+  }): Promise<AnthropicMessagesPayload | OpenAiChatPayload> {
     if (!this.config.WRITEBACK_LLM_BASE_URL) {
       throw new Error("WRITEBACK_LLM_BASE_URL is not configured");
     }
@@ -84,29 +140,63 @@ export class HttpLlmExtractor implements LlmExtractor {
     }, this.config.WRITEBACK_LLM_TIMEOUT_MS);
 
     try {
-      const response = await fetch(new URL("/v1/messages", this.config.WRITEBACK_LLM_BASE_URL), {
+      const requestBody = {
+        current_input: input.current_input,
+        assistant_output: input.assistant_output,
+        tool_results_summary: input.tool_results_summary ?? "",
+        task_id: input.task_id ?? null,
+      };
+      const protocol = this.config.WRITEBACK_LLM_PROTOCOL;
+      const requestUrl =
+        protocol === "anthropic"
+          ? new URL("/v1/messages", this.config.WRITEBACK_LLM_BASE_URL)
+          : new URL("/v1/chat/completions", this.config.WRITEBACK_LLM_BASE_URL);
+      const response = await fetch(requestUrl, {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "anthropic-version": "2023-06-01",
-          ...(this.config.WRITEBACK_LLM_API_KEY ? { "x-api-key": this.config.WRITEBACK_LLM_API_KEY } : {}),
-        },
-        body: JSON.stringify({
-          model: this.config.WRITEBACK_LLM_MODEL,
-          system: WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
-          max_tokens: 600,
-          messages: [
-            {
-              role: "user",
-              content: JSON.stringify({
-                current_input: input.current_input,
-                assistant_output: input.assistant_output,
-                tool_results_summary: input.tool_results_summary ?? "",
-                task_id: input.task_id ?? null,
-              }),
-            },
-          ],
-        }),
+        headers:
+          protocol === "anthropic"
+            ? {
+                "content-type": "application/json",
+                "anthropic-version": "2023-06-01",
+                ...(this.config.WRITEBACK_LLM_API_KEY ? { "x-api-key": this.config.WRITEBACK_LLM_API_KEY } : {}),
+              }
+            : {
+                "content-type": "application/json",
+                ...(this.config.WRITEBACK_LLM_API_KEY
+                  ? { authorization: `Bearer ${this.config.WRITEBACK_LLM_API_KEY}` }
+                  : {}),
+              },
+        body: JSON.stringify(
+          protocol === "anthropic"
+            ? {
+                model: this.config.WRITEBACK_LLM_MODEL,
+                system: WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
+                max_tokens: input.max_tokens,
+                messages: [
+                  {
+                    role: "user",
+                    content: JSON.stringify(requestBody),
+                  },
+                ],
+              }
+            : {
+                model: this.config.WRITEBACK_LLM_MODEL,
+                messages: [
+                  {
+                    role: "system",
+                    content: WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
+                  },
+                  {
+                    role: "user",
+                    content: JSON.stringify(requestBody),
+                  },
+                ],
+                response_format: {
+                  type: "json_object",
+                },
+                max_tokens: input.max_tokens,
+              },
+        ),
         signal: controller.signal,
       });
 
@@ -114,41 +204,45 @@ export class HttpLlmExtractor implements LlmExtractor {
         throw new Error(`writeback llm request failed with ${response.status}`);
       }
 
-      const payload = (await response.json()) as {
-        content?: Array<{ type?: string; text?: string }>;
-        output_text?: string;
-      };
-      const text = extractResponseText(payload);
-      const parsedJson = parseJsonPayload(text);
-      const parsed = llmExtractionResultSchema.safeParse(parsedJson);
-
-      if (!parsed.success) {
-        throw new Error("writeback llm response did not match extraction schema");
-      }
-
-      return {
-        candidates: parsed.data.candidates.slice(0, this.config.WRITEBACK_MAX_CANDIDATES),
-      };
+      return (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload;
     } finally {
       clearTimeout(timeoutHandle);
     }
   }
 }
 
-function extractResponseText(payload: { content?: Array<{ type?: string; text?: string }>; output_text?: string }): string {
-  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+function extractResponseText(payload: AnthropicMessagesPayload | OpenAiChatPayload): string {
+  if ("output_text" in payload && typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text;
   }
 
-  const textParts = (payload.content ?? [])
-    .filter((part) => part?.type === "text" && typeof part.text === "string")
-    .map((part) => part.text ?? "");
+  if ("content" in payload) {
+    const textParts = (payload.content ?? [])
+      .filter((part) => part?.type === "text" && typeof part.text === "string")
+      .map((part) => part.text ?? "");
 
-  if (textParts.length === 0) {
-    throw new Error("writeback llm response did not include text content");
+    if (textParts.length > 0) {
+      return textParts.join("\n");
+    }
   }
 
-  return textParts.join("\n");
+  if (isOpenAiChatPayload(payload)) {
+    const choiceContent = payload.choices?.[0]?.message?.content;
+    if (typeof choiceContent === "string" && choiceContent.trim()) {
+      return choiceContent;
+    }
+
+    if (Array.isArray(choiceContent)) {
+      const textParts = choiceContent
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .map((part) => part.text ?? "");
+      if (textParts.length > 0) {
+        return textParts.join("\n");
+      }
+    }
+  }
+
+  throw new Error("writeback llm response did not include text content");
 }
 
 function parseJsonPayload(text: string): unknown {

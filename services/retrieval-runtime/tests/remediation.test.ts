@@ -92,6 +92,7 @@ const config: AppConfig = {
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
+  WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 40,
   WRITEBACK_MAX_CANDIDATES: 3,
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5000,
@@ -730,6 +731,7 @@ describe("retrieval-runtime remediation", () => {
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
+      llmExtractor,
     );
 
     const request = {
@@ -755,6 +757,7 @@ describe("retrieval-runtime remediation", () => {
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
+      llmExtractor,
     );
 
     const second = await secondService.finalizeTurn(request);
@@ -928,6 +931,52 @@ describe("retrieval-runtime remediation", () => {
       });
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0]?.summary).toBe("默认中文输出");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("parses openai-compatible writeback extraction responses", async () => {
+    const originalFetch = globalThis.fetch;
+    const extractor = new HttpLlmExtractor({
+      ...config,
+      WRITEBACK_LLM_BASE_URL: "http://localhost:8080",
+      WRITEBACK_LLM_PROTOCOL: "openai-compatible",
+      WRITEBACK_LLM_API_KEY: "test-key",
+    } as AppConfig);
+
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  candidates: [
+                    {
+                      candidate_type: "task_state",
+                      scope: "task",
+                      summary: "下一步先补测试",
+                      importance: 4,
+                      confidence: 0.88,
+                      write_reason: "confirmed next step",
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch;
+
+    try {
+      const result = await extractor.extract({
+        current_input: "下一步先补测试",
+        assistant_output: "好的，先补测试。",
+      });
+      expect(result.candidates).toHaveLength(1);
+      expect(result.candidates[0]?.summary).toBe("下一步先补测试");
     } finally {
       globalThis.fetch = originalFetch;
     }

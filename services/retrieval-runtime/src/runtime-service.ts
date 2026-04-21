@@ -23,6 +23,7 @@ import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
+import type { LlmExtractor } from "./writeback/llm-extractor.js";
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
@@ -98,6 +99,7 @@ export class RetrievalRuntimeService {
     private readonly logger: Logger,
     private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
     private readonly embeddingTimeoutMs = 800,
+    private readonly writebackLlmExtractor?: LlmExtractor,
   ) {}
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
@@ -464,6 +466,45 @@ export class RetrievalRuntimeService {
       return status;
     } finally {
       clearTimeout(timeoutHandle);
+    }
+  }
+
+  async checkWritebackLlm(): Promise<DependencyStatus> {
+    if (!this.writebackLlmExtractor?.healthCheck) {
+      const status: DependencyStatus = {
+        name: "writeback_llm",
+        status: "unavailable",
+        detail: "writeback llm is not configured",
+        last_checked_at: nowIso(),
+      };
+      await this.repository.updateDependencyStatus(status);
+      return status;
+    }
+
+    try {
+      await this.writebackLlmExtractor.healthCheck();
+      const status: DependencyStatus = {
+        name: "writeback_llm",
+        status: "healthy",
+        detail: "writeback llm request completed",
+        last_checked_at: nowIso(),
+      };
+      await this.repository.updateDependencyStatus(status);
+      return status;
+    } catch (error) {
+      const detail =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "writeback llm unavailable";
+      const status: DependencyStatus = {
+        name: "writeback_llm",
+        status: detail.includes("timeout") ? "degraded" : "unavailable",
+        detail,
+        last_checked_at: nowIso(),
+      };
+      await this.repository.updateDependencyStatus(status);
+      this.logger.warn({ dependency: "writeback_llm", err: error }, "writeback llm health check failed");
+      return status;
     }
   }
 

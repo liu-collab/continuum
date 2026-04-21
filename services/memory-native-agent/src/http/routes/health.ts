@@ -52,6 +52,10 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
       runtime: runtime ?? {
         status: "unavailable",
         base_url: app.runtimeState.config.runtime.baseUrl,
+        writeback_llm: {
+          status: "unknown",
+          detail: "runtime dependency status is unavailable",
+        },
       },
       provider: {
         id: app.runtimeState.provider.id(),

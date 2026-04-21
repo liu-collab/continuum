@@ -13,12 +13,19 @@ const runtimeCalls = {
   dependencyStatus: vi.fn(async () => ({
     read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
     embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
-    storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
+    storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+    writeback_llm: { name: "writeback_llm" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
   })),
   checkEmbeddings: vi.fn(async () => ({
     name: "embeddings" as const,
     status: "healthy" as const,
     detail: "embedding request completed",
+    last_checked_at: "now",
+  })),
+  checkWritebackLlm: vi.fn(async () => ({
+    name: "writeback_llm" as const,
+    status: "healthy" as const,
+    detail: "writeback llm request completed",
     last_checked_at: "now",
   })),
   sessionStartContext: vi.fn(async () => null),
@@ -220,7 +227,11 @@ describe("health routes", () => {
       expect(response.json()).toEqual({
         runtime: {
           status: "unavailable",
-          base_url: "http://127.0.0.1:4100"
+          base_url: "http://127.0.0.1:4100",
+          writeback_llm: {
+            status: "unknown",
+            detail: "runtime dependency status is unavailable",
+          }
         },
         provider: {
           id: "ollama",
@@ -269,6 +280,7 @@ describe("health routes", () => {
           base_url: null,
           model: "claude-haiku-4-5-20251001",
           api_key: null,
+          protocol: "openai-compatible",
           timeout_ms: 5000,
         },
         mcp: {
@@ -298,6 +310,7 @@ describe("health routes", () => {
             base_url: "https://api.anthropic.com",
             model: "claude-haiku-4-5-20251001",
             api_key: "writeback-key",
+            protocol: "anthropic",
             timeout_ms: 8000,
           },
           mcp: {
@@ -348,6 +361,7 @@ describe("health routes", () => {
         baseUrl: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
         apiKey: "writeback-key",
+        protocol: "anthropic",
         timeoutMs: 8000,
       });
 
@@ -376,6 +390,7 @@ describe("health routes", () => {
           base_url: "https://api.anthropic.com",
           model: "claude-haiku-4-5-20251001",
           api_key: "writeback-key",
+          protocol: "anthropic",
           timeout_ms: 8000,
         },
         mcp: {
@@ -434,6 +449,36 @@ describe("health routes", () => {
         name: "embeddings",
         status: "healthy",
         detail: "embedding request completed",
+        last_checked_at: "now",
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("proxies an active writeback llm health check", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/writeback-llm/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(runtimeCalls.checkWritebackLlm).toHaveBeenCalledTimes(1);
+      expect(response.json()).toEqual({
+        name: "writeback_llm",
+        status: "healthy",
+        detail: "writeback llm request completed",
         last_checked_at: "now",
       });
     } finally {

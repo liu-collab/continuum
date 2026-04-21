@@ -54,7 +54,8 @@ describe("file tree", () => {
 
     expect(screen.queryByTestId("agent-file-tree-workspace-select")).not.toBeInTheDocument();
     expect(screen.getByText("已选文件夹")).toBeInTheDocument();
-    expect(screen.getByTestId("selected-workspace-path")).toHaveTextContent("C:/workspace/repo");
+    expect(screen.getByTestId("selected-workspace-path")).toHaveTextContent("repo");
+    expect(screen.getByTestId("selected-workspace-path")).toHaveAttribute("title", "C:/workspace/repo");
     expect(screen.getByTestId("selected-workspace-id")).toHaveTextContent("ID: 550e8400");
     expect(screen.queryByRole("button", { name: "选择文件夹" })).not.toBeInTheDocument();
   });

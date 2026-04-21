@@ -18,6 +18,7 @@ export type ManagedWritebackLlmConfig = {
   model?: string;
   apiKey?: string;
   timeoutMs?: number;
+  protocol?: "anthropic" | "openai-compatible";
 };
 
 export type ManagedProviderOverride = {
