@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Activity, BookText, Bot, ChartSpline, HeartPulse } from "lucide-react";
 
 import { Providers } from "@/app/providers";
+import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
@@ -46,7 +47,7 @@ export default function RootLayout({
               <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
                 <Link href={"/" as Route} className="flex items-center gap-2">
                   <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    <Activity className="h-3.5 w-3.5" />
+                    <BrandMark className="h-4 w-4" animated />
                   </div>
                   <span className="text-sm font-semibold tracking-tight">Memory Observatory</span>
                 </Link>
