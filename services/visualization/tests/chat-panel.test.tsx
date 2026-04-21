@@ -18,6 +18,7 @@ describe("ChatPanel", () => {
           connection="open"
           degraded={false}
           activeTaskLabel={null}
+          skills={[]}
           onSend={onSend}
           onAbort={vi.fn()}
           onOpenPrompt={vi.fn()}
@@ -57,6 +58,7 @@ describe("ChatPanel", () => {
           connection="open"
           degraded={false}
           activeTaskLabel={null}
+          skills={[]}
           onSend={vi.fn()}
           onAbort={vi.fn()}
           onOpenPrompt={vi.fn()}
@@ -101,6 +103,7 @@ describe("ChatPanel", () => {
           connection="open"
           degraded={false}
           activeTaskLabel={null}
+          skills={[]}
           onSend={vi.fn()}
           onAbort={vi.fn()}
           onOpenPrompt={vi.fn()}
@@ -138,6 +141,7 @@ describe("ChatPanel", () => {
           connection="open"
           degraded={false}
           activeTaskLabel={null}
+          skills={[]}
           onSend={vi.fn()}
           onAbort={vi.fn()}
           onOpenPrompt={vi.fn()}
@@ -153,5 +157,155 @@ describe("ChatPanel", () => {
 
     expect(screen.getByTestId("user-message-turn-1")).toHaveTextContent("用户消息 1");
     expect(screen.queryByTestId("load-earlier-turns")).not.toBeInTheDocument();
+  });
+
+  it("renders the assistant thread inside a dedicated scroll viewport", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            {
+              turnId: "turn-scroll",
+              userInput: "测试滚动",
+              assistantOutput: "这里应该在独立滚动区域里显示。",
+              toolMessages: [],
+              toolCalls: [],
+              phases: [],
+              injection: null,
+              finishReason: "stop",
+              promptAvailable: true,
+              errors: [],
+              taskLabel: null,
+              status: "complete",
+            },
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("assistant-thread-viewport")).toBeInTheDocument();
+  });
+
+  it("shows slash commands including imported skills when typing slash", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[
+            {
+              id: "codex-skill-smoke-check",
+              name: "Smoke Check",
+              description: "A minimal visible skill for verifying MNA slash-command activation.",
+              slash_name: "smoke-check",
+              source_kind: "codex-skill",
+              root_dir: "C:/repo/.mna/skills/smoke-check",
+              entry_file: "C:/repo/.mna/skills/smoke-check/SKILL.md",
+              imported_path: "C:/repo/.mna/skills/smoke-check",
+              user_invocable: true,
+              model_invocable: true,
+              preapproved_tools: []
+            }
+          ]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.type(screen.getByTestId("agent-input"), "/");
+
+    expect(screen.getByTestId("slash-command-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("slash-command-option-skill")).toHaveTextContent("/skill");
+    expect(screen.getByTestId("slash-command-option-smoke-check")).toHaveTextContent("/smoke-check");
+  });
+
+  it("applies the selected slash command into the input on Enter", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[
+            {
+              id: "codex-skill-smoke-check",
+              name: "Smoke Check",
+              description: "A minimal visible skill for verifying MNA slash-command activation.",
+              slash_name: "smoke-check",
+              source_kind: "codex-skill",
+              root_dir: "C:/repo/.mna/skills/smoke-check",
+              entry_file: "C:/repo/.mna/skills/smoke-check/SKILL.md",
+              imported_path: "C:/repo/.mna/skills/smoke-check",
+              user_invocable: true,
+              model_invocable: true,
+              preapproved_tools: []
+            }
+          ]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const input = screen.getByTestId("agent-input");
+    await user.type(input, "/s");
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(input).toHaveValue("/smoke-check ");
+    expect(screen.queryByTestId("slash-command-menu")).not.toBeInTheDocument();
+  });
+
+  it("does not show the slash command menu for normal input", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[
+            {
+              id: "codex-skill-smoke-check",
+              name: "Smoke Check",
+              description: "A minimal visible skill for verifying MNA slash-command activation.",
+              slash_name: "smoke-check",
+              source_kind: "codex-skill",
+              root_dir: "C:/repo/.mna/skills/smoke-check",
+              entry_file: "C:/repo/.mna/skills/smoke-check/SKILL.md",
+              imported_path: "C:/repo/.mna/skills/smoke-check",
+              user_invocable: true,
+              model_invocable: true,
+              preapproved_tools: []
+            }
+          ]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.type(screen.getByTestId("agent-input"), "hello");
+
+    expect(screen.queryByTestId("slash-command-menu")).not.toBeInTheDocument();
   });
 });

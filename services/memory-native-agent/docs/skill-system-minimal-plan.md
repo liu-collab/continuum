@@ -13,6 +13,7 @@
 - [x] 已支持 `HTTP`（`POST /v1/skills/import`）导入
 - [x] 已支持 `SKILL.md + frontmatter + Markdown + supporting files`
 - [x] 已支持 `/<name>` 和 `/skill <name>` 触发
+- [x] 可视化页面已支持输入 `/` 弹出命令面板，并展示内置命令与已导入 skill
 - [x] 已支持 `$ARGUMENTS` / `$ARGUMENTS[n]` / `$0`
 - [x] 已支持 `!command` 展开
 - [x] 已支持 `allowed-tools -> preapprovedTools`

@@ -9,7 +9,9 @@ import type {
   AgentLocale,
   AgentMemoryMode,
   MnaPromptInspectorResponse,
-  MnaSessionSummary
+  MnaSessionSummary,
+  MnaSkillSummary,
+  MnaWorkspaceSummary
 } from "../_lib/openapi-types";
 import { MnaRequestError, MnaUnavailableError } from "../_lib/mna-client";
 import { useAgentClient } from "./use-agent-client";
@@ -21,6 +23,7 @@ type UseAgentWorkspaceOptions = {
 
 const FILE_TREE_PATH_STORAGE_KEY = "continuum.agent.fileTree.path";
 const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "continuum.agent.fileTree.selectedFile";
+const FILE_TREE_WORKSPACE_STORAGE_KEY = "continuum.agent.fileTree.workspace";
 
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();
@@ -32,6 +35,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     path: ".",
     entries: []
   });
+  const [workspaceList, setWorkspaceList] = useState<MnaWorkspaceSummary[]>([]);
+  const [skillList, setSkillList] = useState<MnaSkillSummary[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ path: string; content: string } | null>(null);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof client.getMetrics>> | null>(null);
@@ -47,6 +53,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   useEffect(() => {
     const savedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY);
     const savedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    const savedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
 
     if (savedTreePath) {
       setTreePath(savedTreePath);
@@ -57,6 +64,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     }
 
     setSelectedFilePath(savedSelectedFile);
+    setSelectedWorkspaceId(savedWorkspaceId);
   }, []);
 
   function toAgentRoute(sessionId: string) {
@@ -104,45 +112,21 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
 
-      const sessionList = await client.listSessions();
+      const [sessionList, workspaces, skills] = await Promise.all([
+        client.listSessions(),
+        client.listWorkspaces(),
+        client.listSkills()
+      ]);
       if (cancelled) {
         return;
       }
 
+      setWorkspaceList(workspaces.items);
+      setSkillList(skills.items);
       dispatch({
         type: "session_list_loaded",
         items: sessionList.items
       });
-
-      if (options.sessionId) {
-        try {
-          await openSession(options.sessionId);
-        } catch (error) {
-          if (cancelled) {
-            return;
-          }
-          if (!isRecoverableSessionError(error)) {
-            throw error;
-          }
-          await restoreAvailableSessionOrCreate(sessionList.items, options.sessionId);
-        }
-        return;
-      }
-
-      const existingSessionId = sessionList.items[0]?.id;
-      if (existingSessionId) {
-        router.replace(toAgentRoute(existingSessionId));
-        return;
-      }
-
-      const created = await client.createSession({
-        locale: options.uiLocale
-      });
-      if (cancelled) {
-        return;
-      }
-
-      router.replace(toAgentRoute(created.session_id));
     };
 
     void bootstrap().catch((error) => {
@@ -159,11 +143,86 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
     return () => {
       cancelled = true;
+    };
+  }, [bootstrapAttempt, client]);
+
+  useEffect(() => {
+    return () => {
       streamGenerationRef.current += 1;
       streamRef.current?.close();
       streamRef.current = null;
     };
-  }, [bootstrapAttempt, client, options.sessionId, router]);
+  }, []);
+
+  useEffect(() => {
+    if (state.bootstrapStatus !== "ok") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncRouteSession = async () => {
+      if (options.sessionId) {
+        try {
+          await openSession(options.sessionId);
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+          if (!isRecoverableSessionError(error)) {
+            throw error;
+          }
+
+          const sessionItems =
+            state.sessionList.length > 0
+              ? state.sessionList
+              : (await client.listSessions()).items;
+          if (cancelled) {
+            return;
+          }
+          if (state.sessionList.length === 0) {
+            dispatch({
+              type: "session_list_loaded",
+              items: sessionItems
+            });
+          }
+          await restoreAvailableSessionOrCreate(sessionItems, options.sessionId);
+        }
+        return;
+      }
+
+      const existingSessionId = state.sessionList[0]?.id;
+      if (existingSessionId) {
+        router.replace(toAgentRoute(existingSessionId));
+        return;
+      }
+
+      const created = await client.createSession({
+        locale: options.uiLocale
+      });
+      if (cancelled) {
+        return;
+      }
+
+      router.replace(toAgentRoute(created.session_id));
+    };
+
+    void syncRouteSession().catch((error) => {
+      if (cancelled) {
+        return;
+      }
+
+      dispatch({
+        type: "bootstrap_loaded",
+        bootstrapStatus: error instanceof MnaUnavailableError ? error.status : "token_invalid",
+        reason: error instanceof Error ? error.message : String(error)
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, options.sessionId, options.uiLocale, router, state.bootstrapStatus, state.sessionList]);
 
   useEffect(() => {
     if (state.bootstrapStatus === "ok" || state.bootstrapStatus === "loading") {
@@ -197,18 +256,124 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     setMcpState(await client.getMcpServers());
   }
 
-  async function refreshFileTree(nextPath = treePath) {
-    const payload = await client.getFileTree(nextPath);
+  async function refreshWorkspaceList() {
+    const payload = await client.listWorkspaces();
+    setWorkspaceList(payload.items);
+    return payload.items;
+  }
+
+  async function refreshSkillList() {
+    const payload = await client.listSkills();
+    setSkillList(payload.items);
+    return payload.items;
+  }
+
+  async function refreshFileTree(nextPath = treePath, workspaceId = selectedWorkspaceId) {
+    if (!workspaceId) {
+      setTreePath(".");
+      setFileTree({
+        path: ".",
+        entries: []
+      });
+      return;
+    }
+
+    const payload = await client.getFileTree(nextPath, workspaceId);
     setTreePath(payload.path);
     setFileTree(payload);
     window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, payload.path);
   }
 
-  async function openFile(filePath: string) {
-    const payload = await client.getFile(filePath);
+  async function openFile(filePath: string, workspaceId = selectedWorkspaceId) {
+    if (!workspaceId) {
+      return;
+    }
+
+    const payload = await client.getFile(filePath, workspaceId);
     setSelectedFilePath(payload.path);
     setSelectedFile(payload);
     window.localStorage.setItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY, payload.path);
+  }
+
+  function selectWorkspace(workspaceId: string | null) {
+    setSelectedWorkspaceId(workspaceId);
+    setTreePath(".");
+    setFileTree({
+      path: ".",
+      entries: []
+    });
+    setSelectedFilePath(null);
+    setSelectedFile(null);
+    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+
+    if (workspaceId) {
+      window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, workspaceId);
+      window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
+      void client.getFileTree(".", workspaceId).then((payload) => {
+        setTreePath(payload.path);
+        setFileTree(payload);
+      }).catch(() => {
+        setTreePath(".");
+        setFileTree({
+          path: ".",
+          entries: []
+        });
+      });
+      return;
+    }
+
+    window.localStorage.removeItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
+    window.localStorage.removeItem(FILE_TREE_PATH_STORAGE_KEY);
+  }
+
+  async function registerWorkspace(cwd: string) {
+    const payload = await client.registerWorkspace(cwd);
+    const nextItems = await refreshWorkspaceList();
+    const targetWorkspaceId = payload.workspace.workspace_id;
+    setSelectedWorkspaceId(targetWorkspaceId);
+    window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, targetWorkspaceId);
+    window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
+    setSelectedFilePath(null);
+    setSelectedFile(null);
+    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+
+    if (!nextItems.some((item) => item.workspace_id === targetWorkspaceId)) {
+      setWorkspaceList((current) => [...current, payload.workspace]);
+    }
+
+    await refreshFileTree(".", targetWorkspaceId);
+  }
+
+  async function pickWorkspace() {
+    let payload;
+    try {
+      payload = await client.pickWorkspace();
+    } catch (error) {
+      if (error instanceof MnaRequestError && error.statusCode === 404) {
+        throw new Error("当前 memory-native-agent 还不支持“选择文件夹”。请先重启到最新版本后再试。");
+      }
+      throw error;
+    }
+
+    if (payload.cancelled) {
+      return null;
+    }
+
+    const nextItems = await refreshWorkspaceList();
+    const targetWorkspaceId = payload.workspace.workspace_id;
+    setSelectedWorkspaceId(targetWorkspaceId);
+    window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, targetWorkspaceId);
+    window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
+    setSelectedFilePath(null);
+    setSelectedFile(null);
+    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+
+    if (!nextItems.some((item) => item.workspace_id === targetWorkspaceId)) {
+      setWorkspaceList((current) => [...current, payload.workspace]);
+    }
+
+    await refreshFileTree(".", targetWorkspaceId);
+    return payload.workspace;
   }
 
   async function bindSessionStream(sessionId: string, initialLastEventId?: number | null) {
@@ -266,11 +431,24 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       messages: detail.messages
     });
 
+    const knownWorkspaces = workspaceList.length > 0 ? workspaceList : await refreshWorkspaceList();
+    const storedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
+    const nextWorkspaceId =
+      storedWorkspaceId && knownWorkspaces.some((item) => item.workspace_id === storedWorkspaceId)
+        ? storedWorkspaceId
+        : null;
+    setSelectedWorkspaceId(nextWorkspaceId);
+    if (nextWorkspaceId) {
+      window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, nextWorkspaceId);
+    } else {
+      window.localStorage.removeItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
+    }
+
     await bindSessionStream(sessionId, detail.latest_event_id);
     const storedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY) ?? treePath ?? ".";
     const storedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
     await Promise.allSettled([
-      refreshFileTree(storedTreePath),
+      nextWorkspaceId ? refreshFileTree(storedTreePath, nextWorkspaceId) : Promise.resolve(),
       refreshMetrics(),
       refreshDependencyStatus(),
       refreshAgentConfig(),
@@ -278,7 +456,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     ]);
 
     if (storedSelectedFile) {
-      await openFile(storedSelectedFile).catch(() => {
+      await openFile(storedSelectedFile, nextWorkspaceId).catch(() => {
         window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
         setSelectedFilePath(null);
         setSelectedFile(null);
@@ -449,6 +627,9 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     state,
     activeTurn,
     fileTree,
+    workspaceList,
+    skillList,
+    selectedWorkspaceId,
     selectedFilePath,
     selectedFile,
     metrics,
@@ -472,6 +653,11 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     refreshDependencyStatus,
     refreshAgentConfig,
     refreshMcpState,
+    refreshWorkspaceList,
+    refreshSkillList,
+    registerWorkspace,
+    pickWorkspace,
+    selectWorkspace,
     refreshFileTree,
     openFile,
     openPromptInspector,

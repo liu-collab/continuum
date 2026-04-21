@@ -58,6 +58,10 @@
     "connectionClosedTitle": "连接已关闭",
     "connectionClosedDescription": "请先恢复 `memory-native-agent`，然后再继续发送消息。",
     "placeholder": "输入消息，Enter 发送，Shift+Enter 换行",
+    "slash": {
+      "title": "可用命令",
+      "skill": "按名称触发已导入的 skill"
+    },
     "toolWaiting": "等待工具返回...",
     "toolStatus": {
       "pending": "执行中",
@@ -134,12 +138,12 @@
     "title": "文件树",
     "workspaceLabel": "工作区",
     "workspacePlaceholder": "先选择工作区",
+    "selectedWorkspace": "当前文件树工作区：{label}",
     "sessionWorkspace": "当前会话绑定工作区：{label}",
     "pickFolderAction": "选择文件夹",
-    "addPathPlaceholder": "输入其他文件夹路径",
-    "addPathAction": "添加",
-    "pickError": "打开文件夹选择器失败，请改用手动输入路径。",
-    "registerError": "添加工作区失败，请检查路径是否存在。"
+    "pickFolderPendingAction": "正在打开...",
+    "pickFolderPendingHint": "正在打开系统文件夹选择框，如果没有看到弹窗，请检查是否被其他窗口遮挡。",
+    "pickError": "打开文件夹选择器失败。请确认本地 memory-native-agent 已更新并重启。"
   },
   "filePreview": {
     "title": "文件预览"

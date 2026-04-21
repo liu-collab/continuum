@@ -13,8 +13,8 @@ import { formatProviderKindLabel } from "../_lib/provider-kind";
 import { ChatPanel } from "./chat-panel";
 import { ConfirmDialog } from "./confirm-dialog";
 import { CostBar } from "./cost-bar";
-import { FileTree } from "./file-tree";
 import { FilePreview } from "./file-preview";
+import { FileTree } from "./file-tree";
 import { McpPanel } from "./mcp-panel";
 import { MemoryPanel } from "./memory-panel";
 import { PromptInspector } from "./prompt-inspector";
@@ -37,6 +37,18 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     (workspace.state.bootstrapStatus === "loading"
       ? t("workspace.bootstrap.loading")
       : resolveBootstrapDescription(workspace.state.bootstrapStatus, t));
+  const sessionWorkspace = workspace.workspaceList.find(
+    (item) => item.workspace_id === (workspace.state.session?.workspace_id ?? "")
+  );
+  const currentTurnRunsHref = workspace.activeTurn?.turnId
+    ? `/runs?turn_id=${encodeURIComponent(workspace.activeTurn.turnId)}`
+    : null;
+  const currentTurnMemoriesHref = buildMemoriesHref({
+    sessionId: workspace.state.session?.id ?? null,
+    workspaceId: workspace.state.session?.workspace_id ?? null,
+    taskId: workspace.state.activeTask?.taskId ?? null,
+    userId: workspace.state.session?.user_id ?? null
+  });
 
   if (workspace.state.bootstrapStatus === "loading") {
     return (
@@ -82,6 +94,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 void workspace.refreshMetrics();
                 void workspace.refreshDependencyStatus();
                 void workspace.refreshMcpState();
+                void workspace.refreshWorkspaceList();
               }}
               className="btn-outline"
               title={t("workspace.sessionsEyebrow")}
@@ -109,45 +122,54 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
-          <div className="space-y-4">
-            <section className="rounded-lg border bg-surface">
-              <div className="border-b px-4 py-3">
-                <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
-              </div>
-              <div className="p-3">
-                <SessionList
-                  sessions={workspace.state.sessionList}
-                  activeSessionId={workspace.state.sessionId}
-                  onSelect={(nextSessionId) => {
-                    void workspace.openSession(nextSessionId);
+        <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+          <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
+            <div className="border-b px-4 py-3">
+              <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3">
+              <SessionList
+                sessions={workspace.state.sessionList}
+                activeSessionId={workspace.state.sessionId}
+                activeSessionMemoriesHref={currentTurnMemoriesHref}
+                activeSessionRunsHref={currentTurnRunsHref}
+                onSelect={(nextSessionId) => {
+                  void workspace.openSession(nextSessionId);
+                }}
+                onRename={(session, title) => {
+                  void workspace.renameSession(session.id, title);
+                }}
+                onDelete={(session) => {
+                  void workspace.deleteSession(session.id);
+                }}
+              />
+
+              <div className="mt-4">
+                <FileTree
+                  path={workspace.fileTree.path}
+                  entries={workspace.fileTree.entries}
+                  workspaces={workspace.workspaceList}
+                  selectedWorkspaceId={workspace.selectedWorkspaceId}
+                  selectedFilePath={workspace.selectedFilePath ?? null}
+                  sessionWorkspaceId={workspace.state.session?.workspace_id ?? null}
+                  sessionWorkspaceLabel={sessionWorkspace?.label ?? null}
+                  onPickWorkspace={() => workspace.pickWorkspace().then(() => undefined)}
+                  onOpenDirectory={(nextPath) => {
+                    void workspace.refreshFileTree(nextPath);
                   }}
-                  onRename={(session, title) => {
-                    void workspace.renameSession(session.id, title);
-                  }}
-                  onDelete={(session) => {
-                    void workspace.deleteSession(session.id);
+                  onOpenFile={(filePath) => {
+                    void workspace.openFile(filePath);
                   }}
                 />
               </div>
-            </section>
 
-            <FileTree
-              path={workspace.fileTree.path}
-              entries={workspace.fileTree.entries}
-              selectedFilePath={workspace.selectedFilePath ?? null}
-              onOpenDirectory={(nextPath) => {
-                void workspace.refreshFileTree(nextPath);
-              }}
-              onOpenFile={(filePath) => {
-                void workspace.openFile(filePath);
-              }}
-            />
-
-            {workspace.selectedFile ? (
-              <FilePreview path={workspace.selectedFile.path} content={workspace.selectedFile.content} />
-            ) : null}
-          </div>
+              {workspace.selectedFile ? (
+                <div className="mt-4">
+                  <FilePreview path={workspace.selectedFile.path} content={workspace.selectedFile.content} />
+                </div>
+              ) : null}
+            </div>
+          </section>
 
           <div className="space-y-4">
             {workspace.state.replayGapDetected ? (
@@ -169,6 +191,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               connection={workspace.state.connection}
               degraded={workspace.state.degraded}
               activeTaskLabel={workspace.state.activeTask?.label ?? null}
+              skills={workspace.skillList}
               onSend={(text) => workspace.sendInput(text)}
               onAbort={() => workspace.abortCurrentTurn()}
               onOpenPrompt={(turnId) => {
@@ -177,64 +200,74 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             />
           </div>
 
-          <div className="space-y-4">
-            <MemoryPanel activeTurn={workspace.activeTurn} degraded={workspace.state.degraded} />
-            {workspace.dependencyStatus ? (
-              <section
-                data-testid="agent-dependency-card"
-                className="rounded-lg border bg-surface p-4"
-              >
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  {t("workspace.dependencyTitle")}
-                </div>
-                <div className="mt-3 space-y-2 text-sm">
-                  <DependencyRow
-                    label={t("workspace.runtimeLabel")}
-                    tone={workspace.dependencyStatus.runtime.status === "healthy" ? "success" : "warning"}
-                    value={String(workspace.dependencyStatus.runtime.status ?? "unknown")}
-                  />
-                  <DependencyRow
-                    label={t("workspace.providerLabel")}
-                    tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}
-                    value={workspace.dependencyStatus.provider.status}
-                    extra={formatProviderKey(workspace.dependencyStatus.provider_key)}
-                  />
-                  {workspace.dependencyStatus.provider.detail ? (
-                    <div className="text-xs leading-5 text-muted-foreground">
-                      {workspace.dependencyStatus.provider.detail}
-                    </div>
-                  ) : null}
-                  {"embeddings" in workspace.dependencyStatus.runtime &&
-                  workspace.dependencyStatus.runtime.embeddings ? (
-                    <DependencyRow
-                      label={t("workspace.embeddingLabel")}
-                      tone={
-                        workspace.dependencyStatus.runtime.embeddings.status === "healthy"
-                          ? "success"
-                          : "warning"
-                      }
-                      value={String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
-                    />
-                  ) : null}
-                </div>
-              </section>
-            ) : (
-              <EmptyState
-                title={t("workspace.dependencyEmptyTitle")}
-                description={t("workspace.dependencyEmptyDescription")}
+          <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
+            <div className="border-b px-4 py-3">
+              <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+              <MemoryPanel
+                activeTurn={workspace.activeTurn}
+                degraded={workspace.state.degraded}
               />
-            )}
-            <McpPanel
-              servers={workspace.mcpState?.servers ?? []}
-              tools={workspace.mcpState?.tools ?? []}
-              onRestart={(name) => {
-                void workspace.restartMcpServer(name);
-              }}
-              onDisable={(name) => {
-                void workspace.disableMcpServer(name);
-              }}
-            />
-          </div>
+
+              {workspace.dependencyStatus ? (
+                <section
+                  data-testid="agent-dependency-card"
+                  className="rounded-[1.75rem] border bg-surface p-4"
+                >
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    {t("workspace.dependencyTitle")}
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <DependencyRow
+                      label={t("workspace.runtimeLabel")}
+                      tone={workspace.dependencyStatus.runtime.status === "healthy" ? "success" : "warning"}
+                      value={String(workspace.dependencyStatus.runtime.status ?? "unknown")}
+                    />
+                    <DependencyRow
+                      label={t("workspace.providerLabel")}
+                      tone={workspace.dependencyStatus.provider.status === "configured" ? "success" : "warning"}
+                      value={workspace.dependencyStatus.provider.status}
+                      extra={formatProviderKey(workspace.dependencyStatus.provider_key)}
+                    />
+                    {workspace.dependencyStatus.provider.detail ? (
+                      <div className="text-xs leading-5 text-muted-foreground">
+                        {workspace.dependencyStatus.provider.detail}
+                      </div>
+                    ) : null}
+                    {"embeddings" in workspace.dependencyStatus.runtime &&
+                    workspace.dependencyStatus.runtime.embeddings ? (
+                      <DependencyRow
+                        label={t("workspace.embeddingLabel")}
+                        tone={
+                          workspace.dependencyStatus.runtime.embeddings.status === "healthy"
+                            ? "success"
+                            : "warning"
+                        }
+                        value={String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
+                      />
+                    ) : null}
+                  </div>
+                </section>
+              ) : (
+                <EmptyState
+                  title={t("workspace.dependencyEmptyTitle")}
+                  description={t("workspace.dependencyEmptyDescription")}
+                />
+              )}
+
+              <McpPanel
+                servers={workspace.mcpState?.servers ?? []}
+                tools={workspace.mcpState?.tools ?? []}
+                onRestart={(name) => {
+                  void workspace.restartMcpServer(name);
+                }}
+                onDisable={(name) => {
+                  void workspace.disableMcpServer(name);
+                }}
+              />
+            </div>
+          </section>
         </div>
       </div>
 
@@ -291,6 +324,31 @@ function DependencyRow({
       {extra ? <StatusBadge tone="neutral">{extra}</StatusBadge> : null}
     </div>
   );
+}
+
+function buildMemoriesHref(input: {
+  sessionId: string | null;
+  workspaceId: string | null;
+  taskId: string | null;
+  userId: string | null;
+}) {
+  const params = new URLSearchParams();
+  if (input.sessionId) {
+    params.set("session_id", input.sessionId);
+  }
+  if (input.workspaceId) {
+    params.set("workspace_id", input.workspaceId);
+  }
+  if (input.taskId) {
+    params.set("task_id", input.taskId);
+  }
+  if (input.userId) {
+    params.set("user_id", input.userId);
+  }
+  if (!params.toString()) {
+    return null;
+  }
+  return `/memories?${params.toString()}`;
 }
 
 function resolveBootstrapDescription(

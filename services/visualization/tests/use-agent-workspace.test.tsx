@@ -52,6 +52,10 @@ function createClientMock() {
     getSession: vi.fn(),
     createSession: vi.fn(),
     connectSessionStream: vi.fn(),
+    listSkills: vi.fn(),
+    listWorkspaces: vi.fn(),
+    registerWorkspace: vi.fn(),
+    pickWorkspace: vi.fn(),
     getFileTree: vi.fn(),
     getMetrics: vi.fn(),
     getDependencyStatus: vi.fn(),
@@ -92,6 +96,12 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       items: [createSessionSummary("stale-session"), createSessionSummary("fresh-session")],
       next_cursor: null
     });
+    client.listSkills.mockResolvedValue({
+      items: []
+    });
+    client.listWorkspaces.mockResolvedValue({
+      items: []
+    });
     client.getSession.mockRejectedValue(
       new MnaRequestError("session missing", 404, "session_not_found")
     );
@@ -119,6 +129,12 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       items: [createSessionSummary("stale-session")],
       next_cursor: null
     });
+    client.listSkills.mockResolvedValue({
+      items: []
+    });
+    client.listWorkspaces.mockResolvedValue({
+      items: []
+    });
     client.getSession.mockRejectedValue(
       new MnaRequestError("workspace mismatch", 409, "workspace_mismatch")
     );
@@ -140,5 +156,80 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       });
       expect(replace).toHaveBeenCalledWith("/agent/new-session");
     });
+  });
+
+  it("does not auto-load file tree from the session workspace when the user has not selected one", async () => {
+    const client = createClientMock();
+    client.bootstrap.mockResolvedValue({
+      status: "ok",
+      token: "token-1",
+      reason: null,
+      mnaBaseUrl: "http://127.0.0.1:4193",
+      baseUrl: "http://127.0.0.1:4193"
+    });
+    client.listSessions.mockResolvedValue({
+      items: [createSessionSummary("session-1")],
+      next_cursor: null
+    });
+    client.listSkills.mockResolvedValue({
+      items: [
+        {
+          id: "codex-skill-smoke-check",
+          name: "Smoke Check",
+          description: "A minimal visible skill for verifying MNA slash-command activation.",
+          slash_name: "smoke-check",
+          source_kind: "codex-skill",
+          root_dir: "C:/repo/.mna/skills/smoke-check",
+          entry_file: "C:/repo/.mna/skills/smoke-check/SKILL.md",
+          imported_path: "C:/repo/.mna/skills/smoke-check",
+          user_invocable: true,
+          model_invocable: true,
+          preapproved_tools: []
+        }
+      ]
+    });
+    client.listWorkspaces.mockResolvedValue({
+      items: [
+        {
+          workspace_id: "workspace-1",
+          cwd: "C:/repo",
+          label: "repo",
+          is_current: true
+        }
+      ]
+    });
+    client.getSession.mockResolvedValue({
+      session: {
+        id: "session-1",
+        workspace_id: "workspace-1",
+        user_id: "user-1",
+        title: null,
+        memory_mode: "workspace_plus_global",
+        locale: "zh-CN",
+        created_at: "2026-04-21T00:00:00Z",
+        last_active_at: "2026-04-21T00:00:00Z",
+        closed_at: null
+      },
+      messages: [],
+      latest_event_id: null
+    });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
+    mockUseAgentClient.mockReturnValue(client);
+    mockUsePathname.mockReturnValue("/agent/session-1");
+
+    render(<HookProbe sessionId="session-1" />);
+
+    await waitFor(() => {
+      expect(client.getSession).toHaveBeenCalled();
+    });
+
+    expect(client.getFileTree).not.toHaveBeenCalled();
   });
 });

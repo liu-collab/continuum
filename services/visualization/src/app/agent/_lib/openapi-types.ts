@@ -59,6 +59,7 @@ export type MnaCreateSessionResponse = {
   ws_url: string;
   memory_mode: AgentMemoryMode;
   workspace_id: string;
+  workspace_short_id?: string;
   locale: AgentLocale;
 };
 
@@ -78,13 +79,60 @@ export type MnaFileTreeEntry = {
 
 export type MnaFileTreeResponse = {
   path: string;
+  workspace_id: string;
+  workspace_short_id?: string;
   entries: MnaFileTreeEntry[];
 };
 
 export type MnaFileResponse = {
   path: string;
+  workspace_id: string;
+  workspace_short_id?: string;
   content: string;
 };
+
+export type MnaWorkspaceSummary = {
+  workspace_id: string;
+  short_id?: string;
+  cwd: string;
+  label: string;
+  is_current: boolean;
+};
+
+export type MnaWorkspaceListResponse = {
+  items: MnaWorkspaceSummary[];
+};
+
+export type MnaCreateWorkspaceResponse = {
+  workspace: MnaWorkspaceSummary;
+};
+
+export type MnaSkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  slash_name: string;
+  source_kind: "codex-skill" | "claude-skill" | "claude-command" | "mna-legacy" | string;
+  root_dir: string;
+  entry_file: string;
+  imported_path?: string | null;
+  user_invocable: boolean;
+  model_invocable: boolean;
+  preapproved_tools: string[];
+};
+
+export type MnaSkillListResponse = {
+  items: MnaSkillSummary[];
+};
+
+export type MnaPickWorkspaceResponse =
+  | {
+      cancelled: true;
+    }
+  | {
+      cancelled: false;
+      workspace: MnaWorkspaceSummary;
+    };
 
 export type MnaMetricsResponse = {
   uptime_s: number;

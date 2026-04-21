@@ -16,7 +16,10 @@ import type {
   MnaPromptInspectorResponse,
   MnaServerEventEnvelope,
   MnaSessionDetailResponse,
-  MnaSessionListResponse
+  MnaSessionListResponse,
+  MnaCreateWorkspaceResponse,
+  MnaWorkspaceListResponse,
+  MnaSkillListResponse
 } from "./openapi-types";
 
 export async function getMnaBootstrap(): Promise<AgentTokenBootstrapResponse> {
@@ -136,12 +139,75 @@ export class MnaClient {
     return this.requestJson<MnaPromptInspectorResponse>(`/v1/agent/turns/${turnId}/dispatched-messages`);
   }
 
-  async getFileTree(treePath = ".") {
-    return this.requestJson<MnaFileTreeResponse>(`/v1/agent/fs/tree?path=${encodeURIComponent(treePath)}`);
+  async listSkills() {
+    return this.requestJson<MnaSkillListResponse>("/v1/skills");
   }
 
-  async getFile(filePath: string) {
-    return this.requestJson<MnaFileResponse>(`/v1/agent/fs/file?path=${encodeURIComponent(filePath)}`);
+  async listWorkspaces() {
+    return this.requestJson<MnaWorkspaceListResponse>("/v1/agent/workspaces");
+  }
+
+  async registerWorkspace(cwd: string) {
+    return this.requestJson<MnaCreateWorkspaceResponse>("/v1/agent/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ cwd })
+    });
+  }
+
+  async pickWorkspace() {
+    const response = await fetch("/api/agent/workspaces/pick", {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as MnaApiError | null;
+      throw new MnaRequestError(
+        payload?.error?.message ?? `Request failed with status ${response.status}.`,
+        response.status,
+        payload?.error?.code ?? "request_failed"
+      );
+    }
+
+    const payload = (await response.json()) as {
+      cancelled: boolean;
+      cwd: string | null;
+    };
+
+    if (payload.cancelled || !payload.cwd) {
+      return {
+        cancelled: true as const
+      };
+    }
+
+    const registered = await this.registerWorkspace(payload.cwd);
+    return {
+      cancelled: false as const,
+      workspace: registered.workspace
+    };
+  }
+
+  async getFileTree(treePath = ".", workspaceId?: string) {
+    const query = new URLSearchParams({
+      path: treePath
+    });
+    if (workspaceId) {
+      query.set("workspace_id", workspaceId);
+    }
+    return this.requestJson<MnaFileTreeResponse>(`/v1/agent/fs/tree?${query.toString()}`);
+  }
+
+  async getFile(filePath: string, workspaceId?: string) {
+    const query = new URLSearchParams({
+      path: filePath
+    });
+    if (workspaceId) {
+      query.set("workspace_id", workspaceId);
+    }
+    return this.requestJson<MnaFileResponse>(`/v1/agent/fs/file?${query.toString()}`);
   }
 
   async getMetrics() {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MnaClient } from "@/app/agent/_lib/mna-client";
+import { MnaRequestError } from "@/app/agent/_lib/mna-client";
 
 describe("MnaClient", () => {
   afterEach(() => {
@@ -193,5 +194,135 @@ describe("MnaClient", () => {
         servers: [],
       },
     });
+  });
+
+  it("loads the imported skill list", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [
+            {
+              id: "codex-skill-smoke-check",
+              name: "Smoke Check",
+              description: "A minimal visible skill for verifying MNA slash-command activation.",
+              slash_name: "smoke-check",
+              source_kind: "codex-skill",
+              root_dir: "C:/workspace/.mna/skills/smoke-check",
+              entry_file: "C:/workspace/.mna/skills/smoke-check/SKILL.md",
+              imported_path: "C:/workspace/.mna/skills/smoke-check",
+              user_invocable: true,
+              model_invocable: true,
+              preapproved_tools: [],
+            },
+          ],
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.listSkills();
+
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items[0]?.slash_name).toBe("smoke-check");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:4193/v1/skills",
+      expect.objectContaining({
+        cache: "no-store",
+      }),
+    );
+  });
+
+  it("registers a workspace after the local picker returns a path", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          cancelled: false,
+          cwd: "C:/workspace/repo",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspace: {
+            workspace_id: "workspace-1",
+            short_id: "workspace",
+            cwd: "C:/workspace/repo",
+            label: "repo",
+            is_current: false,
+          },
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.pickWorkspace();
+
+    expect(payload).toEqual({
+      cancelled: false,
+      workspace: {
+        workspace_id: "workspace-1",
+        short_id: "workspace",
+        cwd: "C:/workspace/repo",
+        label: "repo",
+        is_current: false,
+      },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/agent/workspaces/pick",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "http://127.0.0.1:4193/v1/agent/workspaces",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
+  it("surfaces local picker failures as typed request errors", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        error: {
+          code: "workspace_picker_failed",
+          message: "打开文件夹选择器失败。",
+        },
+      }),
+    } as Response);
+
+    const client = new MnaClient();
+
+    await expect(client.pickWorkspace()).rejects.toMatchObject({
+      name: "MnaRequestError",
+      statusCode: 500,
+      code: "workspace_picker_failed",
+      message: "打开文件夹选择器失败。",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

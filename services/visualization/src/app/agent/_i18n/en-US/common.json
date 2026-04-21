@@ -58,6 +58,10 @@
     "connectionClosedTitle": "Connection closed",
     "connectionClosedDescription": "Restore `memory-native-agent` before sending more messages.",
     "placeholder": "Type a message. Enter to send, Shift+Enter for a new line",
+    "slash": {
+      "title": "Available commands",
+      "skill": "Invoke an imported skill by name"
+    },
     "toolWaiting": "Waiting for tool output...",
     "toolStatus": {
       "pending": "Running",
@@ -134,12 +138,12 @@
     "title": "File tree",
     "workspaceLabel": "Workspace",
     "workspacePlaceholder": "Select a workspace first",
+    "selectedWorkspace": "Current file-tree workspace: {label}",
     "sessionWorkspace": "Current session workspace: {label}",
     "pickFolderAction": "Pick folder",
-    "addPathPlaceholder": "Enter another folder path",
-    "addPathAction": "Add",
-    "pickError": "Failed to open the folder picker. Enter a local path manually instead.",
-    "registerError": "Failed to add workspace. Check whether the path exists."
+    "pickFolderPendingAction": "Opening...",
+    "pickFolderPendingHint": "The native folder picker is opening. If no dialog is visible, check whether another window is covering it.",
+    "pickError": "Failed to open the folder picker. Make sure memory-native-agent is updated and restarted."
   },
   "filePreview": {
     "title": "File preview"
