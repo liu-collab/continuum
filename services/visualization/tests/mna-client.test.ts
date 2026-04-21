@@ -144,6 +144,8 @@ describe("MnaClient", () => {
             base_url: null,
             api_key: null,
             temperature: null,
+            effort: null,
+            max_tokens: null,
           },
           embedding: {
             base_url: null,
@@ -156,6 +158,8 @@ describe("MnaClient", () => {
             api_key: null,
             protocol: "openai-compatible",
             timeout_ms: 5000,
+            effort: null,
+            max_tokens: null,
           },
           mcp: {
             servers: [],
@@ -175,6 +179,8 @@ describe("MnaClient", () => {
       provider: {
         kind: "openai-compatible",
         model: "deepseek-chat",
+        effort: "high",
+        max_tokens: 6000,
       },
       embedding: {
         base_url: "https://api.openai.com/v1",
@@ -185,6 +191,8 @@ describe("MnaClient", () => {
         model: "claude-haiku-4-5-20251001",
         protocol: "anthropic",
         timeout_ms: 8000,
+        effort: "medium",
+        max_tokens: 1200,
       },
       mcp: {
         servers: [],
@@ -198,6 +206,8 @@ describe("MnaClient", () => {
       provider: {
         kind: "openai-compatible",
         model: "deepseek-chat",
+        effort: "high",
+        max_tokens: 6000,
       },
       embedding: {
         base_url: "https://api.openai.com/v1",
@@ -208,6 +218,8 @@ describe("MnaClient", () => {
         model: "claude-haiku-4-5-20251001",
         protocol: "anthropic",
         timeout_ms: 8000,
+        effort: "medium",
+        max_tokens: 1200,
       },
       mcp: {
         servers: [],

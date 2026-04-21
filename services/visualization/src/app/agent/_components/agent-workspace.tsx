@@ -76,8 +76,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="h-full min-h-0">
-        <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="grid h-full min-h-0 flex-1 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
           <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
@@ -167,7 +167,12 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
           <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-              <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
+                {workspace.state.degraded ? (
+                  <StatusBadge tone="warning">{t("memoryPanel.degraded")}</StatusBadge>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
@@ -178,10 +183,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               </button>
             </div>
             <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
-              <MemoryPanel
-                activeTurn={workspace.activeTurn}
-                degraded={workspace.state.degraded}
-              />
+              <MemoryPanel activeTurn={workspace.activeTurn} />
 
               {workspace.dependencyStatus ? (
                 <section

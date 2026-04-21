@@ -69,6 +69,7 @@ export type MnaPromptInspectorResponse = {
   round: number;
   messages: Array<Record<string, unknown>>;
   prompt_segments: MnaPromptSegmentView[];
+  phase_results: MnaPromptPhaseResult[];
   tools: Array<Record<string, unknown>>;
 };
 
@@ -79,6 +80,13 @@ export type MnaPromptSegmentView = {
   phase?: string;
   record_ids?: string[];
   record_count?: number;
+};
+
+export type MnaPromptPhaseResult = {
+  phase: string;
+  trace_id: string | null;
+  degraded: boolean;
+  injection_summary?: string;
 };
 
 export type MnaFileTreeEntry = {
@@ -214,6 +222,8 @@ export type MnaAgentConfigResponse = {
     base_url: string | null;
     api_key: string | null;
     temperature: number | null;
+    effort: "low" | "medium" | "high" | "xhigh" | "max" | null;
+    max_tokens: number | null;
     organization?: string | null;
     keep_alive?: string | number | null;
   };
@@ -228,6 +238,8 @@ export type MnaAgentConfigResponse = {
     api_key: string | null;
     protocol: "anthropic" | "openai-compatible";
     timeout_ms: number | null;
+    effort: "low" | "medium" | "high" | "xhigh" | "max" | null;
+    max_tokens: number | null;
   };
   mcp: {
     servers: Array<{

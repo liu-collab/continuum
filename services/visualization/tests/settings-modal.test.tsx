@@ -13,6 +13,8 @@ const baseConfig = {
     base_url: "https://api.deepseek.com",
     api_key: "provider-key",
     temperature: null,
+    effort: "high" as const,
+    max_tokens: 6000,
     organization: null,
     keep_alive: null,
   },
@@ -27,6 +29,8 @@ const baseConfig = {
     api_key: "writeback-key",
     protocol: "anthropic" as const,
     timeout_ms: 5000,
+    effort: "medium" as const,
+    max_tokens: 1200,
   },
   mcp: {
     servers: [],
@@ -233,5 +237,53 @@ describe("SettingsModal", () => {
 
     expect(screen.getByDisplayValue("Anthropic")).toBeInTheDocument();
     expect(screen.getByText(/写回提取模型支持两种协议/)).toBeInTheDocument();
+  });
+
+  it("shows and submits provider and writeback thinking config", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.selectOptions(screen.getAllByRole("combobox")[3]!, "max");
+    await user.clear(screen.getByPlaceholderText("最大输出 token"));
+    await user.type(screen.getByPlaceholderText("最大输出 token"), "8192");
+    await user.selectOptions(screen.getAllByRole("combobox")[5]!, "xhigh");
+    await user.clear(screen.getByPlaceholderText("回写最大输出 token"));
+    await user.type(screen.getByPlaceholderText("回写最大输出 token"), "2048");
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: expect.objectContaining({
+          effort: "max",
+          max_tokens: 8192,
+        }),
+        writeback_llm: expect.objectContaining({
+          effort: "xhigh",
+          max_tokens: 2048,
+        }),
+      }),
+    );
   });
 });

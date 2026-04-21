@@ -49,6 +49,13 @@ export interface InjectionBlock {
   }>;
 }
 
+export interface PromptPhaseResult {
+  phase: Phase;
+  trace_id: string | null;
+  degraded: boolean;
+  injection_summary?: string;
+}
+
 export type Phase = "session_start" | "task_start" | "task_switch" | "before_plan" | "before_response" | "after_response";
 
 export interface RunnerIO {
@@ -123,7 +130,8 @@ export class AgentRunner {
 
     this.persistUserMessage(turnId, userInput);
 
-    const injections: InjectionBlock[] = [];
+    const rawInjections: InjectionBlock[] = [];
+    const phaseResults: PromptPhaseResult[] = [];
     let degraded = false;
     let traceId: string | null = null;
 
@@ -136,10 +144,13 @@ export class AgentRunner {
         degraded = true;
       }
       if (response?.injection_block) {
-        injections.push(...toTieredInjectionBlocks(phase, response.injection_block));
+        rawInjections.push(toInjectionBlock(phase, response.injection_block));
       }
+      phaseResults.push(toPromptPhaseResult(phase, response));
       this.deps.io.emitPhaseResult(turnId, phase, response);
     }
+
+    const injections = buildPromptInjections(rawInjections);
 
     this.deps.io.emitInjectionBanner(
       turnId,
@@ -166,6 +177,9 @@ export class AgentRunner {
       contextMaxTokens - Math.min(this.deps.config.context.reserveTokens, Math.floor(contextMaxTokens / 2)),
       1_024,
     );
+    const effectiveRequestMaxTokens = this.deps.config.provider.maxTokens
+      ? Math.min(requestMaxTokens, this.deps.config.provider.maxTokens)
+      : requestMaxTokens;
 
     let promptSegments = this.conversation.buildPromptSegments({
       systemPrompt,
@@ -216,7 +230,7 @@ export class AgentRunner {
     let terminalEventEmitted = false;
     let round = 1;
 
-    this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), tools, round);
+    this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), phaseResults, tools, round);
 
     try {
       while (!abortController.signal.aborted) {
@@ -228,9 +242,9 @@ export class AgentRunner {
         const chunks = this.deps.provider.chat({
           messages,
           tools,
-          max_tokens: requestMaxTokens,
+          max_tokens: effectiveRequestMaxTokens,
           model: options.skillContext?.modelOverride,
-          effort: options.skillContext?.effort,
+          effort: options.skillContext?.effort ?? this.deps.config.provider.effort ?? undefined,
           signal: abortController.signal,
         });
 
@@ -338,7 +352,7 @@ export class AgentRunner {
           },
           injections,
         });
-        this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), tools, round);
+        this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), phaseResults, tools, round);
         terminalEventEmitted = false;
       }
 
@@ -613,6 +627,7 @@ export class AgentRunner {
     turnId: string,
     messages: ChatMessage[],
     promptSegments: PromptSegmentView[],
+    phaseResults: PromptPhaseResult[],
     tools: ReturnType<ToolDispatcher["listTools"]>,
     round: number,
   ) {
@@ -621,12 +636,25 @@ export class AgentRunner {
         messages_json: JSON.stringify(messages),
         tools_json: JSON.stringify(tools),
         prompt_segments_json: JSON.stringify(promptSegments),
+        phase_results_json: JSON.stringify(phaseResults),
         provider_id: this.deps.provider.id(),
         model: this.deps.provider.model(),
         round,
       }),
     );
   }
+}
+
+function toPromptPhaseResult(
+  phase: Phase,
+  response: PrepareContextResult | SessionStartResult | null,
+): PromptPhaseResult {
+  return {
+    phase,
+    trace_id: response?.trace_id ?? null,
+    degraded: Boolean(response?.degraded),
+    injection_summary: response?.injection_block?.memory_summary,
+  };
 }
 
 function toInjectionBlock(
@@ -653,12 +681,16 @@ function toTieredInjectionBlocks(
   block: NonNullable<PrepareContextResult["injection_block"] | SessionStartResult["injection_block"]>,
 ): InjectionBlock[] {
   const normalized = toInjectionBlock(phase, block);
+  return toTieredInjectionBlocksFromNormalized(normalized);
+}
+
+function toTieredInjectionBlocksFromNormalized(normalized: InjectionBlock): InjectionBlock[] {
   const tiered = tierMemoryInjection(normalized);
   const injections: InjectionBlock[] = [];
 
   if (tiered.high.length > 0) {
     injections.push({
-      phase,
+      phase: normalized.phase,
       injection_reason: normalized.injection_reason,
       memory_summary: normalized.memory_summary,
       memory_records: tiered.high,
@@ -669,7 +701,7 @@ function toTieredInjectionBlocks(
 
   if (tiered.medium.length > 0) {
     injections.push({
-      phase,
+      phase: normalized.phase,
       injection_reason: normalized.injection_reason,
       memory_summary: normalized.memory_summary,
       memory_records: tiered.medium,
@@ -680,7 +712,7 @@ function toTieredInjectionBlocks(
 
   if (tiered.summary) {
     injections.push({
-      phase,
+      phase: normalized.phase,
       injection_reason: normalized.injection_reason,
       memory_summary: tiered.summary,
       memory_records: tiered.summary_records,
@@ -690,6 +722,53 @@ function toTieredInjectionBlocks(
   }
 
   return injections;
+}
+
+function buildPromptInjections(injections: InjectionBlock[]): InjectionBlock[] {
+  if (injections.length === 0) {
+    return [];
+  }
+
+  const merged = mergePromptInjectionSources(injections);
+  return toTieredInjectionBlocksFromNormalized(merged);
+}
+
+function mergePromptInjectionSources(injections: InjectionBlock[]): InjectionBlock {
+  const phases = dedupeStrings(injections.map((item) => item.phase));
+  const reasons = dedupeStrings(injections.map((item) => item.injection_reason));
+  const summaries = dedupeStrings(injections.map((item) => item.memory_summary));
+  const recordMap = new Map<string, InjectionBlock["memory_records"][number]>();
+
+  for (const injection of injections) {
+    for (const record of injection.memory_records) {
+      if (!recordMap.has(record.id)) {
+        recordMap.set(record.id, record);
+      }
+    }
+  }
+
+  return {
+    phase: phases.join(","),
+    injection_reason: reasons.join("\n"),
+    memory_summary: summaries.join("\n"),
+    memory_records: [...recordMap.values()],
+  };
+}
+
+function dedupeStrings(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
 }
 
 function mergeInjections(injections: InjectionBlock[]): InjectionBlock {

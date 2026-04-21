@@ -8,7 +8,7 @@ import { AgentI18nProvider } from "./_i18n/provider";
 export default function AgentLayout({ children }: { children: ReactNode }) {
   return (
     <AgentI18nProvider defaultLocale={getAppConfig().values.NEXT_PUBLIC_MNA_DEFAULT_LOCALE}>
-      <div className="h-full overflow-hidden px-4 sm:px-6 lg:px-8">
+      <div className="h-full overflow-hidden">
         <AgentRouteShell />
         <div className="hidden">{children}</div>
       </div>

@@ -258,6 +258,8 @@ export class MnaClient {
       base_url?: string;
       api_key?: string;
       temperature?: number;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      max_tokens?: number | null;
       organization?: string;
       keep_alive?: string | number;
     };
@@ -272,6 +274,8 @@ export class MnaClient {
       api_key?: string;
       protocol?: "anthropic" | "openai-compatible";
       timeout_ms?: number;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      max_tokens?: number | null;
     };
     mcp?: {
       servers: Array<{

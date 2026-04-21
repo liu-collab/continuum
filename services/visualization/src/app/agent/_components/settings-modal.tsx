@@ -45,6 +45,8 @@ type SettingsModalProps = {
       model: string;
       base_url?: string;
       api_key?: string;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      max_tokens?: number;
     };
     embedding: {
       base_url?: string;
@@ -57,6 +59,8 @@ type SettingsModalProps = {
       api_key?: string;
       protocol?: "anthropic" | "openai-compatible";
       timeout_ms?: number;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      max_tokens?: number;
     };
     mcp: {
       servers: Array<{
@@ -111,6 +115,8 @@ export function SettingsModal({
   const [providerModel, setProviderModel] = useState("");
   const [providerBaseUrl, setProviderBaseUrl] = useState("");
   const [providerApiKey, setProviderApiKey] = useState("");
+  const [providerEffort, setProviderEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
+  const [providerMaxTokens, setProviderMaxTokens] = useState("");
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
@@ -119,6 +125,8 @@ export function SettingsModal({
   const [writebackLlmApiKey, setWritebackLlmApiKey] = useState("");
   const [writebackLlmProtocol, setWritebackLlmProtocol] = useState<"anthropic" | "openai-compatible">("openai-compatible");
   const [writebackLlmTimeoutMs, setWritebackLlmTimeoutMs] = useState("");
+  const [writebackLlmEffort, setWritebackLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
+  const [writebackLlmMaxTokens, setWritebackLlmMaxTokens] = useState("");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
@@ -137,6 +145,8 @@ export function SettingsModal({
     setProviderModel(config.provider.model ?? "");
     setProviderBaseUrl(config.provider.base_url ?? "");
     setProviderApiKey(config.provider.api_key ?? "");
+    setProviderEffort(config.provider.effort ?? "");
+    setProviderMaxTokens(config.provider.max_tokens ? String(config.provider.max_tokens) : "");
     setEmbeddingBaseUrl(config.embedding.base_url ?? "");
     setEmbeddingModel(config.embedding.model ?? "");
     setEmbeddingApiKey(config.embedding.api_key ?? "");
@@ -145,6 +155,8 @@ export function SettingsModal({
     setWritebackLlmApiKey(config.writeback_llm.api_key ?? "");
     setWritebackLlmProtocol(config.writeback_llm.protocol ?? "openai-compatible");
     setWritebackLlmTimeoutMs(config.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "");
+    setWritebackLlmEffort(config.writeback_llm.effort ?? "");
+    setWritebackLlmMaxTokens(config.writeback_llm.max_tokens ? String(config.writeback_llm.max_tokens) : "");
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
     setFeedbackMessage(null);
@@ -173,12 +185,14 @@ export function SettingsModal({
     const trimmedProviderModel = providerModel.trim();
     const trimmedProviderBaseUrl = providerBaseUrl.trim();
     const trimmedProviderApiKey = providerApiKey.trim();
+    const trimmedProviderMaxTokens = providerMaxTokens.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
     const trimmedWritebackLlmBaseUrl = writebackLlmBaseUrl.trim();
     const trimmedWritebackLlmModel = writebackLlmModel.trim();
     const trimmedWritebackLlmApiKey = writebackLlmApiKey.trim();
     const trimmedWritebackLlmTimeoutMs = writebackLlmTimeoutMs.trim();
+    const trimmedWritebackLlmMaxTokens = writebackLlmMaxTokens.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
@@ -210,6 +224,16 @@ export function SettingsModal({
       return;
     }
 
+    if (trimmedProviderMaxTokens && !/^\d+$/.test(trimmedProviderMaxTokens)) {
+      setErrorMessage(t("runtimeConfig.errors.providerMaxTokensInvalid"));
+      return;
+    }
+
+    if (trimmedWritebackLlmMaxTokens && !/^\d+$/.test(trimmedWritebackLlmMaxTokens)) {
+      setErrorMessage(t("runtimeConfig.errors.writebackLlmMaxTokensInvalid"));
+      return;
+    }
+
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(true);
@@ -221,7 +245,9 @@ export function SettingsModal({
           kind: currentProviderKind,
           model: trimmedProviderModel,
           ...(trimmedProviderBaseUrl ? { base_url: trimmedProviderBaseUrl } : {}),
-          ...(trimmedProviderApiKey ? { api_key: trimmedProviderApiKey } : {})
+          ...(trimmedProviderApiKey ? { api_key: trimmedProviderApiKey } : {}),
+          effort: providerEffort || null,
+          ...(trimmedProviderMaxTokens ? { max_tokens: Number(trimmedProviderMaxTokens) } : {})
         },
         embedding: {
           ...(trimmedEmbeddingBaseUrl ? { base_url: trimmedEmbeddingBaseUrl } : {}),
@@ -234,6 +260,8 @@ export function SettingsModal({
           ...(trimmedWritebackLlmApiKey ? { api_key: trimmedWritebackLlmApiKey } : {}),
           protocol: writebackLlmProtocol,
           ...(trimmedWritebackLlmTimeoutMs ? { timeout_ms: Number(trimmedWritebackLlmTimeoutMs) } : {}),
+          effort: writebackLlmEffort || null,
+          ...(trimmedWritebackLlmMaxTokens ? { max_tokens: Number(trimmedWritebackLlmMaxTokens) } : {}),
         },
         mcp: {
           servers: mcpServers.map((server) => ({
@@ -292,12 +320,16 @@ export function SettingsModal({
     const currentApiKey = config?.writeback_llm.api_key?.trim() ?? "";
     const currentProtocol = config?.writeback_llm.protocol ?? "openai-compatible";
     const currentTimeout = config?.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "";
+    const currentEffort = config?.writeback_llm.effort ?? "";
+    const currentMaxTokens = config?.writeback_llm.max_tokens ? String(config.writeback_llm.max_tokens) : "";
     if (
       writebackLlmBaseUrl.trim() !== currentBaseUrl ||
       writebackLlmModel.trim() !== currentModel ||
       writebackLlmApiKey.trim() !== currentApiKey ||
       writebackLlmProtocol !== currentProtocol ||
-      writebackLlmTimeoutMs.trim() !== currentTimeout
+      writebackLlmTimeoutMs.trim() !== currentTimeout ||
+      writebackLlmEffort !== currentEffort ||
+      writebackLlmMaxTokens.trim() !== currentMaxTokens
     ) {
       setFeedbackMessage({
         tone: "warning",
@@ -503,6 +535,31 @@ export function SettingsModal({
                 className="field mt-1"
               />
             </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerEffort")}</span>
+              <select
+                value={providerEffort}
+                onChange={(event) => setProviderEffort(event.target.value as typeof providerEffort)}
+                className="field mt-1"
+              >
+                <option value="">{t("runtimeConfig.effortDisabled")}</option>
+                <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
+                <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
+                <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
+                <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
+                <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerMaxTokens")}</span>
+              <input
+                value={providerMaxTokens}
+                onChange={(event) => setProviderMaxTokens(event.target.value)}
+                placeholder={t("runtimeConfig.providerMaxTokens")}
+                className="field mt-1"
+                inputMode="numeric"
+              />
+            </label>
           </div>
 
           <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
@@ -597,6 +654,31 @@ export function SettingsModal({
                 value={writebackLlmTimeoutMs}
                 onChange={(event) => setWritebackLlmTimeoutMs(event.target.value)}
                 placeholder={t("runtimeConfig.writebackLlmTimeoutMs")}
+                className="field mt-1"
+                inputMode="numeric"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmEffort")}</span>
+              <select
+                value={writebackLlmEffort}
+                onChange={(event) => setWritebackLlmEffort(event.target.value as typeof writebackLlmEffort)}
+                className="field mt-1"
+              >
+                <option value="">{t("runtimeConfig.effortDisabled")}</option>
+                <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
+                <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
+                <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
+                <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
+                <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmMaxTokens")}</span>
+              <input
+                value={writebackLlmMaxTokens}
+                onChange={(event) => setWritebackLlmMaxTokens(event.target.value)}
+                placeholder={t("runtimeConfig.writebackLlmMaxTokens")}
                 className="field mt-1"
                 inputMode="numeric"
               />

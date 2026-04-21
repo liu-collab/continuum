@@ -120,6 +120,8 @@
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
+    "providerEffort": "Reasoning effort",
+    "providerMaxTokens": "Max output tokens",
     "checkEmbedding": "Check embedding config",
     "checkingEmbedding": "Checking...",
     "checkWritebackLlm": "Check writeback llm config",
@@ -130,14 +132,26 @@
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
     },
+    "writebackLlmEffort": "Writeback reasoning effort",
+    "writebackLlmMaxTokens": "Writeback max output tokens",
+    "effortDisabled": "Disabled",
+    "effortOptions": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Max"
+    },
     "save": "Save config",
     "errors": {
       "providerModelRequired": "provider model is required.",
       "providerBaseUrlRequired": "base_url is required for the selected provider.",
       "providerApiKeyRequired": "api_key is required for the selected provider.",
+      "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
       "writebackLlmModelRequired": "WRITEBACK_LLM_MODEL is required when WRITEBACK_LLM_BASE_URL is set.",
-      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS must be a positive integer."
+      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS must be a positive integer.",
+      "writebackLlmMaxTokensInvalid": "writeback max output tokens must be a positive integer."
     }
   },
   "costBar": {
@@ -300,7 +314,12 @@
     "turn": "Turn",
     "provider": "Provider",
     "tools": "Tools",
-    "notLoaded": "Not loaded"
+    "notLoaded": "Not loaded",
+    "finalPrompt": "Final Prompt Segments",
+    "phaseHits": "Phase Hits",
+    "noPromptSegments": "No prompt segments",
+    "noPhaseHits": "No phase hits",
+    "noInjection": "No memory injected in this phase"
   },
   "confirmDialog": {
     "title": "Permission required",

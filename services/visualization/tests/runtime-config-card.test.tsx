@@ -13,6 +13,8 @@ const baseConfig = {
     base_url: null,
     api_key: null,
     temperature: null,
+    effort: null,
+    max_tokens: null,
     organization: null,
     keep_alive: null,
   },
@@ -27,6 +29,8 @@ const baseConfig = {
     api_key: null,
     protocol: "openai-compatible" as const,
     timeout_ms: 5000,
+    effort: null,
+    max_tokens: null,
   },
   mcp: {
     servers: [],

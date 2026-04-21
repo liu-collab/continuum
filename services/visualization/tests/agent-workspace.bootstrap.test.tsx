@@ -194,6 +194,8 @@ describe("AgentWorkspace bootstrap states", () => {
           base_url: "https://api.deepseek.com",
           api_key: null,
           temperature: 0.2,
+          effort: null,
+          max_tokens: null,
           organization: null,
           keep_alive: null
         },
@@ -207,7 +209,9 @@ describe("AgentWorkspace bootstrap states", () => {
           model: "claude-haiku-4-5-20251001",
           api_key: null,
           protocol: "openai-compatible",
-          timeout_ms: 5000
+          timeout_ms: 5000,
+          effort: null,
+          max_tokens: null
         },
         mcp: {
           servers: []
@@ -258,6 +262,7 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
     expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("openai:deepseek-chat");
+    expect(screen.getAllByText("记忆面板")).toHaveLength(1);
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
 

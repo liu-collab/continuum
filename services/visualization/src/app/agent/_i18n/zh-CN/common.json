@@ -120,6 +120,8 @@
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
+    "providerEffort": "思考模式",
+    "providerMaxTokens": "最大输出 token",
     "checkEmbedding": "检查 embedding 配置",
     "checkingEmbedding": "检查中...",
     "checkWritebackLlm": "检查 writeback llm 配置",
@@ -130,14 +132,26 @@
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
     },
+    "writebackLlmEffort": "回写思考模式",
+    "writebackLlmMaxTokens": "回写最大输出 token",
+    "effortDisabled": "关闭",
+    "effortOptions": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "超高",
+      "max": "最大"
+    },
     "save": "保存配置",
     "errors": {
       "providerModelRequired": "provider model 不能为空。",
       "providerBaseUrlRequired": "当前 provider 需要填写 base_url。",
       "providerApiKeyRequired": "当前 provider 需要填写 api_key。",
+      "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
       "writebackLlmModelRequired": "填写 WRITEBACK_LLM_BASE_URL 后，还需要填写 WRITEBACK_LLM_MODEL。",
-      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS 需要是正整数。"
+      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS 需要是正整数。",
+      "writebackLlmMaxTokensInvalid": "writeback 最大输出 token 需要是正整数。"
     }
   },
   "costBar": {
@@ -300,7 +314,12 @@
     "turn": "轮次",
     "provider": "提供方",
     "tools": "工具数",
-    "notLoaded": "未加载"
+    "notLoaded": "未加载",
+    "finalPrompt": "最终 Prompt 片段",
+    "phaseHits": "阶段命中记录",
+    "noPromptSegments": "没有 Prompt 片段",
+    "noPhaseHits": "没有阶段命中记录",
+    "noInjection": "本阶段未注入记忆"
   },
   "confirmDialog": {
     "title": "需要权限确认",
