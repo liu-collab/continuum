@@ -39,7 +39,6 @@ export type RuntimeTurnRecord = {
   traceId: string;
   turnId: string | null;
   workspaceId: string | null;
-  userId: string | null;
   taskId: string | null;
   sessionId: string | null;
   threadId: string | null;
@@ -276,7 +275,6 @@ function mapTurn(value: unknown): RuntimeTurnRecord | null {
     traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
     turnId: pickNullableString(record, "turn_id", "turnId"),
     workspaceId: pickNullableString(record, "workspace_id", "workspaceId"),
-    userId: pickNullableString(record, "user_id", "userId"),
     taskId: pickNullableString(record, "task_id", "taskId"),
     sessionId: pickNullableString(record, "session_id", "sessionId"),
     threadId: pickNullableString(record, "thread_id", "threadId"),

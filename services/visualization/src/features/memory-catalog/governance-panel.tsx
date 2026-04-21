@@ -212,7 +212,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
                 <option value="session">会话</option>
                 <option value="task">任务</option>
                 <option value="workspace">工作区</option>
-                <option value="user">全局</option>
+                <option value="user">平台</option>
               </select>
             </label>
             <label className="block">

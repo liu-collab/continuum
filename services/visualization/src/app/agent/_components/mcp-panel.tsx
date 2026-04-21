@@ -18,7 +18,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
   const { formatMcpStateLabel, t } = useAgentI18n();
 
   return (
-    <div data-testid="mcp-panel" className="rounded-lg border bg-surface">
+    <div data-testid="mcp-panel" className="rounded-[1.75rem] border bg-surface">
       <div className="border-b px-4 py-3">
         <div className="text-sm font-medium text-foreground">{t("mcpPanel.title")}</div>
       </div>

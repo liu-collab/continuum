@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { PencilLine, Trash2 } from "lucide-react";
+import { Brain, PencilLine, Trash2, Workflow } from "lucide-react";
 import { useState } from "react";
 
 import { StatusBadge } from "@/components/status-badge";
@@ -10,9 +10,20 @@ import { cn } from "@/lib/utils";
 import { useAgentI18n } from "../_i18n/provider";
 import type { MnaSessionSummary } from "../_lib/openapi-types";
 
+function toShortWorkspaceId(workspaceId: string) {
+  const normalized = workspaceId.replace(/[^a-zA-Z0-9]/g, "");
+  if (normalized.length >= 8) {
+    return normalized.slice(0, 8).toLowerCase();
+  }
+
+  return workspaceId.slice(0, 8).toLowerCase();
+}
+
 type SessionListProps = {
   sessions: MnaSessionSummary[];
   activeSessionId: string | null;
+  activeSessionMemoriesHref?: string | null;
+  activeSessionRunsHref?: string | null;
   onSelect(sessionId: string): void;
   onRename(session: MnaSessionSummary, title: string): void;
   onDelete(session: MnaSessionSummary): void;
@@ -21,6 +32,8 @@ type SessionListProps = {
 export function SessionList({
   sessions,
   activeSessionId,
+  activeSessionMemoriesHref,
+  activeSessionRunsHref,
   onSelect,
   onRename,
   onDelete
@@ -52,8 +65,8 @@ export function SessionList({
               isActive && "border-accent bg-accent-soft"
             )}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
+              <div className="min-w-0">
                 {isEditing ? (
                   <form
                     onSubmit={(event) => {
@@ -84,18 +97,15 @@ export function SessionList({
                       {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {t("sessionList.workspace", { id: session.workspace_id })}
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <StatusBadge tone={session.closed_at ? "warning" : "success"}>
-                        {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
-                      </StatusBadge>
-                      <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
+                      {t("sessionList.workspace", { id: toShortWorkspaceId(session.workspace_id) })}
                     </div>
                   </button>
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-0.5">
+              <div
+                data-testid={`session-card-action-rail-${session.id}`}
+                className="flex shrink-0 items-start gap-0.5 self-start"
+              >
                 <button
                   type="button"
                   onClick={(event) => {
@@ -120,10 +130,86 @@ export function SessionList({
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
+              {isEditing ? (
+                <>
+                  <div />
+                  <div />
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(session.id)}
+                    className="flex min-w-0 items-center gap-3 text-left"
+                  >
+                    <div
+                      data-testid={`session-card-status-row-${session.id}`}
+                      className="flex min-w-0 flex-wrap items-center gap-1.5"
+                    >
+                      <StatusBadge tone={session.closed_at ? "warning" : "success"}>
+                        {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
+                      </StatusBadge>
+                      <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
+                    </div>
+                  </button>
+                  <div className="flex shrink-0 items-center justify-end">
+                    {isActive ? (
+                      <div
+                        data-testid={`session-card-quick-actions-${session.id}`}
+                        className="flex items-center gap-2"
+                      >
+                        <QuickActionLink
+                          href={activeSessionMemoriesHref ?? null}
+                          title={t("workspace.currentTurnMemories")}
+                          icon={<Brain className="h-3.5 w-3.5" />}
+                        />
+                        <QuickActionLink
+                          href={activeSessionRunsHref ?? null}
+                          title={t("workspace.currentTurnRuns")}
+                          icon={<Workflow className="h-3.5 w-3.5" />}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function QuickActionLink({
+  href,
+  title,
+  icon
+}: {
+  href: string | null;
+  title: string;
+  icon: React.ReactNode;
+}) {
+  if (!href) {
+    return (
+      <span
+        title={title}
+        aria-label={title}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-surface-muted/40 text-muted-foreground opacity-50"
+      >
+        {icon}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      title={title}
+      aria-label={title}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-surface text-muted-foreground transition hover:text-foreground"
+    >
+      {icon}
+    </a>
   );
 }

@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 import {
-  IDENTITY_FILENAME,
   MNA_HOME_DIRNAME,
+  PLATFORM_USER_ID,
   WORKSPACE_MAP_FILENAME,
   WORKSPACE_NAMESPACE_UUID,
 } from "./defaults.js";
@@ -93,19 +93,11 @@ export function resolveUserId(configuredUserId: string | null, homeDirectory: st
     return configuredUserId;
   }
 
-  const identityPath = path.join(ensureMnaHome(homeDirectory), IDENTITY_FILENAME);
-  try {
-    const parsed = JSON.parse(readFileSync(identityPath, "utf8")) as { user_id?: string };
-    if (typeof parsed.user_id === "string" && parsed.user_id.length > 0) {
-      return parsed.user_id;
-    }
-  } catch {
-    // fall through to create a new identity
+  if (process.env.MNA_PLATFORM_USER_ID?.trim()) {
+    return process.env.MNA_PLATFORM_USER_ID.trim();
   }
 
-  const userId = randomUUID();
-  writeFileSync(identityPath, JSON.stringify({ user_id: userId }, null, 2), "utf8");
-  return userId;
+  return PLATFORM_USER_ID;
 }
 
 export function persistWorkspaceMapping(homeDirectory: string, cwd: string, workspaceId: string): void {

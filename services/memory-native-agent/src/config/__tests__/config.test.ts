@@ -43,9 +43,7 @@ describe("config loader", () => {
     expect(config.provider.kind).toBe("demo");
     expect(config.provider.model).toBe("continuum-demo");
     expect(config.memory.mode).toBe("workspace_plus_global");
-    expect(config.memory.userId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(config.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
     expect(config.cli.systemPrompt).toBeNull();
     expect(config.tools.maxOutputChars).toBe(8192);
     expect(config.context.maxTokens).toBeNull();
@@ -152,7 +150,7 @@ provider:
     expect(config.provider.model).toBe("qwen-from-explicit");
   });
 
-  it("persists identity and reuses the same user id", () => {
+  it("uses the platform user id by default", () => {
     const homeDir = createTempDir("mna-home-");
     const workspaceDir = createTempDir("mna-workspace-");
     createdRoots.push(homeDir, workspaceDir);
@@ -170,10 +168,8 @@ provider:
       },
     });
 
-    expect(first.memory.userId).toBe(second.memory.userId);
-
-    const identity = JSON.parse(readFileSync(path.join(homeDir, ".mna", "identity.json"), "utf8")) as { user_id: string };
-    expect(identity.user_id).toBe(first.memory.userId);
+    expect(first.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
+    expect(second.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
   });
 
   it("keeps workspace id stable for the same path", () => {

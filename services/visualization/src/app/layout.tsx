@@ -46,9 +46,7 @@ export default function RootLayout({
             <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
               <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
                 <Link href={"/" as Route} className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    <BrandMark className="h-4 w-4" animated />
-                  </div>
+                  <BrandMark className="h-7 w-7 shrink-0" animated />
                   <span className="text-sm font-semibold tracking-tight">Memory Observatory</span>
                 </Link>
                 <nav className="flex items-center gap-1">

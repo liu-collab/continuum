@@ -4,9 +4,10 @@ export const MNA_HOME_DIRNAME = ".mna";
 export const IDENTITY_FILENAME = "identity.json";
 export const WORKSPACE_MAP_FILENAME = "workspaces.json";
 export const WORKSPACE_NAMESPACE_UUID = "8b7ee9a4-2fa7-54c3-a941-8e1b8db4f4d9";
+export const PLATFORM_USER_ID = "00000000-0000-4000-8000-000000000001";
 
 export const DEFAULT_RUNTIME_BASE_URL = "http://127.0.0.1:3002";
-export const DEFAULT_RUNTIME_REQUEST_TIMEOUT_MS = 800;
+export const DEFAULT_RUNTIME_REQUEST_TIMEOUT_MS = 30_000;
 export const DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS = 1500;
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_DEMO_PROVIDER_BASE_URL = "http://127.0.0.1:4194";

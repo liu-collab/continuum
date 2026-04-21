@@ -21,6 +21,7 @@ const envSchema = z.object({
   STORAGE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   RUNTIME_API_BASE_URL: z.string().url().optional(),
   RUNTIME_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
+  PLATFORM_USER_ID: z.string().uuid().default("00000000-0000-4000-8000-000000000001"),
   MNA_TOKEN_PATH: z.string().default("~/.mna/token.txt"),
   DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().max(100).default(20),
   HEALTH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
@@ -44,6 +45,7 @@ type RawEnv = {
   STORAGE_API_TIMEOUT_MS?: string;
   RUNTIME_API_BASE_URL?: string;
   RUNTIME_API_TIMEOUT_MS?: string;
+  PLATFORM_USER_ID?: string;
   MNA_TOKEN_PATH?: string;
   DEFAULT_PAGE_SIZE?: string;
   HEALTH_POLL_INTERVAL_MS?: string;
@@ -77,6 +79,7 @@ function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
     STORAGE_API_TIMEOUT_MS: env.STORAGE_API_TIMEOUT_MS,
     RUNTIME_API_BASE_URL: env.RUNTIME_API_BASE_URL || undefined,
     RUNTIME_API_TIMEOUT_MS: env.RUNTIME_API_TIMEOUT_MS,
+    PLATFORM_USER_ID: env.PLATFORM_USER_ID,
     MNA_TOKEN_PATH: env.MNA_TOKEN_PATH,
     DEFAULT_PAGE_SIZE: env.DEFAULT_PAGE_SIZE,
     HEALTH_POLL_INTERVAL_MS: env.HEALTH_POLL_INTERVAL_MS,

@@ -26,6 +26,7 @@ type ChatPanelProps = {
 
 const INITIAL_VISIBLE_TURNS = 12;
 const LOAD_MORE_TURNS_STEP = 12;
+const PANEL_HEIGHT_CLASS = "h-[calc(100vh-6.5rem)] min-h-[38rem] max-h-[calc(100vh-6.5rem)]";
 
 export function ChatPanel({
   turns,
@@ -137,7 +138,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
+    <div className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2">
           <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>

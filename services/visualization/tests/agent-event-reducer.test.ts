@@ -9,7 +9,6 @@ describe("agent event reducer", () => {
       session: {
         id: "session-1",
         workspace_id: "workspace-a",
-        user_id: "user-a",
         title: "Demo",
         memory_mode: "workspace_plus_global",
         locale: "zh-CN",
@@ -157,7 +156,6 @@ describe("agent event reducer", () => {
       session: {
         id: "session-1",
         workspace_id: "workspace-a",
-        user_id: "user-a",
         title: "Demo",
         memory_mode: "workspace_plus_global",
         locale: "zh-CN",
@@ -341,7 +339,6 @@ describe("agent event reducer", () => {
       session: {
         id: "session-bootstrap",
         workspace_id: "workspace-a",
-        user_id: "user-a",
         title: "Demo",
         memory_mode: "workspace_plus_global",
         locale: "zh-CN",

@@ -217,7 +217,6 @@ describe("runtime observe contract parsing", () => {
       traceId: "t1",
       turnId: "turn-1",
       workspaceId: "ws1",
-      userId: "u1",
       sessionId: "s1"
     });
     expect(snapshot.triggerRuns).toHaveLength(1);

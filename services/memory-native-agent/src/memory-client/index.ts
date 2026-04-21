@@ -6,6 +6,7 @@ export {
   MemoryUnavailableError,
 } from "./errors.js";
 export type {
+  DependencyProbeResult,
   DependencyStatusSnapshot,
   FinalizeTurnRequest,
   FinalizeTurnResult,
@@ -16,6 +17,7 @@ export type {
   SessionStartResult,
 } from "./schemas.js";
 export {
+  dependencyProbeResultSchema,
   dependencyStatusSnapshotSchema,
   finalizeTurnRequestSchema,
   finalizeTurnResultSchema,

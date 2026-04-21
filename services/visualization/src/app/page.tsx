@@ -7,25 +7,25 @@ const cards = [
     href: "/agent" as Route,
     title: "Agent",
     description: "对话与工具调用",
-    icon: Bot
+    icon: Bot,
   },
   {
     href: "/memories" as Route,
     title: "记忆",
     description: "结构化记录目录",
-    icon: BookText
+    icon: BookText,
   },
   {
     href: "/runs" as Route,
     title: "运行",
     description: "触发 / 召回 / 注入 / 写回",
-    icon: HeartPulse
+    icon: HeartPulse,
   },
   {
     href: "/dashboard" as Route,
     title: "看板",
     description: "运行时与存储指标",
-    icon: ChartSpline
+    icon: ChartSpline,
   }
 ];
 

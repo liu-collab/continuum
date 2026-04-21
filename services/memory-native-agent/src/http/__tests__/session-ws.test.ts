@@ -465,7 +465,7 @@ describe("session websocket routes", () => {
       }),
     });
     const created = await createResponse.json() as { session_id: string };
-    const session = createSessionState(app.runtimeState, created.session_id);
+    const session = await createSessionState(app.runtimeState, created.session_id);
 
     for (let index = 0; index < 205; index += 1) {
       pushSessionEvent(session, {
@@ -539,7 +539,7 @@ describe("session websocket routes", () => {
       }),
     });
     const created = await createResponse.json() as { session_id: string };
-    const session = createSessionState(app.runtimeState, created.session_id);
+    const session = await createSessionState(app.runtimeState, created.session_id);
 
     pushSessionEvent(session, {
       kind: "assistant_delta",

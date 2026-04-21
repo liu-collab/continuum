@@ -24,6 +24,8 @@ type AgentWorkspaceProps = {
   sessionId?: string;
 };
 
+const PANEL_HEIGHT_CLASS = "h-[calc(100vh-6.5rem)] min-h-[38rem] max-h-[calc(100vh-6.5rem)]";
+
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const { locale, t, formatAgentError } = useAgentI18n();
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
@@ -76,7 +78,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     <>
       <div className="space-y-5">
         <div className="grid gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
-          <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
+          <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
               <button
@@ -163,7 +165,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             />
           </div>
 
-          <section className="flex h-[calc(100vh-12rem)] min-h-[38rem] max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm">
+          <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
               <button

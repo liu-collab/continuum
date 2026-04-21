@@ -70,6 +70,44 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("assistant-message-turn-1")).toHaveTextContent("你好，我在。");
   });
 
+  it("renders assistant markdown instead of showing raw markdown text", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            {
+              turnId: "turn-markdown",
+              userInput: "给我一个总结",
+              assistantOutput: "# 总结\n\n- 第一项\n- 第二项",
+              toolMessages: [],
+              toolCalls: [],
+              phases: [],
+              injection: null,
+              finishReason: "stop",
+              promptAvailable: true,
+              errors: [],
+              taskLabel: null,
+              status: "complete",
+            },
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const assistantMessage = screen.getByTestId("assistant-message-turn-markdown");
+    expect(assistantMessage.querySelector("h1")).toHaveTextContent("总结");
+    expect(assistantMessage.querySelectorAll("li")).toHaveLength(2);
+    expect(assistantMessage).not.toHaveTextContent("# 总结");
+    expect(assistantMessage.className).not.toContain("whitespace-pre-wrap");
+  });
+
   it("renders tool calls inline with the assistant message", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">

@@ -6,6 +6,7 @@ import {
   MemoryUnavailableError,
 } from "./errors.js";
 import {
+  dependencyProbeResultSchema,
   dependencyStatusSnapshotSchema,
   finalizeTurnRequestSchema,
   finalizeTurnResultSchema,
@@ -17,6 +18,7 @@ import {
   sessionStartRequestSchema,
   sessionStartResultSchema,
   type DependencyStatusSnapshot,
+  type DependencyProbeResult,
   type FinalizeTurnRequest,
   type FinalizeTurnResult,
   type HealthEndpointResult,
@@ -27,7 +29,7 @@ import {
 } from "./schemas.js";
 
 const MEMORY_NATIVE_AGENT_HOST = "memory_native_agent";
-const DEFAULT_REQUEST_TIMEOUT_MS = 800;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_FINALIZE_TIMEOUT_MS = 1500;
 
 type MemoryClientLogger = {
@@ -175,6 +177,16 @@ export class MemoryClient {
       path: "/v1/runtime/dependency-status",
       timeoutMs: this.requestTimeoutMs,
       responseSchema: dependencyStatusSnapshotSchema,
+      operation: "dependency_status",
+    });
+  }
+
+  async checkEmbeddings(): Promise<DependencyProbeResult> {
+    return this.requestJson({
+      method: "POST",
+      path: "/v1/runtime/dependency-status/embeddings/check",
+      timeoutMs: this.requestTimeoutMs,
+      responseSchema: dependencyProbeResultSchema,
       operation: "dependency_status",
     });
   }

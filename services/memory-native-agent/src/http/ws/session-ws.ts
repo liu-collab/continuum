@@ -13,7 +13,7 @@ const wsQuerySchema = z.object({
 });
 
 export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
-  app.get("/v1/agent/sessions/:id/ws", { websocket: true }, (socket, request) => {
+  app.get("/v1/agent/sessions/:id/ws", { websocket: true }, async (socket, request) => {
     const ws = socket as unknown as WebSocketLike;
     const { params, query } = parseWebsocketRequest(request.raw.url ?? request.url, request.params, request.query);
     if (!query.token || query.token !== app.mnaToken) {
@@ -39,7 +39,7 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
       return;
     }
 
-    const session = app.runtimeState.sessions.get(params.id) ?? createSessionState(app.runtimeState, params.id);
+    const session = app.runtimeState.sessions.get(params.id) ?? await createSessionState(app.runtimeState, params.id);
     session.sockets.add(ws);
     ws.send(JSON.stringify({
       kind: "session_started",
@@ -89,7 +89,7 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
         if (invocation) {
           try {
             const skillContext = await materializeSkillContext(invocation, {
-              cwd: app.runtimeState.config.memory.cwd,
+              cwd: session.workspaceRoot,
             });
             await session.runner.submit(event.text, event.turn_id, { skillContext });
           } catch (error) {
@@ -124,7 +124,7 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
 
         try {
           const skillContext = await materializeSkillContext(invocation, {
-            cwd: app.runtimeState.config.memory.cwd,
+            cwd: session.workspaceRoot,
           });
           await session.runner.submit(text, event.turn_id, { skillContext });
         } catch (error) {

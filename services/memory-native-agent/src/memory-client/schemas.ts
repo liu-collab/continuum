@@ -27,6 +27,8 @@ export const dependencyStatusSchema = z.object({
   last_checked_at: z.string(),
 });
 
+export const dependencyProbeResultSchema = dependencyStatusSchema;
+
 export const dependencyStatusSnapshotSchema = z.object({
   read_model: dependencyStatusSchema,
   embeddings: dependencyStatusSchema,
@@ -221,4 +223,5 @@ export type SessionStartResult = z.infer<typeof sessionStartResultSchema>;
 export type PrepareContextResult = z.infer<typeof prepareContextResultSchema>;
 export type FinalizeTurnResult = z.infer<typeof finalizeTurnResultSchema>;
 export type DependencyStatusSnapshot = z.infer<typeof dependencyStatusSnapshotSchema>;
+export type DependencyProbeResult = z.infer<typeof dependencyProbeResultSchema>;
 export type HealthEndpointResult = z.infer<typeof healthEndpointSchema>;

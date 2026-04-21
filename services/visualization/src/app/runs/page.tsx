@@ -145,7 +145,6 @@ export default async function RunsPage({
                   <Row label="Host" value={response.selectedTurn.turn.host ?? "—"} />
                   <Row label="Session" value={response.selectedTurn.turn.sessionId ?? "—"} />
                   <Row label="Workspace" value={response.selectedTurn.turn.workspaceId ?? "—"} />
-                  <Row label="User" value={response.selectedTurn.turn.userId ?? "—"} />
                   <Row label="Task" value={response.selectedTurn.turn.taskId ?? "—"} />
                   <Row label="Thread" value={response.selectedTurn.turn.threadId ?? "—"} />
                   <Row label="创建" value={formatTimestamp(response.selectedTurn.turn.createdAt)} />

@@ -239,4 +239,26 @@ describe("memory client", () => {
     expect(health.api_version).toBe("v1");
     expect(dependencies.read_model.status).toBe("healthy");
   });
+
+  it("runs an active embedding health check with schema validation", async () => {
+    const runtime = await startMockRuntime((app) => {
+      app.post("/v1/runtime/dependency-status/embeddings/check", async () => ({
+        name: "embeddings",
+        status: "healthy",
+        detail: "embedding request completed",
+        last_checked_at: "2026-04-21T12:00:00.000Z",
+      }));
+    });
+    startedApps.push(runtime.app);
+
+    const client = new MemoryClient({ baseUrl: runtime.baseUrl });
+    const response = await client.checkEmbeddings();
+
+    expect(response).toEqual({
+      name: "embeddings",
+      status: "healthy",
+      detail: "embedding request completed",
+      last_checked_at: "2026-04-21T12:00:00.000Z",
+    });
+  });
 });

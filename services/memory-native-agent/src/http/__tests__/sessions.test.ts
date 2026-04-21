@@ -7,6 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "../../server.js";
 import type { AgentConfig } from "../../config/index.js";
 
+const { pickWorkspaceDirectoryMock } = vi.hoisted(() => ({
+  pickWorkspaceDirectoryMock: vi.fn<() => Promise<string | null>>(),
+}));
+
+vi.mock("../workspace-picker.js", () => ({
+  pickWorkspaceDirectory: pickWorkspaceDirectoryMock,
+}));
+
 const tempRoots: string[] = [];
 const runtimeCalls = {
   healthz: vi.fn(async () => ({
@@ -165,6 +173,7 @@ describe("http session routes", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    pickWorkspaceDirectoryMock.mockReset();
   });
 
   afterEach(async () => {
@@ -201,10 +210,12 @@ describe("http session routes", () => {
     const created = createResponse.json() as {
       session_id: string;
       workspace_id: string;
+      workspace_short_id: string;
       memory_mode: string;
       locale: string;
     };
     expect(created.workspace_id).toBe("project-alpha");
+    expect(created.workspace_short_id).toBe("projecta");
     expect(created.memory_mode).toBe("workspace_only");
     expect(created.locale).toBe("en-US");
 
@@ -415,6 +426,196 @@ describe("http session routes", () => {
     };
     expect(secondPayload.items.every((item) => item.id !== secondSession.session_id)).toBe(true);
     expect(secondPayload.next_cursor).toBeNull();
+  });
+
+  it("lists known workspaces and reads file tree by workspace id", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    const workspaceTwoRoot = path.join(home, "workspace-two");
+    fs.mkdirSync(path.join(home, ".mna"), { recursive: true });
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(workspaceTwoRoot, { recursive: true });
+    fs.writeFileSync(path.join(workspaceTwoRoot, "notes.md"), "# second", "utf8");
+    fs.writeFileSync(
+      path.join(home, ".mna", "workspaces.json"),
+      JSON.stringify({
+        [workspaceRoot]: "550e8400-e29b-41d4-a716-446655440000",
+        [workspaceTwoRoot]: "workspace-secondary"
+      }, null, 2),
+      "utf8"
+    );
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+    const token = app.mnaToken;
+
+    const workspacesResponse = await app.inject({
+      method: "GET",
+      url: "/v1/agent/workspaces",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(workspacesResponse.statusCode).toBe(200);
+    const workspacesPayload = workspacesResponse.json() as {
+      items: Array<{ workspace_id: string; short_id: string; cwd: string; label: string; is_current: boolean }>;
+    };
+    expect(workspacesPayload.items).toHaveLength(2);
+    expect(workspacesPayload.items[0]?.workspace_id).toBe("550e8400-e29b-41d4-a716-446655440000");
+    expect(workspacesPayload.items[0]?.short_id).toBe("550e8400");
+    expect(workspacesPayload.items[0]?.is_current).toBe(true);
+    expect(workspacesPayload.items.some((item) => item.workspace_id === "workspace-secondary")).toBe(true);
+    expect(workspacesPayload.items.some((item) => item.short_id === "workspac")).toBe(true);
+
+    const treeResponse = await app.inject({
+      method: "GET",
+      url: "/v1/agent/fs/tree?workspace_id=workspace-secondary&path=.",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(treeResponse.statusCode).toBe(200);
+    const treePayload = treeResponse.json() as {
+      path: string;
+      workspace_id: string;
+      workspace_short_id: string;
+      entries: Array<{ name: string; type: string }>;
+    };
+    expect(treePayload.workspace_id).toBe("workspace-secondary");
+    expect(treePayload.workspace_short_id).toBe("workspac");
+    expect(treePayload.entries).toEqual([{ name: "notes.md", type: "file" }]);
+
+    const fileResponse = await app.inject({
+      method: "GET",
+      url: "/v1/agent/fs/file?workspace_id=workspace-secondary&path=notes.md",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(fileResponse.statusCode).toBe(200);
+    expect(fileResponse.json()).toEqual({
+      path: "notes.md",
+      workspace_id: "workspace-secondary",
+      workspace_short_id: "workspac",
+      content: "# second"
+    });
+  });
+
+  it("returns workspace_not_found when the requested workspace mapping is missing", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/agent/fs/tree?workspace_id=workspace-missing&path=.",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`
+      }
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: "workspace_not_found",
+        message: "Workspace mapping not found."
+      }
+    });
+  });
+
+  it("registers an arbitrary workspace directory", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    const detachedRoot = path.join(home, "detached");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(detachedRoot, { recursive: true });
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/agent/workspaces",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`
+      },
+      payload: {
+        cwd: detachedRoot
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    const payload = response.json() as {
+      workspace: {
+        workspace_id: string;
+        short_id: string;
+        cwd: string;
+        label: string;
+        is_current: boolean;
+      };
+    };
+    expect(payload.workspace.cwd.replace(/\\/g, "/")).toMatch(/\/detached$/);
+    expect(payload.workspace.short_id).toHaveLength(8);
+    expect(payload.workspace.label).toBe("detached");
+    expect(payload.workspace.is_current).toBe(false);
+  });
+
+  it("opens the native picker and registers the selected workspace", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    const selectedRoot = path.join(home, "selected-workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(selectedRoot, { recursive: true });
+    pickWorkspaceDirectoryMock.mockResolvedValue(selectedRoot);
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/agent/workspaces/pick",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      cancelled: false,
+      workspace: {
+        label: "selected-workspace",
+        is_current: false
+      }
+    });
+  });
+
+  it("returns cancelled when the native picker is closed", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    pickWorkspaceDirectoryMock.mockResolvedValue(null);
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/agent/workspaces/pick",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      cancelled: true
+    });
   });
 
   it("patches a session title", async () => {

@@ -4,14 +4,19 @@ import path from "node:path";
 import type { FastifyReply } from "fastify";
 import { z } from "zod";
 
+import { WORKSPACE_MAP_FILENAME } from "../../config/defaults.js";
+import { deriveWorkspaceId, normalizeWorkspacePath, persistWorkspaceMapping } from "../../config/resolver.js";
 import { createSessionId } from "../../runner/index.js";
 import { createSessionState, updateProviderSelection, updateSessionMode } from "../state.js";
 import type { RuntimeFastifyInstance } from "../types.js";
+import { pickWorkspaceDirectory } from "../workspace-picker.js";
+import { readWorkspaceMappings, resolveWorkspaceRoot } from "../workspace-resolution.js";
 
 const sessionParamsSchema = z.object({ id: z.string().min(1) });
 const turnParamsSchema = z.object({ turnId: z.string().min(1) });
 const fileQuerySchema = z.object({
   path: z.string().default("."),
+  workspace_id: z.string().min(1).optional(),
 });
 
 const createSessionSchema = z.object({
@@ -23,6 +28,19 @@ const createSessionSchema = z.object({
 const patchSessionSchema = z.object({
   title: z.string().trim().min(1),
 });
+
+const createWorkspaceSchema = z.object({
+  cwd: z.string().trim().min(1),
+});
+
+function toWorkspaceShortId(workspaceId: string): string {
+  const normalized = workspaceId.replace(/[^a-zA-Z0-9]/g, "");
+  if (normalized.length >= 8) {
+    return normalized.slice(0, 8).toLowerCase();
+  }
+
+  return workspaceId.slice(0, 8).toLowerCase();
+}
 
 export function registerSessionRoutes(app: RuntimeFastifyInstance) {
   app.post("/v1/agent/sessions", async (request, reply) => {
@@ -40,7 +58,7 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       locale,
     });
 
-    const session = createSessionState(app.runtimeState, sessionId);
+    const session = await createSessionState(app.runtimeState, sessionId);
     await session.runner.start();
 
     const serverAddress = app.server.address();
@@ -51,6 +69,7 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       ws_url: `ws://127.0.0.1:${port}/v1/agent/sessions/${sessionId}/ws?token=${app.mnaToken}`,
       memory_mode: memoryMode,
       workspace_id: workspaceId,
+      workspace_short_id: toWorkspaceShortId(workspaceId),
       locale,
     });
   });
@@ -62,11 +81,19 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       cursor: z.string().optional(),
     }).parse(request.query ?? {});
 
-    return app.runtimeState.store.listSessions({
+    const result = app.runtimeState.store.listSessions({
       workspace_id: query.workspace_id,
       limit: query.limit,
       cursor: query.cursor,
     });
+
+    return {
+      ...result,
+      items: result.items.map((session) => {
+        const { user_id: _userId, ...sessionWithoutUser } = session;
+        return sessionWithoutUser;
+      }),
+    };
   });
 
   app.get("/v1/agent/sessions/:id", async (request, reply) => {
@@ -95,9 +122,10 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
 
     const liveSession = app.runtimeState.sessions.get(params.id);
     const latestEventId = liveSession?.events.at(-1)?.id ?? null;
+    const { user_id: _userId, ...sessionWithoutUser } = session;
 
     return {
-      session,
+      session: sessionWithoutUser,
       messages: app.runtimeState.store.getMessages(params.id),
       latest_event_id: latestEventId,
     };
@@ -249,9 +277,13 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
 
   app.get("/v1/agent/fs/tree", async (request, reply) => {
     const query = fileQuerySchema.parse(request.query ?? {});
+    const workspaceRoot = await resolveRequestedWorkspaceRoot(app, query.workspace_id, reply);
+    if (!workspaceRoot) {
+      return;
+    }
     let targetPath: string;
     try {
-      targetPath = resolveWorkspaceScopedPath(app.runtimeState.config.memory.cwd, query.path);
+      targetPath = resolveWorkspaceScopedPath(workspaceRoot, query.path);
     } catch (error) {
       return sendPathDenied(reply, error);
     }
@@ -259,6 +291,8 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
     const entries = await fs.readdir(targetPath, { withFileTypes: true });
     return {
       path: query.path,
+      workspace_id: query.workspace_id ?? app.runtimeState.config.memory.workspaceId,
+      workspace_short_id: toWorkspaceShortId(query.workspace_id ?? app.runtimeState.config.memory.workspaceId),
       entries: entries.map((entry) => ({
         name: entry.name,
         type: entry.isDirectory() ? "directory" : entry.isFile() ? "file" : "other",
@@ -274,10 +308,15 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/fs/file", async (request, reply) => {
     const query = z.object({
       path: z.string().min(1),
+      workspace_id: z.string().min(1).optional(),
     }).parse(request.query ?? {});
+    const workspaceRoot = await resolveRequestedWorkspaceRoot(app, query.workspace_id, reply);
+    if (!workspaceRoot) {
+      return;
+    }
     let targetPath: string;
     try {
-      targetPath = resolveWorkspaceScopedPath(app.runtimeState.config.memory.cwd, query.path);
+      targetPath = resolveWorkspaceScopedPath(workspaceRoot, query.path);
     } catch (error) {
       return sendPathDenied(reply, error);
     }
@@ -293,8 +332,120 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
     }
     return {
       path: query.path,
+      workspace_id: query.workspace_id ?? app.runtimeState.config.memory.workspaceId,
+      workspace_short_id: toWorkspaceShortId(query.workspace_id ?? app.runtimeState.config.memory.workspaceId),
       content,
     };
+  });
+
+  app.get("/v1/agent/workspaces", async () => {
+    return {
+      items: await listWorkspaceMappings(app),
+    };
+  });
+
+  app.post("/v1/agent/workspaces", async (request, reply) => {
+    const payload = createWorkspaceSchema.parse(request.body ?? {});
+
+    let normalizedCwd: string;
+    try {
+      normalizedCwd = normalizeWorkspacePath(payload.cwd);
+    } catch {
+      return reply.code(400).send({
+        error: {
+          code: "workspace_path_invalid",
+          message: "Workspace directory does not exist.",
+        },
+      });
+    }
+
+    const stat = await fs.stat(normalizedCwd).catch(() => null);
+    if (!stat?.isDirectory()) {
+      return reply.code(400).send({
+        error: {
+          code: "workspace_path_invalid",
+          message: "Workspace directory does not exist.",
+        },
+      });
+    }
+
+    const workspaceId = deriveWorkspaceId(normalizedCwd);
+    persistWorkspaceMapping(app.runtimeState.mnaHomeDirectory, normalizedCwd, workspaceId);
+
+    const items = await listWorkspaceMappings(app);
+    const created = items.find((item) => item.workspace_id === workspaceId);
+
+    return reply.code(201).send({
+      workspace: created ?? mapWorkspaceSummary(
+        workspaceId,
+        normalizedCwd,
+        normalizedCwd === app.runtimeState.config.memory.cwd
+      ),
+    });
+  });
+
+  app.post("/v1/agent/workspaces/pick", async (_request, reply) => {
+    let selectedCwd: string | null;
+    try {
+      selectedCwd = await pickWorkspaceDirectory();
+    } catch (error) {
+      const code =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: string }).code)
+          : "";
+      if (code === "workspace_picker_unsupported") {
+        return reply.code(400).send({
+          error: {
+            code: "workspace_picker_unsupported",
+            message: error instanceof Error ? error.message : "当前系统没有可用的文件夹选择器，请改用手动输入路径。",
+          },
+        });
+      }
+      throw error;
+    }
+
+    if (!selectedCwd) {
+      return reply.code(200).send({
+        cancelled: true,
+      });
+    }
+
+    let normalizedCwd: string;
+    try {
+      normalizedCwd = normalizeWorkspacePath(selectedCwd);
+    } catch {
+      return reply.code(400).send({
+        error: {
+          code: "workspace_path_invalid",
+          message: "Workspace directory does not exist.",
+        },
+      });
+    }
+
+    const stat = await fs.stat(normalizedCwd).catch(() => null);
+    if (!stat?.isDirectory()) {
+      return reply.code(400).send({
+        error: {
+          code: "workspace_path_invalid",
+          message: "Workspace directory does not exist.",
+        },
+      });
+    }
+
+    const workspaceId = deriveWorkspaceId(normalizedCwd);
+    persistWorkspaceMapping(app.runtimeState.mnaHomeDirectory, normalizedCwd, workspaceId);
+
+    const items = await listWorkspaceMappings(app);
+    const created = items.find((item) => item.workspace_id === workspaceId);
+
+    return reply.code(200).send({
+      cancelled: false,
+      workspace: created ?? mapWorkspaceSummary(
+        workspaceId,
+        normalizedCwd,
+        normalizedCwd === app.runtimeState.config.memory.cwd
+      ),
+    });
   });
 
   app.get("/v1/agent/artifacts/:sessionId/:file", async (request, reply) => {
@@ -327,6 +478,47 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
   });
 }
 
+async function listWorkspaceMappings(app: RuntimeFastifyInstance) {
+  const rawMappings = await readWorkspaceMappings(app.runtimeState);
+
+  const items = Object.entries(rawMappings)
+    .map(([cwd, workspaceId]) => mapWorkspaceSummary(workspaceId, cwd, cwd === app.runtimeState.config.memory.cwd))
+    .sort((left, right) => {
+      if (left.is_current !== right.is_current) {
+        return left.is_current ? -1 : 1;
+      }
+      return left.label.localeCompare(right.label);
+    });
+
+  if (items.some((item) => item.workspace_id === app.runtimeState.config.memory.workspaceId)) {
+    return items;
+  }
+
+  return [
+    mapWorkspaceSummary(app.runtimeState.config.memory.workspaceId, app.runtimeState.config.memory.cwd, true),
+    ...items,
+  ];
+}
+
+async function resolveRequestedWorkspaceRoot(
+  app: RuntimeFastifyInstance,
+  workspaceId: string | undefined,
+  reply: FastifyReply
+) {
+  const workspaceRoot = await resolveWorkspaceRoot(app.runtimeState, workspaceId);
+  if (workspaceRoot) {
+    return workspaceRoot;
+  }
+
+  await reply.code(404).send({
+    error: {
+      code: "workspace_not_found",
+      message: "Workspace mapping not found.",
+    },
+  });
+  return null;
+}
+
 function resolveWorkspaceScopedPath(workspaceRoot: string, relativePath: string): string {
   const rootResolved = path.resolve(workspaceRoot);
   const targetPath = path.resolve(rootResolved, relativePath);
@@ -353,4 +545,18 @@ function sendPathDenied(reply: FastifyReply, error: unknown) {
       message: error instanceof Error ? error.message : "Resolved path escapes the workspace root.",
     },
   });
+}
+
+function mapWorkspaceSummary(
+  workspaceId: string,
+  cwd: string,
+  isCurrent: boolean
+) {
+  return {
+    workspace_id: workspaceId,
+    short_id: toWorkspaceShortId(workspaceId),
+    cwd,
+    label: path.basename(cwd) || cwd,
+    is_current: isCurrent,
+  };
 }
