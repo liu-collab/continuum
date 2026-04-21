@@ -222,6 +222,48 @@ describe("AnthropicProvider", () => {
     ]);
   });
 
+  it("combines multiple tiered memory system blocks into a single anthropic system string", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/messages", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        return reply.send({
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          usage: {
+            input_tokens: 3,
+            output_tokens: 2,
+          },
+        });
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new AnthropicProvider({
+      baseUrl: server.baseUrl,
+      model: "claude-sonnet",
+      apiKey: "anthropic-key",
+      runtimeSettings: {
+        maxRetries: 0,
+      },
+    });
+
+    await collectChunks(
+      provider.chat({
+        messages: [
+          { role: "system", content: "core system prompt" },
+          { role: "system", content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+          { role: "system", content: "<memory_summary>summary memory</memory_summary>" },
+          { role: "user", content: "继续" },
+        ],
+      }),
+    );
+
+    expect(requestBody).toMatchObject({
+      system: "core system prompt\n\n<memory_injection tier=\"high\">high memory</memory_injection>\n\n<memory_summary>summary memory</memory_summary>",
+    });
+  });
+
   it("uses a higher default max_tokens when the caller does not provide one", async () => {
     let requestBody: Record<string, unknown> | null = null;
     const server = await startProviderMock((app) => {

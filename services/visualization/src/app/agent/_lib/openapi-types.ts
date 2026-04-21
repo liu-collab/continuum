@@ -69,7 +69,17 @@ export type MnaPromptInspectorResponse = {
   model: string;
   round: number;
   messages: Array<Record<string, unknown>>;
+  prompt_segments: MnaPromptSegmentView[];
   tools: Array<Record<string, unknown>>;
+};
+
+export type MnaPromptSegmentView = {
+  kind: "core_system" | "memory_high" | "memory_medium" | "memory_summary" | "history_summary";
+  priority: "fixed" | "high" | "medium" | "low";
+  preview: string;
+  phase?: string;
+  record_ids?: string[];
+  record_count?: number;
 };
 
 export type MnaFileTreeEntry = {
@@ -263,6 +273,8 @@ export type MnaInjectionBlock = {
   phase: string;
   injection_reason: string;
   memory_summary: string;
+  tier?: "high" | "medium" | "summary";
+  kind?: "stable_preference" | "task_state" | "summary";
   memory_records: MnaInjectionRecord[];
 };
 
@@ -270,6 +282,14 @@ export type MnaWsInjectionBannerEvent = {
   kind: "injection_banner";
   turn_id: string;
   injection: MnaInjectionBlock | null;
+  tier_counts?: {
+    high: number;
+    medium: number;
+    summary: number;
+  };
+  high_summary?: string;
+  medium_summary?: string;
+  summary_only?: string;
   degraded: boolean;
 };
 

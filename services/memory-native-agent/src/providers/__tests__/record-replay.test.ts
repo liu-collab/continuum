@@ -223,4 +223,50 @@ describe("RecordReplayProvider", () => {
     ]);
     expect(secondReplay).toEqual(firstReplay);
   });
+
+  it("records and replays successfully when request messages include multiple system memory blocks", async () => {
+    const fixtureDir = createTempDir();
+    const recordedProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "tiered-memory",
+      mode: "record",
+      modelId: "fake-model",
+      targetProvider: new FakeProvider(),
+    });
+
+    const request = {
+      messages: [
+        { role: "system" as const, content: "core system prompt" },
+        { role: "system" as const, content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+        { role: "system" as const, content: "<memory_summary>summary memory</memory_summary>" },
+        { role: "user" as const, content: "hello" },
+      ],
+      tools: [],
+    };
+
+    for await (const _chunk of recordedProvider.chat(request)) {
+      // drain recorded chunks
+    }
+
+    const replayProvider = new RecordReplayProvider({
+      fixtureDir,
+      fixtureName: "tiered-memory",
+      mode: "replay",
+      modelId: "fake-model",
+    });
+
+    const replayed = [];
+    for await (const chunk of replayProvider.chat(request)) {
+      replayed.push(chunk);
+    }
+
+    expect(replayed).toEqual([
+      { type: "text_delta", text: "hello" },
+      {
+        type: "end",
+        finish_reason: "stop",
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      },
+    ]);
+  });
 });

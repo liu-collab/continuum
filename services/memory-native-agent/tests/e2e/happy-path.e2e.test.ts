@@ -17,6 +17,7 @@ describe("memory-native-agent e2e happy path", () => {
     const firstTurn = await runTurn(firstSession.ws_url, {
       turnId: "turn-remember",
       text: "请记住，我偏好使用 TypeScript。",
+      settleMs: 1_000,
     });
 
     await stack.workerDrain();
@@ -27,13 +28,42 @@ describe("memory-native-agent e2e happy path", () => {
       text: "我偏好什么语言？",
     });
 
-    const injectedBanner = secondTurn.find((event) => event.kind === "injection_banner");
+    const injectedBanner = secondTurn.find(
+      (event) => event.kind === "injection_banner" && event.turn_id === "turn-recall",
+    );
     expect(firstTurn.some((event) => event.kind === "turn_end")).toBe(true);
     expect(secondTurn.some((event) => event.kind === "turn_end")).toBe(true);
     expect(injectedBanner).toBeTruthy();
     expect(
       String((injectedBanner as { injection?: { memory_summary?: string } }).injection?.memory_summary ?? "").toLowerCase(),
     ).toContain("typescript");
+    expect((injectedBanner as { tier_counts?: { high: number } }).tier_counts?.high ?? 0).toBeGreaterThan(0);
+
+    const address = stack.mna.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("mna address unavailable");
+    }
+    const promptInspectorResponse = await fetch(
+      `http://127.0.0.1:${address.port}/v1/agent/turns/turn-recall/dispatched-messages`,
+      {
+        headers: {
+          authorization: `Bearer ${stack.mna.mnaToken}`,
+        },
+      },
+    );
+    expect(promptInspectorResponse.ok).toBe(true);
+    const promptInspector = (await promptInspectorResponse.json()) as {
+      prompt_segments: Array<{ kind: string; preview: string; phase?: string }>;
+    };
+    expect(promptInspector.prompt_segments.some((segment) => segment.kind === "memory_high")).toBe(true);
+    expect(
+      promptInspector.prompt_segments.some(
+        (segment) =>
+          segment.kind === "memory_high"
+          && segment.phase === "before_response"
+          && segment.preview.toLowerCase().includes("typescript"),
+      ),
+    ).toBe(true);
 
     const records = await stack.storageService?.listRecords({
       workspace_id: stack.ids.workspace,

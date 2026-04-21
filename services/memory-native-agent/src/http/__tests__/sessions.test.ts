@@ -804,9 +804,15 @@ describe("http session routes", () => {
     });
     const payload = response.json() as {
       messages: Array<{ role: string; content: string }>;
+      prompt_segments: Array<{ kind: string; priority: string }>;
       tools: Array<Record<string, unknown>>;
     };
     expect(payload.messages.at(0)?.role).toBe("system");
+    expect(payload.prompt_segments.length).toBeGreaterThan(0);
+    expect(payload.prompt_segments[0]).toMatchObject({
+      kind: "core_system",
+      priority: "fixed",
+    });
     expect(payload.messages.at(-1)).toMatchObject({
       role: "user",
       content: "读取当前上下文"
@@ -837,6 +843,7 @@ describe("http session routes", () => {
     app.runtimeState.store.saveDispatchedMessages("turn-tool-round", {
       messages_json: "[{\"role\":\"user\",\"content\":\"读取 README\"}]",
       tools_json: "[]",
+      prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
       provider_id: "ollama",
       model: "qwen2.5-coder",
       round: 2,
@@ -854,6 +861,13 @@ describe("http session routes", () => {
     expect(response.json()).toMatchObject({
       turn_id: "turn-tool-round",
       round: 2,
+      prompt_segments: [
+        {
+          kind: "core_system",
+          priority: "fixed",
+          preview: "system",
+        },
+      ],
     });
   });
 

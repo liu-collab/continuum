@@ -316,6 +316,10 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         kind: "injection_banner",
         turn_id: turnId,
         injection,
+        tier_counts: injection?.tier_counts,
+        high_summary: injection?.high_summary,
+        medium_summary: injection?.medium_summary,
+        summary_only: injection?.summary_only,
         degraded,
       });
     },

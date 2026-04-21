@@ -260,4 +260,48 @@ describe("OpenAICompatibleProvider", () => {
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
     expect(requestCount).toBe(2);
   });
+
+  it("preserves multiple tiered system messages in the OpenAI request body", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/v1/chat/completions", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        reply.header("content-type", "text/event-stream");
+        return reply.send(
+          sseStream([
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1}}\n",
+            "data: [DONE]\n",
+          ]),
+        );
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: server.baseUrl,
+      model: "deepseek-chat",
+      apiKey: "test-key",
+    });
+
+    await collectChunks(
+      provider.chat({
+        messages: [
+          { role: "system", content: "core system prompt" },
+          { role: "system", content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+          { role: "system", content: "<memory_summary>summary memory</memory_summary>" },
+          { role: "user", content: "继续" },
+        ],
+      }),
+    );
+
+    expect(requestBody).toMatchObject({
+      messages: [
+        { role: "system", content: "core system prompt" },
+        { role: "system", content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+        { role: "system", content: "<memory_summary>summary memory</memory_summary>" },
+        { role: "user", content: "继续" },
+      ],
+    });
+  });
 });

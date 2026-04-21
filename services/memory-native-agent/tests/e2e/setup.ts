@@ -793,6 +793,7 @@ async function createRuntimeStack(storageBaseUrl: string) {
       return new RetrievalRuntimeService(
         new TriggerEngine(RUNTIME_BASE_CONFIG, embeddingsClient, readModelRepository, dependencyGuard, logger),
         new QueryEngine(RUNTIME_BASE_CONFIG, readModelRepository, embeddingsClient, dependencyGuard, logger),
+        embeddingsClient,
         new InjectionEngine(RUNTIME_BASE_CONFIG),
         new WritebackEngine(
           { ...RUNTIME_BASE_CONFIG, STORAGE_WRITEBACK_URL: storageBaseUrl },
@@ -802,6 +803,8 @@ async function createRuntimeStack(storageBaseUrl: string) {
         runtimeRepository,
         dependencyGuard,
         logger,
+        undefined,
+        RUNTIME_BASE_CONFIG.EMBEDDING_TIMEOUT_MS,
       );
     },
   };

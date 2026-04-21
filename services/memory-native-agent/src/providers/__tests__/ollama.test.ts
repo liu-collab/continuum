@@ -147,4 +147,46 @@ describe("OllamaProvider", () => {
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
     expect(requestCount).toBe(2);
   });
+
+  it("forwards multiple tiered system messages to Ollama unchanged", async () => {
+    let requestBody: Record<string, unknown> | null = null;
+    const server = await startProviderMock((app) => {
+      app.post("/api/chat", async (request, reply) => {
+        requestBody = request.body as Record<string, unknown>;
+        reply.header("content-type", "application/x-ndjson");
+        return reply.send(
+          ndjsonStream([
+            "{\"message\":{\"content\":\"ok\"}}\n",
+            "{\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":1,\"eval_count\":1}\n",
+          ]),
+        );
+      });
+    });
+    apps.push(server.app);
+
+    const provider = new OllamaProvider({
+      baseUrl: server.baseUrl,
+      model: "qwen2.5-coder",
+    });
+
+    await collectChunks(
+      provider.chat({
+        messages: [
+          { role: "system", content: "core system prompt" },
+          { role: "system", content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+          { role: "system", content: "<memory_summary>summary memory</memory_summary>" },
+          { role: "user", content: "继续" },
+        ],
+      }),
+    );
+
+    expect(requestBody).toMatchObject({
+      messages: [
+        { role: "system", content: "core system prompt" },
+        { role: "system", content: "<memory_injection tier=\"high\">high memory</memory_injection>" },
+        { role: "system", content: "<memory_summary>summary memory</memory_summary>" },
+        { role: "user", content: "继续" },
+      ],
+    });
+  });
 });

@@ -67,6 +67,7 @@ describe("SqliteSessionStore message append", () => {
     store.saveDispatchedMessages("turn-1", {
       messages_json: "[{\"role\":\"user\",\"content\":\"hello\"}]",
       tools_json: "[]",
+      prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
       provider_id: "openai-compatible",
       model: "gpt-test",
       round: 1,
@@ -79,6 +80,7 @@ describe("SqliteSessionStore message append", () => {
     expect(store.getDispatchedMessages("turn-1")).toMatchObject({
       provider_id: "openai-compatible",
       round: 1,
+      prompt_segments_json: "[{\"kind\":\"core_system\",\"priority\":\"fixed\",\"preview\":\"system\"}]",
     });
 
     const messages = store.getMessages("sess-1");

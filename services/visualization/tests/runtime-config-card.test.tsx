@@ -21,6 +21,12 @@ const baseConfig = {
     model: null,
     api_key: null,
   },
+  writeback_llm: {
+    base_url: null,
+    model: "claude-haiku-4-5-20251001",
+    api_key: null,
+    timeout_ms: 5000,
+  },
   mcp: {
     servers: [],
   },

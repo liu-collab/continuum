@@ -15,6 +15,8 @@ import {
   estimateToolTokens,
   resolveContextMaxTokens,
 } from "./token-budget.js";
+import { tierMemoryInjection } from "./memory-tiering.js";
+import { toPromptSegmentView, type PromptSegmentView } from "./prompt-segments.js";
 import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
 import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
@@ -27,6 +29,16 @@ export interface InjectionBlock {
   phase: string;
   injection_reason: string;
   memory_summary: string;
+  tier?: "high" | "medium" | "summary";
+  kind?: "stable_preference" | "task_state" | "summary";
+  tier_counts?: {
+    high: number;
+    medium: number;
+    summary: number;
+  };
+  high_summary?: string;
+  medium_summary?: string;
+  summary_only?: string;
   memory_records: Array<{
     id: string;
     memory_type: string;
@@ -124,7 +136,7 @@ export class AgentRunner {
         degraded = true;
       }
       if (response?.injection_block) {
-        injections.push(toInjectionBlock(phase, response.injection_block));
+        injections.push(...toTieredInjectionBlocks(phase, response.injection_block));
       }
       this.deps.io.emitPhaseResult(turnId, phase, response);
     }
@@ -155,6 +167,17 @@ export class AgentRunner {
       1_024,
     );
 
+    let promptSegments = this.conversation.buildPromptSegments({
+      systemPrompt,
+      tools,
+      tokenBudget: {
+        maxTokens: contextMaxTokens,
+        reserveTokens: this.deps.config.context.reserveTokens,
+        compactionStrategy: this.deps.config.context.compactionStrategy,
+        toolTokenEstimate,
+      },
+      injections,
+    });
     let messages = this.conversation.buildMessages({
       systemPrompt,
       tools,
@@ -193,7 +216,7 @@ export class AgentRunner {
     let terminalEventEmitted = false;
     let round = 1;
 
-    this.persistDispatchedMessages(turnId, messages, tools, round);
+    this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), tools, round);
 
     try {
       while (!abortController.signal.aborted) {
@@ -293,6 +316,17 @@ export class AgentRunner {
         }
 
         round += 1;
+        promptSegments = this.conversation.buildPromptSegments({
+          systemPrompt,
+          tools,
+          tokenBudget: {
+            maxTokens: contextMaxTokens,
+            reserveTokens: this.deps.config.context.reserveTokens,
+            compactionStrategy: this.deps.config.context.compactionStrategy,
+            toolTokenEstimate,
+          },
+          injections,
+        });
         messages = this.conversation.buildMessages({
           systemPrompt,
           tools,
@@ -304,7 +338,7 @@ export class AgentRunner {
           },
           injections,
         });
-        this.persistDispatchedMessages(turnId, messages, tools, round);
+        this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), tools, round);
         terminalEventEmitted = false;
       }
 
@@ -572,6 +606,7 @@ export class AgentRunner {
   private persistDispatchedMessages(
     turnId: string,
     messages: ChatMessage[],
+    promptSegments: PromptSegmentView[],
     tools: ReturnType<ToolDispatcher["listTools"]>,
     round: number,
   ) {
@@ -579,6 +614,7 @@ export class AgentRunner {
       this.deps.store?.saveDispatchedMessages(turnId, {
         messages_json: JSON.stringify(messages),
         tools_json: JSON.stringify(tools),
+        prompt_segments_json: JSON.stringify(promptSegments),
         provider_id: this.deps.provider.id(),
         model: this.deps.provider.model(),
         round,
@@ -606,19 +642,87 @@ function toInjectionBlock(
   };
 }
 
+function toTieredInjectionBlocks(
+  phase: string,
+  block: NonNullable<PrepareContextResult["injection_block"] | SessionStartResult["injection_block"]>,
+): InjectionBlock[] {
+  const normalized = toInjectionBlock(phase, block);
+  const tiered = tierMemoryInjection(normalized);
+  const injections: InjectionBlock[] = [];
+
+  if (tiered.high.length > 0) {
+    injections.push({
+      phase,
+      injection_reason: normalized.injection_reason,
+      memory_summary: normalized.memory_summary,
+      memory_records: tiered.high,
+      tier: "high",
+      kind: "stable_preference",
+    });
+  }
+
+  if (tiered.medium.length > 0) {
+    injections.push({
+      phase,
+      injection_reason: normalized.injection_reason,
+      memory_summary: normalized.memory_summary,
+      memory_records: tiered.medium,
+      tier: "medium",
+      kind: "task_state",
+    });
+  }
+
+  if (tiered.summary) {
+    injections.push({
+      phase,
+      injection_reason: normalized.injection_reason,
+      memory_summary: tiered.summary,
+      memory_records: tiered.summary_records,
+      tier: "summary",
+      kind: "summary",
+    });
+  }
+
+  return injections;
+}
+
 function mergeInjections(injections: InjectionBlock[]): InjectionBlock {
   if (injections.length === 1) {
     const single = injections[0];
     if (!single) {
       throw new Error("Expected at least one injection.");
     }
-    return single;
+    return {
+      ...single,
+      tier_counts: {
+        high: single.tier === "high" ? single.memory_records.length : 0,
+        medium: single.tier === "medium" ? single.memory_records.length : 0,
+        summary: single.tier === "summary" ? single.memory_records.length : 0,
+      },
+      high_summary: single.tier === "high" ? single.memory_summary : undefined,
+      medium_summary: single.tier === "medium" ? single.memory_summary : undefined,
+      summary_only: single.tier === "summary" ? single.memory_summary : undefined,
+    };
   }
 
   return {
     phase: injections.map((item) => item.phase).join(","),
     injection_reason: injections.map((item) => `[${item.phase}] ${item.injection_reason}`).join("\n"),
     memory_summary: injections.map((item) => `[${item.phase}] ${item.memory_summary}`).join("\n"),
+    tier_counts: {
+      high: injections
+        .filter((item) => item.tier === "high")
+        .reduce((sum, item) => sum + item.memory_records.length, 0),
+      medium: injections
+        .filter((item) => item.tier === "medium")
+        .reduce((sum, item) => sum + item.memory_records.length, 0),
+      summary: injections
+        .filter((item) => item.tier === "summary")
+        .reduce((sum, item) => sum + item.memory_records.length, 0),
+    },
+    high_summary: injections.filter((item) => item.tier === "high").map((item) => item.memory_summary).join("\n") || undefined,
+    medium_summary: injections.filter((item) => item.tier === "medium").map((item) => item.memory_summary).join("\n") || undefined,
+    summary_only: injections.filter((item) => item.tier === "summary").map((item) => item.memory_summary).join("\n") || undefined,
     memory_records: injections.flatMap((item) => item.memory_records),
   };
 }

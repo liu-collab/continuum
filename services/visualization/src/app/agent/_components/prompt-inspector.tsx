@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import dynamic from "next/dynamic";
 import { X } from "lucide-react";
 
@@ -79,6 +80,25 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
               <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.tools")}</dt>
                 <dd className="mt-0.5 text-foreground">{payload?.tools.length ?? 0}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Prompt Segments</dt>
+                <dd className="mt-1 space-y-2">
+                  {(payload?.prompt_segments ?? []).map((segment, index) => (
+                    <div key={`${segment.kind}-${segment.phase ?? "none"}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2">
+                      <div className="text-xs font-medium text-foreground">
+                        {segment.kind} · {segment.priority}
+                      </div>
+                      {segment.phase ? (
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">phase: {segment.phase}</div>
+                      ) : null}
+                      <div className="mt-1 text-xs leading-5 text-foreground">{segment.preview}</div>
+                    </div>
+                  ))}
+                  {payload && payload.prompt_segments.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No prompt segments</div>
+                  ) : null}
+                </dd>
               </div>
             </dl>
           </div>

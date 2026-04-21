@@ -1,5 +1,7 @@
 import type { ChatMessage } from "../providers/types.js";
 import type { ToolTrustLevel } from "../tools/index.js";
+import type { PromptSegment } from "./prompt-segments.js";
+import { compilePromptSegments } from "./prompt-segments.js";
 import { compactMessages, type TokenBudgetSettings } from "./token-budget.js";
 
 const MAX_RECENT_MESSAGES = 48;
@@ -19,6 +21,8 @@ export interface BuildMessagesInput {
     phase: string;
     injection_reason: string;
     memory_summary: string;
+    tier?: "high" | "medium" | "summary";
+    kind?: "stable_preference" | "task_state" | "summary";
     memory_records: Array<{
       id: string;
       memory_type: string;
@@ -49,24 +53,7 @@ export class Conversation {
   }
 
   buildMessages(input: BuildMessagesInput): ChatMessage[] {
-    const fixedMessages: ChatMessage[] = [
-      {
-        role: "system",
-        content: input.systemPrompt,
-      },
-    ];
-
-    for (const injection of input.injections) {
-      fixedMessages.push({
-        role: "system",
-        content: buildInjectionBlock(injection),
-      });
-    }
-
-    const archivedSummaryMessage = this.buildArchivedSummaryMessage();
-    if (archivedSummaryMessage) {
-      fixedMessages.push(archivedSummaryMessage);
-    }
+    const fixedMessages = compilePromptSegments(this.buildPromptSegments(input));
 
     return compactMessages(
       fixedMessages,
@@ -78,6 +65,31 @@ export class Conversation {
         toolTokenEstimate: input.tokenBudget?.toolTokenEstimate,
       },
     );
+  }
+
+  buildPromptSegments(input: BuildMessagesInput): PromptSegment[] {
+    const segments: PromptSegment[] = [
+      {
+        kind: "core_system",
+        priority: "fixed",
+        content: input.systemPrompt,
+      },
+    ];
+
+    for (const injection of input.injections) {
+      segments.push(buildInjectionSegment(injection));
+    }
+
+    const archivedSummaryMessage = this.buildArchivedSummaryMessage();
+    if (archivedSummaryMessage) {
+      segments.push({
+        kind: "history_summary",
+        priority: "low",
+        content: archivedSummaryMessage.content,
+      });
+    }
+
+    return segments;
   }
 
   shortSummary(): string {
@@ -135,6 +147,45 @@ function buildInjectionBlock(injection: BuildMessagesInput["injections"][number]
     `memory_records:`,
     records || "- none",
     "</memory_injection>",
+  ].join("\n");
+}
+
+function buildInjectionSegment(injection: BuildMessagesInput["injections"][number]): PromptSegment {
+  const tier = injection.tier ?? "medium";
+
+  if (tier === "summary") {
+    return {
+      kind: "memory_summary",
+      priority: "low",
+      content: buildSummaryBlock(injection),
+      source: {
+        phase: injection.phase,
+        injection_reason: injection.injection_reason,
+        record_ids: injection.memory_records.map((record) => record.id),
+        record_count: injection.memory_records.length,
+      },
+    };
+  }
+
+  return {
+    kind: tier === "high" ? "memory_high" : "memory_medium",
+    priority: tier === "high" ? "high" : "medium",
+    content: buildInjectionBlock(injection),
+    source: {
+      phase: injection.phase,
+      injection_reason: injection.injection_reason,
+      record_ids: injection.memory_records.map((record) => record.id),
+      record_count: injection.memory_records.length,
+    },
+  };
+}
+
+function buildSummaryBlock(injection: BuildMessagesInput["injections"][number]): string {
+  return [
+    `<memory_summary phase="${injection.phase}" kind="${injection.kind ?? "summary"}">`,
+    `injection_reason: ${injection.injection_reason}`,
+    `memory_summary: ${injection.memory_summary}`,
+    "</memory_summary>",
   ].join("\n");
 }
 

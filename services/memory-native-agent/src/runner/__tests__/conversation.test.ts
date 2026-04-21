@@ -59,6 +59,51 @@ describe("Conversation.shortSummary", () => {
     ]);
   });
 
+  it("builds prompt segments with tiered memory blocks before history", () => {
+    const conversation = new Conversation();
+
+    conversation.seed([
+      { role: "user", content: "当前轮输入" },
+    ]);
+
+    const segments = conversation.buildPromptSegments({
+      systemPrompt: "system prompt",
+      injections: [
+        {
+          phase: "before_response",
+          injection_reason: "high value preference",
+          memory_summary: "默认用中文回答",
+          tier: "high",
+          kind: "stable_preference",
+          memory_records: [
+            {
+              id: "pref-1",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用中文回答",
+              importance: 0.95,
+              confidence: 0.98,
+            },
+          ],
+        },
+        {
+          phase: "before_response",
+          injection_reason: "summary only",
+          memory_summary: "当前仓库默认使用 pnpm",
+          tier: "summary",
+          kind: "summary",
+          memory_records: [],
+        },
+      ],
+    });
+
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "core_system",
+      "memory_high",
+      "memory_summary",
+    ]);
+  });
+
   it("drops older history when a token budget is configured", () => {
     const conversation = new Conversation();
 

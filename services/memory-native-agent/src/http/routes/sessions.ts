@@ -242,6 +242,7 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       model: payload.model,
       round: payload.round,
       messages: JSON.parse(payload.messages_json),
+      prompt_segments: payload.prompt_segments_json ? JSON.parse(payload.prompt_segments_json) : [],
       tools: JSON.parse(payload.tools_json),
     };
   });

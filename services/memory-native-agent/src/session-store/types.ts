@@ -57,6 +57,7 @@ export interface ToolInvocation {
 export interface DispatchedMessagesPayload {
   messages_json: string;
   tools_json: string;
+  prompt_segments_json?: string | null;
   provider_id: string;
   model: string;
   round: number;

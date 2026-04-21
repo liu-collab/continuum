@@ -305,11 +305,12 @@ export class SqliteSessionStore implements SessionStore {
     this.db
       .prepare(
         `
-          INSERT INTO dispatched_messages (turn_id, messages_json, tools_json, provider_id, model, round, created_at)
-          VALUES (@turn_id, @messages_json, @tools_json, @provider_id, @model, @round, @created_at)
+          INSERT INTO dispatched_messages (turn_id, messages_json, tools_json, prompt_segments_json, provider_id, model, round, created_at)
+          VALUES (@turn_id, @messages_json, @tools_json, @prompt_segments_json, @provider_id, @model, @round, @created_at)
           ON CONFLICT(turn_id) DO UPDATE SET
             messages_json = excluded.messages_json,
             tools_json = excluded.tools_json,
+            prompt_segments_json = excluded.prompt_segments_json,
             provider_id = excluded.provider_id,
             model = excluded.model,
             round = excluded.round,
@@ -320,6 +321,7 @@ export class SqliteSessionStore implements SessionStore {
         turn_id,
         messages_json: payload.messages_json,
         tools_json: payload.tools_json,
+        prompt_segments_json: payload.prompt_segments_json ?? null,
         provider_id: payload.provider_id,
         model: payload.model,
         round: payload.round,
@@ -338,6 +340,7 @@ export class SqliteSessionStore implements SessionStore {
     return {
       messages_json: readString(row.messages_json),
       tools_json: readString(row.tools_json),
+      prompt_segments_json: readNullableString(row.prompt_segments_json),
       provider_id: readString(row.provider_id),
       model: readString(row.model),
       round: readNumber(row.round),
@@ -360,6 +363,7 @@ export class SqliteSessionStore implements SessionStore {
     const sql = fs.readFileSync(path.join(currentDir, "migrations", "0001-init.sql"), "utf8");
     this.db.exec(sql);
     this.ensureColumn("dispatched_messages", "round", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureColumn("dispatched_messages", "prompt_segments_json", "TEXT");
   }
 
   private ensureColumn(table: string, column: string, definition: string) {
