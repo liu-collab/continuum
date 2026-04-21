@@ -3,7 +3,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const BUILD_STATE_VERSION = 1;
+const BUILD_STATE_VERSION = 2;
 const BUILD_STATE_DIR = path.join(os.homedir(), ".continuum", "build-state");
 const BUILD_STATE_PATH = path.join(BUILD_STATE_DIR, "continuum-cli.json");
 
@@ -15,6 +15,7 @@ function createDefaultBuildState() {
   return {
     version: BUILD_STATE_VERSION,
     cli: null,
+    image: null,
     vendor: {
       entries: {},
       builds: {},
@@ -91,39 +92,11 @@ async function hashInputs(baseDir, entries) {
 }
 
 async function hashStackInputs(packageDir) {
-  const repoRoot = repoRootFromPackageDir(packageDir);
   return hashInputGroups([
     {
       label: "stack",
       baseDir: path.join(packageDir, "templates", "stack"),
       entries: ["Dockerfile", "entrypoint.mjs"],
-    },
-    {
-      label: "storage",
-      baseDir: path.join(repoRoot, "services", "storage"),
-      entries: ["src", "migrations", "package.json", "package-lock.json", "tsconfig.json", "drizzle.config.ts"],
-    },
-    {
-      label: "runtime",
-      baseDir: path.join(repoRoot, "services", "retrieval-runtime"),
-      entries: ["src", "migrations", "package.json", "package-lock.json", "tsconfig.json"],
-    },
-    {
-      label: "visualization",
-      baseDir: path.join(repoRoot, "services", "visualization"),
-      entries: [
-        "src",
-        "public",
-        "package.json",
-        "package-lock.json",
-        "tsconfig.json",
-        "tsconfig.typecheck.json",
-        "next.config.ts",
-        "next-env.d.ts",
-        "postcss.config.js",
-        "tailwind.config.ts",
-        "components.json",
-      ],
     },
   ]);
 }
@@ -136,14 +109,20 @@ function serviceDefinitions(packageDir) {
       buildInputs: ["src", "migrations", "package.json", "package-lock.json", "tsconfig.json", "drizzle.config.ts"],
       entryInputs: ["src", "migrations", "package.json", "package-lock.json", "tsconfig.json", "drizzle.config.ts"],
       buildOutputs: ["dist/src/server.js"],
-      vendorOutputs: [path.join(packageDir, "vendor", "storage", "dist", "src", "server.js")],
+      vendorOutputs: [
+        path.join(packageDir, "vendor", "storage", "dist", "src", "server.js"),
+        path.join(packageDir, "vendor", "storage", "package.json"),
+      ],
     },
     runtime: {
       serviceDir: path.join(repoRoot, "services", "retrieval-runtime"),
       buildInputs: ["src", "migrations", "package.json", "package-lock.json", "tsconfig.json"],
       entryInputs: ["src", "migrations", "host-adapters", "package.json", "package-lock.json", "tsconfig.json"],
       buildOutputs: ["dist/src/index.js"],
-      vendorOutputs: [path.join(packageDir, "vendor", "runtime", "dist", "src", "index.js")],
+      vendorOutputs: [
+        path.join(packageDir, "vendor", "runtime", "dist", "src", "index.js"),
+        path.join(packageDir, "vendor", "runtime", "package.json"),
+      ],
     },
     visualization: {
       serviceDir: path.join(repoRoot, "services", "visualization"),
@@ -201,6 +180,9 @@ export async function readBuildState() {
 
   const content = await readFile(BUILD_STATE_PATH, "utf8");
   const parsed = JSON.parse(content);
+  if (parsed.version !== BUILD_STATE_VERSION) {
+    return createDefaultBuildState();
+  }
   return {
     ...createDefaultBuildState(),
     ...parsed,
@@ -227,6 +209,7 @@ export async function writeBuildState(nextState) {
       {
         version: BUILD_STATE_VERSION,
         cli: nextState.cli ?? null,
+        image: nextState.image ?? null,
         vendor: {
           entries: nextState.vendor?.entries ?? {},
           builds: nextState.vendor?.builds ?? {},
@@ -314,5 +297,45 @@ export async function planVendorBuild(packageDir) {
     changedEntries,
     buildServices,
     needsRefresh: changedEntries.length > 0,
+  };
+}
+
+export async function planStackImageBuild(packageDir) {
+  const state = await readBuildState();
+  const hash = createHash("sha256")
+    .update(String(BUILD_STATE_VERSION))
+    .update(state.vendor.entries.storage ?? "")
+    .update(state.vendor.entries.runtime ?? "")
+    .update(state.vendor.entries.visualization ?? "")
+    .update(state.vendor.entries.stack ?? "")
+    .digest("hex");
+
+  const contextReady = await outputsExist(packageDir, [
+    path.join(packageDir, "vendor", "storage", "dist", "src", "server.js"),
+    path.join(packageDir, "vendor", "storage", "dist", "src", "worker.js"),
+    path.join(packageDir, "vendor", "storage", "migrations"),
+    path.join(packageDir, "vendor", "storage", "node_modules"),
+    path.join(packageDir, "vendor", "storage", "package.json"),
+    path.join(packageDir, "vendor", "runtime", "dist", "src", "index.js"),
+    path.join(packageDir, "vendor", "runtime", "migrations"),
+    path.join(packageDir, "vendor", "runtime", "node_modules"),
+    path.join(packageDir, "vendor", "runtime", "host-adapters", "memory-claude-plugin"),
+    path.join(packageDir, "vendor", "runtime", "package.json"),
+    path.join(packageDir, "vendor", "visualization", "standalone", "server.js"),
+    path.join(packageDir, "vendor", "visualization", "standalone", "package.json"),
+    path.join(packageDir, "vendor", "stack", "Dockerfile"),
+    path.join(packageDir, "vendor", "stack", "entrypoint.mjs"),
+  ]);
+
+  return {
+    currentState: state,
+    nextState: {
+      ...state,
+      image: {
+        hash,
+      },
+    },
+    hash,
+    needsBuild: state.image?.hash !== hash || !contextReady,
   };
 }

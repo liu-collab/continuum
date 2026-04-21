@@ -101,12 +101,18 @@ async function copyWithRetry(sourcePath, targetPath) {
 
 async function copyRuntimeBundle() {
   const targetDir = path.join(vendorStageDir, "runtime");
-  await copyEntries(runtimeDir, targetDir, ["dist", "migrations", "host-adapters", "node_modules"]);
+  await copyEntries(runtimeDir, targetDir, [
+    "dist",
+    "migrations",
+    "host-adapters",
+    "node_modules",
+    "package.json",
+  ]);
 }
 
 async function copyStorageBundle() {
   const targetDir = path.join(vendorStageDir, "storage");
-  await copyEntries(storageDir, targetDir, ["dist", "migrations", "node_modules"]);
+  await copyEntries(storageDir, targetDir, ["dist", "migrations", "node_modules", "package.json"]);
 }
 
 async function copyVisualizationBundle() {
@@ -134,39 +140,6 @@ async function copyMemoryNativeAgentBundle() {
 async function copyStackTemplate() {
   const targetDir = path.join(vendorStageDir, "stack");
   await cp(stackTemplateDir, targetDir, { recursive: true });
-}
-
-async function copyStackSources() {
-  await copyEntries(storageDir, path.join(vendorStageDir, "stack", "storage-src"), [
-    "src",
-    "migrations",
-    "package.json",
-    "package-lock.json",
-    "tsconfig.json",
-    "drizzle.config.ts",
-  ]);
-
-  await copyEntries(runtimeDir, path.join(vendorStageDir, "stack", "runtime-src"), [
-    "src",
-    "migrations",
-    "package.json",
-    "package-lock.json",
-    "tsconfig.json",
-  ]);
-
-  await copyEntries(visualizationDir, path.join(vendorStageDir, "stack", "visualization-src"), [
-    "src",
-    "public",
-    "package.json",
-    "package-lock.json",
-    "tsconfig.json",
-    "tsconfig.typecheck.json",
-    "next.config.ts",
-    "next-env.d.ts",
-    "postcss.config.js",
-    "tailwind.config.ts",
-    "components.json",
-  ]);
 }
 
 async function replaceVendorDir() {
@@ -248,7 +221,6 @@ async function main() {
   }
   if (plan.changedEntries.includes("stack")) {
     await copyStackTemplate();
-    await copyStackSources();
   }
   await replaceVendorDir();
   await writeBuildState(plan.nextState);

@@ -13,6 +13,8 @@ const stopLegacyContinuumProcessesMock = vi.hoisted(() => vi.fn());
 const cpMock = vi.hoisted(() => vi.fn());
 const mkdirMock = vi.hoisted(() => vi.fn());
 const rmMock = vi.hoisted(() => vi.fn());
+const planStackImageBuildMock = vi.hoisted(() => vi.fn());
+const writeBuildStateMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -66,6 +68,13 @@ vi.mock("../src/process-cleanup.js", () => ({
   stopLegacyContinuumProcesses: stopLegacyContinuumProcessesMock,
 }));
 
+vi.mock("../src/build-state-loader.js", () => ({
+  loadBuildStateHelpers: vi.fn(async () => ({
+    planStackImageBuild: planStackImageBuildMock,
+    writeBuildState: writeBuildStateMock,
+  })),
+}));
+
 import { runStartCommand } from "../src/start-command.js";
 
 function mockSuccessfulSpawn() {
@@ -98,6 +107,8 @@ describe("runStartCommand", () => {
     cpMock.mockReset();
     mkdirMock.mockReset();
     rmMock.mockReset();
+    planStackImageBuildMock.mockReset();
+    writeBuildStateMock.mockReset();
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
@@ -114,6 +125,20 @@ describe("runStartCommand", () => {
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: true,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    writeBuildStateMock.mockResolvedValue(undefined);
     fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
     startManagedMnaMock.mockRejectedValue(new Error("mna failed"));
 
@@ -132,4 +157,55 @@ describe("runStartCommand", () => {
       ),
     ).toBe(true);
   }, 130_000);
+
+  it("skips docker build when the managed stack image inputs are unchanged", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 2,
+      image: {
+        hash: "image-hash",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.continuum/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.continuum/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    const spawnCommands = spawnMock.mock.calls.map((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return [command, ...args].join(" ");
+    });
+
+    expect(
+      spawnCommands.some((command) => command.includes("docker build -t continuum-local:latest")),
+    ).toBe(false);
+  });
 });

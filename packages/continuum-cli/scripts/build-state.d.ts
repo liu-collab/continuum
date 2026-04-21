@@ -2,6 +2,7 @@ export type CliBuildPlan = {
   currentState: {
     version: number;
     cli: { hash: string } | null;
+    image: { hash: string } | null;
     vendor: {
       entries: Record<string, string>;
       builds: Record<string, string>;
@@ -10,6 +11,7 @@ export type CliBuildPlan = {
   nextState: {
     version: number;
     cli: { hash: string } | null;
+    image: { hash: string } | null;
     vendor: {
       entries: Record<string, string>;
       builds: Record<string, string>;
@@ -23,6 +25,7 @@ export type VendorBuildPlan = {
   currentState: {
     version: number;
     cli: { hash: string } | null;
+    image: { hash: string } | null;
     vendor: {
       entries: Record<string, string>;
       builds: Record<string, string>;
@@ -31,6 +34,7 @@ export type VendorBuildPlan = {
   nextState: {
     version: number;
     cli: { hash: string } | null;
+    image: { hash: string } | null;
     vendor: {
       entries: Record<string, string>;
       builds: Record<string, string>;
@@ -44,6 +48,7 @@ export type VendorBuildPlan = {
 export function readBuildState(): Promise<{
   version: number;
   cli: { hash: string } | null;
+  image: { hash: string } | null;
   vendor: {
     entries: Record<string, string>;
     builds: Record<string, string>;
@@ -53,6 +58,7 @@ export function readBuildState(): Promise<{
 export function writeBuildState(nextState: {
   version: number;
   cli: { hash: string } | null;
+  image: { hash: string } | null;
   vendor: {
     entries: Record<string, string>;
     builds: Record<string, string>;
@@ -62,3 +68,26 @@ export function writeBuildState(nextState: {
 export function planCliBuild(packageDir: string): Promise<CliBuildPlan>;
 
 export function planVendorBuild(packageDir: string): Promise<VendorBuildPlan>;
+
+export function planStackImageBuild(packageDir: string): Promise<{
+  currentState: {
+    version: number;
+    cli: { hash: string } | null;
+    image: { hash: string } | null;
+    vendor: {
+      entries: Record<string, string>;
+      builds: Record<string, string>;
+    };
+  };
+  nextState: {
+    version: number;
+    cli: { hash: string } | null;
+    image: { hash: string } | null;
+    vendor: {
+      entries: Record<string, string>;
+      builds: Record<string, string>;
+    };
+  };
+  hash: string;
+  needsBuild: boolean;
+}>;

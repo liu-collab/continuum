@@ -66,10 +66,23 @@ async function createVendorFixture(rootDir: string) {
   await writeFixtureFile(path.join(servicesRoot, "memory-native-agent", "dist", "src", "index.js"), "export {};\n");
 
   await writeFixtureFile(path.join(vendorRoot, "storage", "dist", "src", "server.js"), "export {};\n");
+  await writeFixtureFile(path.join(vendorRoot, "storage", "dist", "src", "worker.js"), "export {};\n");
+  await writeFixtureFile(path.join(vendorRoot, "storage", "migrations", "001.sql"), "-- storage\n");
+  await writeFixtureFile(path.join(vendorRoot, "storage", "node_modules", "pg", "index.js"), "export {};\n");
+  await writeFixtureFile(path.join(vendorRoot, "storage", "package.json"), "{\"name\":\"storage\"}\n");
   await writeFixtureFile(path.join(vendorRoot, "runtime", "dist", "src", "index.js"), "export {};\n");
+  await writeFixtureFile(path.join(vendorRoot, "runtime", "migrations", "001.sql"), "-- runtime\n");
+  await writeFixtureFile(path.join(vendorRoot, "runtime", "node_modules", "pg", "index.js"), "export {};\n");
+  await writeFixtureFile(
+    path.join(vendorRoot, "runtime", "host-adapters", "memory-claude-plugin", "manifest.json"),
+    "{}\n",
+  );
+  await writeFixtureFile(path.join(vendorRoot, "runtime", "package.json"), "{\"name\":\"runtime\"}\n");
   await writeFixtureFile(path.join(vendorRoot, "visualization", "standalone", "server.js"), "export {};\n");
+  await writeFixtureFile(path.join(vendorRoot, "visualization", "standalone", "package.json"), "{\"name\":\"viz\"}\n");
   await writeFixtureFile(path.join(vendorRoot, "memory-native-agent", "bin", "mna-server.mjs"), "console.log('mna');\n");
   await writeFixtureFile(path.join(vendorRoot, "stack", "Dockerfile"), "FROM node:22\n");
+  await writeFixtureFile(path.join(vendorRoot, "stack", "entrypoint.mjs"), "console.log('entry');\n");
 
   return packageDir;
 }
@@ -149,5 +162,26 @@ describe("build state planning", () => {
     const publicOnlyPlan = await planVendorBuild(packageDir);
     expect(publicOnlyPlan.changedEntries).toContain("visualization");
     expect(publicOnlyPlan.buildServices).not.toContain("visualization");
+  });
+
+  it("rebuilds stack image when required vendor runtime files are incomplete", async () => {
+    const rootDir = path.join(tempHome, "repo");
+    const packageDir = await createVendorFixture(rootDir);
+    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
+    const { planVendorBuild, planStackImageBuild, writeBuildState } = await import("../scripts/build-state.mjs");
+
+    const vendorPlan = await planVendorBuild(packageDir);
+    await writeBuildState(vendorPlan.nextState);
+
+    const initialImagePlan = await planStackImageBuild(packageDir);
+    expect(initialImagePlan.needsBuild).toBe(true);
+    await writeBuildState(initialImagePlan.nextState);
+
+    const steadyImagePlan = await planStackImageBuild(packageDir);
+    expect(steadyImagePlan.needsBuild).toBe(false);
+
+    await rm(path.join(packageDir, "vendor", "runtime", "node_modules"), { recursive: true, force: true });
+    const incompleteImagePlan = await planStackImageBuild(packageDir);
+    expect(incompleteImagePlan.needsBuild).toBe(true);
   });
 });

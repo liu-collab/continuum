@@ -37,6 +37,7 @@ import {
   writeManagedEmbeddingConfig,
 } from "./managed-config.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
+import { loadBuildStateHelpers } from "./build-state-loader.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
@@ -195,13 +196,13 @@ async function prepareStackContext(packageRoot: string) {
   await rm(stageDir, { recursive: true, force: true });
   await mkdir(stageDir, { recursive: true });
 
-  await cp(vendorPath(packageRoot, "stack", "storage-src"), path.join(stageDir, "storage"), {
+  await cp(vendorPath(packageRoot, "storage"), path.join(stageDir, "storage"), {
     recursive: true,
   });
-  await cp(vendorPath(packageRoot, "stack", "runtime-src"), path.join(stageDir, "runtime"), {
+  await cp(vendorPath(packageRoot, "runtime"), path.join(stageDir, "runtime"), {
     recursive: true,
   });
-  await cp(vendorPath(packageRoot, "stack", "visualization-src"), path.join(stageDir, "visualization"), {
+  await cp(vendorPath(packageRoot, "visualization", "standalone"), path.join(stageDir, "visualization"), {
     recursive: true,
   });
   await cp(vendorPath(packageRoot, "stack", "Dockerfile"), path.join(stageDir, "Dockerfile"));
@@ -292,6 +293,7 @@ export async function runStartCommand(
   importMetaUrl: string,
 ) {
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
+  const buildState = await loadBuildStateHelpers(packageRoot);
   const postgresPort =
     typeof options["postgres-port"] === "string"
       ? Number(options["postgres-port"])
@@ -319,8 +321,14 @@ export async function runStartCommand(
   await stopLegacyContinuumProcesses();
   await stopLegacyPostgresContainer();
 
-  const stageDir = await prepareStackContext(packageRoot);
-  await buildStackImage(stageDir);
+  const stackImagePlan = await buildState.planStackImageBuild(packageRoot);
+  if (stackImagePlan.needsBuild) {
+    const stageDir = await prepareStackContext(packageRoot);
+    await buildStackImage(stageDir);
+    await buildState.writeBuildState(stackImagePlan.nextState);
+  } else {
+    process.stdout.write(`docker image 已是最新，跳过 build: ${DEFAULT_MANAGED_STACK_IMAGE}\n`);
+  }
 
   // Remove old container only after successful build
   await cleanupManagedStackContainer().catch(() => undefined);
