@@ -6,21 +6,28 @@ import { buildMemoryPacket } from "./injection/packet-builder.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
 import type {
+  CandidateMemory,
   DependencyStatus,
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   FinalizeTurnInput,
   FinalizeTurnResponse,
   MaintenanceRunSummary,
+  MemoryPacket,
   MemoryMode,
+  MemoryType,
   ObserveRunsFilters,
   PrepareContextResponse,
+  RetrievalQuery,
   SessionStartResponse,
+  ScopeType,
+  TriggerDecision,
   TriggerContext,
 } from "./shared/types.js";
 import type { EmbeddingsClient } from "./query/embeddings-client.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
+import type { LlmRecallPlanner } from "./trigger/llm-recall-judge.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
@@ -102,6 +109,7 @@ export class RetrievalRuntimeService {
     private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
     private readonly embeddingTimeoutMs = 800,
     private readonly writebackLlmExtractor?: LlmExtractor,
+    private readonly llmRecallPlanner?: LlmRecallPlanner,
     private readonly maintenanceWorker?: WritebackMaintenanceWorker,
   ) {}
 
@@ -227,7 +235,73 @@ export class RetrievalRuntimeService {
 
     const recallStartedAt = Date.now();
     const queryResult = await this.queryEngine.query(normalizedContext, decision);
-    const packet = buildMemoryPacket(queryResult.query, decision, queryResult.candidates);
+    let selectedCandidates = queryResult.candidates;
+    let finalTriggerReason = decision.trigger_reason;
+    let forceNoInjection = false;
+    let degraded = queryResult.degraded;
+    let degradationReason = queryResult.degradation_reason;
+
+    if (
+      normalizedContext.phase === "before_response"
+      && this.llmRecallPlanner
+      && this.queryResultCanBePlanned(queryResult.candidates)
+    ) {
+      const planResult = await this.dependencyGuard.run(
+        "writeback_llm",
+        this.embeddingTimeoutMs,
+        () =>
+          this.llmRecallPlanner!.plan({
+            context: normalizedContext,
+            memory_mode: decision.memory_mode,
+            requested_scopes: decision.requested_scopes,
+            requested_memory_types: decision.requested_memory_types,
+            candidates: queryResult.candidates,
+            semantic_score: decision.semantic_score,
+            semantic_threshold: undefined,
+          }),
+      );
+
+      if (planResult.ok && planResult.value) {
+        finalTriggerReason = planResult.value.reason;
+        if (!planResult.value.should_inject) {
+          selectedCandidates = [];
+          forceNoInjection = true;
+        } else {
+          selectedCandidates = reorderSelectedCandidates(
+            queryResult.candidates,
+            planResult.value.selected_record_ids,
+          );
+        }
+
+        if (planResult.value.should_inject && planResult.value.memory_summary.trim().length > 0) {
+          const packet = buildMemoryPacket(queryResult.query, decision, selectedCandidates);
+          packet.packet_summary = planResult.value.memory_summary;
+          return this.finalizePreparedContextResponse({
+            traceId,
+            decision,
+            triggerReason: finalTriggerReason,
+            queryResult: {
+              ...queryResult,
+              candidates: selectedCandidates,
+              degraded,
+              degradation_reason: degradationReason,
+            },
+            packet,
+            recallStartedAt,
+            injectionStartedAt: Date.now(),
+            dependencyStatus: await this.dependencyGuard.snapshot(),
+          });
+        }
+      } else {
+        degraded = true;
+        degradationReason = degradationReason ?? planResult.error?.code ?? "writeback_llm_unavailable";
+      }
+    }
+
+    const packet = buildMemoryPacket(queryResult.query, decision, selectedCandidates);
+    if (forceNoInjection) {
+      packet.packet_summary = finalTriggerReason;
+    }
     const scopeHitCounts = queryResult.candidates.reduce<Partial<Record<typeof packet.selected_scopes[number], number>>>((acc, candidate) => {
       acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
       return acc;
@@ -238,7 +312,7 @@ export class RetrievalRuntimeService {
       phase: normalizedContext.phase,
       trigger_hit: true,
       trigger_type: decision.trigger_type,
-      trigger_reason: decision.trigger_reason,
+      trigger_reason: finalTriggerReason,
       memory_mode: decision.memory_mode,
       requested_scopes: decision.requested_scopes,
       matched_scopes: packet.selected_scopes,
@@ -249,13 +323,13 @@ export class RetrievalRuntimeService {
       candidate_count: queryResult.candidates.length,
       selected_count: packet.records.length,
       result_state:
-        queryResult.degraded && packet.records.length === 0
+        degraded && packet.records.length === 0
           ? "dependency_unavailable"
           : packet.records.length === 0
             ? "empty"
             : "matched",
-      degraded: queryResult.degraded,
-      degradation_reason: queryResult.degradation_reason,
+      degraded,
+      degradation_reason: degradationReason,
       duration_ms: Date.now() - recallStartedAt,
       created_at: nowIso(),
     });
@@ -286,14 +360,14 @@ export class RetrievalRuntimeService {
 
     return {
       trace_id: traceId,
-      trigger: true,
-      trigger_reason: decision.trigger_reason,
-      memory_packet: packet,
+      trigger: !forceNoInjection,
+      trigger_reason: finalTriggerReason,
+      memory_packet: forceNoInjection ? null : packet,
       injection_block: injectionBlock,
-      degraded: queryResult.degraded,
+      degraded,
       dependency_status: await this.dependencyGuard.snapshot(),
       budget_used: injectionBlock?.token_estimate ?? 0,
-      memory_packet_ids: [packet.packet_id],
+      memory_packet_ids: forceNoInjection ? [] : [packet.packet_id],
     };
   }
 
@@ -495,7 +569,8 @@ export class RetrievalRuntimeService {
   }
 
   async checkWritebackLlm(): Promise<DependencyStatus> {
-    if (!this.writebackLlmExtractor?.healthCheck) {
+    const healthCheck = this.llmRecallPlanner?.healthCheck ?? this.writebackLlmExtractor?.healthCheck;
+    if (!healthCheck) {
       const status: DependencyStatus = {
         name: "writeback_llm",
         status: "unavailable",
@@ -507,7 +582,7 @@ export class RetrievalRuntimeService {
     }
 
     try {
-      await this.writebackLlmExtractor.healthCheck();
+      await healthCheck();
       const status: DependencyStatus = {
         name: "writeback_llm",
         status: "healthy",
@@ -540,4 +615,106 @@ export class RetrievalRuntimeService {
   async getMetrics() {
     return this.repository.getMetrics();
   }
+
+  private queryResultCanBePlanned(candidates: CandidateMemory[]) {
+    return Array.isArray(candidates) && candidates.length > 0;
+  }
+
+  private async finalizePreparedContextResponse(input: {
+    traceId: string;
+    decision: TriggerDecision;
+    triggerReason: string;
+    queryResult: {
+      query: RetrievalQuery;
+      candidates: CandidateMemory[];
+      degraded: boolean;
+      degradation_reason?: string;
+    };
+    packet: MemoryPacket;
+    recallStartedAt: number;
+    injectionStartedAt: number;
+    dependencyStatus: DependencyStatusSnapshot;
+  }): Promise<PrepareContextResponse> {
+    const scopeHitCounts = input.queryResult.candidates.reduce<Partial<Record<typeof input.packet.selected_scopes[number], number>>>((acc, candidate) => {
+      acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    await this.repository.recordRecallRun({
+      trace_id: input.traceId,
+      phase: "before_response",
+      trigger_hit: true,
+      trigger_type: input.decision.trigger_type,
+      trigger_reason: input.triggerReason,
+      memory_mode: input.decision.memory_mode,
+      requested_scopes: input.decision.requested_scopes,
+      matched_scopes: input.packet.selected_scopes,
+      scope_hit_counts: scopeHitCounts,
+      scope_reason: input.decision.scope_reason,
+      query_scope: input.packet.query_scope,
+      requested_memory_types: input.decision.requested_memory_types,
+      candidate_count: input.queryResult.candidates.length,
+      selected_count: input.packet.records.length,
+      result_state:
+        input.queryResult.degraded && input.packet.records.length === 0
+          ? "dependency_unavailable"
+          : input.packet.records.length === 0
+            ? "empty"
+            : "matched",
+      degraded: input.queryResult.degraded,
+      degradation_reason: input.queryResult.degradation_reason,
+      duration_ms: Date.now() - input.recallStartedAt,
+      created_at: nowIso(),
+    });
+
+    const injectionBlock = this.injectionEngine.build(input.packet);
+    await this.repository.recordInjectionRun({
+      trace_id: input.traceId,
+      phase: "before_response",
+      injected: Boolean(injectionBlock),
+      injected_count: injectionBlock?.memory_records.length ?? 0,
+      token_estimate: injectionBlock?.token_estimate ?? 0,
+      memory_mode: input.decision.memory_mode,
+      requested_scopes: input.packet.requested_scopes,
+      selected_scopes: injectionBlock?.selected_scopes ?? [],
+      trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
+      trim_reasons: injectionBlock?.trim_reasons ?? [],
+      result_state:
+        input.packet.records.length === 0
+          ? "no_records"
+          : injectionBlock && injectionBlock.memory_records.length > 0
+            ? "injected"
+            : "trimmed_to_zero",
+      duration_ms: Date.now() - input.injectionStartedAt,
+      created_at: nowIso(),
+    });
+
+    return {
+      trace_id: input.traceId,
+      trigger: true,
+      trigger_reason: input.triggerReason,
+      memory_packet: input.packet,
+      injection_block: injectionBlock,
+      degraded: input.queryResult.degraded,
+      dependency_status: input.dependencyStatus,
+      budget_used: injectionBlock?.token_estimate ?? 0,
+      memory_packet_ids: [input.packet.packet_id],
+    };
+  }
+}
+
+function reorderSelectedCandidates(
+  candidates: CandidateMemory[],
+  selectedRecordIds: string[],
+) {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const selected = selectedRecordIds
+    .map((id) => byId.get(id))
+    .filter((candidate): candidate is CandidateMemory => Boolean(candidate));
+
+  if (selected.length > 0) {
+    return selected;
+  }
+
+  return candidates.slice(0, Math.min(3, candidates.length));
 }

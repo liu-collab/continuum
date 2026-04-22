@@ -75,7 +75,13 @@ export interface CandidateMemory {
 
 export interface TriggerDecision {
   hit: boolean;
-  trigger_type: "phase" | "history_reference" | "semantic_fallback" | "cooldown_skip" | "no_trigger";
+  trigger_type:
+    | "phase"
+    | "history_reference"
+    | "semantic_fallback"
+    | "llm_recall_judge"
+    | "cooldown_skip"
+    | "no_trigger";
   trigger_reason: string;
   requested_memory_types: MemoryType[];
   memory_mode: MemoryMode;
@@ -84,6 +90,8 @@ export interface TriggerDecision {
   importance_threshold: number;
   cooldown_applied: boolean;
   semantic_score?: number;
+  llm_used?: boolean;
+  llm_decision_reason?: string;
   degraded?: boolean;
   degradation_reason?: string;
 }

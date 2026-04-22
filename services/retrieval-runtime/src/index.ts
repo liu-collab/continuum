@@ -9,6 +9,7 @@ import { HttpEmbeddingsClient } from "./query/embeddings-client.js";
 import { PostgresReadModelRepository } from "./query/postgres-read-model-repository.js";
 import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
+import { HttpLlmRecallPlanner } from "./trigger/llm-recall-judge.js";
 import { TriggerEngine } from "./trigger/trigger-engine.js";
 import { HttpLlmExtractor } from "./writeback/llm-extractor.js";
 import { HttpGovernanceVerifier } from "./writeback/llm-governance-verifier.js";
@@ -42,14 +43,26 @@ async function main() {
   const llmExtractor = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmExtractor({
         ...config,
-      WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-      WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-      WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-      WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
-      WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-      WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
-      WRITEBACK_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.WRITEBACK_LLM_MAX_TOKENS,
-    })
+        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
+        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        WRITEBACK_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.WRITEBACK_LLM_MAX_TOKENS,
+      })
+    : undefined;
+  const llmRecallPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpLlmRecallPlanner({
+        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
+        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        RECALL_LLM_JUDGE_MAX_TOKENS: config.RECALL_LLM_JUDGE_MAX_TOKENS,
+        RECALL_LLM_CANDIDATE_LIMIT: config.RECALL_LLM_CANDIDATE_LIMIT,
+      })
     : undefined;
   const maintenancePlanner = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmMaintenancePlanner({
@@ -87,7 +100,7 @@ async function main() {
   );
 
   const runtimeService = new RetrievalRuntimeService(
-    new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+    new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger, llmRecallPlanner),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
@@ -98,6 +111,7 @@ async function main() {
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
     llmExtractor,
+    llmRecallPlanner,
     maintenanceWorker,
   );
 

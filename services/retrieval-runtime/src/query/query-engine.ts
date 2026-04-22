@@ -158,7 +158,7 @@ export class QueryEngine {
         };
       })
       .sort((left, right) => (right.rerank_score ?? 0) - (left.rerank_score ?? 0))
-      .slice(0, this.config.PACKET_RECORD_LIMIT);
+      .slice(0, Math.max(this.config.PACKET_RECORD_LIMIT, this.config.RECALL_LLM_CANDIDATE_LIMIT));
 
     this.logger.debug(
       {

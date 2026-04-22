@@ -9,6 +9,7 @@ export const memoryTypeLabels: Record<MemoryType, string> = {
 export const runtimeMessages = {
   noMatchedMemory: "这次触发没有命中可用记忆。",
   historyReferenceReason: "当前输入明确引用了历史上下文或既有偏好。",
+  llmCandidateScanReason: "本轮先召回候选记忆，再由记忆模型决定最终注入内容。",
   semanticDegradedReason: "语义兜底因依赖异常降级，本轮不执行召回。",
   semanticFallbackReason: "语义相似度超过兜底阈值，已触发记忆召回。",
   shortInputSkipReason: "当前输入过短，且没有明显的历史引用线索。",

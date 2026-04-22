@@ -94,6 +94,9 @@ const config: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 40,
+  RECALL_LLM_JUDGE_ENABLED: true,
+  RECALL_LLM_JUDGE_MAX_TOKENS: 400,
+  RECALL_LLM_CANDIDATE_LIMIT: 12,
   WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
   WRITEBACK_REFINE_ENABLED: true,
   WRITEBACK_MAX_CANDIDATES: 3,
@@ -807,6 +810,7 @@ describe("retrieval-runtime remediation", () => {
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
       llmExtractor,
+      undefined,
     );
 
     const request = {
@@ -833,6 +837,7 @@ describe("retrieval-runtime remediation", () => {
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
       llmExtractor,
+      undefined,
     );
 
     const second = await secondService.finalizeTurn(request);

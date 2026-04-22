@@ -18,6 +18,7 @@ import type {
   SubmittedWriteBackJob,
   WriteBackCandidate,
 } from "../src/shared/types.js";
+import type { LlmRecallPlan, LlmRecallPlanner } from "../src/trigger/llm-recall-judge.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
 import type {
   LlmExtractionResult,
@@ -50,6 +51,9 @@ const baseConfig: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 5000,
+  RECALL_LLM_JUDGE_ENABLED: true,
+  RECALL_LLM_JUDGE_MAX_TOKENS: 400,
+  RECALL_LLM_CANDIDATE_LIMIT: 12,
   WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
   WRITEBACK_REFINE_ENABLED: true,
   WRITEBACK_MAX_CANDIDATES: 3,
@@ -286,11 +290,32 @@ class SpyLlmExtractor implements LlmExtractor {
   }
 }
 
+class StubLlmRecallPlanner implements LlmRecallPlanner {
+  constructor(
+    private readonly result: LlmRecallPlan,
+    private readonly shouldFail = false,
+  ) {}
+
+  async plan(): Promise<LlmRecallPlan> {
+    if (this.shouldFail) {
+      throw new Error("recall llm timeout");
+    }
+    return this.result;
+  }
+
+  async healthCheck(): Promise<void> {
+    if (this.shouldFail) {
+      throw new Error("recall llm timeout");
+    }
+  }
+}
+
 function createRuntime(overrides?: {
   records?: CandidateMemory[];
   embeddingsClient?: EmbeddingsClient;
   storageClient?: StorageWritebackClient;
   llmExtractor?: LlmExtractor;
+  llmRecallPlanner?: LlmRecallPlanner;
   config?: Partial<AppConfig>;
 }) {
   const repository = new InMemoryRuntimeRepository();
@@ -303,7 +328,14 @@ function createRuntime(overrides?: {
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
 
   const service = new RetrievalRuntimeService(
-    new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+    new TriggerEngine(
+      config,
+      embeddingsClient,
+      readModelRepository,
+      dependencyGuard,
+      logger,
+      overrides?.llmRecallPlanner,
+    ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
@@ -314,6 +346,7 @@ function createRuntime(overrides?: {
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
     overrides?.llmExtractor,
+    overrides?.llmRecallPlanner,
   );
 
   return { service, repository, storageClient };
@@ -362,6 +395,86 @@ describe("retrieval-runtime service", () => {
     expect(response.trigger).toBe(false);
     expect(response.injection_block).toBeNull();
     expect(response.memory_packet).toBeNull();
+  });
+
+  it("uses llm recall planner to select injected memory", async () => {
+    const { service } = createRuntime({
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_inject: true,
+        reason: "用户在隐式引用之前确认过的做法，需要恢复记忆。",
+        selected_record_ids: ["mem-preference", "mem-task"],
+        memory_summary: "偏好与任务状态：默认中文回答，并继续当前 retrieval-runtime 接口测试任务。",
+        requested_scopes: ["workspace", "task", "session", "user"],
+        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        importance_threshold: 3,
+      }),
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "照旧，按我定的那套继续就行。",
+    });
+
+    expect(response.trigger).toBe(true);
+    expect(response.trigger_reason).toContain("隐式引用");
+    expect(response.injection_block).not.toBeNull();
+    expect(response.memory_packet?.records.map((record) => record.id)).toEqual(["mem-preference", "mem-task"]);
+    expect(response.injection_block?.memory_summary).toContain("偏好与任务状态");
+  });
+
+  it("respects llm recall planner refusal and skips injection", async () => {
+    const { service } = createRuntime({
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_inject: false,
+        reason: "当前问题是独立问题，不依赖历史记忆。",
+      }),
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "帮我解释一下这个接口的作用。",
+    });
+
+    expect(response.trigger).toBe(false);
+    expect(response.trigger_reason).toContain("独立问题");
+    expect(response.injection_block).toBeNull();
+    expect(response.memory_packet).toBeNull();
+  });
+
+  it("falls back to default injection when llm recall planner is unavailable", async () => {
+    const { service } = createRuntime({
+      llmRecallPlanner: new StubLlmRecallPlanner(
+        {
+          should_inject: false,
+          reason: "unused",
+        },
+        true,
+      ),
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "把之前确定的偏好和任务状态都恢复出来。",
+    });
+
+    expect(response.trigger).toBe(true);
+    expect(response.injection_block).not.toBeNull();
+    expect(response.memory_packet?.records.length).toBeGreaterThan(0);
   });
 
   it("degrades query when embeddings dependency fails", async () => {
@@ -1050,6 +1163,8 @@ describe("retrieval-runtime service", () => {
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
+      undefined,
+      undefined,
     );
 
     const request = {
@@ -1076,6 +1191,8 @@ describe("retrieval-runtime service", () => {
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
+      undefined,
+      undefined,
     );
 
     const second = await secondService.finalizeTurn(request);

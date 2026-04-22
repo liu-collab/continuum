@@ -6,6 +6,7 @@ import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/
 import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import type { Logger } from "pino";
 import { normalizeText } from "../shared/utils.js";
+import type { LlmRecallPlanner } from "./llm-recall-judge.js";
 
 const HISTORY_PATTERNS = ["上次", "之前", "你还记得", "我一般", "偏好", "上回", "last time", "previously"];
 const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
@@ -83,6 +84,7 @@ export class TriggerEngine {
     private readonly readModelRepository: ReadModelRepository,
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
+    private readonly llmRecallPlanner?: LlmRecallPlanner,
   ) {}
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
@@ -134,6 +136,22 @@ export class TriggerEngine {
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
+      };
+    }
+
+    if (this.config.RECALL_LLM_JUDGE_ENABLED && this.llmRecallPlanner) {
+      return {
+        hit: true,
+        trigger_type: "llm_recall_judge",
+        trigger_reason: runtimeMessages.llmCandidateScanReason,
+        requested_memory_types: requestedMemoryTypes,
+        memory_mode: memoryMode,
+        requested_scopes: scopePlan.scopes,
+        scope_reason: scopePlan.reason,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        cooldown_applied: false,
+        llm_used: true,
+        llm_decision_reason: runtimeMessages.llmCandidateScanReason,
       };
     }
 

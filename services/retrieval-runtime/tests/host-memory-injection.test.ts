@@ -45,6 +45,9 @@ const config: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 5_000,
+  RECALL_LLM_JUDGE_ENABLED: true,
+  RECALL_LLM_JUDGE_MAX_TOKENS: 400,
+  RECALL_LLM_CANDIDATE_LIMIT: 12,
   WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
   WRITEBACK_REFINE_ENABLED: true,
   WRITEBACK_MAX_CANDIDATES: 3,
@@ -226,6 +229,8 @@ function createRuntimeApp(records: CandidateMemory[] = sampleRecords) {
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
+    undefined,
+    undefined,
   );
 
   return createApp(service);
