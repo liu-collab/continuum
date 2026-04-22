@@ -236,7 +236,7 @@ export class WritebackEngine {
         [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
       );
     } catch (error) {
-      this.logger?.warn?.({ err: error }, "writeback llm refine failed, using rule output");
+      this.logger?.warn?.({ err: error }, "memory llm refine failed, using rule output");
       return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
     }
   }
@@ -522,7 +522,7 @@ export class WritebackEngine {
       importance: item.importance ?? anchor.importance,
       confidence: item.confidence ?? anchor.confidence,
       write_reason: item.reason,
-      source_type: "writeback_llm",
+      source_type: "memory_llm",
       source_ref: anchor.source_ref,
       confirmed_by_user: anchor.confirmed_by_user,
       extraction_method: "llm",
@@ -553,7 +553,7 @@ export class WritebackEngine {
       importance: item.importance,
       confidence: item.confidence,
       write_reason: item.reason,
-      source_type: "writeback_llm",
+      source_type: "memory_llm",
       source_ref: input.turn_id ?? input.session_id,
       confirmed_by_user: item.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
       extraction_method: "llm",
@@ -581,7 +581,7 @@ export class WritebackEngine {
       importance: candidate.importance,
       confidence: candidate.confidence,
       write_reason: candidate.write_reason,
-      source_type: "writeback_llm",
+      source_type: "memory_llm",
       source_ref: input.turn_id ?? input.session_id,
       confirmed_by_user: candidate.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
       extraction_method: "llm",
@@ -775,7 +775,7 @@ function mergeLlmCorrections(
       refine_action: "keep",
       refine_reason: item.reason,
     },
-    source_type: "writeback_llm",
+    source_type: "memory_llm",
     extraction_method: "llm",
   };
 }

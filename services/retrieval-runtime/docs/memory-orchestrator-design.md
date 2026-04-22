@@ -16,7 +16,7 @@
 | #3 | 已完成 | 召回链路已经有了雏形：模型先做检索规划，再做注入规划 |
 | #4 | 已完成 | 已识别现有冲突点：命名仍是 `writeback_llm`，提示词分散，观测粒度不够，UI 口径偏窄 |
 | #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型与兜底策略，召回/写回/治理开始通过 orchestrator 接口接线，具体 planner 文件仍在继续迁移 |
-| #6 | 待开发 | 完成配置升级：直接使用 `MEMORY_LLM_*`，不兼容旧配置 |
+| #6 | 已完成 | `retrieval-runtime` 已切换到 `MEMORY_LLM_*`，不再兼容旧配置；依赖健康检查与状态桶已统一为 `memory_llm` |
 | #7 | 待开发 | 完成 `visualization` 配置、状态、观测面板的统一改口径 |
 | #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 的具体实现文件仍待迁移到新目录 |
 
@@ -1217,10 +1217,10 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 
 迁移检查清单：
 
-- [ ] 环境变量配置文件（.env）
+- [x] 环境变量配置文件（.env）
 - [ ] 部署配置（docker-compose.yml / k8s manifests）
 - [ ] 监控和告警配置
-- [ ] 文档和 README
+- [x] 文档和 README
 
 ### 12.3 降级配置
 
@@ -1299,8 +1299,8 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 
 | 编号 | 状态 | 工作项 |
 |---|---|---|
-| C1 | 待开发 | 引入 `MEMORY_LLM_*` 配置，替换 `WRITEBACK_LLM_*`（不兼容） |
-| C2 | 待开发 | 更新依赖状态桶：`writeback_llm` → `memory_llm` |
+| C1 | 已完成 | `retrieval-runtime` 已引入 `MEMORY_LLM_*` 配置并替换 `WRITEBACK_LLM_*`（不兼容） |
+| C2 | 已完成 | `retrieval-runtime` 依赖状态桶已从 `writeback_llm` 更新为 `memory_llm` |
 | C3 | 待开发 | 页面配置项改口径为 `memory llm` |
 | C4 | 待开发 | 页面状态探针从 `writeback llm` 升级为统一记忆模型状态 |
 | C5 | 待开发 | 补 plan 级观测面板和调试面板 |
@@ -1469,7 +1469,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 - [ ] 召回、写入、治理链路全部使用模型决策
 - [ ] 降级策略完善，LLM 不可用时有兜底
 - [ ] 观测面板展示 plan 级别数据
-- [ ] 配置迁移完成（MEMORY_LLM_*）
+- [x] 配置迁移完成（MEMORY_LLM_*）
 - [ ] 核心指标：召回准确率 > 80%，治理正确率 > 85%
 
 **阶段 2 交付标准**：

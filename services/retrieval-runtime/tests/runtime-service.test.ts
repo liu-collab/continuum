@@ -53,9 +53,9 @@ const baseConfig: AppConfig = {
   EMBEDDING_BASE_URL: "http://localhost:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
-  WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-  WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-  WRITEBACK_LLM_TIMEOUT_MS: 5000,
+  MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+  MEMORY_LLM_PROTOCOL: "openai-compatible",
+  MEMORY_LLM_TIMEOUT_MS: 15000,
   RECALL_LLM_JUDGE_ENABLED: true,
   RECALL_LLM_JUDGE_MAX_TOKENS: 400,
   RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -557,7 +557,7 @@ describe("retrieval-runtime service", () => {
     });
   });
 
-  it("actively checks writeback llm health and records a healthy status", async () => {
+  it("actively checks memory llm health and records a healthy status", async () => {
     const { service } = createRuntime({
       llmExtractor: {
         extract: async () => ({ candidates: [] }),
@@ -566,46 +566,46 @@ describe("retrieval-runtime service", () => {
       },
     });
 
-    const response = await service.checkWritebackLlm();
+    const response = await service.checkMemoryLlm();
     const dependencies = await service.getDependencies();
 
     expect(response).toMatchObject({
-      name: "writeback_llm",
+      name: "memory_llm",
       status: "healthy",
-      detail: "writeback llm request completed",
+      detail: "memory llm request completed",
     });
-    expect(dependencies.writeback_llm.status).toBe("healthy");
+    expect(dependencies.memory_llm.status).toBe("healthy");
   });
 
-  it("returns not configured style status when writeback llm is missing", async () => {
+  it("returns not configured style status when memory llm is missing", async () => {
     const { service } = createRuntime();
 
-    const response = await service.checkWritebackLlm();
+    const response = await service.checkMemoryLlm();
 
     expect(response).toMatchObject({
-      name: "writeback_llm",
+      name: "memory_llm",
       status: "unavailable",
-      detail: "writeback llm is not configured",
+      detail: "memory llm is not configured",
     });
   });
 
-  it("returns the concrete writeback llm failure reason during active health check", async () => {
+  it("returns the concrete memory llm failure reason during active health check", async () => {
     const { service } = createRuntime({
       llmExtractor: {
         extract: async () => ({ candidates: [] }),
         refine: async () => ({ refined_candidates: [] }),
         healthCheck: async () => {
-          throw new Error("writeback llm request failed with 401");
+          throw new Error("memory llm request failed with 401");
         },
       },
     });
 
-    const response = await service.checkWritebackLlm();
+    const response = await service.checkMemoryLlm();
 
     expect(response).toMatchObject({
-      name: "writeback_llm",
+      name: "memory_llm",
       status: "unavailable",
-      detail: "writeback llm request failed with 401",
+      detail: "memory llm request failed with 401",
     });
   });
 
@@ -739,7 +739,7 @@ describe("retrieval-runtime service", () => {
     });
 
     expect(response.write_back_candidates).toHaveLength(1);
-    expect(response.write_back_candidates[0]?.source.source_type).toBe("writeback_llm");
+    expect(response.write_back_candidates[0]?.source.source_type).toBe("memory_llm");
     expect(response.write_back_candidates[0]?.summary).toBe("默认用中文输出");
     expect(response.write_back_candidates[0]?.scope).toBe("user");
   });
@@ -760,7 +760,7 @@ describe("retrieval-runtime service", () => {
     });
 
     expect(response.write_back_candidates.length).toBeGreaterThan(0);
-    expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "writeback_llm")).toBe(true);
+    expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
   });
 
   it("deduplicates assistant confirmation when the same preference was already extracted from user input", async () => {
@@ -1337,15 +1337,15 @@ describe("retrieval-runtime service", () => {
       method: "POST",
       url: "/v1/runtime/dependency-status/embeddings/check",
     });
-    const writebackLlmCheckResponse = await app.inject({
+    const memoryLlmCheckResponse = await app.inject({
       method: "POST",
-      url: "/v1/runtime/dependency-status/writeback-llm/check",
+      url: "/v1/runtime/dependency-status/memory-llm/check",
     });
 
     expect(prepareResponse.statusCode).toBe(200);
     expect(finalizeResponse.statusCode).toBe(200);
     expect(embeddingCheckResponse.statusCode).toBe(200);
-    expect(writebackLlmCheckResponse.statusCode).toBe(200);
+    expect(memoryLlmCheckResponse.statusCode).toBe(200);
     expect(livenessResponse.json()).toEqual({ status: "alive" });
     expect(readinessResponse.json()).toEqual({ status: "ready" });
     expect(dependenciesResponse.json()).toHaveProperty("read_model");
@@ -1353,8 +1353,8 @@ describe("retrieval-runtime service", () => {
       name: "embeddings",
       status: "healthy",
     });
-    expect(writebackLlmCheckResponse.json()).toMatchObject({
-      name: "writeback_llm",
+    expect(memoryLlmCheckResponse.json()).toMatchObject({
+      name: "memory_llm",
       status: "unavailable",
     });
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();

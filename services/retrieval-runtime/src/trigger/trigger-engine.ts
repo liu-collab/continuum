@@ -141,8 +141,8 @@ export class TriggerEngine {
 
     if (this.config.RECALL_LLM_JUDGE_ENABLED && this.recallSearchPlanner) {
       const llmDecision = await this.dependencyGuard.run(
-        "writeback_llm",
-        this.config.WRITEBACK_LLM_TIMEOUT_MS,
+        "memory_llm",
+        this.config.MEMORY_LLM_TIMEOUT_MS,
         () =>
           this.recallSearchPlanner!.plan({
             context,

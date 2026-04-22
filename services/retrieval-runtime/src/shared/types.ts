@@ -90,6 +90,8 @@ export interface TriggerDecision {
   importance_threshold: number;
   cooldown_applied: boolean;
   semantic_score?: number;
+  query_hint?: string;
+  candidate_limit?: number;
   llm_used?: boolean;
   llm_decision_reason?: string;
   degraded?: boolean;
@@ -189,7 +191,7 @@ export interface SubmittedWriteBackJob {
 export type DependencyState = "healthy" | "degraded" | "unavailable" | "unknown";
 
 export interface DependencyStatus {
-  name: "read_model" | "embeddings" | "storage_writeback" | "writeback_llm";
+  name: "read_model" | "embeddings" | "storage_writeback" | "memory_llm";
   status: DependencyState;
   detail: string;
   last_checked_at: string;
@@ -199,7 +201,7 @@ export interface DependencyStatusSnapshot {
   read_model: DependencyStatus;
   embeddings: DependencyStatus;
   storage_writeback: DependencyStatus;
-  writeback_llm: DependencyStatus;
+  memory_llm: DependencyStatus;
 }
 
 export interface PrepareContextResponse {

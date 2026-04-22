@@ -1,14 +1,14 @@
 import fs from "node:fs";
 
 type WritebackLlmConfigSource = {
-  WRITEBACK_LLM_BASE_URL?: string;
-  WRITEBACK_LLM_MODEL?: string;
-  WRITEBACK_LLM_API_KEY?: string;
-  WRITEBACK_LLM_TIMEOUT_MS?: number | string;
-  WRITEBACK_LLM_PROTOCOL?: string;
-  WRITEBACK_LLM_EFFORT?: string;
-  WRITEBACK_LLM_MAX_TOKENS?: number | string;
-  CONTINUUM_WRITEBACK_LLM_CONFIG_PATH?: string;
+  MEMORY_LLM_BASE_URL?: string;
+  MEMORY_LLM_MODEL?: string;
+  MEMORY_LLM_API_KEY?: string;
+  MEMORY_LLM_TIMEOUT_MS?: number | string;
+  MEMORY_LLM_PROTOCOL?: string;
+  MEMORY_LLM_EFFORT?: string;
+  MEMORY_LLM_MAX_TOKENS?: number | string;
+  CONTINUUM_MEMORY_LLM_CONFIG_PATH?: string;
 };
 
 export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible";
@@ -133,13 +133,13 @@ function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWri
 export function resolveRuntimeWritebackLlmConfig(
   source: WritebackLlmConfigSource,
 ): RuntimeWritebackLlmConfig {
-  const envBaseUrl = normalizeUrl(readNonEmpty(source.WRITEBACK_LLM_BASE_URL));
-  const envModel = readNonEmpty(source.WRITEBACK_LLM_MODEL);
-  const envApiKey = readNonEmpty(source.WRITEBACK_LLM_API_KEY);
-  const envTimeoutMs = normalizeTimeout(source.WRITEBACK_LLM_TIMEOUT_MS);
-  const envProtocol = normalizeProtocol(readNonEmpty(source.WRITEBACK_LLM_PROTOCOL));
-  const envEffort = normalizeEffort(readNonEmpty(source.WRITEBACK_LLM_EFFORT));
-  const envMaxTokens = normalizeTimeout(source.WRITEBACK_LLM_MAX_TOKENS);
+  const envBaseUrl = normalizeUrl(readNonEmpty(source.MEMORY_LLM_BASE_URL));
+  const envModel = readNonEmpty(source.MEMORY_LLM_MODEL);
+  const envApiKey = readNonEmpty(source.MEMORY_LLM_API_KEY);
+  const envTimeoutMs = normalizeTimeout(source.MEMORY_LLM_TIMEOUT_MS);
+  const envProtocol = normalizeProtocol(readNonEmpty(source.MEMORY_LLM_PROTOCOL));
+  const envEffort = normalizeEffort(readNonEmpty(source.MEMORY_LLM_EFFORT));
+  const envMaxTokens = normalizeTimeout(source.MEMORY_LLM_MAX_TOKENS);
 
   return {
     ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
@@ -149,7 +149,7 @@ export function resolveRuntimeWritebackLlmConfig(
     ...(envProtocol ? { protocol: envProtocol } : {}),
     ...(envEffort ? { effort: envEffort } : {}),
     ...(envMaxTokens ? { maxTokens: envMaxTokens } : {}),
-    ...readManagedWritebackLlmConfig(readNonEmpty(source.CONTINUUM_WRITEBACK_LLM_CONFIG_PATH)),
+    ...readManagedWritebackLlmConfig(readNonEmpty(source.CONTINUUM_MEMORY_LLM_CONFIG_PATH)),
   };
 }
 

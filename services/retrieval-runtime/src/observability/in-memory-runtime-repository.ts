@@ -38,7 +38,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
     ["read_model", defaultDependencyStatus("read_model")],
     ["embeddings", defaultDependencyStatus("embeddings")],
     ["storage_writeback", defaultDependencyStatus("storage_writeback")],
-    ["writeback_llm", defaultDependencyStatus("writeback_llm")],
+    ["memory_llm", defaultDependencyStatus("memory_llm")],
   ]);
 
   async initialize(): Promise<void> {
@@ -221,7 +221,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       read_model: this.dependencies.get("read_model") ?? defaultDependencyStatus("read_model"),
       embeddings: this.dependencies.get("embeddings") ?? defaultDependencyStatus("embeddings"),
       storage_writeback: this.dependencies.get("storage_writeback") ?? defaultDependencyStatus("storage_writeback"),
-      writeback_llm: this.dependencies.get("writeback_llm") ?? defaultDependencyStatus("writeback_llm"),
+      memory_llm: this.dependencies.get("memory_llm") ?? defaultDependencyStatus("memory_llm"),
     };
   }
 

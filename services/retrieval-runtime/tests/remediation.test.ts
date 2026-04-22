@@ -92,9 +92,9 @@ const config: AppConfig = {
   EMBEDDING_BASE_URL: "http://localhost:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
-  WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-  WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-  WRITEBACK_LLM_TIMEOUT_MS: 40,
+  MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+  MEMORY_LLM_PROTOCOL: "openai-compatible",
+  MEMORY_LLM_TIMEOUT_MS: 15000,
   RECALL_LLM_JUDGE_ENABLED: true,
   RECALL_LLM_JUDGE_MAX_TOKENS: 400,
   RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -993,8 +993,8 @@ describe("retrieval-runtime remediation", () => {
     const originalFetch = globalThis.fetch;
     const extractor = new HttpLlmExtractor({
       ...config,
-      WRITEBACK_LLM_BASE_URL: "http://localhost:8080",
-      WRITEBACK_LLM_API_KEY: "test-key",
+      MEMORY_LLM_BASE_URL: "http://localhost:8080",
+      MEMORY_LLM_API_KEY: "test-key",
     } as AppConfig);
 
     globalThis.fetch = (async () =>
@@ -1037,9 +1037,9 @@ describe("retrieval-runtime remediation", () => {
     const originalFetch = globalThis.fetch;
     const extractor = new HttpLlmExtractor({
       ...config,
-      WRITEBACK_LLM_BASE_URL: "http://localhost:8080",
-      WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-      WRITEBACK_LLM_API_KEY: "test-key",
+      MEMORY_LLM_BASE_URL: "http://localhost:8080",
+      MEMORY_LLM_PROTOCOL: "openai-compatible",
+      MEMORY_LLM_API_KEY: "test-key",
     } as AppConfig);
 
     globalThis.fetch = (async () =>

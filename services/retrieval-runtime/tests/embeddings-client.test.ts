@@ -41,9 +41,9 @@ describe("retrieval-runtime embeddings client", () => {
       EMBEDDING_BASE_URL: "https://api.openai.com/v1",
       EMBEDDING_MODEL: "text-embedding-3-small",
       EMBEDDING_API_KEY: "test-key",
-      WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-      WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-      WRITEBACK_LLM_TIMEOUT_MS: 5000,
+      MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+      MEMORY_LLM_PROTOCOL: "openai-compatible",
+      MEMORY_LLM_TIMEOUT_MS: 15000,
       RECALL_LLM_JUDGE_ENABLED: true,
       RECALL_LLM_JUDGE_MAX_TOKENS: 400,
       RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -123,9 +123,9 @@ describe("retrieval-runtime embeddings client", () => {
       RUNTIME_SCHEMA: "runtime_private",
       STORAGE_WRITEBACK_URL: "http://localhost:3001",
       EMBEDDING_MODEL: "text-embedding-3-small",
-      WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-      WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-      WRITEBACK_LLM_TIMEOUT_MS: 5000,
+      MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+      MEMORY_LLM_PROTOCOL: "openai-compatible",
+      MEMORY_LLM_TIMEOUT_MS: 15000,
       RECALL_LLM_JUDGE_ENABLED: true,
       RECALL_LLM_JUDGE_MAX_TOKENS: 400,
       RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -211,9 +211,9 @@ describe("retrieval-runtime embeddings client", () => {
         STORAGE_WRITEBACK_URL: "http://localhost:3001",
         EMBEDDING_MODEL: "text-embedding-3-small",
         CONTINUUM_EMBEDDING_CONFIG_PATH: configPath,
-        WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-        WRITEBACK_LLM_PROTOCOL: "openai-compatible",
-        WRITEBACK_LLM_TIMEOUT_MS: 5000,
+        MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_TIMEOUT_MS: 15000,
         RECALL_LLM_JUDGE_ENABLED: true,
         RECALL_LLM_JUDGE_MAX_TOKENS: 400,
         RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -265,7 +265,7 @@ describe("retrieval-runtime embeddings client", () => {
     }
   });
 
-  it("reads managed writeback llm config from a shared file", () => {
+  it("reads managed memory llm config from a shared file", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-writeback-"));
     const configPath = path.join(tempDir, "writeback-llm-config.json");
     fs.writeFileSync(
@@ -283,8 +283,8 @@ describe("retrieval-runtime embeddings client", () => {
 
     try {
       const resolved = resolveRuntimeWritebackLlmConfig({
-        WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-        CONTINUUM_WRITEBACK_LLM_CONFIG_PATH: configPath,
+        MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+        CONTINUUM_MEMORY_LLM_CONFIG_PATH: configPath,
       });
 
       expect(resolved).toEqual({
@@ -296,7 +296,7 @@ describe("retrieval-runtime embeddings client", () => {
       });
       expect(
         hasCompleteRuntimeWritebackLlmConfig({
-          CONTINUUM_WRITEBACK_LLM_CONFIG_PATH: configPath,
+          CONTINUUM_MEMORY_LLM_CONFIG_PATH: configPath,
         }),
       ).toBe(true);
     } finally {

@@ -44,47 +44,47 @@ async function main() {
   const llmExtractor = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmExtractor({
         ...config,
-        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
-        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
-        WRITEBACK_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.WRITEBACK_LLM_MAX_TOKENS,
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        MEMORY_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.MEMORY_LLM_MAX_TOKENS,
       })
     : undefined;
   const llmRecallPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmRecallPlanner({
-        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
-        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
         RECALL_LLM_JUDGE_MAX_TOKENS: config.RECALL_LLM_JUDGE_MAX_TOKENS,
         RECALL_LLM_CANDIDATE_LIMIT: config.RECALL_LLM_CANDIDATE_LIMIT,
       })
     : undefined;
   const maintenancePlanner = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpLlmMaintenancePlanner({
-        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
-        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
         WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
         WRITEBACK_MAINTENANCE_MAX_ACTIONS: config.WRITEBACK_MAINTENANCE_MAX_ACTIONS,
       })
     : undefined;
   const governanceVerifier = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpGovernanceVerifier({
-        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
-        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
-        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
-        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
-        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
-        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
         WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: config.WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS,
       })
     : undefined;
@@ -140,9 +140,9 @@ async function main() {
 
   if (!hasCompleteRuntimeWritebackLlmConfig(config)) {
     await repository.updateDependencyStatus({
-      name: "writeback_llm",
+      name: "memory_llm",
       status: "unavailable",
-      detail: "writeback llm is not configured",
+      detail: "memory llm is not configured",
       last_checked_at: nowIso(),
     });
   }

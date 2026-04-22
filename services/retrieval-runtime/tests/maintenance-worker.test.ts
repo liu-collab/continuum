@@ -120,7 +120,7 @@ class RecordingStorageClient implements StorageWritebackClient {
         reason_text: "test reason",
         suggested_changes_json: {},
         evidence_json: {},
-        planner_model: "writeback_llm",
+        planner_model: "memory_llm",
         planner_confidence: 0.9,
         verifier_required: false,
         verifier_model: null,

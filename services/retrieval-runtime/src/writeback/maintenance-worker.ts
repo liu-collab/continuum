@@ -166,7 +166,7 @@ export class WritebackMaintenanceWorker {
 
     if (!this.planner) {
       summary.degraded = true;
-      summary.degradation_reason = summary.degradation_reason ?? "writeback_llm_unavailable";
+      summary.degradation_reason = summary.degradation_reason ?? "memory_llm_unavailable";
       await this.repository.upsertMaintenanceCheckpoint({
         workspace_id: workspaceId,
         last_scanned_at: summary.next_checkpoint,
@@ -175,7 +175,7 @@ export class WritebackMaintenanceWorker {
     }
 
     const planResult = await this.dependencyGuard.run(
-      "writeback_llm",
+      "memory_llm",
       this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
       () =>
         this.planner!.plan({
@@ -187,7 +187,7 @@ export class WritebackMaintenanceWorker {
 
     if (!planResult.ok || !planResult.value) {
       summary.degraded = true;
-      summary.degradation_reason = summary.degradation_reason ?? planResult.error?.code ?? "writeback_llm_unavailable";
+      summary.degradation_reason = summary.degradation_reason ?? planResult.error?.code ?? "memory_llm_unavailable";
       await this.repository.upsertMaintenanceCheckpoint({
         workspace_id: workspaceId,
         last_scanned_at: summary.next_checkpoint,
@@ -402,7 +402,7 @@ export class WritebackMaintenanceWorker {
     }
 
     const verifyResult = await this.dependencyGuard.run(
-      "writeback_llm",
+      "memory_llm",
       this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
       () =>
         this.verifier!.verify({
@@ -424,7 +424,7 @@ export class WritebackMaintenanceWorker {
       ...base,
       verifier: {
         required: true,
-        model: "writeback_llm",
+        model: "memory_llm",
         decision: verifyResult.value.decision,
         confidence: verifyResult.value.confidence,
         notes: verifyResult.value.notes,
@@ -443,7 +443,7 @@ export class WritebackMaintenanceWorker {
       reason_code: this.toReasonCode(action),
       reason_text: action.type === "resolve_conflict" ? action.resolution_note : action.reason,
       planner: {
-        model: "writeback_llm",
+        model: "memory_llm",
         confidence: this.toPlannerConfidence(action),
       },
       verifier: {

@@ -246,7 +246,7 @@ export class RetrievalRuntimeService {
     ) {
       const recallInjectionPlanner = this.memoryOrchestrator.recall.injection;
       const planResult = await this.dependencyGuard.run(
-        "writeback_llm",
+        "memory_llm",
         this.embeddingTimeoutMs,
         () =>
           recallInjectionPlanner.plan({
@@ -295,7 +295,7 @@ export class RetrievalRuntimeService {
         }
       } else {
         degraded = true;
-        degradationReason = degradationReason ?? planResult.error?.code ?? "writeback_llm_unavailable";
+        degradationReason = degradationReason ?? planResult.error?.code ?? "memory_llm_unavailable";
       }
     }
 
@@ -569,16 +569,16 @@ export class RetrievalRuntimeService {
     }
   }
 
-  async checkWritebackLlm(): Promise<DependencyStatus> {
+  async checkMemoryLlm(): Promise<DependencyStatus> {
     const healthCheck =
       this.memoryOrchestrator?.recall?.search?.healthCheck
       ?? this.memoryOrchestrator?.recall?.injection?.healthCheck
       ?? this.memoryOrchestrator?.writeback?.healthCheck;
     if (!healthCheck) {
       const status: DependencyStatus = {
-        name: "writeback_llm",
+        name: "memory_llm",
         status: "unavailable",
-        detail: "writeback llm is not configured",
+        detail: "memory llm is not configured",
         last_checked_at: nowIso(),
       };
       await this.repository.updateDependencyStatus(status);
@@ -588,9 +588,9 @@ export class RetrievalRuntimeService {
     try {
       await healthCheck();
       const status: DependencyStatus = {
-        name: "writeback_llm",
+        name: "memory_llm",
         status: "healthy",
-        detail: "writeback llm request completed",
+        detail: "memory llm request completed",
         last_checked_at: nowIso(),
       };
       await this.repository.updateDependencyStatus(status);
@@ -599,15 +599,15 @@ export class RetrievalRuntimeService {
       const detail =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "writeback llm unavailable";
+          : "memory llm unavailable";
       const status: DependencyStatus = {
-        name: "writeback_llm",
+        name: "memory_llm",
         status: detail.includes("timeout") ? "degraded" : "unavailable",
         detail,
         last_checked_at: nowIso(),
       };
       await this.repository.updateDependencyStatus(status);
-      this.logger.warn({ dependency: "writeback_llm", err: error }, "writeback llm health check failed");
+      this.logger.warn({ dependency: "memory_llm", err: error }, "memory llm health check failed");
       return status;
     }
   }

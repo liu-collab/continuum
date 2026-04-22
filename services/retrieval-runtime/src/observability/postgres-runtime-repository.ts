@@ -756,7 +756,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       read_model: fallback("read_model"),
       embeddings: fallback("embeddings"),
       storage_writeback: fallback("storage_writeback"),
-      writeback_llm: fallback("writeback_llm"),
+      memory_llm: fallback("memory_llm"),
     };
   }
 
