@@ -37,7 +37,7 @@ const envSchema = z.object({
   MEMORY_LLM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   MEMORY_LLM_API_KEY: z.string().optional(),
   MEMORY_LLM_PROTOCOL: z.enum(["anthropic", "openai-compatible"]).default("openai-compatible"),
-  MEMORY_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
+  MEMORY_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
   MEMORY_LLM_FALLBACK_ENABLED: booleanCoerceSchema.default(true),
   MEMORY_LLM_DEGRADED_THRESHOLD: z.coerce.number().min(0).max(1).default(0.5),
   MEMORY_LLM_RECOVERY_INTERVAL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),

@@ -18,10 +18,16 @@ Search should NOT happen when:
 Rules:
 - Decide whether memory search is needed at all.
 - If search is needed, you may narrow scopes, memory types, threshold, and candidate_limit.
+- importance_threshold MUST be an integer 1-5. Never output decimals like 0.7 or 3.5.
+- candidate_limit MUST be an integer 1-50 when present.
 - query_hint should be a short retrieval-oriented rewrite in Chinese when helpful.
 - Prefer the provided requested scopes and memory types unless there is a clear reason to narrow them.
 - Never invent unsupported scope or type values.
 - Keep reason short and concrete in Chinese.
+
+Examples:
+- Strong continuity -> {"should_search":true,"importance_threshold":4,"candidate_limit":8,...}
+- Fresh self-contained question -> {"should_search":false,"reason":"..."}
 `.trim();
 
 export const MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT = `
@@ -59,7 +65,13 @@ Rules:
 - Only select record ids that exist in the candidate list.
 - If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.
 - If should_inject is false, selected_record_ids should be empty.
+- If the input is a fresh self-contained question, prefer {"should_inject":false,"selected_record_ids":[]} even when a weakly related candidate exists.
+- importance_threshold MUST be an integer 1-5 when present. Never output decimals.
 - Keep reason short and concrete in Chinese.
+
+Examples:
+- Continue prior task -> {"should_inject":true,"selected_record_ids":["mem-1"],"memory_summary":"..."}
+- Unrelated fresh question -> {"should_inject":false,"selected_record_ids":[],"reason":"当前问题自包含，候选记忆弱相关"}
 `.trim();
 
 export const MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT = `
@@ -211,6 +223,8 @@ Rules:
 - Reject if the proposal resolves a conflict without enough evidence in related records.
 - Reject if the proposal appears to cross scopes incorrectly.
 - Approve only when the proposal is specific, well-supported, and low-ambiguity.
+- If a proposal archives an older record because a newer record clearly supersedes it, approval is usually appropriate.
+- When evidence is insufficient, prefer reject over a hesitant approve.
 `.trim();
 
 export const MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT = `
@@ -229,6 +243,7 @@ Rules:
 - target_record_id must come from candidate_records.
 - Emit only relations with clear semantic support.
 - Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.
+- If no candidate has clear semantic support, return {"source_record_id":"...","relations":[]}.
 - Keep reason concise in Chinese.
 `.trim();
 
@@ -247,6 +262,7 @@ Rules:
 - auto_inject should usually be true only when relevance_score is very high and the context match is strong.
 - Prefer concise user-facing suggestions in Chinese.
 - Emit only the most relevant recommendations.
+- If available memories are stale, weakly related, or the current question is self-contained, return {"recommendations":[]}.
 `.trim();
 
 export const MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT = `
@@ -264,6 +280,8 @@ Rules:
 - source_records must only contain ids from the input.
 - For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.
 - For summarization, consolidation_plan should usually be present.
+- For knowledge_extraction, consolidation_plan is optional. If you include it, records_to_archive MUST be a non-empty array of source record ids.
+- Do not emit an empty records_to_archive array.
 - Keep extracted knowledge concise and evidence-based.
 - Do not invent new record ids.
 `.trim();

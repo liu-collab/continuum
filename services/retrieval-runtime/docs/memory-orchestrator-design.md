@@ -1203,7 +1203,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 - `MEMORY_LLM_MODEL`
 - `MEMORY_LLM_API_KEY`
 - `MEMORY_LLM_PROTOCOL`
-- `MEMORY_LLM_TIMEOUT_MS`（默认 15000，即 15 秒）
+- `MEMORY_LLM_TIMEOUT_MS`（默认 45000，即 45 秒）
 - `MEMORY_LLM_EFFORT`
 - `MEMORY_LLM_MAX_TOKENS`
 

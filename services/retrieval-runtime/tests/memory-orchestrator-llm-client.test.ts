@@ -135,6 +135,96 @@ describe("memory orchestrator llm client", () => {
     expect(result).toBe("{\"ok\":true,\"source\":\"fallback\"}");
   });
 
+  it("retries transient upstream failures before succeeding", async () => {
+    let callCount = 0;
+
+    globalThis.fetch = (async () => {
+      callCount += 1;
+      if (callCount < 3) {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: { message: "service unavailable" } }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: "{\"ok\":true,\"source\":\"retry-success\"}",
+              },
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await callMemoryLlm(
+      {
+        MEMORY_LLM_BASE_URL: "https://compat.example.com/v1",
+        MEMORY_LLM_MODEL: "gpt-5.3-codex-spark",
+        MEMORY_LLM_API_KEY: "compat-key",
+        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_TIMEOUT_MS: 500,
+        MEMORY_LLM_EFFORT: "medium",
+      },
+      "system",
+      { ping: true },
+      64,
+    );
+
+    expect(callCount).toBe(3);
+    expect(result).toBe("{\"ok\":true,\"source\":\"retry-success\"}");
+  });
+
+  it("retries one more time for repeated transient failures", async () => {
+    let callCount = 0;
+
+    globalThis.fetch = (async () => {
+      callCount += 1;
+      if (callCount < 4) {
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({ error: { message: "bad gateway" } }),
+        } as Response;
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: "{\"ok\":true,\"source\":\"retry-fourth\"}",
+              },
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await callMemoryLlm(
+      {
+        MEMORY_LLM_BASE_URL: "https://compat.example.com/v1",
+        MEMORY_LLM_MODEL: "gpt-5.3-codex-spark",
+        MEMORY_LLM_API_KEY: "compat-key",
+        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_TIMEOUT_MS: 500,
+        MEMORY_LLM_EFFORT: "medium",
+      },
+      "system",
+      { ping: true },
+      64,
+    );
+
+    expect(callCount).toBe(4);
+    expect(result).toBe("{\"ok\":true,\"source\":\"retry-fourth\"}");
+  });
+
   it("parses fenced json payloads", () => {
     expect(
       parseMemoryLlmJsonPayload("```json\n{\"reason\":\"ok\",\"should_search\":true}\n```"),

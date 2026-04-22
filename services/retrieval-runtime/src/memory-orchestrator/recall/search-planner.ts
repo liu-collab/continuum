@@ -1,6 +1,7 @@
 import type { AppConfig } from "../../config.js";
 import { callMemoryLlm, parseMemoryLlmJsonPayload, type MemoryLlmConfig } from "../llm-client.js";
 import { MEMORY_RECALL_SEARCH_SYSTEM_PROMPT } from "../prompts.js";
+import { normalizeRecallSearchResponse } from "../response-normalizers.js";
 import { memoryRecallSearchSchema } from "../schemas.js";
 import type { RecallSearchInput, RecallSearchPlan, RecallSearchPlanner } from "../types.js";
 
@@ -46,7 +47,7 @@ export class HttpMemoryRecallSearchPlanner implements RecallSearchPlanner {
       this.config.RECALL_LLM_JUDGE_MAX_TOKENS,
     );
 
-    const parsed = memoryRecallSearchSchema.safeParse(parseMemoryLlmJsonPayload(text));
+    const parsed = memoryRecallSearchSchema.safeParse(normalizeRecallSearchResponse(parseMemoryLlmJsonPayload(text)));
     if (!parsed.success) {
       throw new Error("recall llm search response did not match schema");
     }

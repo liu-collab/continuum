@@ -1,6 +1,7 @@
 import type { AppConfig } from "../../config.js";
 import { callMemoryLlm, parseMemoryLlmJsonPayload, type MemoryLlmConfig } from "../llm-client.js";
 import { MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT } from "../prompts.js";
+import { normalizeEvolutionPlanResponse } from "../response-normalizers.js";
 import { memoryEvolutionPlanSchema } from "../schemas.js";
 import type {
   EvolutionPlan,
@@ -42,7 +43,7 @@ export class HttpMemoryEvolutionPlanner implements EvolutionPlanner {
       this.config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
     );
 
-    const parsed = memoryEvolutionPlanSchema.safeParse(parseMemoryLlmJsonPayload(text));
+    const parsed = memoryEvolutionPlanSchema.safeParse(normalizeEvolutionPlanResponse(parseMemoryLlmJsonPayload(text)));
     if (!parsed.success) {
       throw new Error("memory evolution planner response did not match schema");
     }

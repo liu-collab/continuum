@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-04-22T13:47:58.892Z",
+  "generated_at": "2026-04-22T14:15:55.733Z",
   "model": "gpt-5.3-codex-spark",
   "protocol": "openai-compatible",
   "base_url": "http://localhost:8090/v1",
-  "timeout_ms": 20000,
+  "timeout_ms": 45000,
   "summary": [
     {
       "metric": "intent_accuracy",
@@ -13,9 +13,9 @@
     },
     {
       "metric": "recall_accuracy_proxy",
-      "passed": 0,
+      "passed": 3,
       "total": 3,
-      "rate": 0
+      "rate": 1
     },
     {
       "metric": "low_quality_intercept_rate",
@@ -37,15 +37,15 @@
     },
     {
       "metric": "knowledge_extraction_accuracy",
-      "passed": 0,
+      "passed": 2,
       "total": 2,
-      "rate": 0
+      "rate": 1
     },
     {
       "metric": "governance_correctness_proxy",
-      "passed": 1,
+      "passed": 2,
       "total": 2,
-      "rate": 0.5
+      "rate": 1
     },
     {
       "metric": "effectiveness_adjustment_direction_proxy",
@@ -62,8 +62,8 @@
       "promptName": "MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT",
       "expected": "应判断需要记忆，并识别 `task_state`（任务状态）或 `fact_preference`（偏好）",
       "pass": true,
-      "actual": "{\"needs_memory\":true,\"urgency\":\"immediate\",\"memory_types\":[\"task_state\",\"episodic\"],\"suggested_scopes\":[\"task\",\"session\"]}",
-      "durationMs": 17522,
+      "actual": "{\"needs_memory\":true,\"urgency\":\"immediate\",\"memory_types\":[\"task_state\",\"episodic\"],\"suggested_scopes\":[\"session\",\"task\"]}",
+      "durationMs": 13264,
       "systemPrompt": "You are the intent analyzer for a memory-native agent.\nReturn strict JSON only with shape:\n{\"needs_memory\":boolean,\"memory_types\":[...],\"urgency\":\"immediate|deferred|optional\",\"confidence\":number,\"reason\":\"...\",\"suggested_scopes\":[...]}\n\nYour task is to judge whether the current input depends on prior context or durable memory.\n\nRules:\n- Focus on whether the user is continuing earlier work, relying on preferences, or asking for continuity.\n- memory_types must only use: fact_preference | task_state | episodic.\n- suggested_scopes must only use: workspace | user | task | session.\n- If uncertain, prefer a conservative answer that keeps memory available.\n- Keep reason short and concrete in Chinese.",
       "payload": {
         "current_input": "继续昨天那个 memory orchestrator 验收，把测试样本文档补完整，格式还是按之前那版。",
@@ -78,7 +78,7 @@
           ]
         }
       },
-      "rawOutput": "{\"needs_memory\":true,\"memory_types\":[\"task_state\",\"episodic\"],\"urgency\":\"immediate\",\"confidence\":0.97,\"reason\":\"用户要求“继续昨天的 memory orchestrator 验收”并保持“之前版本格式”，这是明确的连续性依赖，需基于既有验收文档与会话历史接续。\",\"suggested_scopes\":[\"task\",\"session\"]}",
+      "rawOutput": "{\"needs_memory\":true,\"memory_types\":[\"task_state\",\"episodic\"],\"urgency\":\"immediate\",\"confidence\":0.96,\"reason\":\"用户明确“继续昨天”“按之前那版”，需要衔接上一轮已生成的验收文档内容与格式。\",\"suggested_scopes\":[\"session\",\"task\"]}",
       "parsedOutput": {
         "needs_memory": true,
         "memory_types": [
@@ -86,11 +86,11 @@
           "episodic"
         ],
         "urgency": "immediate",
-        "confidence": 0.97,
-        "reason": "用户要求“继续昨天的 memory orchestrator 验收”并保持“之前版本格式”，这是明确的连续性依赖，需基于既有验收文档与会话历史接续。",
+        "confidence": 0.96,
+        "reason": "用户明确“继续昨天”“按之前那版”，需要衔接上一轮已生成的验收文档内容与格式。",
         "suggested_scopes": [
-          "task",
-          "session"
+          "session",
+          "task"
         ]
       }
     },
@@ -101,8 +101,8 @@
       "promptName": "MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT",
       "expected": "应判断为自包含问题，不需要记忆",
       "pass": true,
-      "actual": "{\"needs_memory\":false,\"reason\":\"该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。\"}",
-      "durationMs": 8685,
+      "actual": "{\"needs_memory\":false,\"reason\":\"该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。\"}",
+      "durationMs": 13511,
       "systemPrompt": "You are the intent analyzer for a memory-native agent.\nReturn strict JSON only with shape:\n{\"needs_memory\":boolean,\"memory_types\":[...],\"urgency\":\"immediate|deferred|optional\",\"confidence\":number,\"reason\":\"...\",\"suggested_scopes\":[...]}\n\nYour task is to judge whether the current input depends on prior context or durable memory.\n\nRules:\n- Focus on whether the user is continuing earlier work, relying on preferences, or asking for continuity.\n- memory_types must only use: fact_preference | task_state | episodic.\n- suggested_scopes must only use: workspace | user | task | session.\n- If uncertain, prefer a conservative answer that keeps memory available.\n- Keep reason short and concrete in Chinese.",
       "payload": {
         "current_input": "解释一下 HTTP 204 和 304 的区别。",
@@ -112,13 +112,13 @@
           "recent_turns": []
         }
       },
-      "rawOutput": "{\"needs_memory\":false,\"memory_types\":[],\"urgency\":\"optional\",\"confidence\":0.98,\"reason\":\"该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。\",\"suggested_scopes\":[]}",
+      "rawOutput": "{\"needs_memory\":false,\"memory_types\":[],\"urgency\":\"optional\",\"confidence\":0.99,\"reason\":\"该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。\",\"suggested_scopes\":[]}",
       "parsedOutput": {
         "needs_memory": false,
         "memory_types": [],
         "urgency": "optional",
-        "confidence": 0.98,
-        "reason": "该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。",
+        "confidence": 0.99,
+        "reason": "该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。",
         "suggested_scopes": []
       }
     },
@@ -128,10 +128,10 @@
       "module": "recall-search-planner",
       "promptName": "MEMORY_RECALL_SEARCH_SYSTEM_PROMPT",
       "expected": "应触发检索，并给出可用的查询提示",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 8015,
-      "systemPrompt": "You are the memory search planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_search\":boolean,\"reason\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number,\"query_hint\":\"...\",\"candidate_limit\":number}\n\nYour task is to decide whether the current user input needs a memory search before the main model answers, and if yes, how to search.\n\nSearch SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user says things like \"照旧\", \"还是那个\", \"按之前的\", \"按我习惯\", \"继续刚才\", \"延续上次\"\n- the user is asking for continuity, personalization, or context carry-over\n\nSearch should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the user is asking a fresh question with enough local context\n- memory would add little value\n\nRules:\n- Decide whether memory search is needed at all.\n- If search is needed, you may narrow scopes, memory types, threshold, and candidate_limit.\n- query_hint should be a short retrieval-oriented rewrite in Chinese when helpful.\n- Prefer the provided requested scopes and memory types unless there is a clear reason to narrow them.\n- Never invent unsupported scope or type values.\n- Keep reason short and concrete in Chinese.",
+      "pass": true,
+      "actual": "{\"should_search\":true,\"query_hint\":\"查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标\",\"requested_scopes\":[\"workspace\",\"user\",\"task\",\"session\"]}",
+      "durationMs": 11728,
+      "systemPrompt": "You are the memory search planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_search\":boolean,\"reason\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number,\"query_hint\":\"...\",\"candidate_limit\":number}\n\nYour task is to decide whether the current user input needs a memory search before the main model answers, and if yes, how to search.\n\nSearch SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user says things like \"照旧\", \"还是那个\", \"按之前的\", \"按我习惯\", \"继续刚才\", \"延续上次\"\n- the user is asking for continuity, personalization, or context carry-over\n\nSearch should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the user is asking a fresh question with enough local context\n- memory would add little value\n\nRules:\n- Decide whether memory search is needed at all.\n- If search is needed, you may narrow scopes, memory types, threshold, and candidate_limit.\n- importance_threshold MUST be an integer 1-5. Never output decimals like 0.7 or 3.5.\n- candidate_limit MUST be an integer 1-50 when present.\n- query_hint should be a short retrieval-oriented rewrite in Chinese when helpful.\n- Prefer the provided requested scopes and memory types unless there is a clear reason to narrow them.\n- Never invent unsupported scope or type values.\n- Keep reason short and concrete in Chinese.\n\nExamples:\n- Strong continuity -> {\"should_search\":true,\"importance_threshold\":4,\"candidate_limit\":8,...}\n- Fresh self-contained question -> {\"should_search\":false,\"reason\":\"...\"}",
       "payload": {
         "current_input": "继续刚才那份 memory orchestrator 测试报告，把真实模型的实际指标补上。",
         "recent_context_summary": "本会话前文已经讨论过测试样本文档、真实模型验证和验收指标。",
@@ -152,7 +152,25 @@
         "semantic_threshold": 0.72,
         "task_id_present": true
       },
-      "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"integer\",\n    \"received\": \"float\",\n    \"message\": \"Expected integer, received float\",\n    \"path\": [\n      \"importance_threshold\"\n    ]\n  },\n  {\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"type\": \"number\",\n    \"inclusive\": true,\n    \"exact\": false,\n    \"message\": \"Number must be greater than or equal to 1\",\n    \"path\": [\n      \"importance_threshold\"\n    ]\n  }\n]"
+      "rawOutput": "{\"should_search\":true,\"reason\":\"用户要求“继续刚才”并补齐真实模型指标，需检索上一次报告的上下文与任务状态。\",\"requested_scopes\":[\"workspace\",\"user\",\"task\",\"session\"],\"requested_memory_types\":[\"task_state\",\"episodic\",\"fact_preference\"],\"importance_threshold\":4,\"query_hint\":\"查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标\",\"candidate_limit\":8}",
+      "parsedOutput": {
+        "should_search": true,
+        "reason": "用户要求“继续刚才”并补齐真实模型指标，需检索上一次报告的上下文与任务状态。",
+        "requested_scopes": [
+          "workspace",
+          "user",
+          "task",
+          "session"
+        ],
+        "requested_memory_types": [
+          "task_state",
+          "episodic",
+          "fact_preference"
+        ],
+        "importance_threshold": 4,
+        "query_hint": "查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标",
+        "candidate_limit": 8
+      }
     },
     {
       "id": "inject-relevant-memory",
@@ -160,10 +178,10 @@
       "module": "recall-injection-planner",
       "promptName": "MEMORY_RECALL_INJECTION_SYSTEM_PROMPT",
       "expected": "应选择与当前任务连续性最相关的记忆",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 7833,
-      "systemPrompt": "You are the memory injection planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_inject\":boolean,\"reason\":\"...\",\"selected_record_ids\":[...],\"memory_summary\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number}\n\nYour task is to decide whether the current user input needs memory injection before the main model answers, using the provided candidate memories.\n\nInjection SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user needs continuity, personalization, or context carry-over\n\nInjection should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the searched candidate memories are not actually relevant enough\n\nRules:\n- Base your decision on the current input, recent context summary, and the provided candidate memories.\n- Only select record ids that exist in the candidate list.\n- If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.\n- If should_inject is false, selected_record_ids should be empty.\n- Keep reason short and concrete in Chinese.",
+      "pass": true,
+      "actual": "{\"should_inject\":true,\"selected_record_ids\":[\"mem-style-1\",\"mem-task-1\"],\"memory_summary\":\"用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。\"}",
+      "durationMs": 9192,
+      "systemPrompt": "You are the memory injection planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_inject\":boolean,\"reason\":\"...\",\"selected_record_ids\":[...],\"memory_summary\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number}\n\nYour task is to decide whether the current user input needs memory injection before the main model answers, using the provided candidate memories.\n\nInjection SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user needs continuity, personalization, or context carry-over\n\nInjection should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the searched candidate memories are not actually relevant enough\n\nRules:\n- Base your decision on the current input, recent context summary, and the provided candidate memories.\n- Only select record ids that exist in the candidate list.\n- If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.\n- If should_inject is false, selected_record_ids should be empty.\n- If the input is a fresh self-contained question, prefer {\"should_inject\":false,\"selected_record_ids\":[]} even when a weakly related candidate exists.\n- importance_threshold MUST be an integer 1-5 when present. Never output decimals.\n- Keep reason short and concrete in Chinese.\n\nExamples:\n- Continue prior task -> {\"should_inject\":true,\"selected_record_ids\":[\"mem-1\"],\"memory_summary\":\"...\"}\n- Unrelated fresh question -> {\"should_inject\":false,\"selected_record_ids\":[],\"reason\":\"当前问题自包含，候选记忆弱相关\"}",
       "payload": {
         "current_input": "继续把测试样本文档写完，按之前的短句中文风格来。",
         "recent_context_summary": "用户正在完善 memory orchestrator 测试与验收文档。",
@@ -218,7 +236,25 @@
         "semantic_threshold": 0.72,
         "task_id_present": true
       },
-      "error": "[\n  {\n    \"code\": \"invalid_type\",\n    \"expected\": \"integer\",\n    \"received\": \"float\",\n    \"message\": \"Expected integer, received float\",\n    \"path\": [\n      \"importance_threshold\"\n    ]\n  },\n  {\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"type\": \"number\",\n    \"inclusive\": true,\n    \"exact\": false,\n    \"message\": \"Number must be greater than or equal to 1\",\n    \"path\": [\n      \"importance_threshold\"\n    ]\n  }\n]"
+      "rawOutput": "{\"should_inject\":true,\"reason\":\"用户明确要求“继续”并保持既定中文短句风格，需延续先前任务与偏好。\",\"selected_record_ids\":[\"mem-style-1\",\"mem-task-1\"],\"memory_summary\":\"用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。\",\"requested_scopes\":[\"user\",\"task\"],\"requested_memory_types\":[\"fact_preference\",\"task_state\"],\"importance_threshold\":4}",
+      "parsedOutput": {
+        "should_inject": true,
+        "reason": "用户明确要求“继续”并保持既定中文短句风格，需延续先前任务与偏好。",
+        "selected_record_ids": [
+          "mem-style-1",
+          "mem-task-1"
+        ],
+        "memory_summary": "用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。",
+        "requested_scopes": [
+          "user",
+          "task"
+        ],
+        "requested_memory_types": [
+          "fact_preference",
+          "task_state"
+        ],
+        "importance_threshold": 4
+      }
     },
     {
       "id": "inject-irrelevant-memory-skip",
@@ -226,10 +262,10 @@
       "module": "recall-injection-planner",
       "promptName": "MEMORY_RECALL_INJECTION_SYSTEM_PROMPT",
       "expected": "当候选记忆与当前问题无关时，应跳过注入",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 20007,
-      "systemPrompt": "You are the memory injection planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_inject\":boolean,\"reason\":\"...\",\"selected_record_ids\":[...],\"memory_summary\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number}\n\nYour task is to decide whether the current user input needs memory injection before the main model answers, using the provided candidate memories.\n\nInjection SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user needs continuity, personalization, or context carry-over\n\nInjection should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the searched candidate memories are not actually relevant enough\n\nRules:\n- Base your decision on the current input, recent context summary, and the provided candidate memories.\n- Only select record ids that exist in the candidate list.\n- If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.\n- If should_inject is false, selected_record_ids should be empty.\n- Keep reason short and concrete in Chinese.",
+      "pass": true,
+      "actual": "{\"should_inject\":false,\"selected_record_ids\":[],\"memory_summary\":\"\"}",
+      "durationMs": 8367,
+      "systemPrompt": "You are the memory injection planner for a memory-native agent.\nReturn strict JSON only with shape:\n{\"should_inject\":boolean,\"reason\":\"...\",\"selected_record_ids\":[...],\"memory_summary\":\"...\",\"requested_scopes\":[...],\"requested_memory_types\":[...],\"importance_threshold\":number}\n\nYour task is to decide whether the current user input needs memory injection before the main model answers, using the provided candidate memories.\n\nInjection SHOULD happen when:\n- the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context\n- the user needs continuity, personalization, or context carry-over\n\nInjection should NOT happen when:\n- the input is self-contained and does not depend on memory\n- the searched candidate memories are not actually relevant enough\n\nRules:\n- Base your decision on the current input, recent context summary, and the provided candidate memories.\n- Only select record ids that exist in the candidate list.\n- If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.\n- If should_inject is false, selected_record_ids should be empty.\n- If the input is a fresh self-contained question, prefer {\"should_inject\":false,\"selected_record_ids\":[]} even when a weakly related candidate exists.\n- importance_threshold MUST be an integer 1-5 when present. Never output decimals.\n- Keep reason short and concrete in Chinese.\n\nExamples:\n- Continue prior task -> {\"should_inject\":true,\"selected_record_ids\":[\"mem-1\"],\"memory_summary\":\"...\"}\n- Unrelated fresh question -> {\"should_inject\":false,\"selected_record_ids\":[],\"reason\":\"当前问题自包含，候选记忆弱相关\"}",
       "payload": {
         "current_input": "解释一下 HTTP 204 和 304 的区别，用最短的话说清楚。",
         "recent_context_summary": "当前是一次独立的协议知识问答。",
@@ -274,7 +310,24 @@
         "semantic_threshold": 0.72,
         "task_id_present": false
       },
-      "error": "memory_llm_timeout"
+      "rawOutput": "{\"should_inject\":false,\"reason\":\"当前问题是独立的 HTTP 概念解释，语义上不依赖历史任务或偏好记忆，候选记忆与本次内容相关性低\",\"selected_record_ids\":[],\"memory_summary\":\"\",\"requested_scopes\":[\"workspace\",\"user\",\"task\"],\"requested_memory_types\":[\"fact_preference\",\"task_state\",\"episodic\"],\"importance_threshold\":3}",
+      "parsedOutput": {
+        "should_inject": false,
+        "reason": "当前问题是独立的 HTTP 概念解释，语义上不依赖历史任务或偏好记忆，候选记忆与本次内容相关性低",
+        "selected_record_ids": [],
+        "memory_summary": "",
+        "requested_scopes": [
+          "workspace",
+          "user",
+          "task"
+        ],
+        "requested_memory_types": [
+          "fact_preference",
+          "task_state",
+          "episodic"
+        ],
+        "importance_threshold": 3
+      }
     },
     {
       "id": "quality-low-signal",
@@ -283,8 +336,8 @@
       "promptName": "MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT",
       "expected": "应识别低信号候选，并给出低质量或待确认判断",
       "pass": true,
-      "actual": "{\"candidate_id\":\"cand-low-1\",\"quality_score\":0.12,\"confidence\":0.95,\"potential_conflicts\":[],\"suggested_importance\":1,\"suggested_status\":\"pending_confirmation\",\"issues\":[{\"type\":\"low_quality\",\"severity\":\"high\",\"description\":\"仅是当前轮次的确认用语，缺乏可复用事实\"},{\"type\":\"vague\",\"severity\":\"high\",\"description\":\"信息极少且非稳定偏好，更多是临时对话内容\"}],\"reason\":\"该片段为对话确认/礼貌回复，不具备持久记忆价值。\"}",
-      "durationMs": 9372,
+      "actual": "{\"candidate_id\":\"cand-low-1\",\"quality_score\":0.12,\"confidence\":0.83,\"potential_conflicts\":[],\"suggested_importance\":1,\"suggested_status\":\"pending_confirmation\",\"issues\":[{\"type\":\"low_quality\",\"severity\":\"high\",\"description\":\"内容仅为一句礼貌确认，缺乏可复用事实\"},{\"type\":\"vague\",\"severity\":\"medium\",\"description\":\"“好的，我来处理”不体现稳定偏好或可长期记忆的信息\"}],\"reason\":\"该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。\"}",
+      "durationMs": 12998,
       "systemPrompt": "You assess the quality of writeback candidates for durable agent memory.\n\nInput JSON carries:\n- writeback_candidates: [{ id, candidate_type, scope, summary, importance, confidence, write_reason }]\n- existing_similar_records: [{ id, scope, memory_type, status, summary, importance, confidence }]\n- turn_context: { user_input, assistant_output }\n\nReturn strict JSON only with shape:\n{\"assessments\":[{\"candidate_id\":\"...\",\"quality_score\":0-1,\"confidence\":0-1,\"potential_conflicts\":[\"...\"],\"suggested_importance\":1-5,\"suggested_status\":\"active|pending_confirmation\",\"issues\":[{\"type\":\"duplicate|low_quality|conflict|vague\",\"severity\":\"high|medium|low\",\"description\":\"...\"}],\"reason\":\"...\"}]}\n\nRules:\n- candidate_id must refer to an input candidate id.\n- potential_conflicts must only contain ids from existing_similar_records.\n- Use pending_confirmation when the candidate is plausible but duplicate/conflict risk remains.\n- quality_score should be lower for vague, redundant, low-signal, or temporary content.\n- Keep reason and issue descriptions concise in Chinese.",
       "payload": {
         "writeback_candidates": [
@@ -323,13 +376,13 @@
           "assistant_output": "好的，我来处理。后续我会按这个格式写。"
         }
       },
-      "rawOutput": "{\"assessments\":[{\"candidate_id\":\"cand-low-1\",\"quality_score\":0.12,\"confidence\":0.95,\"potential_conflicts\":[],\"suggested_importance\":1,\"suggested_status\":\"pending_confirmation\",\"issues\":[{\"type\":\"low_quality\",\"severity\":\"high\",\"description\":\"仅是当前轮次的确认用语，缺乏可复用事实\"},{\"type\":\"vague\",\"severity\":\"high\",\"description\":\"信息极少且非稳定偏好，更多是临时对话内容\"}],\"reason\":\"该片段为对话确认/礼貌回复，不具备持久记忆价值。\"},{\"candidate_id\":\"cand-good-1\",\"quality_score\":0.97,\"confidence\":0.98,\"potential_conflicts\":[],\"suggested_importance\":5,\"suggested_status\":\"active\",\"issues\":[],\"reason\":\"提取到明确稳定的用户写作偏好，可直接用于后续回答风格约束，且与现有“默认中文”偏好可兼容。\"}]}",
+      "rawOutput": "{\"assessments\":[{\"candidate_id\":\"cand-low-1\",\"quality_score\":0.12,\"confidence\":0.83,\"potential_conflicts\":[],\"suggested_importance\":1,\"suggested_status\":\"pending_confirmation\",\"issues\":[{\"type\":\"low_quality\",\"severity\":\"high\",\"description\":\"内容仅为一句礼貌确认，缺乏可复用事实\"},{\"type\":\"vague\",\"severity\":\"medium\",\"description\":\"“好的，我来处理”不体现稳定偏好或可长期记忆的信息\"}],\"reason\":\"该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。\"},{\"candidate_id\":\"cand-good-1\",\"quality_score\":0.95,\"confidence\":0.96,\"potential_conflicts\":[],\"suggested_importance\":4,\"suggested_status\":\"active\",\"issues\":[],\"reason\":\"清晰表达用户在说明文档中的格式偏好，属于稳定可复用的用户偏好，与已有“默认中文回答”不冲突，可直接写回。\"}]}",
       "parsedOutput": {
         "assessments": [
           {
             "candidate_id": "cand-low-1",
             "quality_score": 0.12,
-            "confidence": 0.95,
+            "confidence": 0.83,
             "potential_conflicts": [],
             "suggested_importance": 1,
             "suggested_status": "pending_confirmation",
@@ -337,25 +390,25 @@
               {
                 "type": "low_quality",
                 "severity": "high",
-                "description": "仅是当前轮次的确认用语，缺乏可复用事实"
+                "description": "内容仅为一句礼貌确认，缺乏可复用事实"
               },
               {
                 "type": "vague",
-                "severity": "high",
-                "description": "信息极少且非稳定偏好，更多是临时对话内容"
+                "severity": "medium",
+                "description": "“好的，我来处理”不体现稳定偏好或可长期记忆的信息"
               }
             ],
-            "reason": "该片段为对话确认/礼貌回复，不具备持久记忆价值。"
+            "reason": "该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。"
           },
           {
             "candidate_id": "cand-good-1",
-            "quality_score": 0.97,
-            "confidence": 0.98,
+            "quality_score": 0.95,
+            "confidence": 0.96,
             "potential_conflicts": [],
-            "suggested_importance": 5,
+            "suggested_importance": 4,
             "suggested_status": "active",
             "issues": [],
-            "reason": "提取到明确稳定的用户写作偏好，可直接用于后续回答风格约束，且与现有“默认中文”偏好可兼容。"
+            "reason": "清晰表达用户在说明文档中的格式偏好，属于稳定可复用的用户偏好，与已有“默认中文回答”不冲突，可直接写回。"
           }
         ]
       }
@@ -366,10 +419,10 @@
       "module": "relation-discoverer",
       "promptName": "MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT",
       "expected": "应发现同一任务上下文里的扩展或相关关系",
-      "pass": true,
-      "actual": "[{\"target_record_id\":\"rec-related-1\",\"relation_type\":\"extends\",\"strength\":0.86,\"bidirectional\":false,\"reason\":\"候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。\"}]",
-      "durationMs": 7672,
-      "systemPrompt": "You discover semantic relations between durable memory records.\n\nInput JSON carries:\n- source_record: { id, memory_type, scope, summary, importance, confidence }\n- candidate_records: [{ id, memory_type, scope, summary, importance, confidence }]\n- context: { workspace_id, user_id } | null\n\nReturn strict JSON only with shape:\n{\"source_record_id\":\"...\",\"relations\":[{\"target_record_id\":\"...\",\"relation_type\":\"depends_on|conflicts_with|extends|supersedes|related_to\",\"strength\":0-1,\"bidirectional\":boolean,\"reason\":\"...\"}]}\n\nRules:\n- source_record_id must equal source_record.id.\n- target_record_id must come from candidate_records.\n- Emit only relations with clear semantic support.\n- Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.\n- Keep reason concise in Chinese.",
+      "pass": false,
+      "actual": "执行失败",
+      "durationMs": 121585,
+      "systemPrompt": "You discover semantic relations between durable memory records.\n\nInput JSON carries:\n- source_record: { id, memory_type, scope, summary, importance, confidence }\n- candidate_records: [{ id, memory_type, scope, summary, importance, confidence }]\n- context: { workspace_id, user_id } | null\n\nReturn strict JSON only with shape:\n{\"source_record_id\":\"...\",\"relations\":[{\"target_record_id\":\"...\",\"relation_type\":\"depends_on|conflicts_with|extends|supersedes|related_to\",\"strength\":0-1,\"bidirectional\":boolean,\"reason\":\"...\"}]}\n\nRules:\n- source_record_id must equal source_record.id.\n- target_record_id must come from candidate_records.\n- Emit only relations with clear semantic support.\n- Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.\n- If no candidate has clear semantic support, return {\"source_record_id\":\"...\",\"relations\":[]}.\n- Keep reason concise in Chinese.",
       "payload": {
         "source_record": {
           "id": "rec-source-1",
@@ -402,19 +455,7 @@
           "user_id": "eval-user"
         }
       },
-      "rawOutput": "{\"source_record_id\":\"rec-source-1\",\"relations\":[{\"target_record_id\":\"rec-related-1\",\"relation_type\":\"extends\",\"strength\":0.86,\"bidirectional\":false,\"reason\":\"候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。\"}]}",
-      "parsedOutput": {
-        "source_record_id": "rec-source-1",
-        "relations": [
-          {
-            "target_record_id": "rec-related-1",
-            "relation_type": "extends",
-            "strength": 0.86,
-            "bidirectional": false,
-            "reason": "候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。"
-          }
-        ]
-      }
+      "error": "memory llm request failed with 502"
     },
     {
       "id": "relation-no-clear-link",
@@ -422,10 +463,10 @@
       "module": "relation-discoverer",
       "promptName": "MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT",
       "expected": "当候选记录没有明确语义关联时，不应强行输出关系",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 20006,
-      "systemPrompt": "You discover semantic relations between durable memory records.\n\nInput JSON carries:\n- source_record: { id, memory_type, scope, summary, importance, confidence }\n- candidate_records: [{ id, memory_type, scope, summary, importance, confidence }]\n- context: { workspace_id, user_id } | null\n\nReturn strict JSON only with shape:\n{\"source_record_id\":\"...\",\"relations\":[{\"target_record_id\":\"...\",\"relation_type\":\"depends_on|conflicts_with|extends|supersedes|related_to\",\"strength\":0-1,\"bidirectional\":boolean,\"reason\":\"...\"}]}\n\nRules:\n- source_record_id must equal source_record.id.\n- target_record_id must come from candidate_records.\n- Emit only relations with clear semantic support.\n- Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.\n- Keep reason concise in Chinese.",
+      "pass": true,
+      "actual": "[]",
+      "durationMs": 13916,
+      "systemPrompt": "You discover semantic relations between durable memory records.\n\nInput JSON carries:\n- source_record: { id, memory_type, scope, summary, importance, confidence }\n- candidate_records: [{ id, memory_type, scope, summary, importance, confidence }]\n- context: { workspace_id, user_id } | null\n\nReturn strict JSON only with shape:\n{\"source_record_id\":\"...\",\"relations\":[{\"target_record_id\":\"...\",\"relation_type\":\"depends_on|conflicts_with|extends|supersedes|related_to\",\"strength\":0-1,\"bidirectional\":boolean,\"reason\":\"...\"}]}\n\nRules:\n- source_record_id must equal source_record.id.\n- target_record_id must come from candidate_records.\n- Emit only relations with clear semantic support.\n- Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.\n- If no candidate has clear semantic support, return {\"source_record_id\":\"...\",\"relations\":[]}.\n- Keep reason concise in Chinese.",
       "payload": {
         "source_record": {
           "id": "rec-source-2",
@@ -458,7 +499,11 @@
           "user_id": "eval-user"
         }
       },
-      "error": "memory_llm_timeout"
+      "rawOutput": "{\"source_record_id\":\"rec-source-2\",\"relations\":[]}",
+      "parsedOutput": {
+        "source_record_id": "rec-source-2",
+        "relations": []
+      }
     },
     {
       "id": "recommend-task-memory",
@@ -467,9 +512,9 @@
       "promptName": "MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT",
       "expected": "应推荐与当前任务连续性相关、宿主大概率会采纳的高价值记忆",
       "pass": true,
-      "actual": "[{\"record_id\":\"mem-rec-1\",\"relevance_score\":0.98,\"trigger_reason\":\"task_similarity\",\"suggestion\":\"继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。\",\"auto_inject\":true},{\"record_id\":\"mem-rec-2\",\"relevance_score\":0.86,\"trigger_reason\":\"related_decision\",\"suggestion\":\"保持中文、简短表达的输出偏好，便于续写验收文档风格一致。\",\"auto_inject\":false}]",
-      "durationMs": 8192,
-      "systemPrompt": "You proactively recommend useful memories for the current context.\n\nInput JSON carries:\n- current_context: { user_input, session_context, detected_task_type }\n- available_memories: [{ id, memory_type, scope, summary, importance, confidence, status }]\n\nReturn strict JSON only with shape:\n{\"recommendations\":[{\"record_id\":\"...\",\"relevance_score\":0-1,\"trigger_reason\":\"task_similarity|forgotten_context|related_decision|conflict_warning\",\"suggestion\":\"...\",\"auto_inject\":boolean}]}\n\nRules:\n- record_id must come from available_memories.\n- auto_inject should usually be true only when relevance_score is very high and the context match is strong.\n- Prefer concise user-facing suggestions in Chinese.\n- Emit only the most relevant recommendations.",
+      "actual": "[{\"record_id\":\"mem-rec-1\",\"relevance_score\":0.98,\"trigger_reason\":\"task_similarity\",\"suggestion\":\"沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。\",\"auto_inject\":true}]",
+      "durationMs": 11157,
+      "systemPrompt": "You proactively recommend useful memories for the current context.\n\nInput JSON carries:\n- current_context: { user_input, session_context, detected_task_type }\n- available_memories: [{ id, memory_type, scope, summary, importance, confidence, status }]\n\nReturn strict JSON only with shape:\n{\"recommendations\":[{\"record_id\":\"...\",\"relevance_score\":0-1,\"trigger_reason\":\"task_similarity|forgotten_context|related_decision|conflict_warning\",\"suggestion\":\"...\",\"auto_inject\":boolean}]}\n\nRules:\n- record_id must come from available_memories.\n- auto_inject should usually be true only when relevance_score is very high and the context match is strong.\n- Prefer concise user-facing suggestions in Chinese.\n- Emit only the most relevant recommendations.\n- If available memories are stale, weakly related, or the current question is self-contained, return {\"recommendations\":[]}.",
       "payload": {
         "current_context": {
           "user_input": "继续完善验收文档，保持之前的写法。",
@@ -511,22 +556,15 @@
           }
         ]
       },
-      "rawOutput": "{\"recommendations\":[{\"record_id\":\"mem-rec-1\",\"relevance_score\":0.98,\"trigger_reason\":\"task_similarity\",\"suggestion\":\"继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。\",\"auto_inject\":true},{\"record_id\":\"mem-rec-2\",\"relevance_score\":0.86,\"trigger_reason\":\"related_decision\",\"suggestion\":\"保持中文、简短表达的输出偏好，便于续写验收文档风格一致。\",\"auto_inject\":false}]}",
+      "rawOutput": "{\"recommendations\":[{\"record_id\":\"mem-rec-1\",\"relevance_score\":0.98,\"trigger_reason\":\"task_similarity\",\"suggestion\":\"沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。\",\"auto_inject\":true}]}",
       "parsedOutput": {
         "recommendations": [
           {
             "record_id": "mem-rec-1",
             "relevance_score": 0.98,
             "trigger_reason": "task_similarity",
-            "suggestion": "继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。",
+            "suggestion": "沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。",
             "auto_inject": true
-          },
-          {
-            "record_id": "mem-rec-2",
-            "relevance_score": 0.86,
-            "trigger_reason": "related_decision",
-            "suggestion": "保持中文、简短表达的输出偏好，便于续写验收文档风格一致。",
-            "auto_inject": false
           }
         ]
       }
@@ -539,8 +577,8 @@
       "expected": "当上下文没有明确连续性时，不应推荐低价值或过期记忆",
       "pass": false,
       "actual": "执行失败",
-      "durationMs": 18957,
-      "systemPrompt": "You proactively recommend useful memories for the current context.\n\nInput JSON carries:\n- current_context: { user_input, session_context, detected_task_type }\n- available_memories: [{ id, memory_type, scope, summary, importance, confidence, status }]\n\nReturn strict JSON only with shape:\n{\"recommendations\":[{\"record_id\":\"...\",\"relevance_score\":0-1,\"trigger_reason\":\"task_similarity|forgotten_context|related_decision|conflict_warning\",\"suggestion\":\"...\",\"auto_inject\":boolean}]}\n\nRules:\n- record_id must come from available_memories.\n- auto_inject should usually be true only when relevance_score is very high and the context match is strong.\n- Prefer concise user-facing suggestions in Chinese.\n- Emit only the most relevant recommendations.",
+      "durationMs": 85521,
+      "systemPrompt": "You proactively recommend useful memories for the current context.\n\nInput JSON carries:\n- current_context: { user_input, session_context, detected_task_type }\n- available_memories: [{ id, memory_type, scope, summary, importance, confidence, status }]\n\nReturn strict JSON only with shape:\n{\"recommendations\":[{\"record_id\":\"...\",\"relevance_score\":0-1,\"trigger_reason\":\"task_similarity|forgotten_context|related_decision|conflict_warning\",\"suggestion\":\"...\",\"auto_inject\":boolean}]}\n\nRules:\n- record_id must come from available_memories.\n- auto_inject should usually be true only when relevance_score is very high and the context match is strong.\n- Prefer concise user-facing suggestions in Chinese.\n- Emit only the most relevant recommendations.\n- If available memories are stale, weakly related, or the current question is self-contained, return {\"recommendations\":[]}.",
       "payload": {
         "current_context": {
           "user_input": "解释一下 TCP 三次握手，给一个最短版本。",
@@ -573,7 +611,7 @@
           }
         ]
       },
-      "error": "memory llm request failed with 503"
+      "error": "memory llm request failed with 502"
     },
     {
       "id": "evolution-knowledge-extraction",
@@ -581,10 +619,10 @@
       "module": "evolution-planner",
       "promptName": "MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT",
       "expected": "应从多条相关记录提炼出稳定模式",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 9566,
-      "systemPrompt": "You plan long-term memory evolution over a set of related records.\n\nInput JSON carries:\n- source_records: [{ id, memory_type, scope, summary, importance, confidence, created_at, updated_at }]\n- time_window: { start, end }\n- evolution_type: knowledge_extraction | pattern_discovery | summarization\n\nReturn strict JSON only with shape:\n{\"evolution_type\":\"...\",\"source_records\":[\"...\"],\"extracted_knowledge\":{\"pattern\":\"...\",\"confidence\":0-1,\"evidence_count\":N,\"suggested_scope\":\"user|workspace\",\"suggested_importance\":1-5},\"consolidation_plan\":{\"new_summary\":\"...\",\"records_to_archive\":[\"...\"]}}\n\nRules:\n- source_records must only contain ids from the input.\n- For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.\n- For summarization, consolidation_plan should usually be present.\n- Keep extracted knowledge concise and evidence-based.\n- Do not invent new record ids.",
+      "pass": true,
+      "actual": "{\"evolution_type\":\"knowledge_extraction\",\"extracted_knowledge\":{\"pattern\":\"用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。\",\"confidence\":0.95,\"evidence_count\":3,\"suggested_scope\":\"user\",\"suggested_importance\":5}}",
+      "durationMs": 12192,
+      "systemPrompt": "You plan long-term memory evolution over a set of related records.\n\nInput JSON carries:\n- source_records: [{ id, memory_type, scope, summary, importance, confidence, created_at, updated_at }]\n- time_window: { start, end }\n- evolution_type: knowledge_extraction | pattern_discovery | summarization\n\nReturn strict JSON only with shape:\n{\"evolution_type\":\"...\",\"source_records\":[\"...\"],\"extracted_knowledge\":{\"pattern\":\"...\",\"confidence\":0-1,\"evidence_count\":N,\"suggested_scope\":\"user|workspace\",\"suggested_importance\":1-5},\"consolidation_plan\":{\"new_summary\":\"...\",\"records_to_archive\":[\"...\"]}}\n\nRules:\n- source_records must only contain ids from the input.\n- For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.\n- For summarization, consolidation_plan should usually be present.\n- For knowledge_extraction, consolidation_plan is optional. If you include it, records_to_archive MUST be a non-empty array of source record ids.\n- Do not emit an empty records_to_archive array.\n- Keep extracted knowledge concise and evidence-based.\n- Do not invent new record ids.",
       "payload": {
         "source_records": [
           {
@@ -624,7 +662,22 @@
         },
         "evolution_type": "knowledge_extraction"
       },
-      "error": "[\n  {\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"type\": \"array\",\n    \"inclusive\": true,\n    \"exact\": false,\n    \"message\": \"Array must contain at least 1 element(s)\",\n    \"path\": [\n      \"consolidation_plan\",\n      \"records_to_archive\"\n    ]\n  }\n]"
+      "rawOutput": "{\n  \"evolution_type\": \"knowledge_extraction\",\n  \"source_records\": [\"evo-1\", \"evo-2\", \"evo-3\"],\n  \"extracted_knowledge\": {\n    \"pattern\": \"用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。\",\n    \"confidence\": 0.95,\n    \"evidence_count\": 3,\n    \"suggested_scope\": \"user\",\n    \"suggested_importance\": 5\n  }\n}",
+      "parsedOutput": {
+        "evolution_type": "knowledge_extraction",
+        "source_records": [
+          "evo-1",
+          "evo-2",
+          "evo-3"
+        ],
+        "extracted_knowledge": {
+          "pattern": "用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。",
+          "confidence": 0.95,
+          "evidence_count": 3,
+          "suggested_scope": "user",
+          "suggested_importance": 5
+        }
+      }
     },
     {
       "id": "evolution-pattern-knowledge-extraction",
@@ -632,10 +685,10 @@
       "module": "evolution-planner",
       "promptName": "MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT",
       "expected": "应从多条任务状态中提炼出稳定的长期工作模式",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 20004,
-      "systemPrompt": "You plan long-term memory evolution over a set of related records.\n\nInput JSON carries:\n- source_records: [{ id, memory_type, scope, summary, importance, confidence, created_at, updated_at }]\n- time_window: { start, end }\n- evolution_type: knowledge_extraction | pattern_discovery | summarization\n\nReturn strict JSON only with shape:\n{\"evolution_type\":\"...\",\"source_records\":[\"...\"],\"extracted_knowledge\":{\"pattern\":\"...\",\"confidence\":0-1,\"evidence_count\":N,\"suggested_scope\":\"user|workspace\",\"suggested_importance\":1-5},\"consolidation_plan\":{\"new_summary\":\"...\",\"records_to_archive\":[\"...\"]}}\n\nRules:\n- source_records must only contain ids from the input.\n- For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.\n- For summarization, consolidation_plan should usually be present.\n- Keep extracted knowledge concise and evidence-based.\n- Do not invent new record ids.",
+      "pass": true,
+      "actual": "{\"evolution_type\":\"knowledge_extraction\",\"source_records\":[\"evo-task-1\",\"evo-task-2\",\"evo-task-3\"],\"extracted_knowledge\":{\"pattern\":\"在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。\",\"confidence\":0.93,\"evidence_count\":3,\"suggested_scope\":\"workspace\",\"suggested_importance\":4}}",
+      "durationMs": 9368,
+      "systemPrompt": "You plan long-term memory evolution over a set of related records.\n\nInput JSON carries:\n- source_records: [{ id, memory_type, scope, summary, importance, confidence, created_at, updated_at }]\n- time_window: { start, end }\n- evolution_type: knowledge_extraction | pattern_discovery | summarization\n\nReturn strict JSON only with shape:\n{\"evolution_type\":\"...\",\"source_records\":[\"...\"],\"extracted_knowledge\":{\"pattern\":\"...\",\"confidence\":0-1,\"evidence_count\":N,\"suggested_scope\":\"user|workspace\",\"suggested_importance\":1-5},\"consolidation_plan\":{\"new_summary\":\"...\",\"records_to_archive\":[\"...\"]}}\n\nRules:\n- source_records must only contain ids from the input.\n- For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.\n- For summarization, consolidation_plan should usually be present.\n- For knowledge_extraction, consolidation_plan is optional. If you include it, records_to_archive MUST be a non-empty array of source record ids.\n- Do not emit an empty records_to_archive array.\n- Keep extracted knowledge concise and evidence-based.\n- Do not invent new record ids.",
       "payload": {
         "source_records": [
           {
@@ -675,7 +728,22 @@
         },
         "evolution_type": "knowledge_extraction"
       },
-      "error": "memory_llm_timeout"
+      "rawOutput": "{\n  \"evolution_type\": \"knowledge_extraction\",\n  \"source_records\": [\"evo-task-1\", \"evo-task-2\", \"evo-task-3\"],\n  \"extracted_knowledge\": {\n    \"pattern\": \"在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。\",\n    \"confidence\": 0.93,\n    \"evidence_count\": 3,\n    \"suggested_scope\": \"workspace\",\n    \"suggested_importance\": 4\n  }\n}",
+      "parsedOutput": {
+        "evolution_type": "knowledge_extraction",
+        "source_records": [
+          "evo-task-1",
+          "evo-task-2",
+          "evo-task-3"
+        ],
+        "extracted_knowledge": {
+          "pattern": "在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。",
+          "confidence": 0.93,
+          "evidence_count": 3,
+          "suggested_scope": "workspace",
+          "suggested_importance": 4
+        }
+      }
     },
     {
       "id": "governance-verify-reject-delete",
@@ -684,9 +752,9 @@
       "promptName": "MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT",
       "expected": "对于缺少删除依据的删除提案，应拒绝执行",
       "pass": true,
-      "actual": "{\"decision\":\"reject\",\"confidence\":0.97,\"notes\":\"Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal.\"}",
-      "durationMs": 7344,
-      "systemPrompt": "You verify a proposed automated memory governance action before execution.\n\nInput JSON carries:\n- proposal: the proposed action with targets, suggested_changes, reason_code, reason_text, evidence\n- seed_records: compact record snapshots\n- related_records: compact related record snapshots\n- open_conflicts: compact conflict snapshots\n\nReturn strict JSON only with shape:\n{\"decision\":\"approve|reject\",\"confidence\":0-1,\"notes\":\"...\"}\n\nRules:\n- Reject if the proposal deletes without a clear delete_reason or replacement context.\n- Reject if the proposal merges records that are not clearly about the same durable fact.\n- Reject if the proposal resolves a conflict without enough evidence in related records.\n- Reject if the proposal appears to cross scopes incorrectly.\n- Approve only when the proposal is specific, well-supported, and low-ambiguity.",
+      "actual": "{\"decision\":\"reject\",\"confidence\":0.97,\"notes\":\"拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。\"}",
+      "durationMs": 8524,
+      "systemPrompt": "You verify a proposed automated memory governance action before execution.\n\nInput JSON carries:\n- proposal: the proposed action with targets, suggested_changes, reason_code, reason_text, evidence\n- seed_records: compact record snapshots\n- related_records: compact related record snapshots\n- open_conflicts: compact conflict snapshots\n\nReturn strict JSON only with shape:\n{\"decision\":\"approve|reject\",\"confidence\":0-1,\"notes\":\"...\"}\n\nRules:\n- Reject if the proposal deletes without a clear delete_reason or replacement context.\n- Reject if the proposal merges records that are not clearly about the same durable fact.\n- Reject if the proposal resolves a conflict without enough evidence in related records.\n- Reject if the proposal appears to cross scopes incorrectly.\n- Approve only when the proposal is specific, well-supported, and low-ambiguity.\n- If a proposal archives an older record because a newer record clearly supersedes it, approval is usually appropriate.\n- When evidence is insufficient, prefer reject over a hesitant approve.",
       "payload": {
         "proposal": {
           "proposal_id": "proposal-1",
@@ -732,11 +800,11 @@
         "related_records": [],
         "open_conflicts": []
       },
-      "rawOutput": "{\"decision\":\"reject\",\"confidence\":0.97,\"notes\":\"Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal.\"}",
+      "rawOutput": "{\"decision\":\"reject\",\"confidence\":0.97,\"notes\":\"拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。\"}",
       "parsedOutput": {
         "decision": "reject",
         "confidence": 0.97,
-        "notes": "Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal."
+        "notes": "拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。"
       }
     },
     {
@@ -745,10 +813,10 @@
       "module": "governance-verifier",
       "promptName": "MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT",
       "expected": "对于证据充分、目标明确的归档提案，应允许通过",
-      "pass": false,
-      "actual": "执行失败",
-      "durationMs": 20012,
-      "systemPrompt": "You verify a proposed automated memory governance action before execution.\n\nInput JSON carries:\n- proposal: the proposed action with targets, suggested_changes, reason_code, reason_text, evidence\n- seed_records: compact record snapshots\n- related_records: compact related record snapshots\n- open_conflicts: compact conflict snapshots\n\nReturn strict JSON only with shape:\n{\"decision\":\"approve|reject\",\"confidence\":0-1,\"notes\":\"...\"}\n\nRules:\n- Reject if the proposal deletes without a clear delete_reason or replacement context.\n- Reject if the proposal merges records that are not clearly about the same durable fact.\n- Reject if the proposal resolves a conflict without enough evidence in related records.\n- Reject if the proposal appears to cross scopes incorrectly.\n- Approve only when the proposal is specific, well-supported, and low-ambiguity.",
+      "pass": true,
+      "actual": "{\"decision\":\"approve\",\"confidence\":0.95,\"notes\":\"The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous.\"}",
+      "durationMs": 13108,
+      "systemPrompt": "You verify a proposed automated memory governance action before execution.\n\nInput JSON carries:\n- proposal: the proposed action with targets, suggested_changes, reason_code, reason_text, evidence\n- seed_records: compact record snapshots\n- related_records: compact related record snapshots\n- open_conflicts: compact conflict snapshots\n\nReturn strict JSON only with shape:\n{\"decision\":\"approve|reject\",\"confidence\":0-1,\"notes\":\"...\"}\n\nRules:\n- Reject if the proposal deletes without a clear delete_reason or replacement context.\n- Reject if the proposal merges records that are not clearly about the same durable fact.\n- Reject if the proposal resolves a conflict without enough evidence in related records.\n- Reject if the proposal appears to cross scopes incorrectly.\n- Approve only when the proposal is specific, well-supported, and low-ambiguity.\n- If a proposal archives an older record because a newer record clearly supersedes it, approval is usually appropriate.\n- When evidence is insufficient, prefer reject over a hesitant approve.",
       "payload": {
         "proposal": {
           "proposal_id": "proposal-2",
@@ -814,7 +882,12 @@
         ],
         "open_conflicts": []
       },
-      "error": "memory_llm_timeout"
+      "rawOutput": "{\"decision\":\"approve\",\"confidence\":0.95,\"notes\":\"The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous.\"}",
+      "parsedOutput": {
+        "decision": "approve",
+        "confidence": 0.95,
+        "notes": "The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous."
+      }
     },
     {
       "id": "effectiveness-memory-used",
@@ -823,8 +896,8 @@
       "promptName": "MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT",
       "expected": "当回复明显使用了注入记忆时，应给出正向使用判断",
       "pass": true,
-      "actual": "{\"record_id\":\"eff-1\",\"was_used\":true,\"usage_confidence\":0.78,\"effectiveness_score\":0.72,\"suggested_importance_adjustment\":0,\"usage_evidence\":\"回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。\",\"reason\":\"体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。\"}",
-      "durationMs": 10764,
+      "actual": "{\"record_id\":\"eff-1\",\"was_used\":true,\"usage_confidence\":0.84,\"effectiveness_score\":0.78,\"suggested_importance_adjustment\":1,\"usage_evidence\":\"回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。\",\"reason\":\"模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。\"}",
+      "durationMs": 8142,
       "systemPrompt": "You evaluate whether injected memories were actually used by the main model response.\n\nInput JSON carries:\n- injected_memories: [{ record_id, summary, importance }]\n- assistant_output: string\n- user_feedback: { rating, comment } | null\n\nReturn strict JSON only with shape:\n{\"evaluations\":[{\"record_id\":\"...\",\"was_used\":boolean,\"usage_confidence\":0-1,\"effectiveness_score\":0-1,\"suggested_importance_adjustment\":-2..2,\"usage_evidence\":\"...\",\"reason\":\"...\"}]}\n\nRules:\n- record_id must refer to an injected memory.\n- Use usage_evidence only when you can point to a clear phrase or behavior in assistant_output.\n- Raise suggested_importance_adjustment only when the memory was clearly used and materially helpful.\n- Lower suggested_importance_adjustment when the memory was ignored or unnecessary.\n- Keep reason short and concrete in Chinese.",
       "payload": {
         "injected_memories": [
@@ -840,17 +913,17 @@
           "comment": "格式符合预期。"
         }
       },
-      "rawOutput": "{\"evaluations\":[{\"record_id\":\"eff-1\",\"was_used\":true,\"usage_confidence\":0.78,\"effectiveness_score\":0.72,\"suggested_importance_adjustment\":0,\"usage_evidence\":\"回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。\",\"reason\":\"体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。\"}]}",
+      "rawOutput": "{\"evaluations\":[{\"record_id\":\"eff-1\",\"was_used\":true,\"usage_confidence\":0.84,\"effectiveness_score\":0.78,\"suggested_importance_adjustment\":1,\"usage_evidence\":\"回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。\",\"reason\":\"模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。\"}]}",
       "parsedOutput": {
         "evaluations": [
           {
             "record_id": "eff-1",
             "was_used": true,
-            "usage_confidence": 0.78,
-            "effectiveness_score": 0.72,
-            "suggested_importance_adjustment": 0,
-            "usage_evidence": "回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。",
-            "reason": "体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。"
+            "usage_confidence": 0.84,
+            "effectiveness_score": 0.78,
+            "suggested_importance_adjustment": 1,
+            "usage_evidence": "回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。",
+            "reason": "模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。"
           }
         ]
       }

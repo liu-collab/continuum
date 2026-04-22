@@ -1,22 +1,22 @@
 # Memory Orchestrator 真实模型离线评测
 
-- 评测时间：2026-04-22T13:47:58.886Z
+- 评测时间：2026-04-22T14:15:55.729Z
 - 模型：`gpt-5.3-codex-spark`
 - 协议：`openai-compatible`
 - 端点：`http://localhost:8090/v1`
-- 超时：`20000`（毫秒）
+- 超时：`45000`（毫秒）
 
 ## 指标汇总
 
 | 指标 | 通过数 | 总数 | 实际指标 |
 |---|---:|---:|---:|
 | intent_accuracy | 2 | 2 | 100.0% |
-| recall_accuracy_proxy | 0 | 3 | 0.0% |
+| recall_accuracy_proxy | 3 | 3 | 100.0% |
 | low_quality_intercept_rate | 1 | 1 | 100.0% |
 | relation_discovery_accuracy | 1 | 2 | 50.0% |
 | recommendation_acceptance_proxy | 1 | 2 | 50.0% |
-| knowledge_extraction_accuracy | 0 | 2 | 0.0% |
-| governance_correctness_proxy | 1 | 2 | 50.0% |
+| knowledge_extraction_accuracy | 2 | 2 | 100.0% |
+| governance_correctness_proxy | 2 | 2 | 100.0% |
 | effectiveness_adjustment_direction_proxy | 1 | 1 | 100.0% |
 
 ## 样本明细
@@ -27,9 +27,9 @@
 - 指标：`intent_accuracy`
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：应判断需要记忆，并识别 `task_state`（任务状态）或 `fact_preference`（偏好）
-- 实际：{"needs_memory":true,"urgency":"immediate","memory_types":["task_state","episodic"],"suggested_scopes":["task","session"]}
+- 实际：{"needs_memory":true,"urgency":"immediate","memory_types":["task_state","episodic"],"suggested_scopes":["session","task"]}
 - 结果：通过
-- 耗时：17522ms
+- 耗时：13264ms
 
 #### 测试提示词
 
@@ -69,7 +69,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.97,"reason":"用户要求“继续昨天的 memory orchestrator 验收”并保持“之前版本格式”，这是明确的连续性依赖，需基于既有验收文档与会话历史接续。","suggested_scopes":["task","session"]}
+{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.96,"reason":"用户明确“继续昨天”“按之前那版”，需要衔接上一轮已生成的验收文档内容与格式。","suggested_scopes":["session","task"]}
 ```
 
 #### 结构化结果
@@ -82,11 +82,11 @@ Rules:
     "episodic"
   ],
   "urgency": "immediate",
-  "confidence": 0.97,
-  "reason": "用户要求“继续昨天的 memory orchestrator 验收”并保持“之前版本格式”，这是明确的连续性依赖，需基于既有验收文档与会话历史接续。",
+  "confidence": 0.96,
+  "reason": "用户明确“继续昨天”“按之前那版”，需要衔接上一轮已生成的验收文档内容与格式。",
   "suggested_scopes": [
-    "task",
-    "session"
+    "session",
+    "task"
   ]
 }
 ```
@@ -97,9 +97,9 @@ Rules:
 - 指标：`intent_accuracy`
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：应判断为自包含问题，不需要记忆
-- 实际：{"needs_memory":false,"reason":"该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。"}
+- 实际：{"needs_memory":false,"reason":"该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。"}
 - 结果：通过
-- 耗时：8685ms
+- 耗时：13511ms
 
 #### 测试提示词
 
@@ -134,7 +134,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。","suggested_scopes":[]}
+{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.99,"reason":"该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。","suggested_scopes":[]}
 ```
 
 #### 结构化结果
@@ -144,8 +144,8 @@ Rules:
   "needs_memory": false,
   "memory_types": [],
   "urgency": "optional",
-  "confidence": 0.98,
-  "reason": "该问题是通用技术解释，不依赖用户历史偏好、任务状态或过去上下文。",
+  "confidence": 0.99,
+  "reason": "该问题是一般性HTTP知识解释，不依赖上下文、历史偏好或先前任务状态。",
   "suggested_scopes": []
 }
 ```
@@ -156,31 +156,9 @@ Rules:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：应触发检索，并给出可用的查询提示
-- 实际：执行失败
-- 结果：未通过
-- 耗时：8015ms
-- 错误：`[
-  {
-    "code": "invalid_type",
-    "expected": "integer",
-    "received": "float",
-    "message": "Expected integer, received float",
-    "path": [
-      "importance_threshold"
-    ]
-  },
-  {
-    "code": "too_small",
-    "minimum": 1,
-    "type": "number",
-    "inclusive": true,
-    "exact": false,
-    "message": "Number must be greater than or equal to 1",
-    "path": [
-      "importance_threshold"
-    ]
-  }
-]`
+- 实际：{"should_search":true,"query_hint":"查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标","requested_scopes":["workspace","user","task","session"]}
+- 结果：通过
+- 耗时：11728ms
 
 #### 测试提示词
 
@@ -204,10 +182,16 @@ Search should NOT happen when:
 Rules:
 - Decide whether memory search is needed at all.
 - If search is needed, you may narrow scopes, memory types, threshold, and candidate_limit.
+- importance_threshold MUST be an integer 1-5. Never output decimals like 0.7 or 3.5.
+- candidate_limit MUST be an integer 1-50 when present.
 - query_hint should be a short retrieval-oriented rewrite in Chinese when helpful.
 - Prefer the provided requested scopes and memory types unless there is a clear reason to narrow them.
 - Never invent unsupported scope or type values.
 - Keep reason short and concrete in Chinese.
+
+Examples:
+- Strong continuity -> {"should_search":true,"importance_threshold":4,"candidate_limit":8,...}
+- Fresh self-contained question -> {"should_search":false,"reason":"..."}
 ```
 
 #### 测试输入
@@ -235,37 +219,44 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"should_search":true,"reason":"用户要求“继续刚才”并补齐真实模型指标，需检索上一次报告的上下文与任务状态。","requested_scopes":["workspace","user","task","session"],"requested_memory_types":["task_state","episodic","fact_preference"],"importance_threshold":4,"query_hint":"查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标","candidate_limit":8}
+```
+
+#### 结构化结果
+
+```json
+{
+  "should_search": true,
+  "reason": "用户要求“继续刚才”并补齐真实模型指标，需检索上一次报告的上下文与任务状态。",
+  "requested_scopes": [
+    "workspace",
+    "user",
+    "task",
+    "session"
+  ],
+  "requested_memory_types": [
+    "task_state",
+    "episodic",
+    "fact_preference"
+  ],
+  "importance_threshold": 4,
+  "query_hint": "查找本次会话及任务中 memory orchestrator 的测试报告内容，并补齐真实模型的实际验证指标",
+  "candidate_limit": 8
+}
+```
+
 ### inject-relevant-memory
 
 - 模块：`recall-injection-planner`
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_INJECTION_SYSTEM_PROMPT`
 - 预期：应选择与当前任务连续性最相关的记忆
-- 实际：执行失败
-- 结果：未通过
-- 耗时：7833ms
-- 错误：`[
-  {
-    "code": "invalid_type",
-    "expected": "integer",
-    "received": "float",
-    "message": "Expected integer, received float",
-    "path": [
-      "importance_threshold"
-    ]
-  },
-  {
-    "code": "too_small",
-    "minimum": 1,
-    "type": "number",
-    "inclusive": true,
-    "exact": false,
-    "message": "Number must be greater than or equal to 1",
-    "path": [
-      "importance_threshold"
-    ]
-  }
-]`
+- 实际：{"should_inject":true,"selected_record_ids":["mem-style-1","mem-task-1"],"memory_summary":"用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。"}
+- 结果：通过
+- 耗时：9192ms
 
 #### 测试提示词
 
@@ -289,7 +280,13 @@ Rules:
 - Only select record ids that exist in the candidate list.
 - If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.
 - If should_inject is false, selected_record_ids should be empty.
+- If the input is a fresh self-contained question, prefer {"should_inject":false,"selected_record_ids":[]} even when a weakly related candidate exists.
+- importance_threshold MUST be an integer 1-5 when present. Never output decimals.
 - Keep reason short and concrete in Chinese.
+
+Examples:
+- Continue prior task -> {"should_inject":true,"selected_record_ids":["mem-1"],"memory_summary":"..."}
+- Unrelated fresh question -> {"should_inject":false,"selected_record_ids":[],"reason":"当前问题自包含，候选记忆弱相关"}
 ```
 
 #### 测试输入
@@ -351,16 +348,44 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"should_inject":true,"reason":"用户明确要求“继续”并保持既定中文短句风格，需延续先前任务与偏好。","selected_record_ids":["mem-style-1","mem-task-1"],"memory_summary":"用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。","requested_scopes":["user","task"],"requested_memory_types":["fact_preference","task_state"],"importance_threshold":4}
+```
+
+#### 结构化结果
+
+```json
+{
+  "should_inject": true,
+  "reason": "用户明确要求“继续”并保持既定中文短句风格，需延续先前任务与偏好。",
+  "selected_record_ids": [
+    "mem-style-1",
+    "mem-task-1"
+  ],
+  "memory_summary": "用户默认中文表达，要求先给一句结论并补充最多3个短点；当前正在续写 memory orchestrator 的测试样本文档。",
+  "requested_scopes": [
+    "user",
+    "task"
+  ],
+  "requested_memory_types": [
+    "fact_preference",
+    "task_state"
+  ],
+  "importance_threshold": 4
+}
+```
+
 ### inject-irrelevant-memory-skip
 
 - 模块：`recall-injection-planner`
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_INJECTION_SYSTEM_PROMPT`
 - 预期：当候选记忆与当前问题无关时，应跳过注入
-- 实际：执行失败
-- 结果：未通过
-- 耗时：20007ms
-- 错误：`memory_llm_timeout`
+- 实际：{"should_inject":false,"selected_record_ids":[],"memory_summary":""}
+- 结果：通过
+- 耗时：8367ms
 
 #### 测试提示词
 
@@ -384,7 +409,13 @@ Rules:
 - Only select record ids that exist in the candidate list.
 - If should_inject is true, selected_record_ids must be non-empty and memory_summary must explain the injected memory in concise Chinese.
 - If should_inject is false, selected_record_ids should be empty.
+- If the input is a fresh self-contained question, prefer {"should_inject":false,"selected_record_ids":[]} even when a weakly related candidate exists.
+- importance_threshold MUST be an integer 1-5 when present. Never output decimals.
 - Keep reason short and concrete in Chinese.
+
+Examples:
+- Continue prior task -> {"should_inject":true,"selected_record_ids":["mem-1"],"memory_summary":"..."}
+- Unrelated fresh question -> {"should_inject":false,"selected_record_ids":[],"reason":"当前问题自包含，候选记忆弱相关"}
 ```
 
 #### 测试输入
@@ -436,15 +467,43 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"should_inject":false,"reason":"当前问题是独立的 HTTP 概念解释，语义上不依赖历史任务或偏好记忆，候选记忆与本次内容相关性低","selected_record_ids":[],"memory_summary":"","requested_scopes":["workspace","user","task"],"requested_memory_types":["fact_preference","task_state","episodic"],"importance_threshold":3}
+```
+
+#### 结构化结果
+
+```json
+{
+  "should_inject": false,
+  "reason": "当前问题是独立的 HTTP 概念解释，语义上不依赖历史任务或偏好记忆，候选记忆与本次内容相关性低",
+  "selected_record_ids": [],
+  "memory_summary": "",
+  "requested_scopes": [
+    "workspace",
+    "user",
+    "task"
+  ],
+  "requested_memory_types": [
+    "fact_preference",
+    "task_state",
+    "episodic"
+  ],
+  "importance_threshold": 3
+}
+```
+
 ### quality-low-signal
 
 - 模块：`writeback-quality-assessor`
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：应识别低信号候选，并给出低质量或待确认判断
-- 实际：{"candidate_id":"cand-low-1","quality_score":0.12,"confidence":0.95,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是当前轮次的确认用语，缺乏可复用事实"},{"type":"vague","severity":"high","description":"信息极少且非稳定偏好，更多是临时对话内容"}],"reason":"该片段为对话确认/礼貌回复，不具备持久记忆价值。"}
+- 实际：{"candidate_id":"cand-low-1","quality_score":0.12,"confidence":0.83,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"内容仅为一句礼貌确认，缺乏可复用事实"},{"type":"vague","severity":"medium","description":"“好的，我来处理”不体现稳定偏好或可长期记忆的信息"}],"reason":"该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。"}
 - 结果：通过
-- 耗时：9372ms
+- 耗时：12998ms
 
 #### 测试提示词
 
@@ -512,7 +571,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-low-1","quality_score":0.12,"confidence":0.95,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是当前轮次的确认用语，缺乏可复用事实"},{"type":"vague","severity":"high","description":"信息极少且非稳定偏好，更多是临时对话内容"}],"reason":"该片段为对话确认/礼貌回复，不具备持久记忆价值。"},{"candidate_id":"cand-good-1","quality_score":0.97,"confidence":0.98,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"提取到明确稳定的用户写作偏好，可直接用于后续回答风格约束，且与现有“默认中文”偏好可兼容。"}]}
+{"assessments":[{"candidate_id":"cand-low-1","quality_score":0.12,"confidence":0.83,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"内容仅为一句礼貌确认，缺乏可复用事实"},{"type":"vague","severity":"medium","description":"“好的，我来处理”不体现稳定偏好或可长期记忆的信息"}],"reason":"该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。"},{"candidate_id":"cand-good-1","quality_score":0.95,"confidence":0.96,"potential_conflicts":[],"suggested_importance":4,"suggested_status":"active","issues":[],"reason":"清晰表达用户在说明文档中的格式偏好，属于稳定可复用的用户偏好，与已有“默认中文回答”不冲突，可直接写回。"}]}
 ```
 
 #### 结构化结果
@@ -523,7 +582,7 @@ Rules:
     {
       "candidate_id": "cand-low-1",
       "quality_score": 0.12,
-      "confidence": 0.95,
+      "confidence": 0.83,
       "potential_conflicts": [],
       "suggested_importance": 1,
       "suggested_status": "pending_confirmation",
@@ -531,25 +590,25 @@ Rules:
         {
           "type": "low_quality",
           "severity": "high",
-          "description": "仅是当前轮次的确认用语，缺乏可复用事实"
+          "description": "内容仅为一句礼貌确认，缺乏可复用事实"
         },
         {
           "type": "vague",
-          "severity": "high",
-          "description": "信息极少且非稳定偏好，更多是临时对话内容"
+          "severity": "medium",
+          "description": "“好的，我来处理”不体现稳定偏好或可长期记忆的信息"
         }
       ],
-      "reason": "该片段为对话确认/礼貌回复，不具备持久记忆价值。"
+      "reason": "该记录为当前轮对话的短暂应答，信号很弱，不适合持久化为会话记忆。"
     },
     {
       "candidate_id": "cand-good-1",
-      "quality_score": 0.97,
-      "confidence": 0.98,
+      "quality_score": 0.95,
+      "confidence": 0.96,
       "potential_conflicts": [],
-      "suggested_importance": 5,
+      "suggested_importance": 4,
       "suggested_status": "active",
       "issues": [],
-      "reason": "提取到明确稳定的用户写作偏好，可直接用于后续回答风格约束，且与现有“默认中文”偏好可兼容。"
+      "reason": "清晰表达用户在说明文档中的格式偏好，属于稳定可复用的用户偏好，与已有“默认中文回答”不冲突，可直接写回。"
     }
   ]
 }
@@ -561,9 +620,10 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：应发现同一任务上下文里的扩展或相关关系
-- 实际：[{"target_record_id":"rec-related-1","relation_type":"extends","strength":0.86,"bidirectional":false,"reason":"候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。"}]
-- 结果：通过
-- 耗时：7672ms
+- 实际：执行失败
+- 结果：未通过
+- 耗时：121585ms
+- 错误：`memory llm request failed with 502`
 
 #### 测试提示词
 
@@ -583,6 +643,7 @@ Rules:
 - target_record_id must come from candidate_records.
 - Emit only relations with clear semantic support.
 - Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.
+- If no candidate has clear semantic support, return {"source_record_id":"...","relations":[]}.
 - Keep reason concise in Chinese.
 ```
 
@@ -623,39 +684,15 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"source_record_id":"rec-source-1","relations":[{"target_record_id":"rec-related-1","relation_type":"extends","strength":0.86,"bidirectional":false,"reason":"候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "source_record_id": "rec-source-1",
-  "relations": [
-    {
-      "target_record_id": "rec-related-1",
-      "relation_type": "extends",
-      "strength": 0.86,
-      "bidirectional": false,
-      "reason": "候选记录是同一任务下的下一步执行项，细化了如何补齐验收文档指标（通过补充评测提示词与输出结果）。"
-    }
-  ]
-}
-```
-
 ### relation-no-clear-link
 
 - 模块：`relation-discoverer`
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：当候选记录没有明确语义关联时，不应强行输出关系
-- 实际：执行失败
-- 结果：未通过
-- 耗时：20006ms
-- 错误：`memory_llm_timeout`
+- 实际：[]
+- 结果：通过
+- 耗时：13916ms
 
 #### 测试提示词
 
@@ -675,6 +712,7 @@ Rules:
 - target_record_id must come from candidate_records.
 - Emit only relations with clear semantic support.
 - Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.
+- If no candidate has clear semantic support, return {"source_record_id":"...","relations":[]}.
 - Keep reason concise in Chinese.
 ```
 
@@ -715,15 +753,30 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"source_record_id":"rec-source-2","relations":[]}
+```
+
+#### 结构化结果
+
+```json
+{
+  "source_record_id": "rec-source-2",
+  "relations": []
+}
+```
+
 ### recommend-task-memory
 
 - 模块：`proactive-recommender`
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：应推荐与当前任务连续性相关、宿主大概率会采纳的高价值记忆
-- 实际：[{"record_id":"mem-rec-1","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.86,"trigger_reason":"related_decision","suggestion":"保持中文、简短表达的输出偏好，便于续写验收文档风格一致。","auto_inject":false}]
+- 实际：[{"record_id":"mem-rec-1","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。","auto_inject":true}]
 - 结果：通过
-- 耗时：8192ms
+- 耗时：11157ms
 
 #### 测试提示词
 
@@ -742,6 +795,7 @@ Rules:
 - auto_inject should usually be true only when relevance_score is very high and the context match is strong.
 - Prefer concise user-facing suggestions in Chinese.
 - Emit only the most relevant recommendations.
+- If available memories are stale, weakly related, or the current question is self-contained, return {"recommendations":[]}.
 ```
 
 #### 测试输入
@@ -793,7 +847,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-rec-1","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.86,"trigger_reason":"related_decision","suggestion":"保持中文、简短表达的输出偏好，便于续写验收文档风格一致。","auto_inject":false}]}
+{"recommendations":[{"record_id":"mem-rec-1","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -805,15 +859,8 @@ Rules:
       "record_id": "mem-rec-1",
       "relevance_score": 0.98,
       "trigger_reason": "task_similarity",
-      "suggestion": "继续沿用当前任务上下文：本次仍是 memory orchestrator 的验收文档完善，按既有写法和结构补充测试样本与验收项。",
+      "suggestion": "沿用当前任务上下文，继续按既有 memory orchestrator 验收文档的写法补充内容，保持章节结构与术语一致。",
       "auto_inject": true
-    },
-    {
-      "record_id": "mem-rec-2",
-      "relevance_score": 0.86,
-      "trigger_reason": "related_decision",
-      "suggestion": "保持中文、简短表达的输出偏好，便于续写验收文档风格一致。",
-      "auto_inject": false
     }
   ]
 }
@@ -827,8 +874,8 @@ Rules:
 - 预期：当上下文没有明确连续性时，不应推荐低价值或过期记忆
 - 实际：执行失败
 - 结果：未通过
-- 耗时：18957ms
-- 错误：`memory llm request failed with 503`
+- 耗时：85521ms
+- 错误：`memory llm request failed with 502`
 
 #### 测试提示词
 
@@ -847,6 +894,7 @@ Rules:
 - auto_inject should usually be true only when relevance_score is very high and the context match is strong.
 - Prefer concise user-facing suggestions in Chinese.
 - Emit only the most relevant recommendations.
+- If available memories are stale, weakly related, or the current question is self-contained, return {"recommendations":[]}.
 ```
 
 #### 测试输入
@@ -892,23 +940,9 @@ Rules:
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：应从多条相关记录提炼出稳定模式
-- 实际：执行失败
-- 结果：未通过
-- 耗时：9566ms
-- 错误：`[
-  {
-    "code": "too_small",
-    "minimum": 1,
-    "type": "array",
-    "inclusive": true,
-    "exact": false,
-    "message": "Array must contain at least 1 element(s)",
-    "path": [
-      "consolidation_plan",
-      "records_to_archive"
-    ]
-  }
-]`
+- 实际：{"evolution_type":"knowledge_extraction","extracted_knowledge":{"pattern":"用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。","confidence":0.95,"evidence_count":3,"suggested_scope":"user","suggested_importance":5}}
+- 结果：通过
+- 耗时：12192ms
 
 #### 测试提示词
 
@@ -927,6 +961,8 @@ Rules:
 - source_records must only contain ids from the input.
 - For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.
 - For summarization, consolidation_plan should usually be present.
+- For knowledge_extraction, consolidation_plan is optional. If you include it, records_to_archive MUST be a non-empty array of source record ids.
+- Do not emit an empty records_to_archive array.
 - Keep extracted knowledge concise and evidence-based.
 - Do not invent new record ids.
 ```
@@ -975,16 +1011,51 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{
+  "evolution_type": "knowledge_extraction",
+  "source_records": ["evo-1", "evo-2", "evo-3"],
+  "extracted_knowledge": {
+    "pattern": "用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。",
+    "confidence": 0.95,
+    "evidence_count": 3,
+    "suggested_scope": "user",
+    "suggested_importance": 5
+  }
+}
+```
+
+#### 结构化结果
+
+```json
+{
+  "evolution_type": "knowledge_extraction",
+  "source_records": [
+    "evo-1",
+    "evo-2",
+    "evo-3"
+  ],
+  "extracted_knowledge": {
+    "pattern": "用户偏好以中文回复为主，回答应自然简短，优先给出结论，再补充几个简短要点。",
+    "confidence": 0.95,
+    "evidence_count": 3,
+    "suggested_scope": "user",
+    "suggested_importance": 5
+  }
+}
+```
+
 ### evolution-pattern-knowledge-extraction
 
 - 模块：`evolution-planner`
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：应从多条任务状态中提炼出稳定的长期工作模式
-- 实际：执行失败
-- 结果：未通过
-- 耗时：20004ms
-- 错误：`memory_llm_timeout`
+- 实际：{"evolution_type":"knowledge_extraction","source_records":["evo-task-1","evo-task-2","evo-task-3"],"extracted_knowledge":{"pattern":"在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。","confidence":0.93,"evidence_count":3,"suggested_scope":"workspace","suggested_importance":4}}
+- 结果：通过
+- 耗时：9368ms
 
 #### 测试提示词
 
@@ -1003,6 +1074,8 @@ Rules:
 - source_records must only contain ids from the input.
 - For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.
 - For summarization, consolidation_plan should usually be present.
+- For knowledge_extraction, consolidation_plan is optional. If you include it, records_to_archive MUST be a non-empty array of source record ids.
+- Do not emit an empty records_to_archive array.
 - Keep extracted knowledge concise and evidence-based.
 - Do not invent new record ids.
 ```
@@ -1051,15 +1124,51 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{
+  "evolution_type": "knowledge_extraction",
+  "source_records": ["evo-task-1", "evo-task-2", "evo-task-3"],
+  "extracted_knowledge": {
+    "pattern": "在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。",
+    "confidence": 0.93,
+    "evidence_count": 3,
+    "suggested_scope": "workspace",
+    "suggested_importance": 4
+  }
+}
+```
+
+#### 结构化结果
+
+```json
+{
+  "evolution_type": "knowledge_extraction",
+  "source_records": [
+    "evo-task-1",
+    "evo-task-2",
+    "evo-task-3"
+  ],
+  "extracted_knowledge": {
+    "pattern": "在该时间窗内，团队验收习惯为先做验证环节（测试样本补充/链路验证），再补充并回写实际指标或统计结果。",
+    "confidence": 0.93,
+    "evidence_count": 3,
+    "suggested_scope": "workspace",
+    "suggested_importance": 4
+  }
+}
+```
+
 ### governance-verify-reject-delete
 
 - 模块：`governance-verifier`
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：对于缺少删除依据的删除提案，应拒绝执行
-- 实际：{"decision":"reject","confidence":0.97,"notes":"Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal."}
+- 实际：{"decision":"reject","confidence":0.97,"notes":"拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。"}
 - 结果：通过
-- 耗时：7344ms
+- 耗时：8524ms
 
 #### 测试提示词
 
@@ -1081,6 +1190,8 @@ Rules:
 - Reject if the proposal resolves a conflict without enough evidence in related records.
 - Reject if the proposal appears to cross scopes incorrectly.
 - Approve only when the proposal is specific, well-supported, and low-ambiguity.
+- If a proposal archives an older record because a newer record clearly supersedes it, approval is usually appropriate.
+- When evidence is insufficient, prefer reject over a hesitant approve.
 ```
 
 #### 测试输入
@@ -1136,7 +1247,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"decision":"reject","confidence":0.97,"notes":"Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal."}
+{"decision":"reject","confidence":0.97,"notes":"拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。"}
 ```
 
 #### 结构化结果
@@ -1145,7 +1256,7 @@ Rules:
 {
   "decision": "reject",
   "confidence": 0.97,
-  "notes": "Reject: deletion is proposed with only a vague reason ('looks unused') and no clear delete_reason or replacement/archival context. The target memory is still an active session-scoped episodic record, and there is no supporting related evidence to justify removal."
+  "notes": "拒绝：删除提议仅说明“看起来没用了，删掉”，未提供明确的删除原因、关联替代记录或保留依据。该记录有明确事实内容（真实模型评测记录），且无冲突或可替代上下文支持，不满足“明确可删除”与“低歧义”条件。"
 }
 ```
 
@@ -1155,10 +1266,9 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：对于证据充分、目标明确的归档提案，应允许通过
-- 实际：执行失败
-- 结果：未通过
-- 耗时：20012ms
-- 错误：`memory_llm_timeout`
+- 实际：{"decision":"approve","confidence":0.95,"notes":"The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous."}
+- 结果：通过
+- 耗时：13108ms
 
 #### 测试提示词
 
@@ -1180,6 +1290,8 @@ Rules:
 - Reject if the proposal resolves a conflict without enough evidence in related records.
 - Reject if the proposal appears to cross scopes incorrectly.
 - Approve only when the proposal is specific, well-supported, and low-ambiguity.
+- If a proposal archives an older record because a newer record clearly supersedes it, approval is usually appropriate.
+- When evidence is insufficient, prefer reject over a hesitant approve.
 ```
 
 #### 测试输入
@@ -1252,15 +1364,31 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"decision":"approve","confidence":0.95,"notes":"The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous."}
+```
+
+#### 结构化结果
+
+```json
+{
+  "decision": "approve",
+  "confidence": 0.95,
+  "notes": "The proposal is a specific archive action for gov-2 with explicit supersession rationale and a replacement record (gov-3). gov-2 and gov-3 are both active user-scope fact_pref records; gov-3 appears to be a superseding/expanded version of the same preference (adds explicit natural/default Chinese while retaining brevity), so archiving the older record is appropriate and non-ambiguous."
+}
+```
+
 ### effectiveness-memory-used
 
 - 模块：`effectiveness-evaluator`
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：当回复明显使用了注入记忆时，应给出正向使用判断
-- 实际：{"record_id":"eff-1","was_used":true,"usage_confidence":0.78,"effectiveness_score":0.72,"suggested_importance_adjustment":0,"usage_evidence":"回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。","reason":"体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。"}
+- 实际：{"record_id":"eff-1","was_used":true,"usage_confidence":0.84,"effectiveness_score":0.78,"suggested_importance_adjustment":1,"usage_evidence":"回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。","reason":"模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。"}
 - 结果：通过
-- 耗时：10764ms
+- 耗时：8142ms
 
 #### 测试提示词
 
@@ -1305,7 +1433,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evaluations":[{"record_id":"eff-1","was_used":true,"usage_confidence":0.78,"effectiveness_score":0.72,"suggested_importance_adjustment":0,"usage_evidence":"回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。","reason":"体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。"}]}
+{"evaluations":[{"record_id":"eff-1","was_used":true,"usage_confidence":0.84,"effectiveness_score":0.78,"suggested_importance_adjustment":1,"usage_evidence":"回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。","reason":"模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。"}]}
 ```
 
 #### 结构化结果
@@ -1316,11 +1444,11 @@ Rules:
     {
       "record_id": "eff-1",
       "was_used": true,
-      "usage_confidence": 0.78,
-      "effectiveness_score": 0.72,
-      "suggested_importance_adjustment": 0,
-      "usage_evidence": "回复以“结论：”开头，且内容为中文，且提到“按中文短句格式”。",
-      "reason": "体现了“中文+先给结论”的偏好，但未给出约定的3个短点，部分满足未完全匹配。"
+      "usage_confidence": 0.84,
+      "effectiveness_score": 0.78,
+      "suggested_importance_adjustment": 1,
+      "usage_evidence": "回复以“结论：”开头，并且全程中文，体现了先给结论再展开的格式意图。",
+      "reason": "模型遵循了中文与结论优先的偏好，风格契合但未完整体现“再补3个短点”。"
     }
   ]
 }

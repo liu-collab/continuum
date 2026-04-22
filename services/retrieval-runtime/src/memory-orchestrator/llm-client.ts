@@ -27,6 +27,10 @@ export type MemoryLlmConfig = Pick<
   | "MEMORY_LLM_EFFORT"
 >;
 
+const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const TRANSIENT_ATTEMPTS = 4;
+const TRANSIENT_BACKOFF_MS = [0, 500, 1_500, 4_000];
+
 export async function callMemoryLlm(
   config: MemoryLlmConfig,
   systemPrompt: string,
@@ -37,76 +41,96 @@ export async function callMemoryLlm(
     throw new Error("MEMORY_LLM_BASE_URL is not configured");
   }
 
-  const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => {
-    controller.abort("memory_llm_timeout");
-  }, config.MEMORY_LLM_TIMEOUT_MS);
+  const protocol = config.MEMORY_LLM_PROTOCOL;
+  const requestUrl =
+    protocol === "anthropic"
+      ? new URL("/v1/messages", config.MEMORY_LLM_BASE_URL)
+      : new URL("/v1/chat/completions", config.MEMORY_LLM_BASE_URL);
+  const headers =
+    protocol === "anthropic"
+      ? {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
+        }
+      : {
+          "content-type": "application/json",
+          ...(config.MEMORY_LLM_API_KEY
+            ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
+            : {}),
+        };
 
-  try {
-    const protocol = config.MEMORY_LLM_PROTOCOL;
-    const requestUrl =
-      protocol === "anthropic"
-        ? new URL("/v1/messages", config.MEMORY_LLM_BASE_URL)
-        : new URL("/v1/chat/completions", config.MEMORY_LLM_BASE_URL);
-    const headers =
-      protocol === "anthropic"
-        ? {
-            "content-type": "application/json",
-            "anthropic-version": "2023-06-01",
-            ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
-          }
-        : {
-            "content-type": "application/json",
-            ...(config.MEMORY_LLM_API_KEY
-              ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
-              : {}),
-          };
+  const requestBodies =
+    protocol === "anthropic"
+      ? [buildAnthropicBody(config, systemPrompt, userPayload, maxTokens)]
+      : [
+          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+            includeResponseFormat: true,
+            includeReasoningEffort: true,
+          }),
+          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+            includeResponseFormat: false,
+            includeReasoningEffort: true,
+          }),
+          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+            includeResponseFormat: false,
+            includeReasoningEffort: false,
+          }),
+        ];
 
-    const requestBodies =
-      protocol === "anthropic"
-        ? [buildAnthropicBody(config, systemPrompt, userPayload, maxTokens)]
-        : [
-            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-              includeResponseFormat: true,
-              includeReasoningEffort: true,
-            }),
-            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-              includeResponseFormat: false,
-              includeReasoningEffort: true,
-            }),
-            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-              includeResponseFormat: false,
-              includeReasoningEffort: false,
-            }),
-          ];
-
-    let response: Response | undefined;
-    for (const requestBody of requestBodies) {
-      response = await fetch(requestUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
-
-      if (response.ok) {
-        break;
-      }
-
-      if (protocol !== "openai-compatible") {
-        break;
-      }
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < TRANSIENT_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(TRANSIENT_BACKOFF_MS[attempt] ?? TRANSIENT_BACKOFF_MS.at(-1) ?? 1_500);
     }
 
-    if (!response?.ok) {
-      throw new Error(`memory llm request failed with ${response?.status ?? "unknown"}`);
-    }
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => {
+      controller.abort("memory_llm_timeout");
+    }, config.MEMORY_LLM_TIMEOUT_MS);
 
-    const payload = (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload;
-    return extractResponseText(payload);
-  } finally {
-    clearTimeout(timeoutHandle);
+    try {
+      let response: Response | undefined;
+      for (const requestBody of requestBodies) {
+        response = await fetch(requestUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+
+        if (response.ok) {
+          break;
+        }
+
+        if (protocol !== "openai-compatible") {
+          break;
+        }
+      }
+
+      if (!response?.ok) {
+        const status = response?.status;
+        if (status !== undefined && attempt + 1 < TRANSIENT_ATTEMPTS && TRANSIENT_STATUS_CODES.has(status)) {
+          continue;
+        }
+        throw new Error(`memory llm request failed with ${status ?? "unknown"}`);
+      }
+
+      const payload = (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload;
+      return extractResponseText(payload);
+    } catch (error) {
+      if (isTransientMemoryLlmError(error) && attempt + 1 < TRANSIENT_ATTEMPTS) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        continue;
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
   }
+
+  throw lastError ?? new Error("memory llm request failed");
 }
 
 export function parseMemoryLlmJsonPayload(text: string): unknown {
@@ -259,4 +283,26 @@ function tryParseJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+function isTransientMemoryLlmError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes("memory_llm_timeout")
+    || error.message.includes("fetch failed")
+    || error.message.includes("ECONNRESET")
+    || error.message.includes("ETIMEDOUT")
+    || error.message.includes("503")
+    || error.message.includes("502")
+    || error.message.includes("504");
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

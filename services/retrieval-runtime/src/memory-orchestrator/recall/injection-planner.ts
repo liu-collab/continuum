@@ -1,6 +1,7 @@
 import type { AppConfig } from "../../config.js";
 import { callMemoryLlm, parseMemoryLlmJsonPayload, type MemoryLlmConfig } from "../llm-client.js";
 import { MEMORY_RECALL_INJECTION_SYSTEM_PROMPT } from "../prompts.js";
+import { normalizeRecallInjectionResponse } from "../response-normalizers.js";
 import { memoryRecallInjectionSchema } from "../schemas.js";
 import type { RecallInjectionInput, RecallInjectionPlan, RecallInjectionPlanner } from "../types.js";
 
@@ -73,7 +74,9 @@ export class HttpMemoryRecallInjectionPlanner implements RecallInjectionPlanner 
       this.config.RECALL_LLM_JUDGE_MAX_TOKENS,
     );
 
-    const parsed = memoryRecallInjectionSchema.safeParse(parseMemoryLlmJsonPayload(text));
+    const parsed = memoryRecallInjectionSchema.safeParse(
+      normalizeRecallInjectionResponse(parseMemoryLlmJsonPayload(text)),
+    );
     if (!parsed.success) {
       throw new Error("recall llm injection response did not match schema");
     }
