@@ -5,6 +5,7 @@ import type { AppConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InjectionEngine } from "../src/injection/injection-engine.js";
+import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
@@ -217,20 +218,27 @@ function createRuntimeApp(records: CandidateMemory[] = sampleRecords) {
   const embeddingsClient = new StubEmbeddingsClient();
   const storageClient = new StubStorageClient();
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
+  const memoryOrchestrator = createMemoryOrchestrator({ config });
 
   const service = new RetrievalRuntimeService(
-    new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+    new TriggerEngine(
+      config,
+      embeddingsClient,
+      readModelRepository,
+      dependencyGuard,
+      logger,
+      memoryOrchestrator?.recall?.search,
+    ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard),
+    new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
-    undefined,
-    undefined,
+    memoryOrchestrator,
   );
 
   return createApp(service);

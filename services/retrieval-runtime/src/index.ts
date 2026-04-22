@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { DependencyGuard } from "./dependency/dependency-guard.js";
 import { InjectionEngine } from "./injection/injection-engine.js";
 import { createLogger } from "./logger.js";
+import { createMemoryOrchestrator } from "./memory-orchestrator/index.js";
 import { FallbackRuntimeRepository } from "./observability/fallback-runtime-repository.js";
 import { InMemoryRuntimeRepository } from "./observability/in-memory-runtime-repository.js";
 import { PostgresRuntimeRepository } from "./observability/postgres-runtime-repository.js";
@@ -98,20 +99,33 @@ async function main() {
     config,
     logger,
   );
+  const memoryOrchestrator = createMemoryOrchestrator({
+    config,
+    recallPlanner: llmRecallPlanner,
+    writebackPlanner: llmExtractor,
+    governancePlanner: maintenancePlanner,
+    governanceVerifier,
+  });
 
   const runtimeService = new RetrievalRuntimeService(
-    new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger, llmRecallPlanner),
+    new TriggerEngine(
+      config,
+      embeddingsClient,
+      readModelRepository,
+      dependencyGuard,
+      logger,
+      memoryOrchestrator?.recall?.search,
+    ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor, logger),
+    new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback, logger),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
-    llmExtractor,
-    llmRecallPlanner,
+    memoryOrchestrator,
     maintenanceWorker,
   );
 

@@ -1,12 +1,12 @@
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
+import type { RecallSearchPlanner } from "../memory-orchestrator/index.js";
 import type { EmbeddingsClient } from "../query/embeddings-client.js";
 import type { ReadModelRepository } from "../query/read-model-repository.js";
 import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/messages.js";
 import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import type { Logger } from "pino";
 import { normalizeText } from "../shared/utils.js";
-import type { LlmRecallPlanner } from "./llm-recall-judge.js";
 
 const HISTORY_PATTERNS = ["上次", "之前", "你还记得", "我一般", "偏好", "上回", "last time", "previously"];
 const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
@@ -84,7 +84,7 @@ export class TriggerEngine {
     private readonly readModelRepository: ReadModelRepository,
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
-    private readonly llmRecallPlanner?: LlmRecallPlanner,
+    private readonly recallSearchPlanner?: RecallSearchPlanner,
   ) {}
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
@@ -139,20 +139,69 @@ export class TriggerEngine {
       };
     }
 
-    if (this.config.RECALL_LLM_JUDGE_ENABLED && this.llmRecallPlanner) {
-      return {
-        hit: true,
-        trigger_type: "llm_recall_judge",
-        trigger_reason: runtimeMessages.llmCandidateScanReason,
-        requested_memory_types: requestedMemoryTypes,
-        memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
-        scope_reason: scopePlan.reason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
-        cooldown_applied: false,
-        llm_used: true,
-        llm_decision_reason: runtimeMessages.llmCandidateScanReason,
-      };
+    if (this.config.RECALL_LLM_JUDGE_ENABLED && this.recallSearchPlanner) {
+      const llmDecision = await this.dependencyGuard.run(
+        "writeback_llm",
+        this.config.WRITEBACK_LLM_TIMEOUT_MS,
+        () =>
+          this.recallSearchPlanner!.plan({
+            context,
+            memory_mode: memoryMode,
+            requested_scopes: scopePlan.scopes,
+            requested_memory_types: requestedMemoryTypes,
+            semantic_score: undefined,
+            semantic_threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+          }),
+      );
+
+      if (llmDecision.ok && llmDecision.value) {
+        if (!llmDecision.value.should_search) {
+          return {
+            hit: false,
+            trigger_type: "no_trigger",
+            trigger_reason: llmDecision.value.reason,
+            requested_memory_types: [],
+            memory_mode: memoryMode,
+            requested_scopes: scopePlan.scopes,
+            scope_reason: scopePlan.reason,
+            importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+            cooldown_applied: false,
+            llm_used: true,
+            llm_decision_reason: llmDecision.value.reason,
+          };
+        }
+
+        return {
+          hit: true,
+          trigger_type: "llm_recall_judge",
+          trigger_reason: llmDecision.value.reason || runtimeMessages.llmCandidateScanReason,
+          requested_memory_types:
+            llmDecision.value.requested_memory_types?.length
+              ? llmDecision.value.requested_memory_types
+              : requestedMemoryTypes,
+          memory_mode: memoryMode,
+          requested_scopes:
+            llmDecision.value.requested_scopes?.length
+              ? dedupeScopes(llmDecision.value.requested_scopes)
+              : scopePlan.scopes,
+          scope_reason: scopePlan.reason,
+          importance_threshold:
+            llmDecision.value.importance_threshold ?? this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+          cooldown_applied: false,
+          query_hint: llmDecision.value.query_hint,
+          candidate_limit: llmDecision.value.candidate_limit,
+          llm_used: true,
+          llm_decision_reason: llmDecision.value.reason,
+        };
+      }
+
+      this.logger.warn(
+        {
+          phase: context.phase,
+          reason: llmDecision.error?.message,
+        },
+        "llm recall search planner degraded, falling back to semantic trigger",
+      );
     }
 
     if (shouldSkipForShortInput(context.current_input)) {

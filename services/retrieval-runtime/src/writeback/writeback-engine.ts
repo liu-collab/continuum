@@ -4,11 +4,11 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
+import type { WritebackPlanner } from "../memory-orchestrator/index.js";
 import type { FinalizeTurnInput, MemoryType, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
 import { jaccardOverlap, normalizeText } from "../shared/utils.js";
 import type {
   LlmExtractionCandidate,
-  LlmExtractor,
   LlmRefineItem,
   LlmRefineResult,
   RuleCandidateDigest,
@@ -208,7 +208,7 @@ export class WritebackEngine {
     private readonly config: AppConfig,
     private readonly storageClient: StorageWritebackClient,
     private readonly dependencyGuard: DependencyGuard,
-    private readonly llmExtractor?: LlmExtractor,
+    private readonly writebackPlanner?: WritebackPlanner,
     private readonly logger?: Logger,
   ) {}
 
@@ -217,12 +217,12 @@ export class WritebackEngine {
   ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] }> {
     const ruleResult = this.runRulesOnly(input);
 
-    if (!this.llmExtractor || !this.config.WRITEBACK_REFINE_ENABLED) {
+    if (!this.writebackPlanner || !this.config.WRITEBACK_REFINE_ENABLED) {
       return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
     }
 
     try {
-      const refined = await this.llmExtractor.refine({
+      const refined = await this.writebackPlanner.refine({
         current_input: input.current_input,
         assistant_output: input.assistant_output,
         tool_results_summary: input.tool_results_summary,

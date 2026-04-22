@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
 import { buildMemoryPacket } from "./injection/packet-builder.js";
+import type { MemoryOrchestrator, RecallInjectionPlanner, WritebackPlanner } from "./memory-orchestrator/index.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
 import type {
@@ -27,11 +28,9 @@ import type {
 import type { EmbeddingsClient } from "./query/embeddings-client.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
-import type { LlmRecallPlanner } from "./trigger/llm-recall-judge.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
-import type { LlmExtractor } from "./writeback/llm-extractor.js";
 import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
@@ -108,8 +107,7 @@ export class RetrievalRuntimeService {
     private readonly logger: Logger,
     private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
     private readonly embeddingTimeoutMs = 800,
-    private readonly writebackLlmExtractor?: LlmExtractor,
-    private readonly llmRecallPlanner?: LlmRecallPlanner,
+    private readonly memoryOrchestrator?: MemoryOrchestrator,
     private readonly maintenanceWorker?: WritebackMaintenanceWorker,
   ) {}
 
@@ -243,19 +241,21 @@ export class RetrievalRuntimeService {
 
     if (
       normalizedContext.phase === "before_response"
-      && this.llmRecallPlanner
+      && this.memoryOrchestrator?.recall?.injection
       && this.queryResultCanBePlanned(queryResult.candidates)
     ) {
+      const recallInjectionPlanner = this.memoryOrchestrator.recall.injection;
       const planResult = await this.dependencyGuard.run(
         "writeback_llm",
         this.embeddingTimeoutMs,
         () =>
-          this.llmRecallPlanner!.plan({
+          recallInjectionPlanner.plan({
             context: normalizedContext,
             memory_mode: decision.memory_mode,
             requested_scopes: decision.requested_scopes,
             requested_memory_types: decision.requested_memory_types,
             candidates: queryResult.candidates,
+            search_reason: decision.llm_decision_reason,
             semantic_score: decision.semantic_score,
             semantic_threshold: undefined,
           }),
@@ -269,13 +269,14 @@ export class RetrievalRuntimeService {
         } else {
           selectedCandidates = reorderSelectedCandidates(
             queryResult.candidates,
-            planResult.value.selected_record_ids,
+            planResult.value.selected_record_ids ?? [],
           );
         }
 
-        if (planResult.value.should_inject && planResult.value.memory_summary.trim().length > 0) {
+        const plannedMemorySummary = planResult.value.memory_summary?.trim() ?? "";
+        if (planResult.value.should_inject && plannedMemorySummary.length > 0) {
           const packet = buildMemoryPacket(queryResult.query, decision, selectedCandidates);
-          packet.packet_summary = planResult.value.memory_summary;
+          packet.packet_summary = plannedMemorySummary;
           return this.finalizePreparedContextResponse({
             traceId,
             decision,
@@ -569,7 +570,10 @@ export class RetrievalRuntimeService {
   }
 
   async checkWritebackLlm(): Promise<DependencyStatus> {
-    const healthCheck = this.llmRecallPlanner?.healthCheck ?? this.writebackLlmExtractor?.healthCheck;
+    const healthCheck =
+      this.memoryOrchestrator?.recall?.search?.healthCheck
+      ?? this.memoryOrchestrator?.recall?.injection?.healthCheck
+      ?? this.memoryOrchestrator?.writeback?.healthCheck;
     if (!healthCheck) {
       const status: DependencyStatus = {
         name: "writeback_llm",

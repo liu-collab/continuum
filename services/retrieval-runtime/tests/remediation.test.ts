@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { AppConfig } from "../src/config.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InjectionEngine } from "../src/injection/injection-engine.js";
+import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import { PostgresRuntimeRepository } from "../src/observability/postgres-runtime-repository.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
@@ -797,20 +798,30 @@ describe("retrieval-runtime remediation", () => {
     const storageClient = new StubStorageClient();
     const llmExtractor = new CountingLlmExtractor();
     const embeddingsClient = new StubEmbeddingsClient();
+    const memoryOrchestrator = createMemoryOrchestrator({
+      config,
+      writebackPlanner: llmExtractor as never,
+    });
 
     const firstService = new RetrievalRuntimeService(
-      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new TriggerEngine(
+        config,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+      ),
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
-      llmExtractor,
-      undefined,
+      memoryOrchestrator,
     );
 
     const request = {
@@ -826,18 +837,24 @@ describe("retrieval-runtime remediation", () => {
     const first = await firstService.finalizeTurn(request);
 
     const secondService = new RetrievalRuntimeService(
-      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new TriggerEngine(
+        config,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+      ),
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
-      llmExtractor,
-      undefined,
+      memoryOrchestrator,
     );
 
     const second = await secondService.finalizeTurn(request);

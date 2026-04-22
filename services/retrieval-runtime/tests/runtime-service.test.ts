@@ -5,6 +5,7 @@ import type { AppConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InjectionEngine } from "../src/injection/injection-engine.js";
+import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
@@ -18,7 +19,11 @@ import type {
   SubmittedWriteBackJob,
   WriteBackCandidate,
 } from "../src/shared/types.js";
-import type { LlmRecallPlan, LlmRecallPlanner } from "../src/trigger/llm-recall-judge.js";
+import type {
+  LlmRecallPlan,
+  LlmRecallPlanner,
+  LlmRecallSearchPlan,
+} from "../src/trigger/llm-recall-judge.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
 import type {
   LlmExtractionResult,
@@ -292,15 +297,23 @@ class SpyLlmExtractor implements LlmExtractor {
 
 class StubLlmRecallPlanner implements LlmRecallPlanner {
   constructor(
-    private readonly result: LlmRecallPlan,
+    private readonly searchPlan: LlmRecallSearchPlan,
+    private readonly injectionPlan: LlmRecallPlan,
     private readonly shouldFail = false,
   ) {}
 
-  async plan(): Promise<LlmRecallPlan> {
+  async planSearch(): Promise<LlmRecallSearchPlan> {
     if (this.shouldFail) {
       throw new Error("recall llm timeout");
     }
-    return this.result;
+    return this.searchPlan;
+  }
+
+  async planInjection(): Promise<LlmRecallPlan> {
+    if (this.shouldFail) {
+      throw new Error("recall llm timeout");
+    }
+    return this.injectionPlan;
   }
 
   async healthCheck(): Promise<void> {
@@ -326,6 +339,11 @@ function createRuntime(overrides?: {
   const storageClient = overrides?.storageClient ?? new StubStorageClient();
   const config = { ...baseConfig, ...overrides?.config };
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
+  const memoryOrchestrator = createMemoryOrchestrator({
+    config,
+    recallPlanner: overrides?.llmRecallPlanner as never,
+    writebackPlanner: overrides?.llmExtractor as never,
+  });
 
   const service = new RetrievalRuntimeService(
     new TriggerEngine(
@@ -334,19 +352,18 @@ function createRuntime(overrides?: {
       readModelRepository,
       dependencyGuard,
       logger,
-      overrides?.llmRecallPlanner,
+      memoryOrchestrator?.recall?.search,
     ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard, overrides?.llmExtractor),
+    new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
-    overrides?.llmExtractor,
-    overrides?.llmRecallPlanner,
+    memoryOrchestrator,
   );
 
   return { service, repository, storageClient };
@@ -400,6 +417,14 @@ describe("retrieval-runtime service", () => {
   it("uses llm recall planner to select injected memory", async () => {
     const { service } = createRuntime({
       llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: true,
+        reason: "用户在隐式引用之前确认过的做法，需要先查记忆。",
+        requested_scopes: ["workspace", "task", "session", "user"],
+        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        importance_threshold: 3,
+        query_hint: "继续沿用用户已经确认过的输出偏好和当前任务状态",
+        candidate_limit: 6,
+      }, {
         should_inject: true,
         reason: "用户在隐式引用之前确认过的做法，需要恢复记忆。",
         selected_record_ids: ["mem-preference", "mem-task"],
@@ -430,6 +455,9 @@ describe("retrieval-runtime service", () => {
   it("respects llm recall planner refusal and skips injection", async () => {
     const { service } = createRuntime({
       llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: false,
+        reason: "当前问题是独立问题，不依赖历史记忆。",
+      }, {
         should_inject: false,
         reason: "当前问题是独立问题，不依赖历史记忆。",
       }),
@@ -454,6 +482,10 @@ describe("retrieval-runtime service", () => {
   it("falls back to default injection when llm recall planner is unavailable", async () => {
     const { service } = createRuntime({
       llmRecallPlanner: new StubLlmRecallPlanner(
+        {
+          should_search: true,
+          reason: "需要查记忆",
+        },
         {
           should_inject: false,
           reason: "unused",
@@ -1151,20 +1183,30 @@ describe("retrieval-runtime service", () => {
     const storageClient = new StubStorageClient();
     const config = { ...baseConfig };
     const embeddingsClient = new StubEmbeddingsClient();
+    const memoryOrchestrator = createMemoryOrchestrator({
+      config,
+      writebackPlanner: llmExtractor,
+    });
 
     const firstService = new RetrievalRuntimeService(
-      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new TriggerEngine(
+        config,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+      ),
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
-      undefined,
-      undefined,
+      memoryOrchestrator,
     );
 
     const request = {
@@ -1181,18 +1223,24 @@ describe("retrieval-runtime service", () => {
     expect(llmExtractor.refineCallCount).toBe(1);
 
     const secondService = new RetrievalRuntimeService(
-      new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
+      new TriggerEngine(
+        config,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+      ),
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
       repository,
       dependencyGuard,
       logger,
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
-      undefined,
-      undefined,
+      memoryOrchestrator,
     );
 
     const second = await secondService.finalizeTurn(request);

@@ -3,6 +3,12 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
+import type {
+  GovernanceAction,
+  GovernancePlan,
+  GovernancePlanner,
+  GovernanceVerifier,
+} from "../memory-orchestrator/index.js";
 import type { RuntimeRepository } from "../observability/runtime-repository.js";
 import type {
   GovernanceExecutionBatch,
@@ -14,12 +20,6 @@ import type {
   ScopeType,
 } from "../shared/types.js";
 import { jaccardOverlap, nowIso } from "../shared/utils.js";
-import type {
-  LlmMaintenancePlanner,
-  MaintenanceAction,
-  MaintenancePlan,
-} from "./llm-maintenance-planner.js";
-import type { GovernanceVerifier } from "./llm-governance-verifier.js";
 import type { StorageWritebackClient } from "./storage-client.js";
 
 export interface MaintenanceWorkerOptions {
@@ -46,7 +46,7 @@ export class WritebackMaintenanceWorker {
   constructor(
     private readonly repository: RuntimeRepository,
     private readonly storageClient: StorageWritebackClient,
-    private readonly planner: LlmMaintenancePlanner | undefined,
+    private readonly planner: GovernancePlanner | undefined,
     private readonly verifier: GovernanceVerifier | undefined,
     private readonly dependencyGuard: DependencyGuard,
     private readonly config: AppConfig,
@@ -209,7 +209,7 @@ export class WritebackMaintenanceWorker {
     });
   }
 
-  private capPlan(plan: MaintenancePlan): MaintenancePlan {
+  private capPlan(plan: GovernancePlan): GovernancePlan {
     return {
       actions: plan.actions.slice(0, this.config.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
       notes: plan.notes,
@@ -312,7 +312,7 @@ export class WritebackMaintenanceWorker {
 
   private async applyActions(
     workspaceId: string,
-    plan: MaintenancePlan,
+    plan: GovernancePlan,
     workspaceContext: WorkspaceMaintenanceContext,
   ): Promise<ApplyOutcome> {
     const outcome: ApplyOutcome = {
@@ -378,7 +378,7 @@ export class WritebackMaintenanceWorker {
 
   private async buildExecutionItem(
     workspaceId: string,
-    action: MaintenanceAction,
+    action: GovernanceAction,
     workspaceContext: WorkspaceMaintenanceContext,
   ): Promise<GovernanceExecutionItem | null> {
     const base = this.toExecutionItem(workspaceId, action);
@@ -434,7 +434,7 @@ export class WritebackMaintenanceWorker {
 
   private toExecutionItem(
     workspaceId: string,
-    action: MaintenanceAction,
+    action: GovernanceAction,
   ): GovernanceExecutionItem | null {
     const proposalType = this.toProposalType(action);
     const proposalId = randomUUID();
@@ -532,18 +532,18 @@ export class WritebackMaintenanceWorker {
     }
   }
 
-  private requiresVerifier(action: MaintenanceAction): boolean {
+  private requiresVerifier(action: GovernanceAction): boolean {
     return action.type === "merge" || action.type === "summarize" || action.type === "resolve_conflict" || action.type === "delete";
   }
 
-  private toProposalType(action: MaintenanceAction): GovernanceExecutionItem["proposal_type"] {
+  private toProposalType(action: GovernanceAction): GovernanceExecutionItem["proposal_type"] {
     if (action.type === "downgrade" && action.new_importance < this.config.WRITEBACK_MAINTENANCE_MIN_IMPORTANCE) {
       return "archive";
     }
     return action.type;
   }
 
-  private toPlannerConfidence(action: MaintenanceAction): number {
+  private toPlannerConfidence(action: GovernanceAction): number {
     if (action.type === "delete") {
       return this.config.WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE;
     }
@@ -556,7 +556,7 @@ export class WritebackMaintenanceWorker {
     return 0.9;
   }
 
-  private toReasonCode(action: MaintenanceAction): string {
+  private toReasonCode(action: GovernanceAction): string {
     switch (action.type) {
       case "archive":
         return "superseded_record";
@@ -576,7 +576,7 @@ export class WritebackMaintenanceWorker {
   private toIdempotencyKey(
     workspaceId: string,
     proposalType: GovernanceExecutionItem["proposal_type"],
-    action: MaintenanceAction,
+    action: GovernanceAction,
   ): string {
     return createHash("sha256")
       .update(

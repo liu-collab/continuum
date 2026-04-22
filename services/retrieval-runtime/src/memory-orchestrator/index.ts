@@ -1,0 +1,25 @@
+export type {
+  GovernanceAction,
+  GovernancePlan,
+  GovernancePlanInput,
+  GovernancePlanner,
+  GovernanceVerificationResult,
+  GovernanceVerifier,
+  GovernanceVerifierInput,
+  MemoryOrchestrator,
+  RecallInjectionInput,
+  RecallInjectionPlan,
+  RecallInjectionPlanner,
+  RecallSearchInput,
+  RecallSearchPlan,
+  RecallSearchPlanner,
+  RuleCandidateDigest,
+  WritebackExtractionCandidate,
+  WritebackExtractionResult,
+  WritebackPlanner,
+  WritebackRefineInput,
+  WritebackRefineItem,
+  WritebackRefineResult,
+} from "./types.js";
+export { getMemoryOrchestratorFallbackCode } from "./fallback-policy.js";
+export { createMemoryOrchestrator } from "./factory.js";
