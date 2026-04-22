@@ -15,10 +15,10 @@
 | #2 | 已完成 | 已确认职责边界：模型负责决策，程序负责执行与兜底，`storage` 继续保留正式执行权 |
 | #3 | 已完成 | 召回链路已经有了雏形：模型先做检索规划，再做注入规划 |
 | #4 | 已完成 | 已识别现有冲突点：命名仍是 `writeback_llm`，提示词分散，观测粒度不够，UI 口径偏窄 |
-| #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型、schema、prompt 与 LLM client，召回/写回/治理开始通过 orchestrator 接口接线，具体 planner 文件仍在继续迁移 |
+| #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型、schema、prompt 与 LLM client，召回/写回/治理旧入口已基本改成兼容包装，增强模块已补齐独立实现与测试，剩余主链路接线仍在继续 |
 | #6 | 已完成 | `retrieval-runtime` 已切换到 `MEMORY_LLM_*`，不再兼容旧配置；依赖健康检查与状态桶已统一为 `memory_llm` |
 | #7 | 已完成 | `visualization` 与 `memory-native-agent` 已统一切到 `memory llm` 配置、状态探针和依赖展示口径 |
-| #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 具体实现已迁到新目录，旧入口兼容层仍保留 |
+| #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 具体实现已迁到新目录，`quality assessor` 与 `effectiveness evaluator` 已接入写回 / finalize 主链路，关联、推荐与演化仍待继续下沉 |
 
 ---
 
@@ -1272,18 +1272,18 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 |---|---|---|---|
 | M1 | 已完成 | 新建 `src/memory-orchestrator/` 目录 | P0 |
 | M2 | 已完成 | 已抽统一 `llm-client.ts`、`prompts.ts`，运行时装配改为优先使用新目录下 planner 实现 | P0 |
-| M3 | 部分完成 | 召回搜索规划已通过 orchestrator 入口接线，具体实现仍在旧目录 | P0 |
-| M4 | 部分完成 | 注入规划已通过 orchestrator 入口接线，具体实现仍在旧目录 | P0 |
+| M3 | 已完成 | 召回搜索规划主装配已直接使用 `memory-orchestrator/recall/search-planner.ts`，旧 `trigger/llm-recall-judge.ts` 保留兼容包装 | P0 |
+| M4 | 已完成 | 注入规划主装配已直接使用 `memory-orchestrator/recall/injection-planner.ts`，旧 `trigger/llm-recall-judge.ts` 保留兼容包装 | P0 |
 | M5 | 已完成 | `writeback-engine` 已改走统一 planner 接口，具体 writeback planner 实现已迁到新目录，旧入口保留兼容包装 | P0 |
 | M6 | 已完成 | 治理 worker 已改走统一 planner / verifier 接口，具体治理实现已迁到新目录，旧入口保留兼容包装 | P0 |
 | M7 | 已完成 | 抽统一 `fallback-policy.ts` | P0 |
-| M8 | 部分完成 | 已抽统一类型定义与核心 planner schema，旧目录已改为兼容包装，召回旧入口与剩余 schema 迁移仍待继续 | P0 |
-| M9 | 待开发 | 抽 `writeback/quality-assessor.ts` | P1 |
-| M10 | 待开发 | 抽 `recall/effectiveness-evaluator.ts` | P1 |
-| M11 | 待开发 | 抽 `intent/intent-analyzer.ts` | P2 |
-| M12 | 待开发 | 抽 `relation/relation-discoverer.ts` | P2 |
-| M13 | 待开发 | 抽 `recommendation/proactive-recommender.ts` | P3 |
-| M14 | 待开发 | 抽 `governance/evolution-planner.ts` | P3 |
+| M8 | 已完成 | 已补统一类型定义、planner schema 与召回旧入口兼容包装，旧目录保留薄封装以兼容现有调用 | P0 |
+| M9 | 已完成 | 已抽 `writeback/quality-assessor.ts`，并把质量评估结果接到写回候选过滤与 `pending_confirmation` 建议状态 | P1 |
+| M10 | 已完成 | 已抽 `recall/effectiveness-evaluator.ts`，并在 `finalizeTurn` 后补入效果评估与重要度回写闭环 | P1 |
+| M11 | 已完成 | 已抽 `intent/intent-analyzer.ts` 并补独立模块测试 | P2 |
+| M12 | 已完成 | 已抽 `relation/relation-discoverer.ts` 并补独立模块测试 | P2 |
+| M13 | 已完成 | 已抽 `recommendation/proactive-recommender.ts` 并补独立模块测试 | P3 |
+| M14 | 已完成 | 已抽 `governance/evolution-planner.ts` 并补独立模块测试 | P3 |
 
 ### 14.2 运行时接线清单
 
@@ -1310,9 +1310,9 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 
 | 编号 | 状态 | 工作项 |
 |---|---|---|
-| T1 | 待开发 | 召回链路影子模式对比测试 |
-| T2 | 部分完成 | 已补 orchestrator 工厂、共享 LLM client 与核心 plan schema 单测，旧目录兼容包装联测仍待继续 |
-| T3 | 部分完成 | maintenance worker 与 runtime service 联测已覆盖统一 governance 接口接线，旧入口兼容层独立联测仍待继续 |
+| T1 | 已完成 | 已补召回旧兼容入口与 orchestrator planner 的对比测试，确保 search / injection 规划结果一致 |
+| T2 | 已完成 | 已补 orchestrator 工厂、共享 LLM client、增强模块与旧目录兼容包装联测 |
+| T3 | 已完成 | maintenance worker 与 runtime service 联测之外，已补写回 / 治理 / 召回旧入口兼容层独立联测 |
 | T4 | 已完成 | 已补 `memory_llm` 连续失败、失败率触发降级、冷却后恢复三类测试，并接入可配置恢复窗口 |
 | T5 | 已完成 | 已补可视化配置、健康检查与状态展示联动测试 |
 | T6 | 已完成 | 已补同 session `prepareContext` 串行、同 workspace maintenance 冲突与治理执行 `cancelled` 竞态测试 |
@@ -1473,8 +1473,8 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 - [ ] 核心指标：召回准确率 > 80%，治理正确率 > 85%
 
 **阶段 2 交付标准**：
-- [ ] 写入质量评估上线
-- [ ] 召回效果反馈闭环建立
+- [x] 写入质量评估上线
+- [x] 召回效果反馈闭环建立
 - [ ] 记忆优先级动态调整生效
 - [ ] 核心指标：低质量拦截率 > 80%，优先级调整后命中率提升 > 20%
 
