@@ -3,6 +3,8 @@ import { z } from "zod";
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
 export const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
 export const providerKindSchema = z.enum(["openai-compatible", "anthropic", "ollama", "demo", "record-replay"]);
+export const approvalModeSchema = z.enum(["confirm", "yolo"]);
+export const planModeSchema = z.enum(["advisory", "confirm"]);
 
 const nonEmptyStringSchema = z.string().trim().min(1);
 const timeoutMsSchema = z.coerce.number().int().min(1);
@@ -81,6 +83,7 @@ const partialMemorySchema = z
 const partialToolsSchema = z
   .object({
     max_output_chars: z.coerce.number().int().min(256).max(256 * 1024).optional(),
+    approval_mode: approvalModeSchema.optional(),
     shell_exec: z
       .object({
         enabled: z.boolean().optional(),
@@ -103,6 +106,12 @@ const partialContextSchema = z
     max_tokens: z.coerce.number().int().min(1).nullable().optional(),
     reserve_tokens: z.coerce.number().int().min(128).max(128 * 1024).optional(),
     compaction_strategy: compactionStrategySchema.optional(),
+  })
+  .strict();
+
+const partialPlanningSchema = z
+  .object({
+    plan_mode: planModeSchema.optional(),
   })
   .strict();
 
@@ -137,6 +146,7 @@ export const configFileSchema = z
     tools: partialToolsSchema.optional(),
     cli: partialCliSchema.optional(),
     context: partialContextSchema.optional(),
+    planning: partialPlanningSchema.optional(),
     logging: partialLoggingSchema.optional(),
     streaming: partialStreamingSchema.optional(),
     skills: partialSkillsSchema.optional(),
@@ -186,6 +196,7 @@ const mergedMcpSchema = z
 const mergedToolsSchema = z
   .object({
     max_output_chars: z.coerce.number().int().min(256).max(256 * 1024),
+    approval_mode: approvalModeSchema,
     shell_exec: z
       .object({
         enabled: z.boolean(),
@@ -207,6 +218,12 @@ const mergedContextSchema = z
     max_tokens: z.coerce.number().int().min(1).nullable(),
     reserve_tokens: z.coerce.number().int().min(128).max(128 * 1024),
     compaction_strategy: compactionStrategySchema,
+  })
+  .strict();
+
+const mergedPlanningSchema = z
+  .object({
+    plan_mode: planModeSchema,
   })
   .strict();
 
@@ -241,6 +258,7 @@ export const mergedConfigSchema = z
     tools: mergedToolsSchema,
     cli: mergedCliSchema,
     context: mergedContextSchema,
+    planning: mergedPlanningSchema,
     logging: mergedLoggingSchema,
     streaming: mergedStreamingSchema,
     skills: mergedSkillsSchema,
@@ -251,5 +269,6 @@ export const mergedConfigSchema = z
 export type MemoryMode = z.infer<typeof memoryModeSchema>;
 export type Locale = z.infer<typeof localeSchema>;
 export type ProviderKind = z.infer<typeof providerKindSchema>;
+export type PlanMode = z.infer<typeof planModeSchema>;
 export type ConfigFileInput = z.infer<typeof configFileSchema>;
 export type MergedConfig = z.infer<typeof mergedConfigSchema>;

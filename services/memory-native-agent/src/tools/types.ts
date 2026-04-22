@@ -12,6 +12,7 @@ export type PermissionDecision =
 export type RiskHint = "write" | "shell" | "mcp";
 export type ToolArtifactKind = "file_diff" | "file_content" | "stdout";
 export type ToolTrustLevel = "builtin_read" | "builtin_write" | "shell" | `mcp:${string}`;
+export type ToolParallelism = "safe" | "workspace_mutating" | "exclusive";
 
 export interface ToolErrorPayload {
   code: string;
@@ -32,6 +33,9 @@ export interface ToolResult {
   error?: ToolErrorPayload;
   exit_code?: number;
   permission_decision?: PermissionDecision;
+  cache_hit?: boolean;
+  changed_files?: string[];
+  rolled_back?: boolean;
 }
 
 export interface ConfirmPayload {
@@ -59,6 +63,7 @@ export interface Tool<TArgs = unknown> {
   description: string;
   parameters: ToolSchema["parameters"];
   permission: PermissionMode;
+  parallelism?: ToolParallelism;
   trustLevel(args: TArgs): ToolTrustLevel;
   buildConfirmPayload?(args: TArgs): ConfirmPayload | null;
   sessionPermissionKey?(args: TArgs): string;

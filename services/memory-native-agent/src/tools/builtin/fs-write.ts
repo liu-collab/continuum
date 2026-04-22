@@ -15,6 +15,7 @@ export function createFsWriteTool(): Tool {
   return {
     name: "fs_write",
     description: "Create or overwrite a file inside the current workspace.",
+    parallelism: "workspace_mutating",
     parameters: {
       type: "object",
       required: ["path", "content"],
@@ -60,6 +61,7 @@ export function createFsWriteTool(): Tool {
         output: artifact.output,
         trust_level: "builtin_write",
         artifact_ref: artifact.artifact_ref,
+        changed_files: [parsed.data.path],
         artifact: artifact.artifact_ref
           ? {
               kind: "file_diff",

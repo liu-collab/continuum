@@ -113,6 +113,7 @@ function createConfig(workspaceRoot: string): AgentConfig {
     },
     tools: {
       maxOutputChars: 8_192,
+      approvalMode: "confirm",
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -126,6 +127,9 @@ function createConfig(workspaceRoot: string): AgentConfig {
       maxTokens: null,
       reserveTokens: 4_096,
       compactionStrategy: "truncate"
+    },
+    planning: {
+      planMode: "advisory",
     },
     logging: {
       level: "info",
@@ -275,6 +279,12 @@ describe("health routes", () => {
           effort: null,
           max_tokens: null,
         },
+        tools: {
+          approval_mode: "confirm",
+        },
+        planning: {
+          plan_mode: "advisory",
+        },
         embedding: {
           base_url: null,
           model: null,
@@ -314,6 +324,12 @@ describe("health routes", () => {
             model: "text-embedding-3-small",
             api_key: "embed-key"
           },
+          tools: {
+            approval_mode: "yolo",
+          },
+          planning: {
+            plan_mode: "confirm",
+          },
           writeback_llm: {
             base_url: "https://api.anthropic.com",
             model: "claude-haiku-4-5-20251001",
@@ -348,6 +364,12 @@ describe("health routes", () => {
           temperature: 0.2,
           effort: "high",
           max_tokens: 6000,
+        },
+        tools: {
+          approval_mode: "yolo",
+        },
+        planning: {
+          plan_mode: "confirm",
         },
         mcp: {
           servers: [
@@ -397,6 +419,12 @@ describe("health routes", () => {
           effort: "high",
           max_tokens: 6000,
         },
+        tools: {
+          approval_mode: "yolo",
+        },
+        planning: {
+          plan_mode: "confirm",
+        },
         embedding: {
           base_url: "https://api.openai.com/v1",
           model: "text-embedding-3-small",
@@ -438,6 +466,32 @@ describe("health routes", () => {
           status: "configured"
         },
         provider_key: "openai-compatible:deepseek-chat"
+      });
+
+      const metricsResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/metrics",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(metricsResponse.statusCode).toBe(200);
+      expect(metricsResponse.json()).toMatchObject({
+        planning: {
+          generated_total: expect.any(Number),
+          confirm_required_total: expect.any(Number),
+        },
+        retries: {
+          total: expect.any(Number),
+        },
+        context_budget: {
+          dropped_messages_total: expect.any(Number),
+        },
+        tool_batches: {
+          total: expect.any(Number),
+          max_batch_size: expect.any(Number),
+        },
       });
     } finally {
       await app.close();

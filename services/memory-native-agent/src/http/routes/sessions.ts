@@ -272,6 +272,20 @@ export function registerSessionRoutes(app: RuntimeFastifyInstance) {
       messages: JSON.parse(payload.messages_json),
       prompt_segments: payload.prompt_segments_json ? JSON.parse(payload.prompt_segments_json) : [],
       phase_results: payload.phase_results_json ? JSON.parse(payload.phase_results_json) : [],
+      budget_plan: payload.budget_plan_json ? JSON.parse(payload.budget_plan_json) : null,
+      plan: payload.plan_json ? JSON.parse(payload.plan_json) : null,
+      plan_revisions: app.runtimeState.store.getPlanRevisions(params.turnId).map((item) => ({
+        id: item.id,
+        plan_id: item.plan_id,
+        revision: item.revision,
+        status: item.status,
+        goal: item.goal,
+        revision_reason: item.revision_reason,
+        plan: JSON.parse(item.plan_json),
+        created_at: item.created_at,
+      })),
+      trace_spans: payload.trace_spans_json ? JSON.parse(payload.trace_spans_json) : [],
+      evaluation: payload.evaluation_json ? JSON.parse(payload.evaluation_json) : [],
       tools: JSON.parse(payload.tools_json),
     };
   });

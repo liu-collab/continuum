@@ -34,6 +34,7 @@ export function createFsEditTool(): Tool {
   return {
     name: "fs_edit",
     description: "Replace a unique string inside a file in the current workspace.",
+    parallelism: "workspace_mutating",
     parameters: {
       type: "object",
       required: ["path", "old_string", "new_string"],
@@ -98,6 +99,7 @@ export function createFsEditTool(): Tool {
         output: artifact.output,
         trust_level: "builtin_write",
         artifact_ref: artifact.artifact_ref,
+        changed_files: [parsed.data.path],
         artifact: artifact.artifact_ref
           ? {
               kind: "file_diff",

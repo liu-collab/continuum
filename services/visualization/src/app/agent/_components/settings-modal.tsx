@@ -53,6 +53,12 @@ type SettingsModalProps = {
       model?: string;
       api_key?: string;
     };
+    tools: {
+      approval_mode: "confirm" | "yolo";
+    };
+    planning: {
+      plan_mode: "advisory" | "confirm";
+    };
     writeback_llm: {
       base_url?: string;
       model?: string;
@@ -120,6 +126,8 @@ export function SettingsModal({
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
+  const [approvalMode, setApprovalMode] = useState<"confirm" | "yolo">("confirm");
+  const [planMode, setPlanMode] = useState<"advisory" | "confirm">("advisory");
   const [writebackLlmBaseUrl, setWritebackLlmBaseUrl] = useState("");
   const [writebackLlmModel, setWritebackLlmModel] = useState("");
   const [writebackLlmApiKey, setWritebackLlmApiKey] = useState("");
@@ -147,6 +155,8 @@ export function SettingsModal({
     setProviderApiKey(config.provider.api_key ?? "");
     setProviderEffort(config.provider.effort ?? "");
     setProviderMaxTokens(config.provider.max_tokens ? String(config.provider.max_tokens) : "");
+    setApprovalMode(config.tools.approval_mode ?? "confirm");
+    setPlanMode(config.planning?.plan_mode ?? "advisory");
     setEmbeddingBaseUrl(config.embedding.base_url ?? "");
     setEmbeddingModel(config.embedding.model ?? "");
     setEmbeddingApiKey(config.embedding.api_key ?? "");
@@ -253,6 +263,12 @@ export function SettingsModal({
           ...(trimmedEmbeddingBaseUrl ? { base_url: trimmedEmbeddingBaseUrl } : {}),
           ...(trimmedEmbeddingModel ? { model: trimmedEmbeddingModel } : {}),
           ...(embeddingApiKey.trim() ? { api_key: embeddingApiKey.trim() } : {})
+        },
+        tools: {
+          approval_mode: approvalMode,
+        },
+        planning: {
+          plan_mode: planMode,
         },
         writeback_llm: {
           ...(trimmedWritebackLlmBaseUrl ? { base_url: trimmedWritebackLlmBaseUrl } : {}),
@@ -454,7 +470,7 @@ export function SettingsModal({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("modeSwitch.label")}</span>
             <select
@@ -467,6 +483,78 @@ export function SettingsModal({
               <option value="workspace_only">{formatMemoryModeLabel("workspace_only")}</option>
             </select>
           </label>
+          <div className="block">
+            <span className="text-xs font-medium text-muted-foreground">{t("approvalModeSwitch.label")}</span>
+            <div className="mt-1 inline-flex w-full rounded-md border bg-surface p-1">
+              <button
+                type="button"
+                data-testid="approval-mode-confirm"
+                aria-pressed={approvalMode === "confirm"}
+                onClick={() => setApprovalMode("confirm")}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  approvalMode === "confirm"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                {t("approvalModeSwitch.options.confirm")}
+              </button>
+              <button
+                type="button"
+                data-testid="approval-mode-yolo"
+                aria-pressed={approvalMode === "yolo"}
+                onClick={() => setApprovalMode("yolo")}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  approvalMode === "yolo"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                {t("approvalModeSwitch.options.yolo")}
+              </button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {approvalMode === "yolo"
+                ? t("approvalModeSwitch.descriptions.yolo")
+                : t("approvalModeSwitch.descriptions.confirm")}
+            </p>
+          </div>
+          <div className="block">
+            <span className="text-xs font-medium text-muted-foreground">计划模式</span>
+            <div className="mt-1 inline-flex w-full rounded-md border bg-surface p-1">
+              <button
+                type="button"
+                data-testid="plan-mode-advisory"
+                aria-pressed={planMode === "advisory"}
+                onClick={() => setPlanMode("advisory")}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  planMode === "advisory"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                advisory
+              </button>
+              <button
+                type="button"
+                data-testid="plan-mode-confirm"
+                aria-pressed={planMode === "confirm"}
+                onClick={() => setPlanMode("confirm")}
+                className={`flex-1 rounded px-3 py-2 text-sm transition ${
+                  planMode === "confirm"
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
+                }`}
+              >
+                confirm
+              </button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              {planMode === "confirm"
+                ? "先生成计划，等确认后再继续执行。"
+                : "先生成计划，然后自动继续执行。"}
+            </p>
+          </div>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("localeSwitch.label")}</span>
             <select

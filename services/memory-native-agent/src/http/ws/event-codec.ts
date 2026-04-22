@@ -16,6 +16,12 @@ export const clientEventSchema = z.discriminatedUnion("kind", [
     decision: z.enum(["allow", "deny", "allow_session"]),
   }),
   z.object({
+    kind: z.literal("plan_confirm"),
+    confirm_id: z.string().min(1),
+    decision: z.enum(["approve", "revise", "cancel"]),
+    feedback: z.string().trim().max(2_000).optional(),
+  }),
+  z.object({
     kind: z.literal("ping"),
   }),
   z.object({

@@ -20,6 +20,9 @@ export type AgentToolCallState = {
   outputPreview: string;
   trustLevel: AgentToolTrustLevel | null;
   artifactRef: string | null;
+  cacheHit?: boolean;
+  changedFiles?: string[];
+  rolledBack?: boolean;
 };
 
 export type AgentTurnState = {
@@ -42,15 +45,55 @@ export type AgentTurnState = {
     message: string;
   }>;
   taskLabel: string | null;
+  plan: {
+    id: string;
+    goal: string;
+    status: "draft" | "approved" | "running" | "completed" | "revised" | "abandoned";
+    steps: Array<{
+      id: string;
+      title: string;
+      status: "pending" | "in_progress" | "completed" | "failed" | "skipped";
+      notes?: string;
+    }>;
+  } | null;
+  evaluations: Array<{
+    scope: "tool" | "turn";
+    decision: {
+      status: "pass" | "retry" | "revise" | "ask_user" | "stop";
+      reason: string;
+      retry_strategy?: "same_tool" | "alternative_tool" | "replan" | "narrow_scope";
+    };
+    toolName?: string;
+    callId?: string;
+  }>;
+  traceSpans: Array<{
+    id: string;
+    trace_id: string;
+    parent_id?: string;
+    name: string;
+    kind: "turn" | "memory" | "llm" | "tool" | "writeback" | "plan" | "evaluation" | "sandbox" | "cache";
+    started_at: string;
+    ended_at?: string;
+    status: "ok" | "error" | "cancelled";
+    attributes: Record<string, string | number | boolean>;
+  }>;
   status: "idle" | "streaming" | "complete" | "error";
 };
 
 export type AgentPendingConfirm = {
+  kind: "tool";
   confirmId: string;
   callId: string;
   tool: string;
   paramsPreview: string;
   riskHint?: "write" | "shell" | "mcp";
+};
+
+export type AgentPendingPlanConfirm = {
+  kind: "plan";
+  confirmId: string;
+  turnId: string;
+  plan: NonNullable<AgentTurnState["plan"]>;
 };
 
 export type AgentTaskEntry = {
@@ -69,7 +112,7 @@ export type AgentState = {
   connection: AgentConnectionState;
   degraded: boolean;
   turns: AgentTurnState[];
-  pendingConfirm: AgentPendingConfirm | null;
+  pendingConfirm: AgentPendingConfirm | AgentPendingPlanConfirm | null;
   locale: AgentLocale;
   activeTask: AgentTaskEntry | null;
   recentTasks: AgentTaskEntry[];
@@ -259,9 +302,12 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
               ? {
                   ...call,
                   status: event.ok ? "ok" : "error",
-                  outputPreview: event.output_preview,
-                  trustLevel: event.trust_level,
-                  artifactRef: event.artifact_ref ?? null
+              outputPreview: event.output_preview,
+              trustLevel: event.trust_level,
+              artifactRef: event.artifact_ref ?? null,
+              cacheHit: event.cache_hit,
+              changedFiles: event.changed_files,
+              rolledBack: event.rolled_back
                 }
               : call
           )
@@ -324,6 +370,38 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
         }))
       };
     }
+    case "plan":
+      return {
+        ...state,
+        turns: upsertTurn(state.turns, event.turn_id, (turn) => ({
+          ...turn,
+          plan: event.plan
+        }))
+      };
+    case "evaluation":
+      return {
+        ...state,
+        turns: upsertTurn(state.turns, event.turn_id, (turn) => ({
+          ...turn,
+          evaluations: [
+            ...turn.evaluations,
+            {
+              scope: event.scope,
+              decision: event.decision,
+              toolName: event.tool_name,
+              callId: event.call_id
+            }
+          ]
+        }))
+      };
+    case "trace":
+      return {
+        ...state,
+        turns: upsertTurn(state.turns, event.turn_id, (turn) => ({
+          ...turn,
+          traceSpans: event.spans
+        }))
+      };
     case "turn_end":
       return {
         ...state,
@@ -348,12 +426,28 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
       return {
         ...state,
         pendingConfirm: {
+          kind: "tool",
           confirmId: event.confirm_id,
           callId: event.call_id,
           tool: event.tool,
           paramsPreview: event.params_preview,
           riskHint: event.risk_hint
         }
+      };
+    case "plan_confirm_needed":
+      return {
+        ...state,
+        pendingConfirm: {
+          kind: "plan",
+          confirmId: event.confirm_id,
+          turnId: event.turn_id,
+          plan: event.plan,
+        },
+        turns: upsertTurn(state.turns, event.turn_id, (turn) => ({
+          ...turn,
+          plan: event.plan,
+          status: turn.status === "idle" ? "streaming" : turn.status,
+        })),
       };
     case "replay_gap":
       return {
@@ -454,6 +548,9 @@ function createEmptyTurn(turnId: string): AgentTurnState {
     promptAvailable: false,
     errors: [],
     taskLabel: null,
+    plan: null,
+    evaluations: [],
+    traceSpans: [],
     status: "idle"
   };
 }

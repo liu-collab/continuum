@@ -1,5 +1,7 @@
 export type AgentLocale = "zh-CN" | "en-US";
 export type AgentMemoryMode = "workspace_only" | "workspace_plus_global";
+export type AgentApprovalMode = "confirm" | "yolo";
+export type AgentPlanMode = "advisory" | "confirm";
 export type AgentConnectionState = "connecting" | "open" | "reconnecting" | "closed";
 export type AgentToolTrustLevel = "builtin_read" | "builtin_write" | "shell" | `mcp:${string}`;
 
@@ -70,6 +72,67 @@ export type MnaPromptInspectorResponse = {
   messages: Array<Record<string, unknown>>;
   prompt_segments: MnaPromptSegmentView[];
   phase_results: MnaPromptPhaseResult[];
+  budget_plan: {
+    budget: {
+      total: number | null;
+      reserve: number;
+      available_for_prompt: number | null;
+    };
+    allocation: {
+      fixed: number;
+      memory: number;
+      tools: number;
+      history: number;
+      current_turn: number;
+    };
+    dropped: Array<{
+      source: "history" | "memory" | "tool_output";
+      reason: "budget" | "priority" | "duplicate" | "oversize";
+      preview: string;
+    }>;
+  } | null;
+  plan: {
+    id: string;
+    goal: string;
+    status: "draft" | "approved" | "running" | "completed" | "revised" | "abandoned";
+    steps: Array<{
+      id: string;
+      title: string;
+      status: "pending" | "in_progress" | "completed" | "failed" | "skipped";
+      notes?: string;
+    }>;
+  } | null;
+  plan_revisions: Array<{
+    id: string;
+    plan_id: string;
+    revision: number;
+    status: "draft" | "approved" | "running" | "completed" | "revised" | "abandoned";
+    goal: string;
+    revision_reason: string | null;
+    plan: NonNullable<MnaPromptInspectorResponse["plan"]>;
+    created_at: string;
+  }>;
+  trace_spans: Array<{
+    id: string;
+    trace_id: string;
+    parent_id?: string;
+    name: string;
+    kind: "turn" | "memory" | "llm" | "tool" | "writeback" | "plan" | "evaluation" | "sandbox" | "cache";
+    started_at: string;
+    ended_at?: string;
+    status: "ok" | "error" | "cancelled";
+    attributes: Record<string, string | number | boolean>;
+  }>;
+  evaluation: Array<{
+    scope: "tool" | "turn";
+    decision: {
+      status: "pass" | "retry" | "revise" | "ask_user" | "stop";
+      reason: string;
+      retry_strategy?: "same_tool" | "alternative_tool" | "replan" | "narrow_scope";
+    };
+    tool_name?: string;
+    call_id?: string;
+  }>;
   tools: Array<Record<string, unknown>>;
 };
 
@@ -162,6 +225,31 @@ export type MnaMetricsResponse = {
   stream_flushed_events_total: number;
   stream_dropped_after_abort_total: number;
   runtime_errors_total: Record<string, number>;
+  cache: {
+    fs_read_hits: number;
+    fs_read_misses: number;
+    embedding_hits: number;
+    embedding_misses: number;
+  };
+  planning: {
+    generated_total: number;
+    revised_total: number;
+    confirm_required_total: number;
+    confirmed_total: number;
+    cancelled_total: number;
+  };
+  retries: {
+    total: number;
+    by_tool: Record<string, number>;
+  };
+  context_budget: {
+    dropped_messages_total: number;
+  };
+  tool_batches: {
+    total: number;
+    parallel_calls_total: number;
+    max_batch_size: number;
+  };
 };
 
 export type MnaMcpServerStatus = {
@@ -227,6 +315,12 @@ export type MnaAgentConfigResponse = {
     organization?: string | null;
     keep_alive?: string | number | null;
   };
+  tools: {
+    approval_mode: AgentApprovalMode;
+  };
+  planning: {
+    plan_mode: AgentPlanMode;
+  };
   embedding: {
     base_url: string | null;
     model: string | null;
@@ -287,6 +381,9 @@ export type MnaWsToolCallResultEvent = {
   output_preview: string;
   artifact_ref?: string;
   trust_level: AgentToolTrustLevel;
+  cache_hit?: boolean;
+  changed_files?: string[];
+  rolled_back?: boolean;
 };
 
 export type MnaInjectionRecord = {
@@ -340,6 +437,31 @@ export type MnaWsTaskChangeEvent = {
   previous_task_id?: string | null;
 };
 
+export type MnaWsPlanEvent = {
+  kind: "plan";
+  turn_id: string;
+  plan: NonNullable<MnaPromptInspectorResponse["plan"]>;
+};
+
+export type MnaWsEvaluationEvent = {
+  kind: "evaluation";
+  turn_id: string;
+  scope: "tool" | "turn";
+  decision: {
+    status: "pass" | "retry" | "revise" | "ask_user" | "stop";
+    reason: string;
+    retry_strategy?: "same_tool" | "alternative_tool" | "replan" | "narrow_scope";
+  };
+  tool_name?: string;
+  call_id?: string;
+};
+
+export type MnaWsTraceEvent = {
+  kind: "trace";
+  turn_id: string;
+  spans: MnaPromptInspectorResponse["trace_spans"];
+};
+
 export type MnaWsTurnEndEvent = {
   kind: "turn_end";
   turn_id: string;
@@ -362,6 +484,13 @@ export type MnaWsToolConfirmEvent = {
   risk_hint?: "write" | "shell" | "mcp";
 };
 
+export type MnaWsPlanConfirmEvent = {
+  kind: "plan_confirm_needed";
+  confirm_id: string;
+  turn_id: string;
+  plan: NonNullable<MnaPromptInspectorResponse["plan"]>;
+};
+
 export type MnaWsReplayGapEvent = {
   kind: "replay_gap";
   last_event_id: number;
@@ -379,9 +508,13 @@ export type MnaServerEvent =
   | MnaWsInjectionBannerEvent
   | MnaWsPhaseResultEvent
   | MnaWsTaskChangeEvent
+  | MnaWsPlanEvent
+  | MnaWsEvaluationEvent
+  | MnaWsTraceEvent
   | MnaWsTurnEndEvent
   | MnaWsErrorEvent
   | MnaWsToolConfirmEvent
+  | MnaWsPlanConfirmEvent
   | MnaWsReplayGapEvent
   | MnaWsPongEvent;
 
@@ -393,4 +526,5 @@ export type MnaClientEvent =
   | { kind: "user_input"; turn_id: string; text: string }
   | { kind: "abort"; turn_id: string }
   | { kind: "tool_confirm"; confirm_id: string; decision: "allow" | "deny" | "allow_session" }
+  | { kind: "plan_confirm"; confirm_id: string; decision: "approve" | "revise" | "cancel"; feedback?: string }
   | { kind: "ping" };

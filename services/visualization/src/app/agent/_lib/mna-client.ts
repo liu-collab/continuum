@@ -268,6 +268,12 @@ export class MnaClient {
       model?: string;
       api_key?: string;
     };
+    tools?: {
+      approval_mode?: "confirm" | "yolo";
+    };
+    planning?: {
+      plan_mode?: "advisory" | "confirm";
+    };
     writeback_llm?: {
       base_url?: string;
       model?: string;

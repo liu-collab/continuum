@@ -15,6 +15,7 @@ export function createFsReadTool(): Tool {
   return {
     name: "fs_read",
     description: "Read a file or list a directory inside the current workspace.",
+    parallelism: "safe",
     parameters: {
       type: "object",
       required: ["path"],
@@ -70,6 +71,7 @@ export function createFsReadTool(): Tool {
           output: artifact.output,
           trust_level: "builtin_read",
           artifact_ref: artifact.artifact_ref,
+          cache_hit: false,
           artifact: artifact.artifact_ref
             ? {
                 kind: "file_content",
@@ -99,6 +101,7 @@ export function createFsReadTool(): Tool {
         output: artifact.output,
         trust_level: "builtin_read",
         artifact_ref: artifact.artifact_ref,
+        cache_hit: false,
         artifact: artifact.artifact_ref
           ? {
               kind: "file_content",

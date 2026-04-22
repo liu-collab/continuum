@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
 import { z } from "zod";
 
 import { matchWildcardPattern, maybePersistArtifact } from "../helpers.js";
 import { ToolInputError, ToolPatternBlockedError, ToolTimeoutError } from "../errors.js";
 import type { Tool } from "../types.js";
+import { SandboxExecutor } from "../../sandbox/executor.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -22,10 +22,12 @@ export interface ShellExecToolOptions {
 
 export function createShellExecTool(options: ShellExecToolOptions): Tool {
   const defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const executor = new SandboxExecutor();
 
   return {
     name: "shell_exec",
     description: "Run a shell command inside the current workspace.",
+    parallelism: "exclusive",
     parameters: {
       type: "object",
       required: ["command"],
@@ -69,13 +71,35 @@ export function createShellExecTool(options: ShellExecToolOptions): Tool {
       }
 
       const timeoutMs = parsed.data.timeout_ms ?? defaultTimeoutMs;
-      const result = await runShellCommand({
-        command: parsed.data.command,
-        cwd: context.workspaceRoot,
-        env: parsed.data.env,
-        abort: context.abort,
-        timeoutMs,
-      });
+      let result;
+      try {
+        result = await executor.run({
+          command: parsed.data.command,
+          cwd: context.cwd,
+          workspaceRoot: context.workspaceRoot,
+          networkEnabled: false,
+          resourceLimits: {
+            timeoutMs,
+          },
+          audit: {
+            sessionId: context.sessionId,
+            turnId: context.turnId,
+            callId: context.callId,
+            toolName: "shell_exec",
+          },
+          rollbackOnError: true,
+          snapshotBeforeRun: true,
+          env: parsed.data.env,
+          abort: context.abort,
+          timeoutMs,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/timed out|aborted/i.test(message)) {
+          throw new ToolTimeoutError(message, error);
+        }
+        throw error;
+      }
 
       const outputSections = [];
       if (result.stdout.trim().length > 0) {
@@ -102,6 +126,8 @@ export function createShellExecTool(options: ShellExecToolOptions): Tool {
         output: artifact.output,
         trust_level: "shell",
         artifact_ref: artifact.artifact_ref,
+        changed_files: result.changedFiles,
+        rolled_back: result.rolledBack,
         artifact: artifact.artifact_ref
           ? {
               kind: "stdout",
@@ -118,107 +144,4 @@ export function createShellExecTool(options: ShellExecToolOptions): Tool {
       };
     },
   };
-}
-
-async function runShellCommand(input: {
-  command: string;
-  cwd: string;
-  env?: Record<string, string>;
-  abort: AbortSignal;
-  timeoutMs: number;
-}) {
-  const command = process.platform === "win32" ? "cmd.exe" : "sh";
-  const args = process.platform === "win32"
-    ? ["/d", "/s", "/c", input.command]
-    : ["-c", input.command];
-
-  return await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: input.cwd,
-      env: {
-        ...process.env,
-        ...input.env,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let settled = false;
-
-    const timeout = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      input.abort.removeEventListener("abort", abortListener);
-      void terminateChild(child).finally(() => {
-        reject(new ToolTimeoutError(`Shell command timed out after ${input.timeoutMs}ms.`));
-      });
-    }, input.timeoutMs);
-
-    const abortListener = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      input.abort.removeEventListener("abort", abortListener);
-      void terminateChild(child).finally(() => {
-        reject(new ToolTimeoutError("Shell command was aborted."));
-      });
-    };
-    input.abort.addEventListener("abort", abortListener, { once: true });
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout.push(chunk);
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr.push(chunk);
-    });
-    child.on("error", (error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      input.abort.removeEventListener("abort", abortListener);
-      reject(error);
-    });
-    child.on("exit", (code) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      input.abort.removeEventListener("abort", abortListener);
-      resolve({
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        exitCode: code ?? 0,
-      });
-    });
-  });
-}
-
-async function terminateChild(child: ReturnType<typeof spawn>) {
-  if (process.platform === "win32") {
-    if (child.pid) {
-      await new Promise<void>((resolve) => {
-        const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-          stdio: "ignore",
-        });
-        killer.on("exit", () => resolve());
-        killer.on("error", () => resolve());
-      });
-      return;
-    }
-
-    child.kill();
-    return;
-  }
-
-  child.kill("SIGTERM");
-  setTimeout(() => child.kill("SIGKILL"), 2_000).unref();
 }

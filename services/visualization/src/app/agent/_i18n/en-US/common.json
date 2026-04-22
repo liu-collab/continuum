@@ -79,6 +79,17 @@
       "workspace_only": "Workspace only"
     }
   },
+  "approvalModeSwitch": {
+    "label": "tool approval mode",
+    "options": {
+      "confirm": "Confirm mode",
+      "yolo": "YOLO mode"
+    },
+    "descriptions": {
+      "confirm": "Tools that require approval will pause and wait for confirmation before they run.",
+      "yolo": "Tools run directly without per-call confirmation. High-risk actions are also allowed through."
+    }
+  },
   "providerSwitch": {
     "label": "provider",
     "modelPlaceholder": "model",

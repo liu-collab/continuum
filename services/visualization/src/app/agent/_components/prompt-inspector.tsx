@@ -21,6 +21,11 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
   const { t } = useAgentI18n();
   const promptSegments = payload?.prompt_segments ?? [];
   const phaseResults = payload?.phase_results ?? [];
+  const dropped = payload?.budget_plan?.dropped ?? [];
+  const plan = payload?.plan;
+  const planRevisions = payload?.plan_revisions ?? [];
+  const evaluation = payload?.evaluation ?? [];
+  const traceSpans = payload?.trace_spans ?? [];
 
   if (!open) {
     return null;
@@ -103,6 +108,40 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
+                <dt className="text-xs text-muted-foreground">budget</dt>
+                <dd className="mt-1 space-y-2 text-xs text-foreground">
+                  {payload?.budget_plan ? (
+                    <>
+                      <div>
+                        total: {String(payload.budget_plan.budget.total ?? "unbounded")} / reserve: {payload.budget_plan.budget.reserve}
+                      </div>
+                      <div>
+                        fixed {payload.budget_plan.allocation.fixed} · memory {payload.budget_plan.allocation.memory} · tools {payload.budget_plan.allocation.tools}
+                      </div>
+                      <div>
+                        history {payload.budget_plan.allocation.history} · current {payload.budget_plan.allocation.current_turn}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">dropped</dt>
+                <dd className="mt-1 space-y-2">
+                  {dropped.map((item, index) => (
+                    <div key={`${item.source}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                      {item.source} · {item.reason}
+                      <div className="mt-1 text-muted-foreground">{item.preview}</div>
+                    </div>
+                  ))}
+                  {payload && dropped.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.phaseHits")}</dt>
                 <dd className="mt-1 space-y-2">
                   {phaseResults.map((result, index) => (
@@ -121,6 +160,68 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                   ))}
                   {payload && phaseResults.length === 0 ? (
                     <div className="text-sm text-muted-foreground">{t("promptInspector.noPhaseHits")}</div>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">plan</dt>
+                <dd className="mt-1 space-y-2">
+                  {plan ? (
+                    <>
+                      <div className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                        {plan.status} · {plan.goal}
+                      </div>
+                      {plan.steps.map((step) => (
+                        <div key={step.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                          {step.status} · {step.title}
+                          {step.notes ? <div className="mt-1 text-muted-foreground">{step.notes}</div> : null}
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">plan revisions</dt>
+                <dd className="mt-1 space-y-2">
+                  {planRevisions.map((item) => (
+                    <div key={item.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                      r{item.revision} · {item.status} · {item.goal}
+                      {item.revision_reason ? (
+                        <div className="mt-1 text-muted-foreground">{item.revision_reason}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                  {payload && planRevisions.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">evaluation</dt>
+                <dd className="mt-1 space-y-2">
+                  {evaluation.map((item, index) => (
+                    <div key={`${item.scope}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                      {item.scope} · {item.decision.status} · {item.decision.reason}
+                    </div>
+                  ))}
+                  {payload && evaluation.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">trace</dt>
+                <dd className="mt-1 space-y-2">
+                  {traceSpans.map((span) => (
+                    <div key={span.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                      {span.kind} · {span.name} · {span.status}
+                    </div>
+                  ))}
+                  {payload && traceSpans.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
                   ) : null}
                 </dd>
               </div>

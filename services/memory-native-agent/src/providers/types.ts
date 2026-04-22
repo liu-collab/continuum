@@ -17,6 +17,7 @@ export interface ToolSchema {
   name: string;
   description: string;
   parameters: JsonSchema;
+  parallelism?: "safe" | "workspace_mutating" | "exclusive";
 }
 
 export interface Usage {

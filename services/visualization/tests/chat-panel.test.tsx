@@ -5,6 +5,28 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ChatPanel } from "@/app/agent/_components/chat-panel";
 import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import type { AgentTurnState } from "@/app/agent/_lib/event-reducer";
+
+function createTurn(overrides: Partial<AgentTurnState> = {}): AgentTurnState {
+  return {
+    turnId: "turn-default",
+    userInput: "",
+    assistantOutput: "",
+    toolMessages: [],
+    toolCalls: [],
+    phases: [],
+    injection: null,
+    finishReason: "stop",
+    promptAvailable: true,
+    errors: [],
+    taskLabel: null,
+    plan: null,
+    evaluations: [],
+    traceSpans: [],
+    status: "complete",
+    ...overrides,
+  };
+}
 
 describe("ChatPanel", () => {
   it("submits only once when pressing Enter", async () => {
@@ -40,20 +62,11 @@ describe("ChatPanel", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
           turns={[
-            {
+            createTurn({
               turnId: "turn-1",
               userInput: "你好",
               assistantOutput: "你好，我在。",
-              toolMessages: [],
-              toolCalls: [],
-              phases: [],
-              injection: null,
-              finishReason: "stop",
-              promptAvailable: true,
-              errors: [],
-              taskLabel: null,
-              status: "complete",
-            },
+            }),
           ]}
           connection="open"
           degraded={false}
@@ -75,20 +88,11 @@ describe("ChatPanel", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
           turns={[
-            {
+            createTurn({
               turnId: "turn-markdown",
               userInput: "给我一个总结",
               assistantOutput: "# 总结\n\n- 第一项\n- 第二项",
-              toolMessages: [],
-              toolCalls: [],
-              phases: [],
-              injection: null,
-              finishReason: "stop",
-              promptAvailable: true,
-              errors: [],
-              taskLabel: null,
-              status: "complete",
-            },
+            }),
           ]}
           connection="open"
           degraded={false}
@@ -113,11 +117,10 @@ describe("ChatPanel", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
           turns={[
-            {
+            createTurn({
               turnId: "turn-tool",
               userInput: "读取 README",
               assistantOutput: "我先读取一下文件。",
-              toolMessages: [],
               toolCalls: [
                 {
                   callId: "call-1",
@@ -129,14 +132,8 @@ describe("ChatPanel", () => {
                   artifactRef: null,
                 },
               ],
-              phases: [],
-              injection: null,
               finishReason: "tool_use",
-              promptAvailable: true,
-              errors: [],
-              taskLabel: null,
-              status: "complete",
-            },
+            }),
           ]}
           connection="open"
           degraded={false}
@@ -157,19 +154,10 @@ describe("ChatPanel", () => {
 
   it("hides older turns behind a load earlier button", async () => {
     const user = userEvent.setup();
-    const turns = Array.from({ length: 14 }, (_, index) => ({
+    const turns = Array.from({ length: 14 }, (_, index) => createTurn({
       turnId: `turn-${index + 1}`,
       userInput: `用户消息 ${index + 1}`,
       assistantOutput: `助手消息 ${index + 1}`,
-      toolMessages: [],
-      toolCalls: [],
-      phases: [],
-      injection: null,
-      finishReason: "stop",
-      promptAvailable: true,
-      errors: [],
-      taskLabel: null,
-      status: "complete" as const,
     }));
 
     render(
@@ -202,20 +190,11 @@ describe("ChatPanel", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
           turns={[
-            {
+            createTurn({
               turnId: "turn-scroll",
               userInput: "测试滚动",
               assistantOutput: "这里应该在独立滚动区域里显示。",
-              toolMessages: [],
-              toolCalls: [],
-              phases: [],
-              injection: null,
-              finishReason: "stop",
-              promptAvailable: true,
-              errors: [],
-              taskLabel: null,
-              status: "complete",
-            },
+            }),
           ]}
           connection="open"
           degraded={false}
@@ -236,25 +215,17 @@ describe("ChatPanel", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
           turns={[
-            {
+            createTurn({
               turnId: "turn-injection",
               userInput: "帮我回忆上下文",
               assistantOutput: "我已经结合记忆继续回答。",
-              toolMessages: [],
-              toolCalls: [],
-              phases: [],
               injection: {
                 phase: "before_response",
                 injection_reason: "history reference",
                 memory_summary: "这里是一段注入摘要，不应该在中间聊天区重复渲染。",
                 memory_records: [],
               },
-              finishReason: "stop",
-              promptAvailable: true,
-              errors: [],
-              taskLabel: null,
-              status: "complete",
-            },
+            }),
           ]}
           connection="open"
           degraded={false}

@@ -8,6 +8,7 @@ describe("buildSystemPrompt", () => {
       workspaceRoot: "C:/repo/demo",
       platform: "win32",
       memoryMode: "workspace_plus_global",
+      approvalMode: "confirm",
       locale: "zh-CN",
     });
 
@@ -22,6 +23,7 @@ describe("buildSystemPrompt", () => {
       workspaceRoot: "/tmp/demo",
       platform: "linux",
       memoryMode: "workspace_only",
+      approvalMode: "yolo",
       locale: "en-US",
       appendedPrompt: "Always prefer concise replies.",
     });
@@ -29,5 +31,6 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("You are memory-native-agent");
     expect(prompt).toContain("Always prefer concise replies.");
     expect(prompt).toContain("/tmp/demo");
+    expect(prompt).toContain("Current tool approval mode: yolo");
   });
 });

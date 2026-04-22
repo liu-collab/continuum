@@ -15,6 +15,17 @@ import {
   estimateToolTokens,
   resolveContextMaxTokens,
 } from "./token-budget.js";
+import { generateExecutionPlan, shouldGeneratePlan } from "../planning/plan-generator.js";
+import { advancePlanAfterTool, markPlanRunning } from "../planning/plan-state.js";
+import type { ExecutionPlan } from "../planning/types.js";
+import { evaluateAssistantOutput, evaluateToolResult, type EvaluationDecision } from "../evaluation/turn-evaluator.js";
+import {
+  createRetryPolicyState,
+  evaluateRetryAllowance,
+  registerToolAttempt,
+  type RetryPolicyState,
+} from "../evaluation/retry-policy.js";
+import { RuntimeTracer, type RuntimeSpan } from "../trace/runtime-tracer.js";
 import { tierMemoryInjection } from "./memory-tiering.js";
 import { toPromptSegmentView, type PromptSegmentView } from "./prompt-segments.js";
 import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
@@ -23,6 +34,7 @@ import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../
 import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
 import type { SessionStore } from "../session-store/index.js";
 import type { MaterializedSkillContext } from "../skills/index.js";
+import { hashArgs } from "../tools/index.js";
 import type { ToolCallEnvelope, ToolDispatcher, ToolResult } from "../tools/index.js";
 
 export interface InjectionBlock {
@@ -56,6 +68,17 @@ export interface PromptPhaseResult {
   injection_summary?: string;
 }
 
+export interface PlanEvent {
+  plan: ExecutionPlan;
+}
+
+export interface EvaluationEvent {
+  scope: "tool" | "turn";
+  decision: EvaluationDecision;
+  tool_name?: string;
+  call_id?: string;
+}
+
 export type Phase = "session_start" | "task_start" | "task_switch" | "before_plan" | "before_response" | "after_response";
 
 export interface RunnerIO {
@@ -65,6 +88,9 @@ export interface RunnerIO {
   emitInjectionBanner(turnId: string, injection: InjectionBlock | null, degraded: boolean): void;
   emitPhaseResult(turnId: string, phase: Phase, resp: PrepareContextResult | SessionStartResult | null): void;
   emitTaskChange(turnId: string, change: TaskChangeEvent): void;
+  emitPlan?(turnId: string, event: PlanEvent): void;
+  emitEvaluation?(turnId: string, event: EvaluationEvent): void;
+  emitTrace?(turnId: string, spans: RuntimeSpan[]): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
   emitError(scope: "turn" | "session", err: Error & { code?: string }): void;
   recordPrepareContextLatency?(phase: Phase, latencyMs: number): void;
@@ -77,6 +103,14 @@ export interface RunnerIO {
     params_preview: string;
     risk_hint?: "write" | "shell" | "mcp";
   }): Promise<"allow" | "deny" | "allow_session">;
+  requestPlanConfirm?(payload: {
+    turn_id: string;
+    plan: ExecutionPlan;
+  }): Promise<{ outcome: "approve" | "revise" | "cancel"; feedback?: string }>;
+  recordRetry?(toolName: string): void;
+  recordContextDrop?(count: number): void;
+  recordToolBatch?(size: number, parallelCalls: number): void;
+  recordPlanConfirmation?(outcome: "approve" | "revise" | "cancel"): void;
 }
 
 export interface RunnerDeps {
@@ -95,13 +129,21 @@ export interface SubmitOptions {
   skillContext?: MaterializedSkillContext;
 }
 
+interface PlanConfirmDecision {
+  outcome: "approve" | "revise" | "cancel";
+  feedback?: string;
+}
+
 export class AgentRunner {
   private readonly conversation = new Conversation();
   private readonly sessionId: string;
   private currentTask: TaskState | null = null;
   private recentTasks: TaskState[] = [];
   private readonly activeAbortControllers = new Map<string, AbortController>();
+  private readonly tracer = new RuntimeTracer();
   private storeWarningEmitted = false;
+  private currentPlan: ExecutionPlan | null = null;
+  private readonly planRevisionCounter = new Map<string, number>();
 
   constructor(private readonly deps: RunnerDeps) {
     this.sessionId = deps.sessionId ?? createSessionId();
@@ -151,6 +193,9 @@ export class AgentRunner {
     }
 
     const injections = buildPromptInjections(rawInjections);
+    const shouldPlan = shouldGeneratePlan(userInput) || orderedPhases.includes("before_plan");
+    let evaluationEvents: EvaluationEvent[] = [];
+    let retryState = createRetryPolicyState();
 
     this.deps.io.emitInjectionBanner(
       turnId,
@@ -162,6 +207,7 @@ export class AgentRunner {
       workspaceRoot: this.deps.config.memory.cwd,
       platform: process.platform,
       memoryMode: this.deps.config.memory.mode,
+      approvalMode: this.deps.config.tools.approvalMode,
       locale: this.deps.config.locale,
       appendedPrompt: [this.deps.config.cli.systemPrompt, options.skillContext?.systemPrompt].filter(Boolean).join("\n\n") || null,
     });
@@ -170,6 +216,22 @@ export class AgentRunner {
       role: "user",
       content: userInput,
     });
+
+    if (shouldPlan) {
+      this.publishPlan(turnId, generateExecutionPlan({
+        sessionId: this.sessionId,
+        turnId,
+        goal: userInput,
+        existingPlan: this.currentPlan,
+      }));
+      const planDecision = await this.resolvePlanBeforeExecution(turnId, userInput);
+      if (planDecision === "cancel") {
+        this.safeStore(() => this.deps.store?.closeTurn(turnId, "cancelled"));
+        this.deps.io.emitTurnEnd(turnId, "cancelled");
+        this.activeAbortControllers.delete(turnId);
+        return;
+      }
+    }
 
     const contextMaxTokens = this.deps.config.context.maxTokens ?? resolveContextMaxTokens(this.deps.config.provider);
     const toolTokenEstimate = estimateToolTokens(tools);
@@ -181,7 +243,7 @@ export class AgentRunner {
       ? Math.min(requestMaxTokens, this.deps.config.provider.maxTokens)
       : requestMaxTokens;
 
-    let promptSegments = this.conversation.buildPromptSegments({
+    const budgetInput = {
       systemPrompt,
       tools,
       tokenBudget: {
@@ -191,18 +253,11 @@ export class AgentRunner {
         toolTokenEstimate,
       },
       injections,
-    });
-    let messages = this.conversation.buildMessages({
-      systemPrompt,
-      tools,
-      tokenBudget: {
-        maxTokens: contextMaxTokens,
-        reserveTokens: this.deps.config.context.reserveTokens,
-        compactionStrategy: this.deps.config.context.compactionStrategy,
-        toolTokenEstimate,
-      },
-      injections,
-    });
+    } as const;
+    let budgetPlan = this.conversation.buildBudgetPlan(budgetInput);
+    this.applyBudgetMetrics(budgetPlan);
+    let promptSegments = budgetPlan.keptSegments;
+    let messages = budgetPlan.keptMessages;
 
     const bridge = new StreamBridge(
       turnId,
@@ -230,14 +285,34 @@ export class AgentRunner {
     let terminalEventEmitted = false;
     let round = 1;
 
-    this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), phaseResults, tools, round);
+    this.persistDispatchedMessages(
+      turnId,
+      messages,
+      promptSegments.map(toPromptSegmentView),
+      phaseResults,
+      tools,
+      round,
+      budgetPlan,
+      this.currentPlan,
+      [],
+      evaluationEvents,
+    );
 
     try {
       while (!abortController.signal.aborted) {
         let encounteredToolCall = false;
         let roundAssistantToolMessage: ChatMessage | null = null;
+        const pendingToolCalls: ToolCall[] = [];
         let sawFirstProviderToken = false;
         const providerStartedAt = Date.now();
+        const llmSpan = this.tracer.startSpan({
+          traceId,
+          name: `llm_round_${round}`,
+          kind: "llm",
+          attributes: {
+            round,
+          },
+        });
         this.deps.io.recordProviderCall?.(this.deps.provider.id());
         const chunks = this.deps.provider.chat({
           messages,
@@ -274,6 +349,7 @@ export class AgentRunner {
 
           if (chunk.type === "tool_call") {
             encounteredToolCall = true;
+            pendingToolCalls.push(chunk.call);
             if (!roundAssistantToolMessage) {
               roundAssistantToolMessage = {
                 role: "assistant",
@@ -288,30 +364,6 @@ export class AgentRunner {
               ];
             }
             await bridge.handle(chunk);
-            const toolResult = await this.runTool(turnId, chunk.call, abortController.signal, options.skillContext);
-            toolResults.push(toolResult);
-            this.deps.io.emitToolCallResult(chunk.call.id, toolResult);
-            const wrappedToolOutput = this.conversation.wrapToolOutput(
-              chunk.call.name,
-              chunk.call.id,
-              toolResult.trust_level,
-              toolResult.output,
-            );
-            this.conversation.addMessage({
-              role: "tool",
-              content: wrappedToolOutput,
-              tool_call_id: chunk.call.id,
-            });
-            this.safeStore(() =>
-              this.deps.store?.appendMessage({
-                id: createTurnId(),
-                session_id: this.sessionId,
-                turn_id: turnId,
-                role: "tool",
-                content: wrappedToolOutput,
-                tool_call_id: chunk.call.id,
-              }),
-            );
             continue;
           }
 
@@ -320,9 +372,97 @@ export class AgentRunner {
           await bridge.handle(chunk);
           terminalEventEmitted = true;
         }
+        llmSpan.finish(abortController.signal.aborted ? "cancelled" : "ok", {
+          finish_reason: finishReason,
+        });
 
         if (abortController.signal.aborted) {
           break;
+        }
+
+        if (pendingToolCalls.length > 0) {
+          const toolBatchSpan = this.tracer.startSpan({
+            traceId,
+            name: `tool_batch_${round}`,
+            kind: "tool",
+            attributes: {
+              size: pendingToolCalls.length,
+            },
+          });
+          const batchResults = await this.runToolBatch(turnId, pendingToolCalls, abortController.signal, options.skillContext);
+          this.deps.io.recordToolBatch?.(
+            pendingToolCalls.length,
+            pendingToolCalls.filter((call) =>
+              this.deps.tools.listTools().some((tool) => tool.name === call.name && tool.parallelism === "safe")
+            ).length,
+          );
+          let replanReason: string | undefined;
+          for (const batchResult of batchResults) {
+            const finalBatchResult = await this.maybeRetryToolCall(
+              turnId,
+              batchResult.call,
+              batchResult.result,
+              retryState,
+              abortController.signal,
+              options.skillContext,
+            );
+            const result = finalBatchResult.result;
+            replanReason = replanReason ?? finalBatchResult.replanReason;
+            toolResults.push(result);
+            this.deps.io.emitToolCallResult(batchResult.call.id, result);
+            const wrappedToolOutput = this.conversation.wrapToolOutput(
+              batchResult.call.name,
+              batchResult.call.id,
+              result.trust_level,
+              result.output,
+            );
+            this.conversation.addMessage({
+              role: "tool",
+              content: wrappedToolOutput,
+              tool_call_id: batchResult.call.id,
+            });
+            this.safeStore(() =>
+              this.deps.store?.appendMessage({
+                id: createTurnId(),
+                session_id: this.sessionId,
+                turn_id: turnId,
+                role: "tool",
+                content: wrappedToolOutput,
+                tool_call_id: batchResult.call.id,
+              }),
+            );
+
+            const retryKey = `${batchResult.call.name}:${hashArgs(batchResult.call.args)}`;
+            const attempts = retryState.toolAttempts.get(retryKey) ?? 1;
+            const toolDecision = evaluateToolResult({
+              toolName: batchResult.call.name,
+              toolResult: result,
+              repeatedFailure: attempts > 1 && !result.ok,
+            });
+            evaluationEvents = [
+              ...evaluationEvents,
+              {
+                scope: "tool",
+                tool_name: batchResult.call.name,
+                call_id: batchResult.call.id,
+                decision: toolDecision,
+              },
+            ];
+            this.deps.io.emitEvaluation?.(turnId, evaluationEvents.at(-1)!);
+            if (this.currentPlan) {
+              this.currentPlan = advancePlanAfterTool(this.currentPlan, result.ok, toolDecision.reason);
+            }
+          }
+          if (replanReason && this.currentPlan) {
+            this.publishPlan(turnId, generateExecutionPlan({
+              sessionId: this.sessionId,
+              turnId,
+              goal: userInput,
+              existingPlan: this.currentPlan,
+              revisionReason: replanReason,
+            }));
+          }
+          toolBatchSpan.finish("ok");
         }
 
         if (!encounteredToolCall || finishReason !== "tool_use") {
@@ -330,29 +470,22 @@ export class AgentRunner {
         }
 
         round += 1;
-        promptSegments = this.conversation.buildPromptSegments({
-          systemPrompt,
+        budgetPlan = this.conversation.buildBudgetPlan(budgetInput);
+        this.applyBudgetMetrics(budgetPlan);
+        promptSegments = budgetPlan.keptSegments;
+        messages = budgetPlan.keptMessages;
+        this.persistDispatchedMessages(
+          turnId,
+          messages,
+          promptSegments.map(toPromptSegmentView),
+          phaseResults,
           tools,
-          tokenBudget: {
-            maxTokens: contextMaxTokens,
-            reserveTokens: this.deps.config.context.reserveTokens,
-            compactionStrategy: this.deps.config.context.compactionStrategy,
-            toolTokenEstimate,
-          },
-          injections,
-        });
-        messages = this.conversation.buildMessages({
-          systemPrompt,
-          tools,
-          tokenBudget: {
-            maxTokens: contextMaxTokens,
-            reserveTokens: this.deps.config.context.reserveTokens,
-            compactionStrategy: this.deps.config.context.compactionStrategy,
-            toolTokenEstimate,
-          },
-          injections,
-        });
-        this.persistDispatchedMessages(turnId, messages, promptSegments.map(toPromptSegmentView), phaseResults, tools, round);
+          round,
+          budgetPlan,
+          this.currentPlan,
+          this.tracer.listSpans(traceId),
+          evaluationEvents,
+        );
         terminalEventEmitted = false;
       }
 
@@ -378,6 +511,15 @@ export class AgentRunner {
     }
 
     const assistantOutput = assistantParts.join("");
+    const turnDecision = evaluateAssistantOutput(assistantOutput, toolResults);
+    evaluationEvents = [
+      ...evaluationEvents,
+      {
+        scope: "turn",
+        decision: turnDecision,
+      },
+    ];
+    this.deps.io.emitEvaluation?.(turnId, evaluationEvents.at(-1)!);
     if (assistantOutput.trim().length > 0) {
       this.conversation.addMessage({
         role: "assistant",
@@ -397,8 +539,29 @@ export class AgentRunner {
     }
 
     this.safeStore(() => this.deps.store?.closeTurn(turnId, finishReason, traceId ?? undefined));
+    this.deps.io.emitTrace?.(turnId, this.tracer.listSpans(traceId));
+    if (this.currentPlan) {
+      this.publishPlan(turnId, this.currentPlan);
+    }
+    this.persistDispatchedMessages(
+      turnId,
+      messages,
+      promptSegments.map(toPromptSegmentView),
+      phaseResults,
+      tools,
+      round,
+      this.conversation.getLastBudgetPlan(),
+      this.currentPlan,
+      this.tracer.listSpans(traceId),
+      evaluationEvents,
+    );
 
     if (shouldFinalizeTurn(userInput, assistantOutput)) {
+      const finalizeSpan = this.tracer.startSpan({
+        traceId,
+        name: "finalize_turn",
+        kind: "writeback",
+      });
       void this.deps.memoryClient.finalizeTurn({
         workspace_id: this.deps.config.memory.workspaceId,
         user_id: this.deps.config.memory.userId,
@@ -410,9 +573,12 @@ export class AgentRunner {
         tool_results_summary: summarizeToolResults(toolResults),
         memory_mode: this.deps.config.memory.mode,
       }).catch((error) => {
+        finalizeSpan.finish("error");
         this.deps.io.emitError("session", Object.assign(error instanceof Error ? error : new Error(String(error)), {
           code: (error as Error & { code?: string }).code ?? "memory_unavailable",
         }));
+      }).then(() => {
+        finalizeSpan.finish("ok");
       });
     }
   }
@@ -427,6 +593,119 @@ export class AgentRunner {
       controller.abort();
     }
     this.activeAbortControllers.clear();
+  }
+
+  private publishPlan(turnId: string, plan: ExecutionPlan) {
+    this.currentPlan = plan;
+    this.deps.io.emitPlan?.(turnId, { plan });
+    const revision = (this.planRevisionCounter.get(turnId) ?? 0) + 1;
+    this.planRevisionCounter.set(turnId, revision);
+    this.safeStore(() =>
+      this.deps.store?.savePlanRevision({
+        id: createTurnId(),
+        session_id: this.sessionId,
+        turn_id: turnId,
+        plan_id: plan.id,
+        revision,
+        status: plan.status,
+        goal: plan.goal,
+        revision_reason: plan.revision_reason ?? null,
+        plan_json: JSON.stringify(plan),
+      }),
+    );
+  }
+
+  private async resolvePlanBeforeExecution(turnId: string, userInput: string): Promise<"continue" | "cancel"> {
+    if (!this.currentPlan) {
+      return "continue";
+    }
+
+    if (this.deps.config.planning.planMode !== "confirm" || !this.deps.io.requestPlanConfirm) {
+      this.currentPlan = markPlanRunning(this.currentPlan);
+      this.publishPlan(turnId, this.currentPlan);
+      return "continue";
+    }
+
+    let decision = await this.deps.io.requestPlanConfirm({
+      turn_id: turnId,
+      plan: this.currentPlan,
+    });
+    this.deps.io.recordPlanConfirmation?.(decision.outcome);
+
+    while (decision.outcome === "revise") {
+      this.currentPlan = generateExecutionPlan({
+        sessionId: this.sessionId,
+        turnId,
+        goal: userInput,
+        existingPlan: this.currentPlan,
+        revisionReason: decision.feedback?.trim() || "user_requested_revision",
+      });
+      this.publishPlan(turnId, this.currentPlan);
+      decision = await this.deps.io.requestPlanConfirm({
+        turn_id: turnId,
+        plan: this.currentPlan,
+      });
+      this.deps.io.recordPlanConfirmation?.(decision.outcome);
+    }
+
+    if (decision.outcome === "cancel") {
+      return "cancel";
+    }
+
+    this.currentPlan = markPlanRunning(this.currentPlan);
+    this.publishPlan(turnId, this.currentPlan);
+    return "continue";
+  }
+
+  private applyBudgetMetrics(budgetPlan: ReturnType<Conversation["buildBudgetPlan"]>) {
+    this.deps.io.recordContextDrop?.(budgetPlan.dropped.length);
+  }
+
+  private async maybeRetryToolCall(
+    turnId: string,
+    call: ToolCall,
+    result: ToolResult,
+    retryState: RetryPolicyState,
+    abortSignal: AbortSignal,
+    skillContext?: MaterializedSkillContext,
+  ): Promise<{ result: ToolResult; replanReason?: string }> {
+    if (result.ok) {
+      return { result };
+    }
+
+    const retryKey = `${call.name}:${hashArgs(call.args)}`;
+    const attempts = registerToolAttempt(retryState, retryKey);
+    const toolDecision = evaluateToolResult({
+      toolName: call.name,
+      toolResult: result,
+      repeatedFailure: attempts > 1 && !result.ok,
+    });
+
+    if (toolDecision.status !== "retry") {
+      if (toolDecision.status === "revise") {
+        return {
+          result,
+          replanReason: toolDecision.reason,
+        };
+      }
+      return { result };
+    }
+
+    const retryDecision = evaluateRetryAllowance(retryState, retryKey, result);
+    if (!retryDecision.allowed) {
+      return {
+        result,
+        replanReason: retryDecision.strategy === "replan" ? retryDecision.reason : undefined,
+      };
+    }
+
+    retryState.turnRetryCount += 1;
+    this.deps.io.recordRetry?.(call.name);
+    const retryResult = await this.runTool(turnId, call, abortSignal, skillContext);
+    return {
+      result: retryResult,
+      replanReason: !retryResult.ok && retryDecision.strategy === "replan" ? retryDecision.reason : undefined,
+    };
   }
 
   private applyTaskStateChanges(turnId: string, triggers: DetectedTriggers): Phase[] {
@@ -500,6 +779,14 @@ export class AgentRunner {
 
   private async safePrepareContext(phase: Phase, turnId: string, userInput: string): Promise<PrepareContextResult | null> {
     const startedAt = Date.now();
+    const span = this.tracer.startSpan({
+      name: `prepare_context_${phase}`,
+      kind: "memory",
+      attributes: {
+        phase,
+        turn_id: turnId,
+      },
+    });
     try {
       const response = await this.deps.memoryClient.prepareContext({
         workspace_id: this.deps.config.memory.workspaceId,
@@ -515,9 +802,13 @@ export class AgentRunner {
         memory_mode: this.deps.config.memory.mode,
       });
       this.deps.io.recordPrepareContextLatency?.(phase, Date.now() - startedAt);
+      span.finish("ok", {
+        degraded: Boolean(response.degraded),
+      });
       return response;
     } catch (error) {
       this.deps.io.recordPrepareContextLatency?.(phase, Date.now() - startedAt);
+      span.finish("error");
       const fallback: PrepareContextResult = {
         trace_id: "dependency_unavailable",
         trigger: false,
@@ -567,6 +858,14 @@ export class AgentRunner {
     abortSignal: AbortSignal,
     skillContext?: MaterializedSkillContext,
   ): Promise<ToolResult> {
+    const span = this.tracer.startSpan({
+      name: `tool_${call.name}`,
+      kind: "tool",
+      attributes: {
+        turn_id: turnId,
+        tool: call.name,
+      },
+    });
     return await this.deps.tools.invoke(
       call as ToolCallEnvelope,
       {
@@ -580,7 +879,56 @@ export class AgentRunner {
         abort: abortSignal,
         confirm: this.deps.io.requestConfirm.bind(this.deps.io),
       },
+    ).then((result) => {
+      span.finish(result.ok ? "ok" : "error", {
+        ok: result.ok,
+      });
+      return result;
+    }).catch((error) => {
+      span.finish("error");
+      throw error;
+    });
+  }
+
+  private async runToolBatch(
+    turnId: string,
+    calls: ToolCall[],
+    abortSignal: AbortSignal,
+    skillContext?: MaterializedSkillContext,
+  ): Promise<Array<{ call: ToolCall; result: ToolResult }>> {
+    const safeNames = new Set(
+      this.deps.tools.listTools()
+        .filter((tool) => tool.parallelism === "safe")
+        .map((tool) => tool.name),
     );
+
+    const parallelCalls = calls.filter((call) => safeNames.has(call.name));
+    const serialCalls = calls.filter((call) => !safeNames.has(call.name));
+
+    const parallelResults = await Promise.all(
+      parallelCalls.map(async (call) => ({
+        call,
+        result: await this.runTool(turnId, call, abortSignal, skillContext),
+      })),
+    );
+
+    const serialResults: Array<{ call: ToolCall; result: ToolResult }> = [];
+    for (const call of serialCalls) {
+      serialResults.push({
+        call,
+        result: await this.runTool(turnId, call, abortSignal, skillContext),
+      });
+    }
+
+    const resultMap = new Map<string, ToolResult>();
+    for (const item of [...parallelResults, ...serialResults]) {
+      resultMap.set(item.call.id, item.result);
+    }
+
+    return calls.map((call) => ({
+      call,
+      result: resultMap.get(call.id)!,
+    }));
   }
 
   private persistUserMessage(turnId: string, userInput: string) {
@@ -630,6 +978,10 @@ export class AgentRunner {
     phaseResults: PromptPhaseResult[],
     tools: ReturnType<ToolDispatcher["listTools"]>,
     round: number,
+    budgetPlan?: unknown | null,
+    plan?: ExecutionPlan | null,
+    traceSpans?: RuntimeSpan[] | null,
+    evaluationEvents?: EvaluationEvent[] | null,
   ) {
     this.safeStore(() =>
       this.deps.store?.saveDispatchedMessages(turnId, {
@@ -637,6 +989,10 @@ export class AgentRunner {
         tools_json: JSON.stringify(tools),
         prompt_segments_json: JSON.stringify(promptSegments),
         phase_results_json: JSON.stringify(phaseResults),
+        budget_plan_json: budgetPlan ? JSON.stringify(budgetPlan) : null,
+        plan_json: plan ? JSON.stringify(plan) : null,
+        trace_spans_json: traceSpans ? JSON.stringify(traceSpans) : null,
+        evaluation_json: evaluationEvents ? JSON.stringify(evaluationEvents) : null,
         provider_id: this.deps.provider.id(),
         model: this.deps.provider.model(),
         round,

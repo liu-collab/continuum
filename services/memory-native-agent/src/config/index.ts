@@ -13,6 +13,7 @@ import {
   type ConfigFileInput,
   type Locale,
   type MemoryMode,
+  type PlanMode,
   type ProviderKind,
 } from "./schema.js";
 import {
@@ -72,6 +73,7 @@ export interface AgentConfig {
   };
   tools: {
     maxOutputChars: number;
+    approvalMode: "confirm" | "yolo";
     shellExec: {
       enabled: boolean;
       timeoutMs: number;
@@ -85,6 +87,9 @@ export interface AgentConfig {
     maxTokens: number | null;
     reserveTokens: number;
     compactionStrategy: "truncate" | "summarize";
+  };
+  planning: {
+    planMode: PlanMode;
   };
   logging: {
     level: "silent" | "error" | "warn" | "info" | "debug" | "trace";
@@ -379,6 +384,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     },
     tools: {
       maxOutputChars: effectiveConfig.tools.max_output_chars,
+      approvalMode: effectiveConfig.tools.approval_mode,
       shellExec: {
         enabled: effectiveConfig.tools.shell_exec.enabled,
         timeoutMs: effectiveConfig.tools.shell_exec.timeout_ms,
@@ -395,6 +401,9 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       maxTokens: effectiveConfig.context.max_tokens,
       reserveTokens: effectiveConfig.context.reserve_tokens,
       compactionStrategy: effectiveConfig.context.compaction_strategy,
+    },
+    planning: {
+      planMode: effectiveConfig.planning.plan_mode,
     },
     logging: {
       level: effectiveConfig.logging.level,

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,12 @@ const baseConfig = {
     timeout_ms: 5000,
     effort: null,
     max_tokens: null,
+  },
+  tools: {
+    approval_mode: "confirm" as const,
+  },
+  planning: {
+    plan_mode: "advisory" as const,
   },
   mcp: {
     servers: [],
@@ -103,12 +109,17 @@ describe("RuntimeConfigCard", () => {
     );
 
     await user.selectOptions(screen.getByRole("combobox"), "openai-compatible");
-    await user.clear(screen.getByPlaceholderText("provider model"));
-    await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
-    await user.type(screen.getByPlaceholderText("provider base_url"), "https://api.deepseek.com");
-    await user.type(screen.getByPlaceholderText("provider api_key"), "demo-key");
-    await user.type(screen.getByPlaceholderText("EMBEDDING_BASE_URL"), "https://api.openai.com/v1");
-    await user.type(screen.getByPlaceholderText("EMBEDDING_MODEL"), "text-embedding-3-small");
+    fireEvent.change(screen.getByPlaceholderText("provider model"), { target: { value: "deepseek-chat" } });
+    fireEvent.change(screen.getByPlaceholderText("provider base_url"), {
+      target: { value: "https://api.deepseek.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("provider api_key"), { target: { value: "demo-key" } });
+    fireEvent.change(screen.getByPlaceholderText("EMBEDDING_BASE_URL"), {
+      target: { value: "https://api.openai.com/v1" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("EMBEDDING_MODEL"), {
+      target: { value: "text-embedding-3-small" },
+    });
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(onSave).toHaveBeenCalledWith({

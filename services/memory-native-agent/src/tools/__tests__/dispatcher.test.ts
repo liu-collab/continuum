@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { McpServerUnavailableError, type McpRegistry } from "../../mcp-client/index.js";
 import type { SessionStore } from "../../session-store/index.js";
+import { createFsReadTool } from "../builtin/fs-read.js";
 import { createFsWriteTool } from "../builtin/fs-write.js";
 import { createMcpCallTool } from "../builtin/mcp-call.js";
 import { ToolDispatcher } from "../dispatcher.js";
@@ -259,5 +260,47 @@ describe("ToolDispatcher", () => {
     expect(result.ok).toBe(true);
     expect(result.permission_decision).toBe("preapproved");
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("caches fs_read results by file mtime and args", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mna-tools-dispatch-"));
+    tempRoots.push(root);
+    fs.writeFileSync(path.join(root, "README.md"), "hello cache", "utf8");
+
+    const registry = new ToolRegistry();
+    registry.register(createFsReadTool());
+    const dispatcher = new ToolDispatcher({
+      registry,
+      gate: new PermissionGate(),
+    });
+
+    const first = await dispatcher.invoke(
+      {
+        id: "call-read-1",
+        name: "fs_read",
+        args: {
+          path: "README.md",
+        },
+      },
+      createContext(root, "allow"),
+    );
+    const second = await dispatcher.invoke(
+      {
+        id: "call-read-2",
+        name: "fs_read",
+        args: {
+          path: "README.md",
+        },
+      },
+      {
+        ...createContext(root, "allow"),
+        callId: "call-read-2",
+      },
+    );
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(second.cache_hit).toBe(true);
+    expect(dispatcher.getCacheStats().hits).toBeGreaterThanOrEqual(1);
   });
 });

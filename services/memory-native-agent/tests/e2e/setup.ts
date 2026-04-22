@@ -933,6 +933,7 @@ function createAgentConfig(input: {
     },
     tools: {
       maxOutputChars: 8_192,
+      approvalMode: "confirm",
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -946,6 +947,9 @@ function createAgentConfig(input: {
       maxTokens: null,
       reserveTokens: 4_096,
       compactionStrategy: "truncate",
+    },
+    planning: {
+      planMode: "advisory",
     },
     logging: {
       level: "info",

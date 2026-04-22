@@ -32,6 +32,12 @@ const baseConfig = {
     effort: "medium" as const,
     max_tokens: 1200,
   },
+  tools: {
+    approval_mode: "confirm" as const,
+  },
+  planning: {
+    plan_mode: "advisory" as const,
+  },
   mcp: {
     servers: [],
   },
@@ -279,10 +285,51 @@ describe("SettingsModal", () => {
           effort: "max",
           max_tokens: 8192,
         }),
+        planning: expect.objectContaining({
+          plan_mode: "advisory",
+        }),
         writeback_llm: expect.objectContaining({
           effort: "xhigh",
           max_tokens: 2048,
         }),
+      }),
+    );
+  });
+
+  it("submits confirm plan mode when user switches it", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckWritebackLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "writeback llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("plan-mode-confirm"));
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planning: {
+          plan_mode: "confirm",
+        },
       }),
     );
   });

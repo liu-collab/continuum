@@ -30,6 +30,9 @@ export type ContinuumAssistantCustomMeta = {
   phases: AgentTurnState["phases"];
   errors: AgentTurnState["errors"];
   taskLabel: AgentTurnState["taskLabel"];
+  plan: AgentTurnState["plan"];
+  evaluations: AgentTurnState["evaluations"];
+  traceSpans: AgentTurnState["traceSpans"];
 };
 
 type CreateContinuumThreadStoreInput = {
@@ -71,7 +74,10 @@ function createTurnMessages(turn: AgentTurnState, index: number): ThreadMessage[
     injection: turn.injection,
     phases: turn.phases,
     errors: turn.errors,
-    taskLabel: turn.taskLabel
+    taskLabel: turn.taskLabel,
+    plan: turn.plan,
+    evaluations: turn.evaluations,
+    traceSpans: turn.traceSpans
   };
 
   return [

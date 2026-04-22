@@ -98,11 +98,12 @@ describe("agent event reducer", () => {
       }
     });
 
-    expect(state.pendingConfirm?.tool).toBe("shell_exec");
+    expect(state.pendingConfirm && state.pendingConfirm.kind === "tool" ? state.pendingConfirm.tool : null).toBe("shell_exec");
     expect(state.turns[0]?.assistantOutput).toBe("done");
     expect(state.turns[0]?.phases[0]?.phase).toBe("before_response");
     expect(state.turns[0]?.status).toBe("complete");
     expect(state.pendingConfirm).toEqual({
+      kind: "tool",
       confirmId: "confirm-1",
       callId: "call-1",
       tool: "shell_exec",

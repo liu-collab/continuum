@@ -19,6 +19,7 @@ export class ToolRegistry {
       name: tool.name,
       description: tool.description,
       parameters: tool.parameters,
+      parallelism: tool.parallelism ?? "exclusive",
     }));
   }
 }

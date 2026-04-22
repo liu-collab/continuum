@@ -213,6 +213,9 @@ describe("AgentWorkspace bootstrap states", () => {
           effort: null,
           max_tokens: null
         },
+        tools: {
+          approval_mode: "confirm"
+        },
         mcp: {
           servers: []
         }

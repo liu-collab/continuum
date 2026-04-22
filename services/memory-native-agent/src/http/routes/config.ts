@@ -4,7 +4,7 @@ import path from "node:path";
 import { z } from "zod";
 
 import type { RuntimeFastifyInstance } from "../types.js";
-import { updateMcpServers, updateProviderSelection } from "../state.js";
+import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolApprovalMode } from "../state.js";
 
 const providerKindSchema = z.enum(["demo", "openai-compatible", "anthropic", "ollama", "record-replay"]);
 const mcpServerPayloadSchema = z.object({
@@ -89,6 +89,12 @@ const updateConfigSchema = z.object({
   provider: providerPayloadSchema.optional(),
   embedding: embeddingPayloadSchema.optional(),
   writeback_llm: writebackLlmPayloadSchema.optional(),
+  tools: z.object({
+    approval_mode: z.enum(["confirm", "yolo"]).optional(),
+  }).optional(),
+  planning: z.object({
+    plan_mode: z.enum(["advisory", "confirm"]).optional(),
+  }).optional(),
   mcp: z.object({
     servers: z.array(mcpServerPayloadSchema),
   }).optional(),
@@ -156,6 +162,12 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         max_tokens: app.runtimeState.config.provider.maxTokens ?? null,
         organization: app.runtimeState.config.provider.organization,
         keep_alive: app.runtimeState.config.provider.keepAlive,
+      },
+      tools: {
+        approval_mode: app.runtimeState.config.tools.approvalMode,
+      },
+      planning: {
+        plan_mode: app.runtimeState.config.planning.planMode,
       },
       embedding: {
         base_url: embedding?.baseUrl ?? process.env.EMBEDDING_BASE_URL ?? null,
@@ -239,7 +251,9 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       };
 
       updateProviderSelection(app.runtimeState, nextProvider);
+      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
       await writeJson(resolveProviderConfigPath(app), {
+        ...existingConfig,
         provider: {
           kind: nextProvider.kind,
           model: nextProvider.model,
@@ -250,6 +264,32 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
           max_tokens: nextProvider.maxTokens ?? null,
           ...(nextProvider.organization ? { organization: nextProvider.organization } : {}),
           ...(nextProvider.keepAlive !== undefined ? { keep_alive: nextProvider.keepAlive } : {}),
+        },
+      });
+    }
+
+    if (payload.tools?.approval_mode) {
+      updateToolApprovalMode(app.runtimeState, payload.tools.approval_mode);
+
+      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
+      await writeJson(resolveProviderConfigPath(app), {
+        ...existingConfig,
+        tools: {
+          ...(isRecord(existingConfig.tools) ? existingConfig.tools : {}),
+          approval_mode: payload.tools.approval_mode,
+        },
+      });
+    }
+
+    if (payload.planning?.plan_mode) {
+      updatePlanMode(app.runtimeState, payload.planning.plan_mode);
+
+      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
+      await writeJson(resolveProviderConfigPath(app), {
+        ...existingConfig,
+        planning: {
+          ...(isRecord(existingConfig.planning) ? existingConfig.planning : {}),
+          plan_mode: payload.planning.plan_mode,
         },
       });
     }
@@ -292,4 +332,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
   app.post("/v1/agent/dependency-status/writeback-llm/check", async () => {
     return app.runtimeState.memoryClient.checkWritebackLlm();
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

@@ -2,7 +2,8 @@ import type { ChatMessage } from "../providers/types.js";
 import type { ToolTrustLevel } from "../tools/index.js";
 import type { PromptSegment } from "./prompt-segments.js";
 import { compilePromptSegments } from "./prompt-segments.js";
-import { compactMessages, type TokenBudgetSettings } from "./token-budget.js";
+import { type TokenBudgetSettings } from "./token-budget.js";
+import { planContextBudget, type ContextBudgetPlan } from "./context-budget-planner.js";
 
 const MAX_RECENT_MESSAGES = 48;
 const TARGET_RECENT_MESSAGES = 32;
@@ -37,6 +38,7 @@ export interface BuildMessagesInput {
 export class Conversation {
   private recentMessages: ChatMessage[] = [];
   private archivedSummary: string | null = null;
+  private lastBudgetPlan: ContextBudgetPlan | null = null;
 
   get messages(): ChatMessage[] {
     return [...this.recentMessages];
@@ -53,18 +55,7 @@ export class Conversation {
   }
 
   buildMessages(input: BuildMessagesInput): ChatMessage[] {
-    const fixedMessages = compilePromptSegments(this.buildPromptSegments(input));
-
-    return compactMessages(
-      fixedMessages,
-      this.recentMessages,
-      {
-        maxTokens: input.tokenBudget?.maxTokens ?? null,
-        reserveTokens: input.tokenBudget?.reserveTokens ?? 4_096,
-        compactionStrategy: input.tokenBudget?.compactionStrategy ?? "truncate",
-        toolTokenEstimate: input.tokenBudget?.toolTokenEstimate,
-      },
-    );
+    return this.buildBudgetPlan(input).keptMessages;
   }
 
   buildPromptSegments(input: BuildMessagesInput): PromptSegment[] {
@@ -92,6 +83,10 @@ export class Conversation {
     return segments;
   }
 
+  getLastBudgetPlan(): ContextBudgetPlan | null {
+    return this.lastBudgetPlan;
+  }
+
   shortSummary(): string {
     const recentUserMessages = this.recentMessages
       .filter((message) => message.role === "user")
@@ -105,6 +100,22 @@ export class Conversation {
 
   wrapToolOutput(toolName: string, callId: string, trustLevel: ToolTrustLevel, rawOutput: string): string {
     return `<tool_output tool="${toolName}" call_id="${callId}" trust="${trustLevel}">\n${escapeToolOutput(rawOutput)}\n</tool_output>`;
+  }
+
+  buildBudgetPlan(input: BuildMessagesInput): ContextBudgetPlan {
+    const segments = this.buildPromptSegments(input);
+    const plan = planContextBudget({
+      segments,
+      historyMessages: this.recentMessages,
+      tokenBudget: {
+        maxTokens: input.tokenBudget?.maxTokens ?? null,
+        reserveTokens: input.tokenBudget?.reserveTokens ?? 4_096,
+        compactionStrategy: input.tokenBudget?.compactionStrategy ?? "truncate",
+        toolTokenEstimate: input.tokenBudget?.toolTokenEstimate,
+      },
+    });
+    this.lastBudgetPlan = plan;
+    return plan;
   }
 
   private compactIfNeeded() {
@@ -152,6 +163,7 @@ function buildInjectionBlock(injection: BuildMessagesInput["injections"][number]
 
 function buildInjectionSegment(injection: BuildMessagesInput["injections"][number]): PromptSegment {
   const tier = injection.tier ?? "medium";
+  const phase = pickPrimaryPhase(injection.phase);
 
   if (tier === "summary") {
     return {
@@ -159,7 +171,7 @@ function buildInjectionSegment(injection: BuildMessagesInput["injections"][numbe
       priority: "low",
       content: buildSummaryBlock(injection),
       source: {
-        phase: injection.phase,
+        phase,
         injection_reason: injection.injection_reason,
         record_ids: injection.memory_records.map((record) => record.id),
         record_count: injection.memory_records.length,
@@ -172,7 +184,7 @@ function buildInjectionSegment(injection: BuildMessagesInput["injections"][numbe
     priority: tier === "high" ? "high" : "medium",
     content: buildInjectionBlock(injection),
     source: {
-      phase: injection.phase,
+      phase,
       injection_reason: injection.injection_reason,
       record_ids: injection.memory_records.map((record) => record.id),
       record_count: injection.memory_records.length,
@@ -229,4 +241,17 @@ function summarizeArchivedMessage(message: ChatMessage): string {
   }
 
   return `- ${message.role}: ${preview}`;
+}
+
+function pickPrimaryPhase(value: string) {
+  const phases = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (phases.includes("before_response")) {
+    return "before_response";
+  }
+
+  return phases.at(-1) ?? value;
 }

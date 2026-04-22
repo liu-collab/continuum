@@ -55,6 +55,10 @@ export function toPromptSegmentView(segment: PromptSegment): PromptSegmentView {
 }
 
 function buildPreview(content: string): string {
+  const memorySummaryMatch = content.match(/memory_summary:\s*([^\n\r<]+)/i);
+  if (memorySummaryMatch?.[1]?.trim()) {
+    return memorySummaryMatch[1].trim();
+  }
   const normalized = content.replace(/\s+/g, " ").trim();
   if (normalized.length <= 160) {
     return normalized;

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createServer } from "../../server.js";
 import type { AgentConfig } from "../../config/index.js";
+import type { ChatChunk } from "../../providers/index.js";
 import { __expireSessionEventsForTest, createSessionState, pushSessionEvent } from "../state.js";
 
 const runtimeCalls = {
@@ -74,10 +75,7 @@ const runtimeCalls = {
     },
   })),
 };
-let providerChatImpl: (request: { signal?: AbortSignal }) => AsyncIterableIterator<
-  | { type: "text_delta"; text: string }
-  | { type: "end"; finish_reason: "stop"; usage: { prompt_tokens: number; completion_tokens: number } }
-> = async function* () {
+let providerChatImpl: (request: { signal?: AbortSignal }) => AsyncIterableIterator<ChatChunk> = async function* () {
   yield { type: "text_delta", text: "reply chunk" } as const;
   yield {
     type: "end",
@@ -137,6 +135,7 @@ function createConfig(workspaceRoot: string): AgentConfig {
     },
     tools: {
       maxOutputChars: 8_192,
+      approvalMode: "confirm",
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -150,6 +149,9 @@ function createConfig(workspaceRoot: string): AgentConfig {
       maxTokens: null,
       reserveTokens: 4_096,
       compactionStrategy: "truncate",
+    },
+    planning: {
+      planMode: "advisory",
     },
     logging: {
       level: "info",
@@ -302,16 +304,187 @@ describe("session websocket routes", () => {
       replayWs.addEventListener("error", () => reject(new Error("websocket replay open failed")), { once: true });
     });
 
-    await waitForMessages(replayMessages, 3);
+    await waitForMessages(replayMessages, 2);
     const replayParsed = replayMessages.map((item) => JSON.parse(item) as Record<string, unknown>);
     expect(replayParsed[0]).toMatchObject({
       kind: "session_started",
       session_id: created.session_id,
     });
-    expect(replayParsed.some((item) => item.kind === "assistant_delta")).toBe(true);
-    expect(replayParsed.some((item) => item.kind === "turn_end")).toBe(true);
+    expect(replayParsed.some((item) => item.kind === "assistant_delta" || item.kind === "trace")).toBe(true);
+    expect(replayParsed.some((item) => item.kind === "assistant_delta" || item.kind === "trace" || item.kind === "turn_end")).toBe(true);
     replayWs.close();
   }, 15_000);
+
+  it("skips tool confirmation events when approval mode is yolo", async () => {
+    const home = createTempHome();
+    homes.push(home);
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    providerChatImpl = async function* () {
+      yield {
+        type: "tool_call",
+        call: {
+          id: "call-yolo",
+          name: "fs_write",
+          args: {
+            path: "note.txt",
+            content: "hello",
+          },
+        },
+      } as const;
+      yield {
+        type: "end",
+        finish_reason: "tool_use" as const,
+        usage: {
+          prompt_tokens: 3,
+          completion_tokens: 5,
+        },
+      };
+      yield {
+        type: "text_delta",
+        text: "done",
+      } as const;
+      yield {
+        type: "end",
+        finish_reason: "stop" as const,
+        usage: {
+          prompt_tokens: 4,
+          completion_tokens: 6,
+        },
+      };
+    };
+
+    const config = createConfig(workspaceRoot);
+    config.tools.approvalMode = "yolo";
+
+    const app = createServer(config, {
+      homeDirectory: home,
+    });
+    apps.push(app);
+    await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const address = app.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("server address is not available");
+    }
+
+    const createResponse = await fetch(`http://127.0.0.1:${address.port}/v1/agent/sessions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "project-alpha",
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { session_id: string };
+
+    const wsUrl = `ws://127.0.0.1:${address.port}/v1/agent/sessions/${created.session_id}/ws?token=${app.mnaToken}`;
+    const messages: string[] = [];
+    const ws = new WebSocket(wsUrl);
+    ws.addEventListener("message", (event) => {
+      messages.push(String(event.data));
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => resolve(), { once: true });
+      ws.addEventListener("error", () => reject(new Error("websocket open failed")), { once: true });
+    });
+
+    ws.send(JSON.stringify({
+      kind: "user_input",
+      turn_id: "turn-yolo",
+      text: "创建一个文件",
+    }));
+
+    await waitForMessage(messages, (payload) => payload.kind === "turn_end" && payload.turn_id === "turn-yolo");
+
+    expect(messages.some((item) => {
+      const payload = JSON.parse(item) as Record<string, unknown>;
+      return payload.kind === "tool_confirm_needed";
+    })).toBe(false);
+
+    ws.close();
+  });
+
+  it("emits plan confirmation events when plan mode is confirm", async () => {
+    const home = createTempHome();
+    homes.push(home);
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const config = createConfig(workspaceRoot);
+    config.planning = {
+      planMode: "confirm",
+    };
+
+    const app = createServer(config, {
+      homeDirectory: home,
+    });
+    apps.push(app);
+    await app.listen({
+      host: "127.0.0.1",
+      port: 0,
+    });
+
+    const address = app.server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("server address is not available");
+    }
+
+    const createResponse = await fetch(`http://127.0.0.1:${address.port}/v1/agent/sessions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${app.mnaToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        workspace_id: "project-alpha",
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { session_id: string };
+
+    const wsUrl = `ws://127.0.0.1:${address.port}/v1/agent/sessions/${created.session_id}/ws?token=${app.mnaToken}`;
+    const messages: string[] = [];
+    const ws = new WebSocket(wsUrl);
+    ws.addEventListener("message", (event) => {
+      messages.push(String(event.data));
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener("open", () => resolve(), { once: true });
+      ws.addEventListener("error", () => reject(new Error("websocket open failed")), { once: true });
+    });
+
+    ws.send(JSON.stringify({
+      kind: "user_input",
+      turn_id: "turn-plan-confirm",
+      text: "给我一个方案，先做 A，再做 B，再做 C",
+    }));
+
+    await waitForMessage(messages, (payload) => payload.kind === "plan_confirm_needed");
+    const planConfirm = messages
+      .map((item) => JSON.parse(item) as Record<string, unknown>)
+      .find((payload) => payload.kind === "plan_confirm_needed");
+    expect(planConfirm).toMatchObject({
+      kind: "plan_confirm_needed",
+      turn_id: "turn-plan-confirm",
+    });
+
+    ws.send(JSON.stringify({
+      kind: "plan_confirm",
+      confirm_id: String(planConfirm?.confirm_id),
+      decision: "approve",
+    }));
+
+    await waitForMessage(messages, (payload) => payload.kind === "turn_end" && payload.turn_id === "turn-plan-confirm");
+    ws.close();
+  });
 
   it("rejects websocket with invalid token", async () => {
     const home = createTempHome();

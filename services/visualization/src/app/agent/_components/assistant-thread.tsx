@@ -210,6 +210,35 @@ function AssistantMessageBubble({
           </div>
         ) : null}
 
+        {meta?.plan ? (
+          <div className="mt-4 rounded-2xl border bg-surface-muted/30 px-3 py-3">
+            <div className="text-xs font-medium text-foreground">
+              plan · {meta.plan.status}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{meta.plan.goal}</div>
+            <div className="mt-2 space-y-1">
+              {meta.plan.steps.map((step) => (
+                <div key={step.id} className="text-xs text-foreground">
+                  {step.status} · {step.title}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {meta?.evaluations.length ? (
+          <div className="mt-4 rounded-2xl border bg-surface-muted/30 px-3 py-3">
+            <div className="text-xs font-medium text-foreground">evaluation</div>
+            <div className="mt-2 space-y-1">
+              {meta.evaluations.slice(-4).map((item, index) => (
+                <div key={`${item.scope}-${index}`} className="text-xs text-muted-foreground">
+                  {item.scope} · {item.decision.status} · {item.decision.reason}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {meta?.errors.length ? (
           <div className="mt-4">
             <ErrorState

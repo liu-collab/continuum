@@ -76,6 +76,7 @@ function createConfig(workspaceRoot: string): AgentConfig {
     },
     tools: {
       maxOutputChars: 8_192,
+      approvalMode: "confirm",
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -89,6 +90,9 @@ function createConfig(workspaceRoot: string): AgentConfig {
       maxTokens: null,
       reserveTokens: 4_096,
       compactionStrategy: "truncate",
+    },
+    planning: {
+      planMode: "advisory",
     },
     logging: {
       level: "info",

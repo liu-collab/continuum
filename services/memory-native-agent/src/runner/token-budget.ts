@@ -140,7 +140,7 @@ function estimateTextTokens(content: string): number {
   return Math.ceil(content.length / CHARS_PER_TOKEN);
 }
 
-function truncateMessageToBudget(message: ChatMessage, tokenBudget: number): ChatMessage | null {
+export function truncateMessageToBudget(message: ChatMessage, tokenBudget: number): ChatMessage | null {
   if (tokenBudget < MIN_TRUNCATED_MESSAGE_TOKENS) {
     return null;
   }

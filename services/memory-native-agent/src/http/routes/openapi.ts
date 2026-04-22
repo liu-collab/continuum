@@ -61,6 +61,11 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Runtime metrics",
         },
       },
+      "/metrics": {
+        get: {
+          summary: "Prometheus metrics",
+        },
+      },
       "/v1/agent/sessions": {
         get: {
           summary: "List sessions",

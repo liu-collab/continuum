@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
+import { EmbeddingCache } from "../cache/embedding-cache.js";
 import type { AgentConfig } from "../config/index.js";
 import { McpRegistry } from "../mcp-client/index.js";
 import { MemoryClient } from "../memory-client/index.js";
@@ -13,6 +14,8 @@ import { createDefaultToolDispatcher, type ToolDispatcher, type ToolResult } fro
 import type { MemoryMode } from "../config/schema.js";
 import { resolveArtifactsRoot, resolveMnaHomeDirectory } from "../shared/token.js";
 import { resolveWorkspaceRoot } from "./workspace-resolution.js";
+import type { RuntimeSpan } from "../trace/runtime-tracer.js";
+import type { ExecutionPlan } from "../planning/types.js";
 
 export interface ServerEventEnvelope {
   id: number;
@@ -30,6 +33,7 @@ export interface SessionState {
   events: ServerEventEnvelope[];
   nextEventId: number;
   pendingConfirms: Map<string, (decision: "allow" | "deny" | "allow_session") => void>;
+  pendingPlanConfirms: Map<string, (decision: { outcome: "approve" | "revise" | "cancel"; feedback?: string }) => void>;
   sockets: Set<{ send(data: string): void }>;
 }
 
@@ -44,9 +48,34 @@ export interface ServerMetrics {
   streamFlushedEventsTotal: number;
   streamDroppedAfterAbortTotal: number;
   runtimeErrorsTotal: Record<string, number>;
+  cache: {
+    fsReadHits: number;
+    fsReadMisses: number;
+    embeddingHits: number;
+    embeddingMisses: number;
+  };
   latencySamples: {
     prepareContextMs: number[];
     providerFirstTokenMs: number[];
+  };
+  planning: {
+    generatedTotal: number;
+    revisedTotal: number;
+    confirmRequiredTotal: number;
+    confirmedTotal: number;
+    cancelledTotal: number;
+  };
+  retries: {
+    total: number;
+    toolTotal: Record<string, number>;
+  };
+  contextBudget: {
+    droppedMessagesTotal: number;
+  };
+  toolBatches: {
+    total: number;
+    parallelCallsTotal: number;
+    maxBatchSize: number;
   };
 }
 
@@ -63,6 +92,7 @@ export interface MnaRuntimeState {
   sessions: Map<string, SessionState>;
   metrics: ServerMetrics;
   artifactsRoot: string;
+  embeddingCache: EmbeddingCache;
 }
 
 export interface RuntimeStateOptions {
@@ -139,12 +169,38 @@ export function createRuntimeState(config: AgentConfig, options: RuntimeStateOpt
       streamFlushedEventsTotal: 0,
       streamDroppedAfterAbortTotal: 0,
       runtimeErrorsTotal: {},
+      cache: {
+        fsReadHits: 0,
+        fsReadMisses: 0,
+        embeddingHits: 0,
+        embeddingMisses: 0,
+      },
       latencySamples: {
         prepareContextMs: [],
         providerFirstTokenMs: [],
       },
+      planning: {
+        generatedTotal: 0,
+        revisedTotal: 0,
+        confirmRequiredTotal: 0,
+        confirmedTotal: 0,
+        cancelledTotal: 0,
+      },
+      retries: {
+        total: 0,
+        toolTotal: {},
+      },
+      contextBudget: {
+        droppedMessagesTotal: 0,
+      },
+      toolBatches: {
+        total: 0,
+        parallelCallsTotal: 0,
+        maxBatchSize: 0,
+      },
     },
     artifactsRoot,
+    embeddingCache: new EmbeddingCache(),
   };
 }
 
@@ -164,6 +220,7 @@ export async function createSessionState(state: MnaRuntimeState, sessionId: stri
     events: [],
     nextEventId: 1,
     pendingConfirms: new Map(),
+    pendingPlanConfirms: new Map(),
     sockets: new Set(),
   };
 
@@ -258,6 +315,41 @@ export function updateProviderSelection(state: MnaRuntimeState, provider: AgentC
   }
 }
 
+export function updateToolApprovalMode(state: MnaRuntimeState, approvalMode: AgentConfig["tools"]["approvalMode"]) {
+  state.config = {
+    ...state.config,
+    tools: {
+      ...state.config.tools,
+      approvalMode,
+    },
+  };
+
+  state.tools = createDefaultToolDispatcher({
+    config: state.config,
+    mcpRegistry: state.mcpRegistry,
+    sessionStore: state.store,
+    artifactsRoot: state.artifactsRoot,
+  });
+
+  for (const session of state.sessions.values()) {
+    session.runner = buildSessionRunner(state, session);
+  }
+}
+
+export function updatePlanMode(state: MnaRuntimeState, planMode: AgentConfig["planning"]["planMode"]) {
+  state.config = {
+    ...state.config,
+    planning: {
+      ...state.config.planning,
+      planMode,
+    },
+  };
+
+  for (const session of state.sessions.values()) {
+    session.runner = buildSessionRunner(state, session);
+  }
+}
+
 export async function updateMcpServers(state: MnaRuntimeState, servers: AgentConfig["mcp"]["servers"]) {
   state.config = {
     ...state.config,
@@ -307,6 +399,11 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
       if (result.permission_decision === "denied" || result.permission_decision === "timeout" || result.permission_decision === "blocked_pattern") {
         incrementCounter(state.metrics.toolDenialsTotal, result.permission_decision);
       }
+      if (result.cache_hit) {
+        state.metrics.cache.fsReadHits += 1;
+      } else if (result.trust_level === "builtin_read") {
+        state.metrics.cache.fsReadMisses += 1;
+      }
 
       pushSessionEvent(session, {
         kind: "tool_call_result",
@@ -315,6 +412,9 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         output_preview: result.output.slice(0, 1024),
         artifact_ref: result.artifact_ref,
         trust_level: result.trust_level,
+        cache_hit: result.cache_hit,
+        changed_files: result.changed_files,
+        rolled_back: result.rolled_back,
       });
     },
     emitInjectionBanner(turnId, injection, degraded) {
@@ -344,6 +444,31 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         kind: "task_change",
         turn_id: turnId,
         ...change,
+      });
+    },
+    emitPlan(turnId, event) {
+      state.metrics.planning.generatedTotal += 1;
+      if (event.plan.status === "revised") {
+        state.metrics.planning.revisedTotal += 1;
+      }
+      pushSessionEvent(session, {
+        kind: "plan",
+        turn_id: turnId,
+        plan: event.plan,
+      });
+    },
+    emitEvaluation(turnId, event) {
+      pushSessionEvent(session, {
+        kind: "evaluation",
+        turn_id: turnId,
+        ...event,
+      });
+    },
+    emitTrace(turnId, spans: RuntimeSpan[]) {
+      pushSessionEvent(session, {
+        kind: "trace",
+        turn_id: turnId,
+        spans,
       });
     },
     emitTurnEnd(turnId, finishReason) {
@@ -380,6 +505,10 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
       state.metrics.streamDroppedAfterAbortTotal += metrics.dropped_after_abort_total;
     },
     requestConfirm(payload) {
+      if (state.config.tools.approvalMode === "yolo") {
+        return Promise.resolve("allow" as const);
+      }
+
       const confirmId = createConfirmId();
       return new Promise((resolve) => {
         session.pendingConfirms.set(confirmId, resolve);
@@ -389,6 +518,38 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
           ...payload,
         });
       });
+    },
+    requestPlanConfirm(payload) {
+      state.metrics.planning.confirmRequiredTotal += 1;
+      const confirmId = createConfirmId();
+      return new Promise((resolve) => {
+        session.pendingPlanConfirms.set(confirmId, resolve);
+        pushSessionEvent(session, {
+          kind: "plan_confirm_needed",
+          confirm_id: confirmId,
+          turn_id: payload.turn_id,
+          plan: payload.plan,
+        });
+      });
+    },
+    recordRetry(toolName) {
+      state.metrics.retries.total += 1;
+      incrementCounter(state.metrics.retries.toolTotal, toolName);
+    },
+    recordContextDrop(count) {
+      state.metrics.contextBudget.droppedMessagesTotal += count;
+    },
+    recordToolBatch(size, parallelCalls) {
+      state.metrics.toolBatches.total += 1;
+      state.metrics.toolBatches.parallelCallsTotal += parallelCalls;
+      state.metrics.toolBatches.maxBatchSize = Math.max(state.metrics.toolBatches.maxBatchSize, size);
+    },
+    recordPlanConfirmation(outcome) {
+      if (outcome === "approve") {
+        state.metrics.planning.confirmedTotal += 1;
+      } else {
+        state.metrics.planning.cancelledTotal += 1;
+      }
     },
   };
 }

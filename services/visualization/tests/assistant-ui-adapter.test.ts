@@ -19,6 +19,9 @@ function createTurn(overrides: Partial<AgentTurnState> = {}): AgentTurnState {
     promptAvailable: true,
     errors: [],
     taskLabel: null,
+    plan: null,
+    evaluations: [],
+    traceSpans: [],
     status: "complete",
     ...overrides
   };

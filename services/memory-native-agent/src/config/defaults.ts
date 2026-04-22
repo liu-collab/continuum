@@ -61,6 +61,7 @@ export const DEFAULT_RAW_CONFIG = {
   },
   tools: {
     max_output_chars: DEFAULT_TOOL_MAX_OUTPUT_CHARS,
+    approval_mode: "confirm" as const,
     shell_exec: {
       enabled: true,
       timeout_ms: 30_000,
@@ -74,6 +75,9 @@ export const DEFAULT_RAW_CONFIG = {
     max_tokens: null as number | null,
     reserve_tokens: DEFAULT_CONTEXT_RESERVE_TOKENS,
     compaction_strategy: "truncate" as const,
+  },
+  planning: {
+    plan_mode: "advisory" as const,
   },
   logging: {
     level: "info" as const,

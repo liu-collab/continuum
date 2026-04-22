@@ -1,12 +1,15 @@
 import type { SessionStore } from "../session-store/index.js";
+import fs from "node:fs";
 import {
   ToolExecutionError,
   ToolPatternBlockedError,
   ToolTimeoutError,
 } from "./errors.js";
 import { hashArgs, previewArgs } from "./helpers.js";
+import { resolveWorkspacePath } from "./helpers.js";
 import { PermissionGate } from "./permission-gate.js";
 import { ToolRegistry } from "./registry.js";
+import { ToolResultCache } from "../cache/tool-result-cache.js";
 import type {
   ToolAuditSink,
   ToolContext,
@@ -31,6 +34,7 @@ export class ToolDispatcher {
   private readonly logger: ToolLogger;
   private readonly artifactsRoot: string | null;
   private readonly defaultMaxOutputChars: number | undefined;
+  private readonly resultCache = new ToolResultCache();
 
   constructor(options: ToolDispatcherOptions) {
     this.registry = options.registry;
@@ -60,6 +64,10 @@ export class ToolDispatcher {
     return this.artifactsRoot;
   }
 
+  getCacheStats() {
+    return this.resultCache.stats();
+  }
+
   async invoke(call: ToolCallEnvelope, context: ToolContext): Promise<ToolResult> {
     const tool = this.registry.get(call.name);
     if (!tool) {
@@ -80,6 +88,17 @@ export class ToolDispatcher {
     const startedAt = Date.now();
     let permissionDecision: ToolResult["permission_decision"] = "auto";
     let result: ToolResult;
+    const cacheKey = this.buildCacheKey(call, context, argsHash);
+
+    if (cacheKey) {
+      const cached = this.resultCache.get(cacheKey);
+      if (cached) {
+        return {
+          ...cached,
+          cache_hit: true,
+        };
+      }
+    }
 
     try {
       const permission = await this.gate.authorize(tool, call, context);
@@ -103,6 +122,12 @@ export class ToolDispatcher {
           maxOutputChars: context.maxOutputChars ?? this.defaultMaxOutputChars,
         });
         result.permission_decision = permissionDecision;
+        if (cacheKey && result.ok) {
+          this.resultCache.set(cacheKey, result);
+        }
+        if (tool.parallelism === "workspace_mutating" || tool.name === "shell_exec") {
+          this.resultCache.clear();
+        }
       }
     } catch (error) {
       if (error instanceof ToolPatternBlockedError) {
@@ -156,6 +181,31 @@ export class ToolDispatcher {
         },
         "tool audit record failed",
       );
+    }
+  }
+
+  private buildCacheKey(call: ToolCallEnvelope, context: ToolContext, argsHash: string): string | null {
+    if (call.name !== "fs_read") {
+      return null;
+    }
+
+    const relativePath = typeof call.args.path === "string" ? call.args.path : null;
+    if (!relativePath) {
+      return null;
+    }
+
+    try {
+      const resolved = resolveWorkspacePath(context.workspaceRoot, relativePath);
+      const stat = fs.statSync(resolved);
+      return [
+        context.workspaceRoot,
+        relativePath,
+        stat.mtimeMs,
+        stat.isDirectory() ? "directory" : "file",
+        argsHash,
+      ].join(":");
+    } catch {
+      return null;
     }
   }
 }

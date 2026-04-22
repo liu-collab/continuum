@@ -48,6 +48,8 @@ describe("config loader", () => {
     expect(config.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
     expect(config.cli.systemPrompt).toBeNull();
     expect(config.tools.maxOutputChars).toBe(8192);
+    expect(config.tools.approvalMode).toBe("confirm");
+    expect(config.planning.planMode).toBe("advisory");
     expect(config.context.maxTokens).toBeNull();
     expect(config.context.reserveTokens).toBe(4096);
     expect(config.logging.level).toBe("info");
@@ -89,11 +91,14 @@ context:
 logging:
   level: debug
 tools:
+  approval_mode: yolo
   shell_exec:
     enabled: true
     timeout_ms: 45000
     deny_patterns:
       - git reset --hard
+planning:
+  plan_mode: confirm
 `,
     );
 
@@ -110,6 +115,8 @@ tools:
     expect(config.provider.effort).toBe("high");
     expect(config.provider.maxTokens).toBe(8192);
     expect(config.tools.maxOutputChars).toBe(4096);
+    expect(config.tools.approvalMode).toBe("yolo");
+    expect(config.planning.planMode).toBe("confirm");
     expect(config.context.maxTokens).toBe(64000);
     expect(config.logging.level).toBe("debug");
     expect(config.tools.shellExec.enabled).toBe(true);

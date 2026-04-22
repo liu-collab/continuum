@@ -6,8 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { initialAgentState, reduceAgentEvent } from "../_lib/event-reducer";
 import type {
+  AgentApprovalMode,
   AgentLocale,
   AgentMemoryMode,
+  AgentPlanMode,
   MnaPromptInspectorResponse,
   MnaSessionSummary,
   MnaSkillSummary,
@@ -542,16 +544,30 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
   }
 
-  function confirmTool(decision: "allow" | "deny" | "allow_session") {
+  function confirmTool(decision: "allow" | "deny" | "allow_session" | "approve" | "revise" | "cancel") {
     if (!state.pendingConfirm) {
       return;
     }
 
-    streamRef.current?.send({
-      kind: "tool_confirm",
-      confirm_id: state.pendingConfirm.confirmId,
-      decision
-    });
+    if (state.pendingConfirm.kind === "tool") {
+      if (decision !== "allow" && decision !== "deny" && decision !== "allow_session") {
+        return;
+      }
+      streamRef.current?.send({
+        kind: "tool_confirm",
+        confirm_id: state.pendingConfirm.confirmId,
+        decision
+      });
+    } else {
+      if (decision !== "approve" && decision !== "revise" && decision !== "cancel") {
+        return;
+      }
+      streamRef.current?.send({
+        kind: "plan_confirm",
+        confirm_id: state.pendingConfirm.confirmId,
+        decision
+      });
+    }
     dispatch({
       type: "pending_confirm_cleared"
     });
@@ -636,6 +652,12 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       base_url?: string;
       model?: string;
       api_key?: string;
+    };
+    tools?: {
+      approval_mode?: AgentApprovalMode;
+    };
+    planning?: {
+      plan_mode?: AgentPlanMode;
     };
     writeback_llm?: {
       base_url?: string;

@@ -79,6 +79,31 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
     stream_flushed_events_total: app.runtimeState.metrics.streamFlushedEventsTotal,
     stream_dropped_after_abort_total: app.runtimeState.metrics.streamDroppedAfterAbortTotal,
     runtime_errors_total: app.runtimeState.metrics.runtimeErrorsTotal,
+    cache: {
+      fs_read_hits: app.runtimeState.metrics.cache.fsReadHits,
+      fs_read_misses: app.runtimeState.metrics.cache.fsReadMisses,
+      embedding_hits: app.runtimeState.metrics.cache.embeddingHits,
+      embedding_misses: app.runtimeState.metrics.cache.embeddingMisses,
+    },
+    planning: {
+      generated_total: app.runtimeState.metrics.planning.generatedTotal,
+      revised_total: app.runtimeState.metrics.planning.revisedTotal,
+      confirm_required_total: app.runtimeState.metrics.planning.confirmRequiredTotal,
+      confirmed_total: app.runtimeState.metrics.planning.confirmedTotal,
+      cancelled_total: app.runtimeState.metrics.planning.cancelledTotal,
+    },
+    retries: {
+      total: app.runtimeState.metrics.retries.total,
+      by_tool: app.runtimeState.metrics.retries.toolTotal,
+    },
+    context_budget: {
+      dropped_messages_total: app.runtimeState.metrics.contextBudget.droppedMessagesTotal,
+    },
+    tool_batches: {
+      total: app.runtimeState.metrics.toolBatches.total,
+      parallel_calls_total: app.runtimeState.metrics.toolBatches.parallelCallsTotal,
+      max_batch_size: app.runtimeState.metrics.toolBatches.maxBatchSize,
+    },
     latency_p50_ms: {
       prepare_context: percentile(app.runtimeState.metrics.latencySamples.prepareContextMs, 0.5),
       provider_first_token: percentile(app.runtimeState.metrics.latencySamples.providerFirstTokenMs, 0.5),
@@ -88,6 +113,32 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
       provider_first_token: percentile(app.runtimeState.metrics.latencySamples.providerFirstTokenMs, 0.95),
     },
   }));
+
+  app.get("/metrics", async (_request, reply) => {
+    const metrics = app.runtimeState.metrics;
+    const lines = [
+      `mna_turns_total ${metrics.turnsTotal}`,
+      `mna_stream_flushed_events_total ${metrics.streamFlushedEventsTotal}`,
+      `mna_stream_dropped_after_abort_total ${metrics.streamDroppedAfterAbortTotal}`,
+      `mna_cache_fs_read_hits_total ${metrics.cache.fsReadHits}`,
+      `mna_cache_fs_read_misses_total ${metrics.cache.fsReadMisses}`,
+      `mna_cache_embedding_hits_total ${metrics.cache.embeddingHits}`,
+      `mna_cache_embedding_misses_total ${metrics.cache.embeddingMisses}`,
+      `mna_planning_generated_total ${metrics.planning.generatedTotal}`,
+      `mna_planning_revised_total ${metrics.planning.revisedTotal}`,
+      `mna_planning_confirm_required_total ${metrics.planning.confirmRequiredTotal}`,
+      `mna_planning_confirmed_total ${metrics.planning.confirmedTotal}`,
+      `mna_planning_cancelled_total ${metrics.planning.cancelledTotal}`,
+      `mna_retries_total ${metrics.retries.total}`,
+      `mna_context_budget_dropped_messages_total ${metrics.contextBudget.droppedMessagesTotal}`,
+      `mna_tool_batches_total ${metrics.toolBatches.total}`,
+      `mna_tool_batch_parallel_calls_total ${metrics.toolBatches.parallelCallsTotal}`,
+      `mna_tool_batch_max_size ${metrics.toolBatches.maxBatchSize}`,
+    ];
+
+    reply.header("content-type", "text/plain; version=0.0.4");
+    return lines.join("\n");
+  });
 }
 
 function percentile(values: number[], ratio: number) {

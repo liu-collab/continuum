@@ -11,6 +11,7 @@ import type {
   DispatchedMessagesPayload,
   Message,
   OpenTurnInput,
+  PlanRevision,
   Session,
   SessionListFilter,
   SessionStore,
@@ -300,18 +301,77 @@ export class SqliteSessionStore implements SessionStore {
       });
   }
 
+  savePlanRevision(input: {
+    id: string;
+    session_id: string;
+    turn_id: string;
+    plan_id: string;
+    revision: number;
+    status: PlanRevision["status"];
+    goal: string;
+    revision_reason?: string | null;
+    plan_json: string;
+    created_at?: string;
+  }): void {
+    const createdAt = input.created_at ?? new Date().toISOString();
+    this.db
+      .prepare(
+        `
+          INSERT INTO plans (id, session_id, turn_id, plan_id, revision, status, goal, revision_reason, plan_json, created_at)
+          VALUES (@id, @session_id, @turn_id, @plan_id, @revision, @status, @goal, @revision_reason, @plan_json, @created_at)
+        `,
+      )
+      .run({
+        ...input,
+        revision_reason: input.revision_reason ?? null,
+        created_at: createdAt,
+      });
+  }
+
   saveDispatchedMessages(turn_id: string, payload: DispatchedMessagesPayload): void {
     const createdAt = payload.created_at ?? new Date().toISOString();
     this.db
       .prepare(
         `
-          INSERT INTO dispatched_messages (turn_id, messages_json, tools_json, prompt_segments_json, phase_results_json, provider_id, model, round, created_at)
-          VALUES (@turn_id, @messages_json, @tools_json, @prompt_segments_json, @phase_results_json, @provider_id, @model, @round, @created_at)
+          INSERT INTO dispatched_messages (
+            turn_id,
+            messages_json,
+            tools_json,
+            prompt_segments_json,
+            phase_results_json,
+            budget_plan_json,
+            plan_json,
+            trace_spans_json,
+            evaluation_json,
+            provider_id,
+            model,
+            round,
+            created_at
+          )
+          VALUES (
+            @turn_id,
+            @messages_json,
+            @tools_json,
+            @prompt_segments_json,
+            @phase_results_json,
+            @budget_plan_json,
+            @plan_json,
+            @trace_spans_json,
+            @evaluation_json,
+            @provider_id,
+            @model,
+            @round,
+            @created_at
+          )
           ON CONFLICT(turn_id) DO UPDATE SET
             messages_json = excluded.messages_json,
             tools_json = excluded.tools_json,
             prompt_segments_json = excluded.prompt_segments_json,
             phase_results_json = excluded.phase_results_json,
+            budget_plan_json = excluded.budget_plan_json,
+            plan_json = excluded.plan_json,
+            trace_spans_json = excluded.trace_spans_json,
+            evaluation_json = excluded.evaluation_json,
             provider_id = excluded.provider_id,
             model = excluded.model,
             round = excluded.round,
@@ -324,6 +384,10 @@ export class SqliteSessionStore implements SessionStore {
         tools_json: payload.tools_json,
         prompt_segments_json: payload.prompt_segments_json ?? null,
         phase_results_json: payload.phase_results_json ?? null,
+        budget_plan_json: payload.budget_plan_json ?? null,
+        plan_json: payload.plan_json ?? null,
+        trace_spans_json: payload.trace_spans_json ?? null,
+        evaluation_json: payload.evaluation_json ?? null,
         provider_id: payload.provider_id,
         model: payload.model,
         round: payload.round,
@@ -344,11 +408,22 @@ export class SqliteSessionStore implements SessionStore {
       tools_json: readString(row.tools_json),
       prompt_segments_json: readNullableString(row.prompt_segments_json),
       phase_results_json: readNullableString(row.phase_results_json),
+      budget_plan_json: readNullableString(row.budget_plan_json),
+      plan_json: readNullableString(row.plan_json),
+      trace_spans_json: readNullableString(row.trace_spans_json),
+      evaluation_json: readNullableString(row.evaluation_json),
       provider_id: readString(row.provider_id),
       model: readString(row.model),
       round: readNumber(row.round),
       created_at: readString(row.created_at),
     };
+  }
+
+  getPlanRevisions(turn_id: string): PlanRevision[] {
+    return this.db
+      .prepare(`SELECT * FROM plans WHERE turn_id = ? ORDER BY revision ASC, created_at ASC`)
+      .all(turn_id)
+      .map((row: unknown) => mapPlanRevision(row as SqliteRow));
   }
 
   markInterruptedTurnsAsCrashed(): number {
@@ -368,6 +443,26 @@ export class SqliteSessionStore implements SessionStore {
     this.ensureColumn("dispatched_messages", "round", "INTEGER NOT NULL DEFAULT 1");
     this.ensureColumn("dispatched_messages", "prompt_segments_json", "TEXT");
     this.ensureColumn("dispatched_messages", "phase_results_json", "TEXT");
+    this.ensureColumn("dispatched_messages", "budget_plan_json", "TEXT");
+    this.ensureColumn("dispatched_messages", "plan_json", "TEXT");
+    this.ensureColumn("dispatched_messages", "trace_spans_json", "TEXT");
+    this.ensureColumn("dispatched_messages", "evaluation_json", "TEXT");
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS plans (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+        plan_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        revision_reason TEXT,
+        plan_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_plans_turn_revision
+        ON plans(turn_id, revision ASC, created_at ASC);
+    `);
   }
 
   private ensureColumn(table: string, column: string, definition: string) {
@@ -454,6 +549,21 @@ function mapToolInvocation(row: SqliteRow): ToolInvocation {
     error_code: readNullableString(row.error_code),
     artifact_ref: readNullableString(row.artifact_ref),
     duration_ms: readNumber(row.duration_ms),
+    created_at: readString(row.created_at),
+  };
+}
+
+function mapPlanRevision(row: SqliteRow): PlanRevision {
+  return {
+    id: readString(row.id),
+    session_id: readString(row.session_id),
+    turn_id: readString(row.turn_id),
+    plan_id: readString(row.plan_id),
+    revision: readNumber(row.revision),
+    status: readString(row.status) as PlanRevision["status"],
+    goal: readString(row.goal),
+    revision_reason: readNullableString(row.revision_reason),
+    plan_json: readString(row.plan_json),
     created_at: readString(row.created_at),
   };
 }

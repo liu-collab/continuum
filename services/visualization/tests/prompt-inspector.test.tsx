@@ -47,6 +47,25 @@ describe("PromptInspector", () => {
                 injection_summary: "回复前命中了中文偏好",
               },
             ],
+            budget_plan: {
+              budget: {
+                total: 32000,
+                reserve: 4096,
+                available_for_prompt: 20000,
+              },
+              allocation: {
+                fixed: 200,
+                memory: 120,
+                tools: 0,
+                history: 160,
+                current_turn: 60,
+              },
+              dropped: [],
+            },
+            plan: null,
+            plan_revisions: [],
+            trace_spans: [],
+            evaluation: [],
             tools: [],
           }}
         />

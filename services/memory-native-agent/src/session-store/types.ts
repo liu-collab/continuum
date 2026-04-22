@@ -59,10 +59,27 @@ export interface DispatchedMessagesPayload {
   tools_json: string;
   prompt_segments_json?: string | null;
   phase_results_json?: string | null;
+  budget_plan_json?: string | null;
+  plan_json?: string | null;
+  trace_spans_json?: string | null;
+  evaluation_json?: string | null;
   provider_id: string;
   model: string;
   round: number;
   created_at?: string;
+}
+
+export interface PlanRevision {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  plan_id: string;
+  revision: number;
+  status: "draft" | "approved" | "running" | "completed" | "revised" | "abandoned";
+  goal: string;
+  revision_reason: string | null;
+  plan_json: string;
+  created_at: string;
 }
 
 export interface CreateSessionInput {
@@ -133,6 +150,19 @@ export interface SessionStore {
 
   saveDispatchedMessages(turn_id: string, payload: DispatchedMessagesPayload): void;
   getDispatchedMessages(turn_id: string): DispatchedMessagesPayload | null;
+  savePlanRevision(input: {
+    id: string;
+    session_id: string;
+    turn_id: string;
+    plan_id: string;
+    revision: number;
+    status: PlanRevision["status"];
+    goal: string;
+    revision_reason?: string | null;
+    plan_json: string;
+    created_at?: string;
+  }): void;
+  getPlanRevisions(turn_id: string): PlanRevision[];
 
   markInterruptedTurnsAsCrashed(): number;
   close(): void;

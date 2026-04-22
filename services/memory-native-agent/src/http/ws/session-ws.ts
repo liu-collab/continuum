@@ -79,6 +79,18 @@ export function registerSessionWebsocket(app: RuntimeFastifyInstance) {
         return;
       }
 
+      if (event.kind === "plan_confirm") {
+        const resolver = session.pendingPlanConfirms.get(event.confirm_id);
+        if (resolver) {
+          session.pendingPlanConfirms.delete(event.confirm_id);
+          resolver({
+            outcome: event.decision,
+            feedback: event.feedback,
+          });
+        }
+        return;
+      }
+
       if (event.kind === "abort") {
         session.runner.abort(event.turn_id);
         return;

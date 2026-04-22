@@ -15,6 +15,7 @@ export function createMcpCallTool(registry: McpRegistry): Tool {
   return {
     name: "mcp_call",
     description: "Call an external MCP tool by server and tool name.",
+    parallelism: "exclusive",
     parameters: {
       type: "object",
       required: ["server", "tool"],

@@ -12,11 +12,19 @@ function createIo() {
     emitInjectionBanner: vi.fn(),
     emitPhaseResult: vi.fn(),
     emitTaskChange: vi.fn(),
+    emitPlan: vi.fn(),
+    emitEvaluation: vi.fn(),
+    emitTrace: vi.fn(),
     emitTurnEnd: vi.fn(),
     emitError: vi.fn(),
     recordPrepareContextLatency: vi.fn(),
     recordProviderCall: vi.fn(),
     recordProviderFirstTokenLatency: vi.fn(),
+    requestPlanConfirm: vi.fn(async () => ({ outcome: "approve" as const })),
+    recordRetry: vi.fn(),
+    recordContextDrop: vi.fn(),
+    recordToolBatch: vi.fn(),
+    recordPlanConfirmation: vi.fn(),
     requestConfirm: vi.fn(async () => "allow" as const),
   };
 }
@@ -107,6 +115,7 @@ function createConfig(): AgentConfig {
     mcp: { servers: [] },
     tools: {
       maxOutputChars: 8_192,
+      approvalMode: "confirm",
       shellExec: {
         enabled: true,
         timeoutMs: 30_000,
@@ -120,6 +129,9 @@ function createConfig(): AgentConfig {
       maxTokens: null,
       reserveTokens: 4_096,
       compactionStrategy: "truncate",
+    },
+    planning: {
+      planMode: "advisory",
     },
     logging: {
       level: "info",
@@ -582,7 +594,7 @@ describe("AgentRunner", () => {
         content: expect.stringContaining("<tool_output tool=\"fs_read\" call_id=\"call-1\" trust=\"builtin_read\">"),
       }),
     );
-    expect(saveDispatchedMessages).toHaveBeenCalledTimes(2);
+    expect(saveDispatchedMessages).toHaveBeenCalledTimes(3);
     expect(saveDispatchedMessages).toHaveBeenNthCalledWith(
       1,
       "turn-tool-loop",
@@ -593,6 +605,14 @@ describe("AgentRunner", () => {
     );
     expect(saveDispatchedMessages).toHaveBeenNthCalledWith(
       2,
+      "turn-tool-loop",
+      expect.objectContaining({
+        provider_id: "ollama",
+        model: "qwen2.5-coder",
+      }),
+    );
+    expect(saveDispatchedMessages).toHaveBeenNthCalledWith(
+      3,
       "turn-tool-loop",
       expect.objectContaining({
         provider_id: "ollama",
@@ -738,6 +758,238 @@ describe("AgentRunner", () => {
         max_tokens: 10_000,
       }),
     );
+  });
+
+  it("persists budget plan, plan, evaluation, and trace spans in dispatched payload", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    const saveDispatchedMessages = vi.fn();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages,
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("先规划一下再继续", "turn-observe");
+
+    const payload = saveDispatchedMessages.mock.calls.at(-1)?.[1] as {
+      budget_plan_json?: string | null;
+      plan_json?: string | null;
+      trace_spans_json?: string | null;
+      evaluation_json?: string | null;
+    };
+
+    expect(payload.budget_plan_json).toBeTruthy();
+    expect(payload.plan_json).toBeTruthy();
+    expect(payload.trace_spans_json).toBeTruthy();
+    expect(payload.evaluation_json).toBeTruthy();
+    expect(JSON.parse(payload.plan_json ?? "{}")).toEqual(
+      expect.objectContaining({
+        goal: "先规划一下再继续",
+      }),
+    );
+  });
+
+  it("emits plan and evaluation events for planning turns", async () => {
+    const io = createIo();
+    io.emitPlan = vi.fn();
+    io.emitEvaluation = vi.fn();
+    const memoryClient = createMemoryClient();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("给我一个方案，先做 A，再做 B，再做 C", "turn-plan");
+
+    expect(io.emitPlan).toHaveBeenCalled();
+    expect(io.emitEvaluation).toHaveBeenCalledWith(
+      "turn-plan",
+      expect.objectContaining({
+        scope: "turn",
+      }),
+    );
+  });
+
+  it("waits for plan confirmation before continuing when plan mode is confirm", async () => {
+    const io = createIo();
+    io.emitPlan = vi.fn();
+    io.requestPlanConfirm = vi.fn(async () => ({ outcome: "approve" as const }));
+    const memoryClient = createMemoryClient();
+    const config = createConfig();
+    config.planning.planMode = "confirm";
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config,
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("给我一个方案，先做 A，再做 B，再做 C", "turn-plan-confirm");
+
+    expect(io.requestPlanConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turn_id: "turn-plan-confirm",
+      }),
+    );
+    expect(io.recordPlanConfirmation).toHaveBeenCalledWith("approve");
+    expect(io.emitAssistantDelta).toHaveBeenCalledWith("turn-plan-confirm", "ok");
+  });
+
+  it("retries a failed tool once and records retry metrics", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        output: "first failed",
+        trust_level: "shell" as const,
+        permission_decision: "auto" as const,
+        error: {
+          code: "tool_execution_failed",
+          message: "failed",
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        output: "second ok",
+        trust_level: "shell" as const,
+        permission_decision: "auto" as const,
+      });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* (request: { messages: Array<{ role: string }> }) {
+          const hasToolMessage = request.messages.some((message) => message.role === "tool");
+          if (!hasToolMessage) {
+            yield {
+              type: "tool_call",
+              call: {
+                id: "call-retry",
+                name: "shell_exec",
+                args: {
+                  command: "dir",
+                },
+              },
+            } as const;
+            yield {
+              type: "end",
+              finish_reason: "tool_use",
+              usage: {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+              },
+            } as const;
+            return;
+          }
+
+          yield { type: "text_delta", text: "recovered" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [
+          {
+            name: "shell_exec",
+            description: "Execute shell",
+            parameters: {
+              type: "object",
+            },
+            parallelism: "safe",
+          },
+        ],
+        invoke,
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("执行命令并给我结果", "turn-tool-retry");
+
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(io.recordRetry).toHaveBeenCalledWith("shell_exec");
+    expect(io.emitAssistantDelta).toHaveBeenCalledWith("turn-tool-retry", "recovered");
   });
 
   it("deduplicates repeated memory records across phases before building the prompt", async () => {
