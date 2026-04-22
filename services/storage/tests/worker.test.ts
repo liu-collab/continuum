@@ -4,6 +4,7 @@ import { JobWorker } from "../src/jobs/job-worker.js";
 import { createLogger } from "../src/logger.js";
 import { buildRecordFromNormalized } from "../src/db/repositories.js";
 import { normalizeCandidate } from "../src/domain/normalizer.js";
+import { GovernanceExecutionEngine } from "../src/domain/governance-execution-engine.js";
 import { runWorker } from "../src/worker.js";
 import { createMemoryRepositories, buildCandidate } from "./memory-repositories.js";
 
@@ -377,6 +378,67 @@ describe("job worker", () => {
     expect(metrics.new_pending_embedding_records).toBe(1);
     expect(metrics.retry_pending_embedding_records).toBe(1);
     expect(metrics.oldest_pending_embedding_age_seconds).toBeGreaterThanOrEqual(80);
+  });
+
+  it("collects governance proposal and execution metrics", async () => {
+    const repositories = createMemoryRepositories();
+    const engine = new GovernanceExecutionEngine(repositories);
+    const first = await repositories.records.insertRecord({
+      ...buildRecordFromNormalized({
+        normalized: normalizeCandidate(buildCandidate()),
+      }),
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+
+    await engine.executeBatch({
+      workspace_id: first.workspace_id,
+      source_service: "retrieval-runtime",
+      items: [
+        {
+          proposal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          proposal_type: "delete",
+          targets: {
+            record_ids: [first.id],
+          },
+          suggested_changes: {
+            delete_mode: "soft",
+            status: "deleted",
+          },
+          reason_code: "obsolete_task_state",
+          reason_text: "delete obsolete task state",
+          evidence: {
+            delete_reason: "replaced by newer state",
+          },
+          planner: {
+            model: "writeback_llm",
+            confidence: 0.95,
+          },
+          verifier: {
+            required: true,
+            model: "writeback_llm",
+            decision: "approve",
+            confidence: 0.91,
+          },
+          policy_version: "memory-governance-v1",
+          idempotency_key: "delete-proposal-1",
+        },
+      ],
+    });
+
+    const executions = await repositories.governance.listExecutions();
+    expect(executions).toHaveLength(1);
+
+    await engine.retryExecution(executions[0]!.id);
+
+    const metrics = await repositories.metrics.collect();
+    expect(metrics.governance_proposal_count).toBe(1);
+    expect(metrics.governance_verifier_required_count).toBe(1);
+    expect(metrics.governance_verifier_approved_count).toBe(1);
+    expect(metrics.governance_execution_count).toBe(2);
+    expect(metrics.governance_execution_success_count).toBe(1);
+    expect(metrics.governance_execution_failure_count).toBe(1);
+    expect(metrics.governance_soft_delete_count).toBe(2);
+    expect(metrics.governance_retry_count).toBe(1);
   });
 
   it("does not duplicate a user memory when written from another workspace", async () => {

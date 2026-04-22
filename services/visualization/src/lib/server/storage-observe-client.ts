@@ -16,6 +16,15 @@ export type StorageMetricsSnapshot = {
   newPendingEmbeddingRecords: number | null;
   retryPendingEmbeddingRecords: number | null;
   oldestPendingEmbeddingAgeSeconds: number | null;
+  governanceProposalCount: number | null;
+  governanceVerifierRequiredCount: number | null;
+  governanceVerifierApprovedCount: number | null;
+  governanceGuardRejectedCount: number | null;
+  governanceExecutionCount: number | null;
+  governanceExecutionSuccessCount: number | null;
+  governanceExecutionFailureCount: number | null;
+  governanceSoftDeleteCount: number | null;
+  governanceRetryCount: number | null;
 };
 
 export type StorageWriteJobRecord = {
@@ -142,6 +151,42 @@ export async function fetchStorageMetrics() {
       oldestPendingEmbeddingAgeSeconds: readMetric(record, [
         "oldest_pending_embedding_age_seconds",
         "oldestPendingEmbeddingAgeSeconds"
+      ]),
+      governanceProposalCount: readMetric(record, [
+        "governance_proposal_count",
+        "governanceProposalCount"
+      ]),
+      governanceVerifierRequiredCount: readMetric(record, [
+        "governance_verifier_required_count",
+        "governanceVerifierRequiredCount"
+      ]),
+      governanceVerifierApprovedCount: readMetric(record, [
+        "governance_verifier_approved_count",
+        "governanceVerifierApprovedCount"
+      ]),
+      governanceGuardRejectedCount: readMetric(record, [
+        "governance_guard_rejected_count",
+        "governanceGuardRejectedCount"
+      ]),
+      governanceExecutionCount: readMetric(record, [
+        "governance_execution_count",
+        "governanceExecutionCount"
+      ]),
+      governanceExecutionSuccessCount: readMetric(record, [
+        "governance_execution_success_count",
+        "governanceExecutionSuccessCount"
+      ]),
+      governanceExecutionFailureCount: readMetric(record, [
+        "governance_execution_failure_count",
+        "governanceExecutionFailureCount"
+      ]),
+      governanceSoftDeleteCount: readMetric(record, [
+        "governance_soft_delete_count",
+        "governanceSoftDeleteCount"
+      ]),
+      governanceRetryCount: readMetric(record, [
+        "governance_retry_count",
+        "governanceRetryCount"
       ])
     }
   };

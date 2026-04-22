@@ -76,6 +76,11 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
         role: pickString(target, "role") ?? "target",
       })),
   );
+  const targetRecordIds = targets
+    .map((target) => asRecord(target))
+    .filter((target): target is NonNullable<ReturnType<typeof asRecord>> => Boolean(target))
+    .map((target) => pickString(target, "record_id", "recordId"))
+    .filter((target): target is string => Boolean(target));
   const evidence = pickRecord(proposal ?? {}, "evidence_json", "evidence") ?? {};
 
   return {
@@ -105,6 +110,7 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
       pickNumber(proposal ?? {}, "verifier_confidence", "verifierConfidence") ?? null,
     verifierNotes: pickString(proposal ?? {}, "verifier_notes", "verifierNotes") ?? null,
     targetSummary,
+    targetRecordIds,
     resultSummary: pickString(execution, "result_summary", "resultSummary") ?? null,
     errorMessage: pickString(execution, "error_message", "errorMessage") ?? null,
   };

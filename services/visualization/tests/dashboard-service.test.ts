@@ -14,12 +14,14 @@ const {
   fetchRuntimeMetricsMock,
   fetchRuntimeRunsMock,
   fetchStorageMetricsMock,
-  fetchStorageWriteJobsMock
+  fetchStorageWriteJobsMock,
+  fetchGovernanceExecutionsMock
 } = vi.hoisted(() => ({
   fetchRuntimeMetricsMock: vi.fn<() => Promise<any>>(),
   fetchRuntimeRunsMock: vi.fn<() => Promise<any>>(),
   fetchStorageMetricsMock: vi.fn<() => Promise<any>>(),
-  fetchStorageWriteJobsMock: vi.fn<() => Promise<any>>()
+  fetchStorageWriteJobsMock: vi.fn<() => Promise<any>>(),
+  fetchGovernanceExecutionsMock: vi.fn<() => Promise<any>>()
 }));
 
 fetchRuntimeMetricsMock.mockImplementation(async () => ({
@@ -97,7 +99,16 @@ fetchStorageMetricsMock.mockImplementation(async () => ({
     writeP95Ms: 220,
     newPendingEmbeddingRecords: 1,
     retryPendingEmbeddingRecords: 2,
-    oldestPendingEmbeddingAgeSeconds: 180
+    oldestPendingEmbeddingAgeSeconds: 180,
+    governanceProposalCount: 4,
+    governanceVerifierRequiredCount: 3,
+    governanceVerifierApprovedCount: 2,
+    governanceGuardRejectedCount: 0,
+    governanceExecutionCount: 4,
+    governanceExecutionSuccessCount: 3,
+    governanceExecutionFailureCount: 1,
+    governanceSoftDeleteCount: 1,
+    governanceRetryCount: 1
   }
 }));
 
@@ -123,6 +134,22 @@ fetchStorageWriteJobsMock.mockImplementation(async () => ({
   }
 }));
 
+fetchGovernanceExecutionsMock.mockImplementation(async () => ({
+  status: {
+    name: "storage_governance_executions",
+    label: "Storage governance executions",
+    kind: "dependency",
+    status: "healthy",
+    checkedAt: "2026-04-16T00:00:00Z",
+    lastCheckedAt: "2026-04-16T00:00:00Z",
+    lastOkAt: "2026-04-16T00:00:00Z",
+    lastError: null,
+    responseTimeMs: 20,
+    detail: null
+  },
+  items: []
+}));
+
 vi.mock("@/lib/cache", () => ({
   getCachedValue: (_key: string, _ttl: number, loader: () => Promise<unknown>) => loader()
 }));
@@ -143,6 +170,10 @@ vi.mock("@/lib/server/runtime-observe-client", () => ({
 vi.mock("@/lib/server/storage-observe-client", () => ({
   fetchStorageMetrics: fetchStorageMetricsMock,
   fetchStorageWriteJobs: fetchStorageWriteJobsMock
+}));
+
+vi.mock("@/lib/server/storage-governance-executions-client", () => ({
+  fetchGovernanceExecutions: fetchGovernanceExecutionsMock
 }));
 
 function createMetric(key: string, value: number | null): DashboardMetric {
@@ -346,15 +377,146 @@ describe("dashboard window selection", () => {
     expect(result.retrievalMetrics.some((item) => item.key === "runtime_outbox_pending_count")).toBe(true);
     expect(result.storageMetrics.some((item) => item.key === "new_pending_embedding_records")).toBe(true);
     expect(result.storageMetrics.some((item) => item.key === "oldest_pending_embedding_age_seconds")).toBe(true);
+    expect(result.storageMetrics.some((item) => item.key === "governance_execution_success_rate")).toBe(true);
+    expect(result.storageMetrics.some((item) => item.key === "governance_recall_hit_rate_after")).toBe(true);
   });
 
   it("does not fetch runtime or storage metrics twice for trend comparison", async () => {
     fetchRuntimeMetricsMock.mockClear();
     fetchStorageMetricsMock.mockClear();
+    fetchGovernanceExecutionsMock.mockClear();
 
     await getDashboard("30m");
 
     expect(fetchRuntimeMetricsMock).toHaveBeenCalledTimes(1);
     expect(fetchStorageMetricsMock).toHaveBeenCalledTimes(1);
+    expect(fetchGovernanceExecutionsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes governance source status and retry metric", async () => {
+    const now = Date.now();
+    fetchRuntimeRunsMock.mockResolvedValueOnce({
+      status: {
+        name: "runtime_api",
+        label: "Runtime observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 25,
+        detail: null
+      },
+      data: {
+        turns: [],
+        triggerRuns: [],
+        recallRuns: [
+          {
+            traceId: "trace-hit",
+            phase: null,
+            triggerHit: true,
+            triggerType: "history_reference",
+            triggerReason: "reason",
+            memoryMode: "workspace_plus_global",
+            requestedTypes: ["fact_preference"],
+            requestedScopes: ["workspace", "user"],
+            selectedScopes: ["user"],
+            scopeHitCounts: [{ scope: "user", count: 1 }],
+            selectedRecordIds: ["memory-1"],
+            queryScope: "scope=user",
+            candidateCount: 1,
+            selectedCount: 1,
+            resultState: "matched",
+            emptyReason: null,
+            degraded: false,
+            degradationReason: null,
+            durationMs: 120,
+            createdAt: new Date(now - 2 * 60_000).toISOString()
+          }
+        ],
+        injectionRuns: [],
+        writeBackRuns: [],
+        dependencyStatus: []
+      }
+    });
+    fetchGovernanceExecutionsMock.mockResolvedValueOnce({
+      status: {
+        name: "storage_governance_executions",
+        label: "Storage governance executions",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 20,
+        detail: null
+      },
+      items: [
+        {
+          executionId: "execution-1",
+          proposalId: "proposal-1",
+          workspaceId: "ws-1",
+          proposalType: "delete",
+          proposalTypeLabel: "软删除",
+          executionStatus: "executed",
+          executionStatusLabel: "执行成功",
+          reasonCode: "obsolete_task_state",
+          reasonText: "delete obsolete task state",
+          deleteReason: "replaced by newer state",
+          startedAt: new Date(now - 4 * 60_000).toISOString(),
+          finishedAt: new Date(now - 3 * 60_000).toISOString(),
+          sourceService: "retrieval-runtime",
+          plannerModel: "writeback_llm",
+          plannerConfidence: 0.95,
+          verifierRequired: true,
+          verifierModel: "writeback_llm",
+          verifierDecision: "approve",
+          verifierConfidence: 0.91,
+          verifierNotes: "safe to delete",
+          targetSummary: "target:memory-1",
+          targetRecordIds: ["memory-1"],
+          resultSummary: "delete executed",
+          errorMessage: null
+        },
+        {
+          executionId: "execution-2",
+          proposalId: "proposal-1",
+          workspaceId: "ws-1",
+          proposalType: "delete",
+          proposalTypeLabel: "软删除",
+          executionStatus: "failed",
+          executionStatusLabel: "执行失败",
+          reasonCode: "obsolete_task_state",
+          reasonText: "delete obsolete task state",
+          deleteReason: "replaced by newer state",
+          startedAt: new Date(now - 14 * 60_000).toISOString(),
+          finishedAt: new Date(now - 13 * 60_000).toISOString(),
+          sourceService: "retrieval-runtime",
+          plannerModel: "writeback_llm",
+          plannerConfidence: 0.95,
+          verifierRequired: true,
+          verifierModel: "writeback_llm",
+          verifierDecision: "approve",
+          verifierConfidence: 0.91,
+          verifierNotes: "safe to delete",
+          targetSummary: "target:memory-1",
+          targetRecordIds: ["memory-1"],
+          resultSummary: null,
+          errorMessage: "timeout"
+        }
+      ]
+    });
+
+    const result = await getDashboard("30m");
+
+    expect(result.sourceStatus.some((item) => item.name === "storage_governance_executions")).toBe(true);
+    expect(
+      result.storageMetrics.find((item) => item.key === "governance_retry_rate")?.value
+    ).toBe(0.25);
+    expect(
+      result.storageMetrics.find((item) => item.key === "governance_recall_hit_rate_after")?.value
+    ).toBe(1);
   });
 });

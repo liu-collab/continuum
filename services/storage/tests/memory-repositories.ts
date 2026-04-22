@@ -537,6 +537,31 @@ export function createMemoryRepositories(
             const ageSeconds = Math.max(0, Math.floor((Date.now() - new Date(baseTime).getTime()) / 1000));
             return Math.max(maxAge, ageSeconds);
           }, 0),
+        governance_proposal_count: state.governanceProposals.length,
+        governance_verifier_required_count: state.governanceProposals.filter(
+          (proposal) => proposal.verifier_required,
+        ).length,
+        governance_verifier_approved_count: state.governanceProposals.filter(
+          (proposal) => proposal.verifier_required && proposal.verifier_decision === "approve",
+        ).length,
+        governance_guard_rejected_count: state.governanceExecutions.filter(
+          (execution) => execution.execution_status === "rejected_by_guard",
+        ).length,
+        governance_execution_count: state.governanceExecutions.length,
+        governance_execution_success_count: state.governanceExecutions.filter(
+          (execution) => execution.execution_status === "executed",
+        ).length,
+        governance_execution_failure_count: state.governanceExecutions.filter(
+          (execution) => execution.execution_status === "failed",
+        ).length,
+        governance_soft_delete_count: state.governanceExecutions.filter(
+          (execution) => execution.proposal_type === "delete",
+        ).length,
+        governance_retry_count: Math.max(
+          state.governanceExecutions.length
+            - new Set(state.governanceExecutions.map((execution) => execution.proposal_id)).size,
+          0,
+        ),
       };
     },
   };

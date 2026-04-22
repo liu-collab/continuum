@@ -537,6 +537,15 @@ export interface StorageMetrics {
   new_pending_embedding_records: number;
   retry_pending_embedding_records: number;
   oldest_pending_embedding_age_seconds: number;
+  governance_proposal_count: number;
+  governance_verifier_required_count: number;
+  governance_verifier_approved_count: number;
+  governance_guard_rejected_count: number;
+  governance_execution_count: number;
+  governance_execution_success_count: number;
+  governance_execution_failure_count: number;
+  governance_soft_delete_count: number;
+  governance_retry_count: number;
 }
 
 export const EXPECTED_SUMMARY_EMBEDDING_DIMENSION = 1536;

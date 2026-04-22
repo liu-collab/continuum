@@ -75,6 +75,7 @@ describe("storage governance executions client", () => {
     expect(result.items[0]?.proposalTypeLabel).toBe("软删除");
     expect(result.items[0]?.executionStatusLabel).toBe("执行成功");
     expect(result.items[0]?.deleteReason).toBe("replaced by newer state");
+    expect(result.items[0]?.targetRecordIds).toEqual(["memory-1"]);
   });
 
   it("maps governance execution detail payload", async () => {

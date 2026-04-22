@@ -94,6 +94,7 @@ fetchGovernanceExecutionsMock.mockImplementation(async () => ({
       verifierDecision: "approve",
       verifierConfidence: 0.91,
       targetSummary: "target:memory-1",
+      targetRecordIds: ["memory-1"],
       resultSummary: "delete executed",
       errorMessage: null,
     },

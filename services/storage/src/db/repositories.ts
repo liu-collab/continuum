@@ -1147,10 +1147,12 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
   const recordsTable = tableName(session.privateSchema, "memory_records");
   const conflictsTable = tableName(session.privateSchema, "memory_conflicts");
   const refreshTable = tableName(session.privateSchema, "memory_read_model_refresh_jobs");
+  const proposalsTable = tableName(session.privateSchema, "memory_governance_proposals");
+  const executionsTable = tableName(session.privateSchema, "memory_governance_executions");
 
   return {
     async collect() {
-      const [jobs, records, conflicts, outcomes, projector, embeddingState] = await Promise.all([
+      const [jobs, records, conflicts, outcomes, projector, embeddingState, governanceProposals, governanceExecutions] = await Promise.all([
         session.query(`
           select
             count(*)::int as write_jobs_total,
@@ -1214,6 +1216,26 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
             )::int as oldest_pending_embedding_age_seconds
           from ${tableName(session.sharedSchema, "memory_read_model_v1")}
         `),
+        session.query(`
+          select
+            count(*)::int as governance_proposal_count,
+            count(*) filter (where verifier_required = true)::int as governance_verifier_required_count,
+            count(*) filter (
+              where verifier_required = true
+                and verifier_decision = 'approve'
+            )::int as governance_verifier_approved_count
+          from ${proposalsTable}
+        `),
+        session.query(`
+          select
+            count(*)::int as governance_execution_count,
+            count(*) filter (where execution_status = 'rejected_by_guard')::int as governance_guard_rejected_count,
+            count(*) filter (where execution_status = 'executed')::int as governance_execution_success_count,
+            count(*) filter (where execution_status = 'failed')::int as governance_execution_failure_count,
+            count(*) filter (where proposal_type = 'delete')::int as governance_soft_delete_count,
+            greatest(count(*)::int - count(distinct proposal_id)::int, 0)::int as governance_retry_count
+          from ${executionsTable}
+        `),
       ]);
 
       return {
@@ -1223,6 +1245,8 @@ function createMetricsRepository(session: DbSession): MetricsRepository {
         ...toMetricObject(outcomes.rows[0]),
         ...toMetricObject(projector.rows[0]),
         ...toMetricObject(embeddingState.rows[0]),
+        ...toMetricObject(governanceProposals.rows[0]),
+        ...toMetricObject(governanceExecutions.rows[0]),
       } as unknown as StorageMetrics;
     },
   };

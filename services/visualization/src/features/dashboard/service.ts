@@ -11,6 +11,7 @@ import { getCachedValue } from "@/lib/cache";
 import { getAppConfig } from "@/lib/env";
 import { formatMetricValue } from "@/lib/format";
 import { fetchRuntimeMetrics, fetchRuntimeRuns } from "@/lib/server/runtime-observe-client";
+import { fetchGovernanceExecutions } from "@/lib/server/storage-governance-executions-client";
 import { fetchStorageMetrics, fetchStorageWriteJobs } from "@/lib/server/storage-observe-client";
 
 type TrendSource = {
@@ -129,6 +130,109 @@ function pointSeries(current: number | null, previous: number | null, currentTai
     current,
     previous,
     points: [previous, previous, currentTail ?? current, current]
+  };
+}
+
+type GovernanceExecutionItem = Awaited<ReturnType<typeof fetchGovernanceExecutions>>["items"][number];
+
+function countExecutionsInRange(
+  items: GovernanceExecutionItem[],
+  startInclusive: number,
+  endExclusive?: number
+) {
+  return items.filter((item) => {
+    const startedAt = timeOf(item.startedAt);
+    if (startedAt < startInclusive) {
+      return false;
+    }
+    if (endExclusive !== undefined && startedAt >= endExclusive) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function hasGovernanceFollowupHit(
+  executionTime: number,
+  targetRecordIds: string[],
+  recallRuns: Awaited<ReturnType<typeof fetchRuntimeRuns>>["data"]["recallRuns"],
+  windowMs = 6 * 60 * 60 * 1000
+) {
+  if (targetRecordIds.length === 0) {
+    return false;
+  }
+
+  return recallRuns.some((run) => {
+    const createdAt = timeOf(run.createdAt);
+    if (createdAt <= executionTime || createdAt > executionTime + windowMs) {
+      return false;
+    }
+
+    return run.selectedRecordIds.some((recordId) => targetRecordIds.includes(recordId));
+  });
+}
+
+function computeGovernanceWindowTrend(
+  window: string,
+  executions: GovernanceExecutionItem[],
+  recallRuns: Awaited<ReturnType<typeof fetchRuntimeRuns>>["data"]["recallRuns"]
+) {
+  const { currentStart, previousStart, now } = getCutoffBounds(window);
+  const currentExecutions = countExecutionsInRange(executions, currentStart, now);
+  const previousExecutions = countExecutionsInRange(executions, previousStart, currentStart);
+
+  const currentVerifierRequired = currentExecutions.filter((item) => item.verifierRequired).length;
+  const previousVerifierRequired = previousExecutions.filter((item) => item.verifierRequired).length;
+  const currentVerifierApproved = currentExecutions.filter(
+    (item) => item.verifierRequired && item.verifierDecision === "approve"
+  ).length;
+  const previousVerifierApproved = previousExecutions.filter(
+    (item) => item.verifierRequired && item.verifierDecision === "approve"
+  ).length;
+  const currentExecuted = currentExecutions.filter((item) => item.executionStatus === "executed").length;
+  const previousExecuted = previousExecutions.filter((item) => item.executionStatus === "executed").length;
+  const currentRetries = Math.max(
+    currentExecutions.length - new Set(currentExecutions.map((item) => item.proposalId)).size,
+    0
+  );
+  const previousRetries = Math.max(
+    previousExecutions.length - new Set(previousExecutions.map((item) => item.proposalId)).size,
+    0
+  );
+
+  const buildRecallHitRate = (items: typeof currentExecutions) => {
+    const executedItems = items.filter((item) => item.executionStatus === "executed");
+    if (executedItems.length === 0) {
+      return null;
+    }
+
+    const hits = executedItems.filter((item) => {
+      const executionTime = timeOf(item.finishedAt ?? item.startedAt);
+
+      return hasGovernanceFollowupHit(executionTime, item.targetRecordIds, recallRuns);
+    }).length;
+
+    return ratio(hits, executedItems.length);
+  };
+
+  return {
+    proposalVolume: seriesFromPair(currentExecutions.length, previousExecutions.length),
+    verificationPassRate: pointSeries(
+      ratio(currentVerifierApproved, currentVerifierRequired),
+      ratio(previousVerifierApproved, previousVerifierRequired)
+    ),
+    executionSuccessRate: pointSeries(
+      ratio(currentExecuted, currentExecutions.length),
+      ratio(previousExecuted, previousExecutions.length)
+    ),
+    retryRate: pointSeries(
+      ratio(currentRetries, currentExecutions.length),
+      ratio(previousRetries, previousExecutions.length)
+    ),
+    recallHitRateAfterGovernance: pointSeries(
+      buildRecallHitRate(currentExecutions),
+      buildRecallHitRate(previousExecutions)
+    )
   };
 }
 
@@ -339,6 +443,7 @@ function buildDiagnosisCards(
   storageMetrics: DashboardMetric[],
   runtimeTrend: ReturnType<typeof computeRuntimeWindowTrend>,
   storageTrend: ReturnType<typeof estimateStorageTrend>,
+  governanceTrend: ReturnType<typeof computeGovernanceWindowTrend>,
   degradedSources: string[]
 ) {
   const emptyRecall = retrievalMetrics.find((item) => item.key === "empty_recall_rate")?.value ?? null;
@@ -346,6 +451,10 @@ function buildDiagnosisCards(
   const workspaceOnlyRate = retrievalMetrics.find((item) => item.key === "workspace_only_rate")?.value ?? null;
   const globalShare = retrievalMetrics.find((item) => item.key === "global_scope_share")?.value ?? null;
   const workspaceShare = retrievalMetrics.find((item) => item.key === "workspace_scope_share")?.value ?? null;
+  const governanceSuccessRate =
+    storageMetrics.find((item) => item.key === "governance_execution_success_rate")?.value ?? null;
+  const governanceRetryRate =
+    storageMetrics.find((item) => item.key === "governance_retry_rate")?.value ?? null;
 
   return [
     diagnosisCard(
@@ -387,6 +496,23 @@ function buildDiagnosisCards(
         ? "当前冲突率偏高，需要关注治理策略或合并规则。"
         : "当前冲突压力比较稳定。",
       conflictRate !== null && conflictRate >= 0.15 ? "warning" : "info"
+    ),
+    diagnosisCard(
+      "governance_execution",
+      "storage",
+      "治理执行稳定性",
+      governanceRetryRate !== null && governanceRetryRate >= 0.15
+        ? "最近治理重试比例偏高，优先检查执行链路稳定性。"
+        : governanceSuccessRate !== null && governanceSuccessRate < 0.8
+          ? "最近治理执行成功率偏低，需要先排查执行失败原因。"
+          : governanceTrend.recallHitRateAfterGovernance.current !== null
+            ? `近窗治理后召回命中率约为 ${formatMetricValue(governanceTrend.recallHitRateAfterGovernance.current, "percent")}。`
+            : "当前治理执行整体稳定，但治理后召回命中样本还不够。",
+      governanceRetryRate !== null && governanceRetryRate >= 0.15
+        ? "warning"
+        : governanceSuccessRate !== null && governanceSuccessRate < 0.8
+          ? "warning"
+          : "info"
     )
   ];
 }
@@ -395,15 +521,17 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
   const { values } = getAppConfig();
 
   return getCachedValue(`dashboard:${window}`, values.DASHBOARD_CACHE_MS, async () => {
-    const [runtimeCurrent, runtimeRuns, storageCurrent, jobs] = await Promise.all([
+    const [runtimeCurrent, runtimeRuns, storageCurrent, jobs, governance] = await Promise.all([
       fetchRuntimeMetrics(),
       fetchRuntimeRuns(""),
       fetchStorageMetrics(),
-      fetchStorageWriteJobs()
+      fetchStorageWriteJobs(),
+      fetchGovernanceExecutions({ limit: 100 })
     ]);
 
     const runtimeTrend = computeRuntimeWindowTrend(window, runtimeRuns.data);
     const storageTrend = estimateStorageTrend(window, jobs.jobs);
+    const governanceTrend = computeGovernanceWindowTrend(window, governance.items, runtimeRuns.data.recallRuns);
 
     const triggerRuns = runtimeRuns.data.triggerRuns;
     const recallRuns = runtimeRuns.data.recallRuns;
@@ -644,6 +772,72 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "当前最老一条 pending 向量记录已经等待的秒数。",
         60,
         300
+      ),
+      metric(
+        "governance_proposal_count",
+        "治理提案总量",
+        storageCurrent.metrics?.governanceProposalCount ?? null,
+        "count",
+        "storage",
+        "已生成并落库的治理提案数量。"
+      ),
+      metric(
+        "governance_verification_pass_rate",
+        "治理复核通过率",
+        ratio(
+          storageCurrent.metrics?.governanceVerifierApprovedCount ?? 0,
+          storageCurrent.metrics?.governanceVerifierRequiredCount ?? 0
+        ),
+        "percent",
+        "storage",
+        "需要 verifier 的高影响提案里，通过二次复核的占比。",
+        0.8,
+        0.95
+      ),
+      metric(
+        "governance_execution_success_rate",
+        "治理执行成功率",
+        ratio(
+          storageCurrent.metrics?.governanceExecutionSuccessCount ?? 0,
+          storageCurrent.metrics?.governanceExecutionCount ?? 0
+        ),
+        "percent",
+        "storage",
+        "治理执行记录里，最终成功落盘的占比。"
+      ),
+      metric(
+        "governance_soft_delete_rate",
+        "软删除占比",
+        ratio(
+          storageCurrent.metrics?.governanceSoftDeleteCount ?? 0,
+          storageCurrent.metrics?.governanceExecutionCount ?? 0
+        ),
+        "percent",
+        "storage",
+        "治理执行里软删除动作的占比，用来观察删除策略是否过于激进。",
+        0.2,
+        0.4
+      ),
+      metric(
+        "governance_retry_rate",
+        "治理重试占比",
+        ratio(
+          storageCurrent.metrics?.governanceRetryCount ?? 0,
+          storageCurrent.metrics?.governanceExecutionCount ?? 0
+        ),
+        "percent",
+        "storage",
+        "同一 proposal 出现多次执行记录的占比，用来观察执行稳定性。",
+        0.05,
+        0.15
+      ),
+      metric(
+        "governance_recall_hit_rate_after",
+        "治理后召回命中率",
+        governanceTrend.recallHitRateAfterGovernance.current,
+        "percent",
+        "storage",
+        "近窗内已执行治理动作后，后续召回再次命中这些目标记录的占比；当前按运行时近期轨迹做估算。"
       )
     ];
 
@@ -702,10 +896,61 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         window,
         0.5,
         0.7
+      ),
+      buildTrend(
+        "governance_proposal_volume",
+        "治理提案量",
+        "对比当前半窗口和上一半窗口里的治理提案数量变化。",
+        "storage",
+        "count",
+        governanceTrend.proposalVolume,
+        window
+      ),
+      buildTrend(
+        "governance_verification_pass_rate",
+        "治理复核通过率",
+        "观察高影响治理动作在最近窗口里的 verifier 通过情况。",
+        "storage",
+        "percent",
+        governanceTrend.verificationPassRate,
+        window,
+        0.8,
+        0.95
+      ),
+      buildTrend(
+        "governance_execution_success_rate",
+        "治理执行成功率",
+        "判断最近治理执行是稳定落盘，还是开始出现更多失败。",
+        "storage",
+        "percent",
+        governanceTrend.executionSuccessRate,
+        window,
+        0.8,
+        0.95
+      ),
+      buildTrend(
+        "governance_retry_rate",
+        "治理重试占比",
+        "观察同一提案是否开始需要更多次执行才能成功。",
+        "storage",
+        "percent",
+        governanceTrend.retryRate,
+        window,
+        0.05,
+        0.15
+      ),
+      buildTrend(
+        "governance_recall_hit_rate_after",
+        "治理后召回命中率",
+        "近窗估算治理动作执行后，后续召回再次命中相关记录的比例。",
+        "storage",
+        "percent",
+        governanceTrend.recallHitRateAfterGovernance,
+        window
       )
     ];
 
-    const sourceStatus = [runtimeCurrent.status, storageCurrent.status, jobs.status];
+    const sourceStatus = [runtimeCurrent.status, storageCurrent.status, jobs.status, governance.status];
     const degradedSources = sourceStatus
       .filter((source) => source.status !== "healthy")
       .map((source) => source.label);
@@ -720,6 +965,7 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         storageMetrics,
         runtimeTrend,
         storageTrend,
+        governanceTrend,
         degradedSources
       ),
       trends,
