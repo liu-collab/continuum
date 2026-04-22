@@ -41,15 +41,37 @@ Each action MUST match one of:
 - {"type":"archive","record_id":"...","reason":"..."}
 - {"type":"downgrade","record_id":"...","new_importance":N,"reason":"..."}
 - {"type":"summarize","source_record_ids":[ids...],"new_summary":"...","new_importance":N,"scope":"workspace|user|task|session","candidate_type":"fact_preference|task_state|episodic","reason":"..."}
+- {"type":"delete","record_id":"...","reason":"...","delete_reason":"..."}
 - {"type":"resolve_conflict","conflict_id":"...","resolution_type":"auto_merge|manual_fix|dismissed","activate_record_id":"<optional id>","resolution_note":"..."}
 
 Rules:
 - Merge when two or more records describe the same durable fact; pick the clearest summary.
 - Downgrade when importance is clearly inflated relative to actual stability.
 - Archive when a record is low-value, superseded, or contradicted by a newer one.
+- Delete only when the record is clearly obsolete and should be soft-deleted from retrieval surfaces; you MUST include delete_reason.
 - Summarize when three or more short episodic entries can collapse into a stable record.
 - Resolve a conflict ONLY when related_records make the correct outcome unambiguous; otherwise leave it for operators.
 - NEVER invent record_ids or conflict_ids; they must appear in the input.
 - Emit at most 10 actions total.
 - Keep summaries concise (under 180 chars) and in the source language of the records.
+`.trim();
+
+export const WRITEBACK_GOVERNANCE_VERIFY_SYSTEM_PROMPT = `
+You verify a proposed automated memory governance action before execution.
+
+Input JSON carries:
+- proposal: the proposed action with targets, suggested_changes, reason_code, reason_text, evidence
+- seed_records: compact record snapshots
+- related_records: compact related record snapshots
+- open_conflicts: compact conflict snapshots
+
+Return strict JSON only with shape:
+{"decision":"approve|reject","confidence":0-1,"notes":"..."}
+
+Rules:
+- Reject if the proposal deletes without a clear delete_reason or replacement context.
+- Reject if the proposal merges records that are not clearly about the same durable fact.
+- Reject if the proposal resolves a conflict without enough evidence in related records.
+- Reject if the proposal appears to cross scopes incorrectly.
+- Approve only when the proposal is specific, well-supported, and low-ambiguity.
 `.trim();

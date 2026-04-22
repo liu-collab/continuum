@@ -113,6 +113,11 @@ const config: AppConfig = {
   WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
   WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
   WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+  WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: 1000,
+  WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE: 0.85,
+  WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE: 0.92,
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
@@ -218,6 +223,10 @@ class StubStorageClient {
 
   async resolveConflict(): Promise<never> {
     throw new Error("StubStorageClient.resolveConflict not implemented in test");
+  }
+
+  async submitGovernanceExecutions() {
+    return [];
   }
 }
 
@@ -534,6 +543,7 @@ describe("retrieval-runtime remediation", () => {
         archiveRecord: async () => { throw new Error("not implemented"); },
         listConflicts: async () => [],
         resolveConflict: async () => { throw new Error("not implemented"); },
+        submitGovernanceExecutions: async () => [],
       },
       guard,
     );
@@ -713,6 +723,7 @@ describe("retrieval-runtime remediation", () => {
         archiveRecord: async () => { throw new Error("not implemented"); },
         listConflicts: async () => [],
         resolveConflict: async () => { throw new Error("not implemented"); },
+        submitGovernanceExecutions: async () => [],
       },
       guard,
     );

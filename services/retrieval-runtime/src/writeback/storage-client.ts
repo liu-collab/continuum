@@ -1,6 +1,8 @@
 import type { AppConfig } from "../config.js";
 import type {
   ConflictStatus,
+  GovernanceExecutionBatch,
+  GovernanceExecutionResponseItem,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
   MemoryType,
@@ -79,6 +81,10 @@ export interface StorageWritebackClient {
     payload: ResolveConflictPayload,
     signal?: AbortSignal,
   ): Promise<MemoryConflictSnapshot>;
+  submitGovernanceExecutions(
+    batch: GovernanceExecutionBatch,
+    signal?: AbortSignal,
+  ): Promise<GovernanceExecutionResponseItem[]>;
 }
 
 export class HttpStorageWritebackClient implements StorageWritebackClient {
@@ -185,6 +191,20 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
       signal,
     });
     return mapConflictRow(envelope.data);
+  }
+
+  async submitGovernanceExecutions(
+    batch: GovernanceExecutionBatch,
+    signal?: AbortSignal,
+  ): Promise<GovernanceExecutionResponseItem[]> {
+    const url = new URL("/v1/storage/governance-executions", this.config.STORAGE_WRITEBACK_URL);
+    const envelope = await fetchJson<{ data?: GovernanceExecutionResponseItem[] }>(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(batch),
+      signal,
+    });
+    return envelope.data ?? [];
   }
 
   private async postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {

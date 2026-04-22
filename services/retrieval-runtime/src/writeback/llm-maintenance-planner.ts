@@ -49,6 +49,13 @@ const summarizeActionSchema = z.object({
   reason: z.string().min(1),
 });
 
+const deleteActionSchema = z.object({
+  type: z.literal("delete"),
+  record_id: z.string().min(1),
+  reason: z.string().min(1),
+  delete_reason: z.string().min(3),
+});
+
 const resolveConflictActionSchema = z.object({
   type: z.literal("resolve_conflict"),
   conflict_id: z.string().min(1),
@@ -62,6 +69,7 @@ const maintenanceActionSchema = z.discriminatedUnion("type", [
   archiveActionSchema,
   downgradeActionSchema,
   summarizeActionSchema,
+  deleteActionSchema,
   resolveConflictActionSchema,
 ]);
 
@@ -170,6 +178,7 @@ function isActionReferencingKnownIds(
       return action.target_record_ids.every((id) => recordIds.has(id));
     case "archive":
     case "downgrade":
+    case "delete":
       return recordIds.has(action.record_id);
     case "summarize":
       return action.source_record_ids.every((id) => recordIds.has(id));

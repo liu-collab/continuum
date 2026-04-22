@@ -11,6 +11,7 @@ import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
 import { TriggerEngine } from "./trigger/trigger-engine.js";
 import { HttpLlmExtractor } from "./writeback/llm-extractor.js";
+import { HttpGovernanceVerifier } from "./writeback/llm-governance-verifier.js";
 import { HttpLlmMaintenancePlanner } from "./writeback/llm-maintenance-planner.js";
 import { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
@@ -62,12 +63,24 @@ async function main() {
         WRITEBACK_MAINTENANCE_MAX_ACTIONS: config.WRITEBACK_MAINTENANCE_MAX_ACTIONS,
       })
     : undefined;
+  const governanceVerifier = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpGovernanceVerifier({
+        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
+        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: config.WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS,
+      })
+    : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
   const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
   const maintenanceWorker = new WritebackMaintenanceWorker(
     repository,
     storageClient,
     maintenancePlanner,
+    governanceVerifier,
     dependencyGuard,
     config,
     logger,

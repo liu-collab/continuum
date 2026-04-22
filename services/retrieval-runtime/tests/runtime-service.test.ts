@@ -12,6 +12,7 @@ import { QueryEngine } from "../src/query/query-engine.js";
 import { RetrievalRuntimeService } from "../src/runtime-service.js";
 import type {
   CandidateMemory,
+  GovernanceExecutionResponseItem,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
   SubmittedWriteBackJob,
@@ -68,6 +69,11 @@ const baseConfig: AppConfig = {
   WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
   WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
   WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+  WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: 1000,
+  WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE: 0.85,
+  WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE: 0.92,
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
@@ -216,6 +222,10 @@ class StubStorageClient implements StorageWritebackClient {
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
     throw new Error("stub storage client does not implement resolveConflict");
+  }
+
+  async submitGovernanceExecutions(): Promise<GovernanceExecutionResponseItem[]> {
+    return [];
   }
 }
 

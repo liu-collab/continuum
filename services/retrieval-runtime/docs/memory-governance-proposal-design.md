@@ -16,7 +16,7 @@
 | #3 | 已完成 | 已确认职责边界：`retrieval-runtime` 负责治理提案与模型复核，`storage` 负责自动执行、审计、幂等和事务口径 |
 | #4 | 已完成 | 已补充当前 `writeback-expansion-design` 的不合理点，作为本方案的改造依据 |
 | #5 | 已完成 | `storage` 已新增治理提案模型、批量自动执行接口、执行历史查询接口 |
-| #6 | 待开发 | `retrieval-runtime` 的 maintenance worker 从“直接落盘”改为“生成提案 + 模型复核 + 提交执行包” |
+| #6 | 已完成 | `retrieval-runtime` 已把 maintenance worker 改成“生成提案 + 模型复核 + 提交执行包”，并补齐影子模式与降级语义 |
 | #7 | 待开发 | `visualization` 增加治理历史、删除原因、来源链路和执行结果展示 |
 | #8 | 待开发 | 建立治理提案通过率、复核通过率、执行成功率、软删除率、治理后召回命中率等指标 |
 
@@ -747,11 +747,11 @@ storage execution failed
 
 | 事项 | 状态 | 说明 |
 |---|---|---|
-| maintenance planner 输出适配 proposal 模型 | 待开发 | 从直接 action 改成治理提案 |
-| 增加 verifier 调用链 | 待开发 | 高影响动作走二次模型复核 |
-| maintenance worker 提交执行包 | 待开发 | 替换现有直接 `patch/archive/resolve` 行为 |
-| 提案构建器 | 待开发 | 统一补齐 `reason_code`、`reason_text`、`evidence`、`delete_reason` |
-| 兼容旧配置与降级 | 待开发 | 提交执行包失败时，降级语义要清晰 |
+| maintenance planner 输出适配 proposal 模型 | 已完成 | planner 已输出可组装为治理提案的动作模型，并支持 `delete` |
+| 增加 verifier 调用链 | 已完成 | `merge`、`summarize`、`resolve_conflict`、`delete` 已走二次模型复核 |
+| maintenance worker 提交执行包 | 已完成 | 已替换原有直接 `patch/archive/resolve` 行为，统一提交 execution batch |
+| 提案构建器 | 已完成 | 已统一补齐 `reason_code`、`reason_text`、`evidence`、`delete_reason` 和幂等键 |
+| 兼容旧配置与降级 | 已完成 | 已补 verifier 不可用跳过、高影响动作保护、`shadow mode` 和 `downgrade -> archive` 兼容口径 |
 
 ### 15.3 `visualization`
 

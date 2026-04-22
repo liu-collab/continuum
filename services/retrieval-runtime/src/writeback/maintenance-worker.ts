@@ -1,18 +1,17 @@
-import { createHash } from "node:crypto";
-
+import { createHash, randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { RuntimeRepository } from "../observability/runtime-repository.js";
 import type {
+  GovernanceExecutionBatch,
+  GovernanceExecutionItem,
   MaintenanceRunSummary,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
   MemoryType,
   ScopeType,
-  SubmittedWriteBackJob,
-  WriteBackCandidate,
 } from "../shared/types.js";
 import { jaccardOverlap, nowIso } from "../shared/utils.js";
 import type {
@@ -20,10 +19,8 @@ import type {
   MaintenanceAction,
   MaintenancePlan,
 } from "./llm-maintenance-planner.js";
-import type {
-  StorageActor,
-  StorageWritebackClient,
-} from "./storage-client.js";
+import type { GovernanceVerifier } from "./llm-governance-verifier.js";
+import type { StorageWritebackClient } from "./storage-client.js";
 
 export interface MaintenanceWorkerOptions {
   workspaceId?: string;
@@ -34,7 +31,12 @@ interface ApplyOutcome {
   applied: number;
   skipped: number;
   conflicts_resolved: number;
-  submitted_jobs: SubmittedWriteBackJob[];
+}
+
+interface WorkspaceMaintenanceContext {
+  seed_records: MemoryRecordSnapshot[];
+  related_records: MemoryRecordSnapshot[];
+  open_conflicts: MemoryConflictSnapshot[];
 }
 
 export class WritebackMaintenanceWorker {
@@ -45,6 +47,7 @@ export class WritebackMaintenanceWorker {
     private readonly repository: RuntimeRepository,
     private readonly storageClient: StorageWritebackClient,
     private readonly planner: LlmMaintenancePlanner | undefined,
+    private readonly verifier: GovernanceVerifier | undefined,
     private readonly dependencyGuard: DependencyGuard,
     private readonly config: AppConfig,
     private readonly logger: Logger,
@@ -147,6 +150,11 @@ export class WritebackMaintenanceWorker {
     summary.related_fetched += related.length;
 
     const conflicts = await this.fetchConflicts(workspaceId);
+    const workspaceContext: WorkspaceMaintenanceContext = {
+      seed_records: seeds,
+      related_records: related,
+      open_conflicts: conflicts,
+    };
 
     if (seeds.length + related.length < 2 && conflicts.length === 0) {
       await this.repository.upsertMaintenanceCheckpoint({
@@ -171,9 +179,9 @@ export class WritebackMaintenanceWorker {
       this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
       () =>
         this.planner!.plan({
-          seed_records: seeds,
-          related_records: related,
-          open_conflicts: conflicts,
+          seed_records: workspaceContext.seed_records,
+          related_records: workspaceContext.related_records,
+          open_conflicts: workspaceContext.open_conflicts,
         }),
     );
 
@@ -190,7 +198,7 @@ export class WritebackMaintenanceWorker {
     const plan = this.capPlan(planResult.value);
     summary.actions_proposed += plan.actions.length;
 
-    const outcome = await this.applyActions(workspaceId, plan);
+    const outcome = await this.applyActions(workspaceId, plan, workspaceContext);
     summary.actions_applied += outcome.applied;
     summary.actions_skipped += outcome.skipped;
     summary.conflicts_resolved += outcome.conflicts_resolved;
@@ -302,168 +310,58 @@ export class WritebackMaintenanceWorker {
     return response.filter((conflict) => conflict.workspace_id === workspaceId).slice(0, 10);
   }
 
-  private async applyActions(workspaceId: string, plan: MaintenancePlan): Promise<ApplyOutcome> {
+  private async applyActions(
+    workspaceId: string,
+    plan: MaintenancePlan,
+    workspaceContext: WorkspaceMaintenanceContext,
+  ): Promise<ApplyOutcome> {
     const outcome: ApplyOutcome = {
       applied: 0,
       skipped: 0,
       conflicts_resolved: 0,
-      submitted_jobs: [],
     };
-
-    const actor: StorageActor = {
-      actor_type: "system",
-      actor_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
-    };
-
+    const items: GovernanceExecutionItem[] = [];
     for (const action of plan.actions) {
-      try {
-        switch (action.type) {
-          case "merge":
-            await this.applyMerge(action, actor);
-            break;
-          case "archive":
-            await this.applyArchive(action, actor);
-            break;
-          case "downgrade":
-            await this.applyDowngrade(action, actor);
-            break;
-          case "summarize":
-            outcome.submitted_jobs.push(...(await this.applySummarize(action, actor, workspaceId)));
-            break;
-          case "resolve_conflict":
-            await this.applyResolveConflict(action);
-            outcome.conflicts_resolved += 1;
-            break;
-        }
-        outcome.applied += 1;
-      } catch (error) {
+      const built = await this.buildExecutionItem(workspaceId, action, workspaceContext);
+      if (!built) {
         outcome.skipped += 1;
-        this.logger.warn(
-          { err: error, workspace_id: workspaceId, action_type: action.type },
-          "maintenance action failed",
-        );
+        continue;
+      }
+      items.push(built);
+      if (action.type === "resolve_conflict") {
+        outcome.conflicts_resolved += 1;
       }
     }
 
-    return outcome;
-  }
-
-  private async applyMerge(
-    action: Extract<MaintenanceAction, { type: "merge" }>,
-    actor: StorageActor,
-  ): Promise<void> {
-    const [first, ...rest] = action.target_record_ids;
-    if (!first) {
-      throw new Error("merge action missing target ids");
+    if (items.length === 0) {
+      return outcome;
     }
-    await this.storageClient.patchRecord(first, {
-      summary: action.merged_summary,
-      details_json: {
-        merged_from: action.target_record_ids,
-      },
-      importance: action.merged_importance,
-      actor,
-      reason: action.reason,
-    });
-    for (const id of rest) {
-      await this.storageClient.archiveRecord(id, {
-        actor,
-        reason: action.reason,
-      });
+
+    if (this.config.WRITEBACK_GOVERNANCE_SHADOW_MODE) {
+      outcome.applied += items.length;
+      this.logger.info(
+        { workspace_id: workspaceId, item_count: items.length },
+        "maintenance governance shadow mode enabled, skipping storage execution",
+      );
+      return outcome;
     }
-  }
 
-  private async applyArchive(
-    action: Extract<MaintenanceAction, { type: "archive" }>,
-    actor: StorageActor,
-  ): Promise<void> {
-    await this.storageClient.archiveRecord(action.record_id, {
-      actor,
-      reason: action.reason,
-    });
-  }
-
-  private async applyDowngrade(
-    action: Extract<MaintenanceAction, { type: "downgrade" }>,
-    actor: StorageActor,
-  ): Promise<void> {
-    if (action.new_importance < this.config.WRITEBACK_MAINTENANCE_MIN_IMPORTANCE) {
-      await this.storageClient.archiveRecord(action.record_id, {
-        actor,
-        reason: action.reason,
-      });
-      return;
-    }
-    await this.storageClient.patchRecord(action.record_id, {
-      importance: action.new_importance,
-      actor,
-      reason: action.reason,
-    });
-  }
-
-  private async applySummarize(
-    action: Extract<MaintenanceAction, { type: "summarize" }>,
-    actor: StorageActor,
-    workspaceId: string,
-  ): Promise<SubmittedWriteBackJob[]> {
-    const idempotencyKey = createHash("sha256")
-      .update(
-        JSON.stringify({
-          workspace_id: workspaceId,
-          scope: action.scope,
-          candidate_type: action.candidate_type,
-          summary: action.new_summary,
-          source_ids: action.source_record_ids,
-        }),
-      )
-      .digest("hex");
-
-    const candidate: WriteBackCandidate = {
+    const batch: GovernanceExecutionBatch = {
       workspace_id: workspaceId,
-      user_id: null,
-      task_id: null,
-      session_id: null,
-      candidate_type: action.candidate_type,
-      scope: action.scope,
-      summary: action.new_summary,
-      details: {
-        extraction_method: "llm",
-        maintenance_action: "summarize",
-        source_record_ids: action.source_record_ids,
-      },
-      importance: action.new_importance,
-      confidence: 0.85,
-      write_reason: action.reason,
-      source: {
-        source_type: "writeback_maintenance",
-        source_ref: action.source_record_ids.join(","),
-        service_name: "retrieval-runtime",
-        extraction_method: "llm",
-      },
-      idempotency_key: idempotencyKey,
+      source_service: "retrieval-runtime",
+      items,
     };
 
-    const jobs = await this.storageClient.submitCandidates([candidate]);
-
-    for (const id of action.source_record_ids) {
-      await this.storageClient.archiveRecord(id, {
-        actor,
-        reason: action.reason,
-      });
+    try {
+      const results = await this.storageClient.submitGovernanceExecutions(batch);
+      outcome.applied += results.filter((result) => result.execution.execution_status === "executed").length;
+      outcome.skipped += results.filter((result) => result.execution.execution_status !== "executed").length;
+    } catch (error) {
+      outcome.skipped += items.length;
+      this.logger.warn({ err: error, workspace_id: workspaceId }, "maintenance governance execution batch failed");
     }
 
-    return jobs;
-  }
-
-  private async applyResolveConflict(
-    action: Extract<MaintenanceAction, { type: "resolve_conflict" }>,
-  ): Promise<void> {
-    await this.storageClient.resolveConflict(action.conflict_id, {
-      resolution_type: action.resolution_type,
-      resolved_by: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
-      resolution_note: action.resolution_note,
-      activate_record_id: action.activate_record_id,
-    });
+    return outcome;
   }
 
   private async runStorage<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T | undefined> {
@@ -476,5 +374,218 @@ export class WritebackMaintenanceWorker {
       return undefined;
     }
     return result.value;
+  }
+
+  private async buildExecutionItem(
+    workspaceId: string,
+    action: MaintenanceAction,
+    workspaceContext: WorkspaceMaintenanceContext,
+  ): Promise<GovernanceExecutionItem | null> {
+    const base = this.toExecutionItem(workspaceId, action);
+    if (!base) {
+      return null;
+    }
+
+    const requiresVerifier = this.requiresVerifier(action);
+    if (!requiresVerifier) {
+      return base;
+    }
+
+    if (!this.config.WRITEBACK_GOVERNANCE_VERIFY_ENABLED) {
+      this.logger.warn({ action_type: action.type }, "governance verifier disabled, skipping high-impact action");
+      return null;
+    }
+
+    if (!this.verifier) {
+      this.logger.warn({ action_type: action.type }, "governance verifier unavailable, skipping high-impact action");
+      return null;
+    }
+
+    const verifyResult = await this.dependencyGuard.run(
+      "writeback_llm",
+      this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
+      () =>
+        this.verifier!.verify({
+          proposal: base,
+          seed_records: workspaceContext.seed_records,
+          related_records: workspaceContext.related_records,
+          open_conflicts:
+            action.type === "resolve_conflict"
+              ? workspaceContext.open_conflicts.filter((conflict) => conflict.id === action.conflict_id)
+              : workspaceContext.open_conflicts,
+        }),
+    );
+
+    if (!verifyResult.ok || !verifyResult.value || verifyResult.value.decision !== "approve") {
+      return null;
+    }
+
+    return {
+      ...base,
+      verifier: {
+        required: true,
+        model: "writeback_llm",
+        decision: verifyResult.value.decision,
+        confidence: verifyResult.value.confidence,
+        notes: verifyResult.value.notes,
+      },
+    };
+  }
+
+  private toExecutionItem(
+    workspaceId: string,
+    action: MaintenanceAction,
+  ): GovernanceExecutionItem | null {
+    const proposalType = this.toProposalType(action);
+    const proposalId = randomUUID();
+    const base = {
+      proposal_id: proposalId,
+      reason_code: this.toReasonCode(action),
+      reason_text: action.type === "resolve_conflict" ? action.resolution_note : action.reason,
+      planner: {
+        model: "writeback_llm",
+        confidence: this.toPlannerConfidence(action),
+      },
+      verifier: {
+        required: this.requiresVerifier(action),
+      },
+      policy_version: "memory-governance-v1",
+      idempotency_key: this.toIdempotencyKey(workspaceId, proposalType, action),
+    } satisfies Omit<GovernanceExecutionItem, "proposal_type" | "targets" | "suggested_changes" | "evidence">;
+
+    switch (action.type) {
+      case "archive":
+        return {
+          ...base,
+          proposal_type: "archive",
+          targets: { record_ids: [action.record_id] },
+          suggested_changes: { status: "archived" },
+          evidence: { archive_reason: action.reason },
+        };
+      case "downgrade":
+        if (action.new_importance < this.config.WRITEBACK_MAINTENANCE_MIN_IMPORTANCE) {
+          return {
+            ...base,
+            proposal_type: "archive",
+            targets: { record_ids: [action.record_id] },
+            suggested_changes: { status: "archived" },
+            evidence: {
+              archive_reason: action.reason,
+              downgraded_importance: action.new_importance,
+              original_action: "downgrade",
+            },
+          };
+        }
+        return {
+          ...base,
+          proposal_type: "downgrade",
+          targets: { record_ids: [action.record_id] },
+          suggested_changes: { importance: action.new_importance },
+          evidence: { downgrade_reason: action.reason },
+        };
+      case "merge":
+        return {
+          ...base,
+          proposal_type: "merge",
+          targets: { record_ids: action.target_record_ids },
+          suggested_changes: {
+            summary: action.merged_summary,
+            importance: action.merged_importance,
+          },
+          evidence: { merged_from: action.target_record_ids },
+        };
+      case "summarize":
+        return {
+          ...base,
+          proposal_type: "summarize",
+          targets: { record_ids: action.source_record_ids },
+          suggested_changes: {
+            summary: action.new_summary,
+            importance: action.new_importance,
+            scope: action.scope,
+            candidate_type: action.candidate_type,
+          },
+          evidence: { source_record_ids: action.source_record_ids },
+        };
+      case "resolve_conflict":
+        return {
+          ...base,
+          proposal_type: "resolve_conflict",
+          targets: {
+            record_ids: action.activate_record_id ? [action.activate_record_id] : [],
+            conflict_id: action.conflict_id,
+            winner_record_id: action.activate_record_id,
+          },
+          suggested_changes: { status: "active" },
+          evidence: { resolution_type: action.resolution_type },
+        };
+      case "delete":
+        return {
+          ...base,
+          proposal_type: "delete",
+          targets: { record_ids: [action.record_id] },
+          suggested_changes: { delete_mode: "soft", status: "deleted" },
+          evidence: { delete_reason: action.delete_reason },
+        };
+      default:
+        return null;
+    }
+  }
+
+  private requiresVerifier(action: MaintenanceAction): boolean {
+    return action.type === "merge" || action.type === "summarize" || action.type === "resolve_conflict" || action.type === "delete";
+  }
+
+  private toProposalType(action: MaintenanceAction): GovernanceExecutionItem["proposal_type"] {
+    if (action.type === "downgrade" && action.new_importance < this.config.WRITEBACK_MAINTENANCE_MIN_IMPORTANCE) {
+      return "archive";
+    }
+    return action.type;
+  }
+
+  private toPlannerConfidence(action: MaintenanceAction): number {
+    if (action.type === "delete") {
+      return this.config.WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE;
+    }
+    if (
+      action.type === "archive"
+      || (action.type === "downgrade" && action.new_importance < this.config.WRITEBACK_MAINTENANCE_MIN_IMPORTANCE)
+    ) {
+      return this.config.WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE;
+    }
+    return 0.9;
+  }
+
+  private toReasonCode(action: MaintenanceAction): string {
+    switch (action.type) {
+      case "archive":
+        return "superseded_record";
+      case "downgrade":
+        return "obsolete_task_state";
+      case "merge":
+        return "duplicate_preference";
+      case "summarize":
+        return "stale_summary";
+      case "resolve_conflict":
+        return "conflict_resolved";
+      case "delete":
+        return "obsolete_task_state";
+    }
+  }
+
+  private toIdempotencyKey(
+    workspaceId: string,
+    proposalType: GovernanceExecutionItem["proposal_type"],
+    action: MaintenanceAction,
+  ): string {
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          workspaceId,
+          proposalType,
+          action,
+        }),
+      )
+      .digest("hex");
   }
 }

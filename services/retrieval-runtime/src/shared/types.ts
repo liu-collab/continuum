@@ -415,3 +415,102 @@ export interface MaintenanceRunSummary {
   degradation_reason?: string;
   next_checkpoint: string;
 }
+
+export type GovernanceProposalType =
+  | "merge"
+  | "archive"
+  | "downgrade"
+  | "confirm"
+  | "resolve_conflict"
+  | "summarize"
+  | "delete";
+
+export type GovernanceExecutionStatus =
+  | "proposed"
+  | "verified"
+  | "rejected_by_guard"
+  | "executing"
+  | "executed"
+  | "failed"
+  | "superseded"
+  | "cancelled";
+
+export interface GovernanceExecutionItem {
+  proposal_id: string;
+  proposal_type: GovernanceProposalType;
+  targets: {
+    record_ids: string[];
+    conflict_id?: string;
+    winner_record_id?: string;
+  };
+  suggested_changes: {
+    summary?: string;
+    importance?: number;
+    status?: RecordStatus;
+    delete_mode?: "soft";
+    candidate_type?: MemoryType;
+    scope?: ScopeType;
+  };
+  reason_code: string;
+  reason_text: string;
+  evidence: Record<string, unknown>;
+  planner: {
+    model: string;
+    confidence: number;
+  };
+  verifier: {
+    required: boolean;
+    model?: string;
+    decision?: "approve" | "reject";
+    confidence?: number;
+    notes?: string;
+  };
+  policy_version: string;
+  idempotency_key: string;
+}
+
+export interface GovernanceExecutionBatch {
+  workspace_id: string;
+  source_service: string;
+  items: GovernanceExecutionItem[];
+}
+
+export interface GovernanceProposalResult {
+  id: string;
+  workspace_id: string;
+  proposal_type: GovernanceProposalType;
+  status: GovernanceExecutionStatus;
+  reason_code: string;
+  reason_text: string;
+  suggested_changes_json: Record<string, unknown>;
+  evidence_json: Record<string, unknown>;
+  planner_model: string;
+  planner_confidence: number;
+  verifier_required: boolean;
+  verifier_model: string | null;
+  verifier_decision: "approve" | "reject" | null;
+  verifier_confidence: number | null;
+  verifier_notes: string | null;
+  policy_version: string;
+  idempotency_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GovernanceExecutionResult {
+  id: string;
+  workspace_id: string;
+  proposal_id: string;
+  proposal_type: GovernanceProposalType;
+  execution_status: GovernanceExecutionStatus;
+  result_summary: string | null;
+  error_message: string | null;
+  source_service: string;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface GovernanceExecutionResponseItem {
+  proposal: GovernanceProposalResult;
+  execution: GovernanceExecutionResult;
+}

@@ -9,6 +9,11 @@ import type {
   MaintenancePlan,
   MaintenancePlanInput,
 } from "../src/writeback/llm-maintenance-planner.js";
+import type {
+  GovernanceVerifier,
+  GovernanceVerifierInput,
+  GovernanceVerifierResult,
+} from "../src/writeback/llm-governance-verifier.js";
 import { WritebackMaintenanceWorker } from "../src/writeback/maintenance-worker.js";
 import type {
   RecordListFilters,
@@ -19,11 +24,10 @@ import type {
   StorageWritebackClient,
 } from "../src/writeback/storage-client.js";
 import type {
+  GovernanceExecutionResponseItem,
   ConflictStatus,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
-  SubmittedWriteBackJob,
-  WriteBackCandidate,
 } from "../src/shared/types.js";
 
 const workspaceId = "550e8400-e29b-41d4-a716-446655440000";
@@ -64,10 +68,7 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
 }
 
 class RecordingStorageClient implements StorageWritebackClient {
-  public submitted: WriteBackCandidate[] = [];
-  public patched: Array<{ id: string; payload: RecordPatchPayload }> = [];
-  public archived: Array<{ id: string; payload: StorageMutationPayload }> = [];
-  public conflictsResolved: Array<{ id: string; payload: ResolveConflictPayload }> = [];
+  public governanceBatches: Array<unknown> = [];
 
   constructor(
     private readonly seeds: MemoryRecordSnapshot[],
@@ -75,12 +76,8 @@ class RecordingStorageClient implements StorageWritebackClient {
     private readonly conflicts: MemoryConflictSnapshot[] = [],
   ) {}
 
-  async submitCandidates(candidates: WriteBackCandidate[]): Promise<SubmittedWriteBackJob[]> {
-    this.submitted.push(...candidates);
-    return candidates.map((candidate) => ({
-      candidate_summary: candidate.summary,
-      status: "accepted_async",
-    }));
+  async submitCandidates(): Promise<never> {
+    throw new Error("submitCandidates should not be called by governance worker");
   }
 
   async listRecords(filters: RecordListFilters): Promise<RecordListPage> {
@@ -94,33 +91,60 @@ class RecordingStorageClient implements StorageWritebackClient {
     };
   }
 
-  async patchRecord(recordId: string, payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
-    this.patched.push({ id: recordId, payload });
-    const existing = [...this.seeds, ...this.related].find((r) => r.id === recordId);
-    return {
-      ...(existing ?? makeRecord(recordId, payload.summary ?? "")),
-      summary: payload.summary ?? existing?.summary ?? "",
-      importance: payload.importance ?? existing?.importance ?? 3,
-    };
+  async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<never> {
+    throw new Error("patchRecord should not be called by governance worker");
   }
 
-  async archiveRecord(recordId: string, payload: StorageMutationPayload): Promise<MemoryRecordSnapshot> {
-    this.archived.push({ id: recordId, payload });
-    const existing = [...this.seeds, ...this.related].find((r) => r.id === recordId);
-    return { ...(existing ?? makeRecord(recordId, "")), status: "archived" };
+  async archiveRecord(_recordId: string, _payload: StorageMutationPayload): Promise<never> {
+    throw new Error("archiveRecord should not be called by governance worker");
   }
 
   async listConflicts(_status?: ConflictStatus): Promise<MemoryConflictSnapshot[]> {
     return this.conflicts;
   }
 
-  async resolveConflict(conflictId: string, payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
-    this.conflictsResolved.push({ id: conflictId, payload });
-    const existing = this.conflicts.find((c) => c.id === conflictId);
-    if (!existing) {
-      throw new Error(`conflict ${conflictId} not found`);
-    }
-    return { ...existing, status: "resolved" };
+  async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<never> {
+    throw new Error("resolveConflict should not be called by governance worker");
+  }
+
+  async submitGovernanceExecutions(batch: unknown): Promise<GovernanceExecutionResponseItem[]> {
+    this.governanceBatches.push(batch);
+    const typed = batch as { workspace_id: string; items: Array<{ proposal_id: string; proposal_type: GovernanceExecutionResponseItem["execution"]["proposal_type"] }> };
+    return typed.items.map((item, index) => ({
+      proposal: {
+        id: item.proposal_id,
+        workspace_id: typed.workspace_id,
+        proposal_type: item.proposal_type,
+        status: "verified",
+        reason_code: "test_reason",
+        reason_text: "test reason",
+        suggested_changes_json: {},
+        evidence_json: {},
+        planner_model: "writeback_llm",
+        planner_confidence: 0.9,
+        verifier_required: false,
+        verifier_model: null,
+        verifier_decision: null,
+        verifier_confidence: null,
+        verifier_notes: null,
+        policy_version: "memory-governance-v1",
+        idempotency_key: `test-${index}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      execution: {
+        id: `exec-${index}`,
+        workspace_id: typed.workspace_id,
+        proposal_id: item.proposal_id,
+        proposal_type: item.proposal_type,
+        execution_status: "executed",
+        result_summary: "executed",
+        error_message: null,
+        source_service: "retrieval-runtime",
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+      },
+    }));
   }
 }
 
@@ -132,6 +156,23 @@ class StubPlanner implements LlmMaintenancePlanner {
   async plan(input: MaintenancePlanInput): Promise<MaintenancePlan> {
     this.planCalls.push(input);
     return this.factory(input);
+  }
+}
+
+class StubVerifier implements GovernanceVerifier {
+  public verifyCalls: GovernanceVerifierInput[] = [];
+
+  constructor(
+    private readonly result: GovernanceVerifierResult = {
+      decision: "approve",
+      confidence: 0.94,
+      notes: "verified",
+    },
+  ) {}
+
+  async verify(input: GovernanceVerifierInput): Promise<GovernanceVerifierResult> {
+    this.verifyCalls.push(input);
+    return this.result;
   }
 }
 
@@ -155,10 +196,12 @@ describe("WritebackMaintenanceWorker", () => {
     const repository = new InMemoryRuntimeRepository();
     const logger = pino({ enabled: false });
     const guard = new DependencyGuard(repository, logger);
+    const verifier = new StubVerifier();
     const worker = new WritebackMaintenanceWorker(
       repository,
       storage,
       planner,
+      verifier,
       guard,
       makeConfig(),
       logger,
@@ -168,10 +211,11 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.actions_applied).toBe(1);
     expect(summary.actions_skipped).toBe(0);
-    expect(storage.patched).toHaveLength(1);
-    expect(storage.patched[0]?.id).toBe(seed.id);
-    expect(storage.patched[0]?.payload.summary).toContain("合并后");
-    expect(storage.archived.map((a) => a.id)).toEqual([related.id]);
+    expect(storage.governanceBatches).toHaveLength(1);
+    const batch = storage.governanceBatches[0] as { items: Array<{ proposal_type: string; targets: { record_ids: string[] } }> };
+    expect(batch.items[0]?.proposal_type).toBe("merge");
+    expect(batch.items[0]?.targets.record_ids).toEqual([seed.id, related.id]);
+    expect(verifier.verifyCalls).toHaveLength(1);
   });
 
   it("downgrades to archive when importance falls below MIN_IMPORTANCE", async () => {
@@ -196,6 +240,7 @@ describe("WritebackMaintenanceWorker", () => {
       repository,
       storage,
       planner,
+      undefined,
       guard,
       makeConfig(),
       logger,
@@ -204,9 +249,9 @@ describe("WritebackMaintenanceWorker", () => {
     const summary = await worker.runOnce({ workspaceId, forced: true });
 
     expect(summary.actions_applied).toBe(1);
-    expect(storage.archived).toHaveLength(1);
-    expect(storage.archived[0]?.id).toBe(record.id);
-    expect(storage.patched).toHaveLength(0);
+    const batch = storage.governanceBatches[0] as { items: Array<{ proposal_type: string; targets: { record_ids: string[] } }> };
+    expect(batch.items[0]?.proposal_type).toBe("archive");
+    expect(batch.items[0]?.targets.record_ids).toEqual([record.id]);
   });
 
   it("summarize submits new candidate and archives sources", async () => {
@@ -230,10 +275,12 @@ describe("WritebackMaintenanceWorker", () => {
     const repository = new InMemoryRuntimeRepository();
     const logger = pino({ enabled: false });
     const guard = new DependencyGuard(repository, logger);
+    const verifier = new StubVerifier();
     const worker = new WritebackMaintenanceWorker(
       repository,
       storage,
       planner,
+      verifier,
       guard,
       makeConfig(),
       logger,
@@ -241,10 +288,10 @@ describe("WritebackMaintenanceWorker", () => {
 
     await worker.runOnce({ workspaceId, forced: true });
 
-    expect(storage.submitted).toHaveLength(1);
-    expect(storage.submitted[0]?.summary).toBe("任务完成摘要");
-    expect(storage.submitted[0]?.source.source_type).toBe("writeback_maintenance");
-    expect(new Set(storage.archived.map((a) => a.id))).toEqual(new Set([a.id, b.id]));
+    const batch = storage.governanceBatches[0] as { items: Array<{ proposal_type: string; suggested_changes: { summary?: string } }> };
+    expect(batch.items[0]?.proposal_type).toBe("summarize");
+    expect(batch.items[0]?.suggested_changes.summary).toBe("任务完成摘要");
+    expect(verifier.verifyCalls).toHaveLength(1);
   });
 
   it("reports degraded when planner is undefined", async () => {
@@ -259,6 +306,7 @@ describe("WritebackMaintenanceWorker", () => {
       repository,
       storage,
       undefined,
+      undefined,
       guard,
       makeConfig(),
       logger,
@@ -268,9 +316,7 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.degraded).toBe(true);
     expect(summary.actions_applied).toBe(0);
-    expect(storage.patched).toHaveLength(0);
-    expect(storage.archived).toHaveLength(0);
-    expect(storage.submitted).toHaveLength(0);
+    expect(storage.governanceBatches).toHaveLength(0);
   });
 
   it("skips llm call when seeds + related < 2 and no conflicts", async () => {
@@ -287,6 +333,7 @@ describe("WritebackMaintenanceWorker", () => {
       repository,
       storage,
       planner,
+      undefined,
       guard,
       makeConfig(),
       logger,
@@ -296,5 +343,75 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.actions_applied).toBe(0);
     expect(planner.planCalls).toHaveLength(0);
+  });
+
+  it("skips high-impact actions when verifier is disabled", async () => {
+    const seed = makeRecord("seed-verify-off", "默认使用中文输出", 4);
+    const related = makeRecord("rel-verify-off", "偏好中文输出", 3);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new StubPlanner(() => ({
+      actions: [
+        {
+          type: "merge",
+          target_record_ids: [seed.id, related.id],
+          merged_summary: "默认使用中文输出（合并后）",
+          merged_importance: 5,
+          reason: "duplicate stable preference",
+        },
+      ],
+    }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig({ WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(0);
+    expect(summary.actions_skipped).toBe(1);
+    expect(storage.governanceBatches).toHaveLength(0);
+  });
+
+  it("does not submit governance batch when shadow mode is enabled", async () => {
+    const record = makeRecord("shadow-archive", "旧任务状态", 3);
+    const sibling = makeRecord("shadow-related", "新任务状态", 4);
+    const storage = new RecordingStorageClient([record], [sibling]);
+    const planner = new StubPlanner(() => ({
+      actions: [
+        {
+          type: "archive",
+          record_id: record.id,
+          reason: "superseded by newer record",
+        },
+      ],
+    }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig({ WRITEBACK_GOVERNANCE_SHADOW_MODE: true }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(1);
+    expect(summary.actions_skipped).toBe(0);
+    expect(storage.governanceBatches).toHaveLength(0);
   });
 });
