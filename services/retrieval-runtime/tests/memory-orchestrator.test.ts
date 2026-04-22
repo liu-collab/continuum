@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { loadConfig } from "../src/config.js";
 import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
-import type { LlmRecallPlanner } from "../src/trigger/llm-recall-judge.js";
-import type { LlmExtractor } from "../src/writeback/llm-extractor.js";
-import type { GovernanceVerifier } from "../src/writeback/llm-governance-verifier.js";
-import type { LlmMaintenancePlanner } from "../src/writeback/llm-maintenance-planner.js";
+import { memoryGovernancePlanSchema, memoryRecallSearchSchema, memoryWritebackExtractionSchema } from "../src/memory-orchestrator/schemas.js";
+import type {
+  GovernancePlanner,
+  GovernanceVerifier,
+  RecallInjectionPlanner,
+  RecallSearchPlanner,
+  WritebackPlanner,
+} from "../src/memory-orchestrator/types.js";
 
 const config = loadConfig({
   NODE_ENV: "test",
@@ -19,11 +23,13 @@ describe("memory orchestrator factory", () => {
   });
 
   it("adapts recall, writeback, and governance capabilities behind one entry", async () => {
-    const recallPlanner: LlmRecallPlanner = {
-      async planSearch() {
+    const recallSearchPlanner: RecallSearchPlanner = {
+      async plan() {
         return { should_search: true, reason: "search" };
       },
-      async planInjection() {
+    };
+    const recallInjectionPlanner: RecallInjectionPlanner = {
+      async plan() {
         return {
           should_inject: true,
           reason: "inject",
@@ -32,7 +38,7 @@ describe("memory orchestrator factory", () => {
         };
       },
     };
-    const writebackPlanner: LlmExtractor = {
+    const writebackPlanner: WritebackPlanner = {
       async extract() {
         return {
           candidates: [
@@ -64,7 +70,7 @@ describe("memory orchestrator factory", () => {
         };
       },
     };
-    const governancePlanner: LlmMaintenancePlanner = {
+    const governancePlanner: GovernancePlanner = {
       async plan() {
         return {
           actions: [
@@ -89,7 +95,10 @@ describe("memory orchestrator factory", () => {
 
     const orchestrator = createMemoryOrchestrator({
       config,
-      recallPlanner,
+      recallPlanner: {
+        search: recallSearchPlanner,
+        injection: recallInjectionPlanner,
+      },
       writebackPlanner,
       governancePlanner,
       governanceVerifier,
@@ -133,5 +142,61 @@ describe("memory orchestrator factory", () => {
         candidates: [],
       }) ?? Promise.reject(new Error("missing injection planner")),
     ).resolves.toMatchObject({ should_inject: true, reason: "inject" });
+  });
+
+  it("validates shared recall, writeback, and governance schemas", () => {
+    expect(
+      memoryRecallSearchSchema.parse({
+        should_search: true,
+        reason: "需要继续之前的任务状态",
+        requested_scopes: ["workspace", "task"],
+        requested_memory_types: ["task_state"],
+        importance_threshold: 4,
+        query_hint: "继续之前的任务状态",
+        candidate_limit: 8,
+      }),
+    ).toMatchObject({
+      should_search: true,
+      candidate_limit: 8,
+    });
+
+    expect(
+      memoryWritebackExtractionSchema.parse({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "默认中文",
+            importance: 5,
+            confidence: 0.9,
+            write_reason: "stable preference",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      candidates: [
+        {
+          summary: "默认中文",
+        },
+      ],
+    });
+
+    expect(
+      memoryGovernancePlanSchema.parse({
+        actions: [
+          {
+            type: "archive",
+            record_id: "rec-1",
+            reason: "superseded",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      actions: [
+        {
+          type: "archive",
+        },
+      ],
+    });
   });
 });

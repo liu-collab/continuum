@@ -1,15 +1,21 @@
 import type { AppConfig } from "../config.js";
-import type { LlmRecallPlanner } from "../trigger/llm-recall-judge.js";
-import type { LlmExtractor } from "../writeback/llm-extractor.js";
-import type { GovernanceVerifier } from "../writeback/llm-governance-verifier.js";
-import type { LlmMaintenancePlanner } from "../writeback/llm-maintenance-planner.js";
-import type { MemoryOrchestrator } from "./types.js";
+import type {
+  GovernancePlanner,
+  GovernanceVerifier,
+  MemoryOrchestrator,
+  RecallInjectionPlanner,
+  RecallSearchPlanner,
+  WritebackPlanner,
+} from "./types.js";
 
 export function createMemoryOrchestrator(input: {
   config: AppConfig;
-  recallPlanner?: LlmRecallPlanner;
-  writebackPlanner?: LlmExtractor;
-  governancePlanner?: LlmMaintenancePlanner;
+  recallPlanner?: {
+    search: RecallSearchPlanner;
+    injection: RecallInjectionPlanner;
+  };
+  writebackPlanner?: WritebackPlanner;
+  governancePlanner?: GovernancePlanner;
   governanceVerifier?: GovernanceVerifier;
 }): MemoryOrchestrator | undefined {
   if (
@@ -24,14 +30,8 @@ export function createMemoryOrchestrator(input: {
   return {
     recall: input.recallPlanner
       ? {
-          search: {
-            plan: (args) => input.recallPlanner!.planSearch(args),
-            healthCheck: () => input.recallPlanner!.healthCheck?.(),
-          },
-          injection: {
-            plan: (args) => input.recallPlanner!.planInjection(args),
-            healthCheck: () => input.recallPlanner!.healthCheck?.(),
-          },
+          search: input.recallPlanner.search,
+          injection: input.recallPlanner.injection,
         }
       : undefined,
     writeback: input.writebackPlanner

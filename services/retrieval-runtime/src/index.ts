@@ -2,7 +2,12 @@ import { loadConfig } from "./config.js";
 import { DependencyGuard } from "./dependency/dependency-guard.js";
 import { InjectionEngine } from "./injection/injection-engine.js";
 import { createLogger } from "./logger.js";
+import { HttpMemoryGovernancePlanner } from "./memory-orchestrator/governance/planner.js";
+import { HttpMemoryGovernanceVerifier } from "./memory-orchestrator/governance/verifier.js";
 import { createMemoryOrchestrator } from "./memory-orchestrator/index.js";
+import { HttpMemoryRecallInjectionPlanner } from "./memory-orchestrator/recall/injection-planner.js";
+import { HttpMemoryRecallSearchPlanner } from "./memory-orchestrator/recall/search-planner.js";
+import { HttpMemoryWritebackPlanner } from "./memory-orchestrator/writeback/planner.js";
 import { FallbackRuntimeRepository } from "./observability/fallback-runtime-repository.js";
 import { InMemoryRuntimeRepository } from "./observability/in-memory-runtime-repository.js";
 import { PostgresRuntimeRepository } from "./observability/postgres-runtime-repository.js";
@@ -10,11 +15,7 @@ import { HttpEmbeddingsClient } from "./query/embeddings-client.js";
 import { PostgresReadModelRepository } from "./query/postgres-read-model-repository.js";
 import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
-import { HttpLlmRecallPlanner } from "./trigger/llm-recall-judge.js";
 import { TriggerEngine } from "./trigger/trigger-engine.js";
-import { HttpLlmExtractor } from "./writeback/llm-extractor.js";
-import { HttpGovernanceVerifier } from "./writeback/llm-governance-verifier.js";
-import { HttpLlmMaintenancePlanner } from "./writeback/llm-maintenance-planner.js";
 import { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
 import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js";
@@ -41,8 +42,8 @@ async function main() {
   const embeddingsClient = new HttpEmbeddingsClient(config);
   const storageClient = new HttpStorageWritebackClient(config);
   const activeWritebackLlmConfig = resolveRuntimeWritebackLlmConfig(config);
-  const llmExtractor = hasCompleteRuntimeWritebackLlmConfig(config)
-    ? new HttpLlmExtractor({
+  const writebackPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryWritebackPlanner({
         ...config,
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
         MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
@@ -53,8 +54,20 @@ async function main() {
         MEMORY_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.MEMORY_LLM_MAX_TOKENS,
       })
     : undefined;
-  const llmRecallPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
-    ? new HttpLlmRecallPlanner({
+  const recallSearchPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryRecallSearchPlanner({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        RECALL_LLM_JUDGE_MAX_TOKENS: config.RECALL_LLM_JUDGE_MAX_TOKENS,
+        RECALL_LLM_CANDIDATE_LIMIT: config.RECALL_LLM_CANDIDATE_LIMIT,
+      })
+    : undefined;
+  const recallInjectionPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryRecallInjectionPlanner({
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
         MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
         MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
@@ -66,7 +79,7 @@ async function main() {
       })
     : undefined;
   const maintenancePlanner = hasCompleteRuntimeWritebackLlmConfig(config)
-    ? new HttpLlmMaintenancePlanner({
+    ? new HttpMemoryGovernancePlanner({
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
         MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
         MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
@@ -78,7 +91,7 @@ async function main() {
       })
     : undefined;
   const governanceVerifier = hasCompleteRuntimeWritebackLlmConfig(config)
-    ? new HttpGovernanceVerifier({
+    ? new HttpMemoryGovernanceVerifier({
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
         MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
         MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
@@ -101,8 +114,14 @@ async function main() {
   );
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
-    recallPlanner: llmRecallPlanner,
-    writebackPlanner: llmExtractor,
+    recallPlanner:
+      recallSearchPlanner && recallInjectionPlanner
+        ? {
+            search: recallSearchPlanner,
+            injection: recallInjectionPlanner,
+          }
+        : undefined,
+    writebackPlanner,
     governancePlanner: maintenancePlanner,
     governanceVerifier,
   });

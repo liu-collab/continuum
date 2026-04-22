@@ -23,3 +23,29 @@ export type {
 } from "./types.js";
 export { getMemoryOrchestratorFallbackCode } from "./fallback-policy.js";
 export { createMemoryOrchestrator } from "./factory.js";
+export { callMemoryLlm, parseMemoryLlmJsonPayload, type MemoryLlmConfig } from "./llm-client.js";
+export {
+  MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
+  MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT,
+  MEMORY_RECALL_INJECTION_SYSTEM_PROMPT,
+  MEMORY_RECALL_SEARCH_SYSTEM_PROMPT,
+  MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
+  MEMORY_WRITEBACK_REFINE_SYSTEM_PROMPT,
+} from "./prompts.js";
+export {
+  memoryCandidateLimitSchema,
+  memoryGovernanceActionSchema,
+  memoryGovernancePlanSchema,
+  memoryGovernanceVerificationSchema,
+  memoryImportanceSchema,
+  memoryRecallInjectionSchema,
+  memoryRecallInjectSchema,
+  memoryRecallSearchSchema,
+  memoryRecallSkipSchema,
+  memoryScopeSchema,
+  memoryTypeSchema,
+  memoryWritebackCandidateSchema,
+  memoryWritebackExtractionSchema,
+  memoryWritebackRefineItemSchema,
+  memoryWritebackRefineSchema,
+} from "./schemas.js";
