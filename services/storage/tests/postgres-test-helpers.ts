@@ -86,6 +86,7 @@ async function cloneMigrations(suffix: string) {
   const sources = [
     "0001_storage_init.sql",
     "0002_read_model_contract.sql",
+    "0004_governance_executions.sql",
   ] as const;
   const fileNames: string[] = [];
 

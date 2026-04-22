@@ -611,4 +611,165 @@ describe("storage api", () => {
     expect(versionsResponse.json().data.length).toBeGreaterThan(0);
     expect(historyResponse.json().data.length).toBeGreaterThan(0);
   });
+
+  it("accepts governance execution batches and lists execution history", async () => {
+    const repositories = createMemoryRepositories();
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+
+    const job = await service.submitWriteBackCandidate(buildCandidate());
+    expect(job.id).toBeTruthy();
+    await service.processWriteJobs();
+    const records = await service.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: undefined,
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+    const [stored] = records.items;
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const executeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/storage/governance-executions",
+      payload: {
+        workspace_id: "11111111-1111-4111-8111-111111111111",
+        source_service: "retrieval-runtime",
+        items: [
+          {
+            proposal_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            proposal_type: "archive",
+            targets: {
+              record_ids: [stored!.id],
+            },
+            suggested_changes: {
+              status: "archived",
+            },
+            reason_code: "duplicate_preference",
+            reason_text: "archived duplicate preference",
+            evidence: {
+              seed_record_ids: [stored!.id],
+            },
+            planner: {
+              model: "writeback_llm",
+              confidence: 0.91,
+            },
+            verifier: {
+              required: false,
+            },
+            policy_version: "memory-governance-v1",
+            idempotency_key: "archive-proposal-one",
+          },
+        ],
+      },
+    });
+
+    expect(executeResponse.statusCode).toBe(200);
+    expect(executeResponse.json().data).toHaveLength(1);
+    expect(executeResponse.json().data[0].execution.execution_status).toBe("executed");
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/v1/storage/governance-executions?workspace_id=11111111-1111-4111-8111-111111111111",
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().data.length).toBe(1);
+
+    const executionId = executeResponse.json().data[0].execution.id;
+    const detailResponse = await app.inject({
+      method: "GET",
+      url: `/v1/storage/governance-executions/${executionId}`,
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json().data.id).toBe(executionId);
+  });
+
+  it("requires delete_reason for delete governance executions", async () => {
+    const app = createApp(
+      createStorageService({
+        repositories: createMemoryRepositories(),
+        logger: createLogger("silent"),
+        config: {
+          port: 3001,
+          host: "127.0.0.1",
+          log_level: "silent",
+          database_url: "postgres://example",
+          storage_schema_private: "storage_private",
+          storage_schema_shared: "storage_shared_v1",
+          write_job_poll_interval_ms: 1000,
+          write_job_batch_size: 10,
+          write_job_max_retries: 3,
+          read_model_refresh_max_retries: 2,
+          embedding_base_url: undefined,
+          embedding_api_key: undefined,
+          embedding_model: "text-embedding-3-small",
+          redis_url: undefined,
+        },
+      }),
+    );
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/storage/governance-executions",
+      payload: {
+        workspace_id: "11111111-1111-4111-8111-111111111111",
+        source_service: "retrieval-runtime",
+        items: [
+          {
+            proposal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            proposal_type: "delete",
+            targets: {
+              record_ids: ["cccccccc-cccc-4ccc-8ccc-cccccccccccc"],
+            },
+            suggested_changes: {
+              delete_mode: "soft",
+            },
+            reason_code: "obsolete_task_state",
+            reason_text: "delete obsolete task state",
+            evidence: {},
+            planner: {
+              model: "writeback_llm",
+              confidence: 0.95,
+            },
+            verifier: {
+              required: true,
+              model: "writeback_llm",
+              decision: "approve",
+              confidence: 0.92,
+            },
+            policy_version: "memory-governance-v1",
+            idempotency_key: "delete-proposal-one",
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("validation_failed");
+  });
 });

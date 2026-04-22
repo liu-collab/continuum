@@ -8,6 +8,7 @@ import {
   archiveRecordSchema,
   confirmRecordSchema,
   deleteRecordSchema,
+  governanceExecutionBatchRequestSchema,
   invalidateRecordSchema,
   recordPatchSchema,
   recordQuerySchema,
@@ -226,6 +227,49 @@ export function createApp(service: StorageService): FastifyInstance {
     const payload = resolveConflictSchema.parse(request.body);
     const conflict = await service.resolveConflict(params.conflictId, payload);
     return ok(conflict);
+  });
+
+  app.post("/v1/storage/governance-executions", async (request) => {
+    const payload = governanceExecutionBatchRequestSchema.parse(request.body);
+    return ok(await service.submitGovernanceExecutions(payload));
+  });
+
+  app.get("/v1/storage/governance-executions", async (request) => {
+    const query = z
+      .object({
+        workspace_id: z.uuid().optional(),
+        proposal_type: z
+          .enum(["merge", "archive", "downgrade", "confirm", "resolve_conflict", "summarize", "delete"])
+          .optional(),
+        execution_status: z
+          .enum(["proposed", "verified", "rejected_by_guard", "executing", "executed", "failed", "superseded", "cancelled"])
+          .optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .parse(request.query);
+
+    return ok(
+      await service.listGovernanceExecutions({
+        ...(query.workspace_id ? { workspace_id: query.workspace_id } : {}),
+        ...(query.proposal_type ? { proposal_type: query.proposal_type } : {}),
+        ...(query.execution_status ? { execution_status: query.execution_status } : {}),
+        limit: query.limit,
+      }),
+    );
+  });
+
+  app.get("/v1/storage/governance-executions/:executionId", async (request) => {
+    const params = z.object({ executionId: z.uuid() }).parse(request.params);
+    const execution = await service.getGovernanceExecution(params.executionId);
+    if (!execution) {
+      throw new AppError("not_found", "governance execution not found", 404, params);
+    }
+    return ok(execution);
+  });
+
+  app.post("/v1/storage/governance-executions/:executionId/retry", async (request) => {
+    const params = z.object({ executionId: z.uuid() }).parse(request.params);
+    return ok(await service.retryGovernanceExecution(params.executionId));
   });
 
   app.get("/v1/storage/observe/metrics", async () => ok(await service.getMetrics()));

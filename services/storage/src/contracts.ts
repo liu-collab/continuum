@@ -49,6 +49,27 @@ export const governanceActionTypeSchema = z.enum([
   "restore_version",
 ]);
 
+export const governanceExecutionStatusSchema = z.enum([
+  "proposed",
+  "verified",
+  "rejected_by_guard",
+  "executing",
+  "executed",
+  "failed",
+  "superseded",
+  "cancelled",
+]);
+
+export const governanceProposalTypeSchema = z.enum([
+  "merge",
+  "archive",
+  "downgrade",
+  "confirm",
+  "resolve_conflict",
+  "summarize",
+  "delete",
+]);
+
 const sourceSchema = z.object({
   source_type: z.string().trim().min(1),
   source_ref: z.string().trim().min(1),
@@ -72,6 +93,130 @@ const structuredDetailsSchema = z
   .refine((value) => !containsTranscriptLikeContent(value), {
     message: "details must remain structured and cannot contain raw transcript payloads",
   });
+
+const governanceExecutionTargetSchema = z.object({
+  record_ids: z.array(z.uuid()).default([]),
+  conflict_id: z.uuid().optional(),
+  winner_record_id: z.uuid().optional(),
+});
+
+const governanceSuggestedChangesSchema = z
+  .object({
+    summary: z.string().trim().min(3).max(500).optional(),
+    importance: z.number().int().min(1).max(5).optional(),
+    status: memoryStatusSchema.optional(),
+    delete_mode: z.literal("soft").optional(),
+    candidate_type: memoryTypeSchema.optional(),
+    scope: scopeSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      Boolean(
+        value.summary ??
+          value.importance ??
+          value.status ??
+          value.delete_mode ??
+          value.candidate_type ??
+          value.scope,
+      ),
+    {
+      message: "at least one suggested change must be provided",
+      path: ["summary"],
+    },
+  );
+
+const governancePlannerSchema = z.object({
+  model: z.string().trim().min(1),
+  confidence: z.number().min(0).max(1),
+});
+
+const governanceVerifierSchema = z.object({
+  required: z.boolean(),
+  model: z.string().trim().min(1).optional(),
+  decision: z.enum(["approve", "reject"]).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  notes: z.string().trim().min(1).max(500).optional(),
+});
+
+export const governanceExecutionItemSchema = z
+  .object({
+    proposal_id: z.uuid(),
+    proposal_type: governanceProposalTypeSchema,
+    targets: governanceExecutionTargetSchema,
+    suggested_changes: governanceSuggestedChangesSchema,
+    reason_code: z.string().trim().min(1).max(120),
+    reason_text: z.string().trim().min(3).max(240),
+    evidence: structuredDetailsSchema,
+    planner: governancePlannerSchema,
+    verifier: governanceVerifierSchema,
+    policy_version: z.string().trim().min(1).max(120),
+    idempotency_key: z.string().trim().min(8).max(128),
+  })
+  .superRefine((value, ctx) => {
+    const recordCount = value.targets.record_ids.length;
+    const isDelete = value.proposal_type === "delete";
+    const isMerge = value.proposal_type === "merge";
+    const isSummarize = value.proposal_type === "summarize";
+    const isResolveConflict = value.proposal_type === "resolve_conflict";
+    const needsVerifier = isMerge || isSummarize || isResolveConflict || isDelete;
+
+    if (needsVerifier && value.verifier.required !== true) {
+      ctx.addIssue({
+        code: "custom",
+        message: "verifier.required must be true for high-impact actions",
+        path: ["verifier", "required"],
+      });
+    }
+
+    if (needsVerifier && value.verifier.decision !== "approve") {
+      ctx.addIssue({
+        code: "custom",
+        message: "verifier must approve high-impact actions",
+        path: ["verifier", "decision"],
+      });
+    }
+
+    if (isDelete && value.suggested_changes.delete_mode !== "soft") {
+      ctx.addIssue({
+        code: "custom",
+        message: "delete actions must use soft delete mode",
+        path: ["suggested_changes", "delete_mode"],
+      });
+    }
+
+    if (isDelete) {
+      const deleteReason = value.evidence["delete_reason"];
+      if (typeof deleteReason !== "string" || deleteReason.trim().length < 3) {
+        ctx.addIssue({
+          code: "custom",
+          message: "delete_reason is required for delete actions",
+          path: ["evidence", "delete_reason"],
+        });
+      }
+    }
+
+    if ((isMerge || isSummarize) && recordCount < 2) {
+      ctx.addIssue({
+        code: "custom",
+        message: "merge and summarize actions require at least two target records",
+        path: ["targets", "record_ids"],
+      });
+    }
+
+    if (isResolveConflict && !value.targets.conflict_id) {
+      ctx.addIssue({
+        code: "custom",
+        message: "conflict_id is required for resolve_conflict actions",
+        path: ["targets", "conflict_id"],
+      });
+    }
+  });
+
+export const governanceExecutionBatchRequestSchema = z.object({
+  workspace_id: z.uuid(),
+  source_service: z.string().trim().min(1).default("retrieval-runtime"),
+  items: z.array(governanceExecutionItemSchema).min(1).max(50),
+});
 
 export const writeBackCandidateSchema = z
   .object({
@@ -232,6 +377,8 @@ export type RefreshJobStatus = z.infer<typeof refreshJobStatusSchema>;
 export type ConflictStatus = z.infer<typeof conflictStatusSchema>;
 export type ConflictType = z.infer<typeof conflictTypeSchema>;
 export type GovernanceActionType = z.infer<typeof governanceActionTypeSchema>;
+export type GovernanceExecutionStatus = z.infer<typeof governanceExecutionStatusSchema>;
+export type GovernanceProposalType = z.infer<typeof governanceProposalTypeSchema>;
 export type WriteBackCandidate = z.infer<typeof writeBackCandidateSchema>;
 export type WriteJobEnvelope = z.infer<typeof writeJobEnvelopeSchema>;
 export type WriteBackBatchRequest = z.infer<typeof writeBackBatchRequestSchema>;
@@ -251,6 +398,8 @@ export type InvalidateRecordInput = z.infer<typeof invalidateRecordSchema>;
 export type DeleteRecordInput = z.infer<typeof deleteRecordSchema>;
 export type RestoreVersionInput = z.infer<typeof restoreVersionSchema>;
 export type ResolveConflictInput = z.infer<typeof resolveConflictSchema>;
+export type GovernanceExecutionItem = z.infer<typeof governanceExecutionItemSchema>;
+export type GovernanceExecutionBatchRequest = z.infer<typeof governanceExecutionBatchRequestSchema>;
 
 export interface NormalizedMemory extends WriteBackCandidate {
   user_id: string | null;
@@ -399,6 +548,48 @@ export interface GovernanceAction {
   actor_type: "system" | "user" | "operator";
   actor_id: string;
   created_at: string;
+}
+
+export interface GovernanceProposal {
+  id: string;
+  workspace_id: string;
+  proposal_type: GovernanceProposalType;
+  status: GovernanceExecutionStatus;
+  reason_code: string;
+  reason_text: string;
+  suggested_changes_json: Record<string, unknown>;
+  evidence_json: Record<string, unknown>;
+  planner_model: string;
+  planner_confidence: number;
+  verifier_required: boolean;
+  verifier_model: string | null;
+  verifier_decision: "approve" | "reject" | null;
+  verifier_confidence: number | null;
+  verifier_notes: string | null;
+  policy_version: string;
+  idempotency_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GovernanceProposalTarget {
+  proposal_id: string;
+  record_id: string | null;
+  conflict_id: string | null;
+  role: "target" | "winner" | "loser" | "seed" | "related";
+}
+
+export interface GovernanceExecution {
+  id: string;
+  workspace_id: string;
+  proposal_id: string;
+  proposal_type: GovernanceProposalType;
+  execution_status: GovernanceExecutionStatus;
+  result_summary: string | null;
+  error_message: string | null;
+  source_service: string;
+  started_at: string;
+  finished_at: string | null;
 }
 
 export interface RecordHistoryEntry {

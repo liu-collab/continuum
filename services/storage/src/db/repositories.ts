@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import type {
   AcceptedWriteBackJob,
   GovernanceAction,
+  GovernanceExecution,
+  GovernanceExecutionItem,
+  GovernanceProposal,
+  GovernanceProposalTarget,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -104,6 +108,42 @@ export interface GovernanceRepository {
     actor_id: string;
   }): Promise<void>;
   listActions(recordId: string): Promise<GovernanceAction[]>;
+  createProposal(input: {
+    proposal: Omit<GovernanceProposal, "id" | "created_at" | "updated_at">;
+    targets: GovernanceProposalTarget[];
+  }): Promise<GovernanceProposal>;
+  findProposalById(proposalId: string): Promise<GovernanceProposal | null>;
+  findProposalByIdempotencyKey(idempotencyKey: string): Promise<GovernanceProposal | null>;
+  listProposals(filters?: {
+    workspace_id?: string;
+    status?: string;
+    proposal_type?: string;
+    limit?: number;
+  }): Promise<GovernanceProposal[]>;
+  listProposalTargets(proposalId: string): Promise<GovernanceProposalTarget[]>;
+  createExecution(input: {
+    workspace_id: string;
+    proposal_id: string;
+    proposal_type: GovernanceExecution["proposal_type"];
+    execution_status: GovernanceExecution["execution_status"];
+    result_summary?: string | null;
+    error_message?: string | null;
+    source_service: string;
+    started_at: string;
+    finished_at?: string | null;
+  }): Promise<GovernanceExecution>;
+  updateExecution(
+    executionId: string,
+    patch: Partial<Pick<GovernanceExecution, "execution_status" | "result_summary" | "error_message" | "finished_at">>,
+  ): Promise<GovernanceExecution>;
+  findExecutionById(executionId: string): Promise<GovernanceExecution | null>;
+  findExecutionByProposalId(proposalId: string): Promise<GovernanceExecution | null>;
+  listExecutions(filters?: {
+    workspace_id?: string;
+    proposal_type?: string;
+    execution_status?: string;
+    limit?: number;
+  }): Promise<GovernanceExecution[]>;
 }
 
 export interface ReadModelRepository {
@@ -613,6 +653,9 @@ function createConflictRepository(session: DbSession): ConflictRepository {
 
 function createGovernanceRepository(session: DbSession): GovernanceRepository {
   const table = tableName(session.privateSchema, "memory_governance_actions");
+  const proposalsTable = tableName(session.privateSchema, "memory_governance_proposals");
+  const proposalTargetsTable = tableName(session.privateSchema, "memory_governance_proposal_targets");
+  const executionsTable = tableName(session.privateSchema, "memory_governance_executions");
 
   return {
     async appendAction(input) {
@@ -651,6 +694,223 @@ function createGovernanceRepository(session: DbSession): GovernanceRepository {
         actor_id: String(row.actor_id),
         created_at: toIsoString(row.created_at),
       }));
+    },
+    async createProposal(input) {
+      const result = await session.query(
+        `
+          insert into ${proposalsTable}
+            (
+              workspace_id, proposal_type, status, reason_code, reason_text,
+              suggested_changes_json, evidence_json, planner_model, planner_confidence,
+              verifier_required, verifier_model, verifier_decision, verifier_confidence, verifier_notes,
+              policy_version, idempotency_key
+            )
+          values
+            ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          returning *
+        `,
+        [
+          input.proposal.workspace_id,
+          input.proposal.proposal_type,
+          input.proposal.status,
+          input.proposal.reason_code,
+          input.proposal.reason_text,
+          JSON.stringify(input.proposal.suggested_changes_json),
+          JSON.stringify(input.proposal.evidence_json),
+          input.proposal.planner_model,
+          input.proposal.planner_confidence,
+          input.proposal.verifier_required,
+          input.proposal.verifier_model,
+          input.proposal.verifier_decision,
+          input.proposal.verifier_confidence,
+          input.proposal.verifier_notes,
+          input.proposal.policy_version,
+          input.proposal.idempotency_key,
+        ],
+      );
+
+      const proposal = mapGovernanceProposal(requireRow(result.rows[0], "memory_governance_proposals insert"));
+
+      for (const target of input.targets) {
+        await session.query(
+          `
+            insert into ${proposalTargetsTable}
+              (proposal_id, record_id, conflict_id, role)
+            values
+              ($1, $2, $3, $4)
+          `,
+          [proposal.id, target.record_id, target.conflict_id, target.role],
+        );
+      }
+
+      return proposal;
+    },
+    async findProposalById(proposalId) {
+      const result = await session.query(`select * from ${proposalsTable} where id = $1`, [proposalId]);
+      return result.rows[0] ? mapGovernanceProposal(result.rows[0]) : null;
+    },
+    async findProposalByIdempotencyKey(idempotencyKey) {
+      const result = await session.query(
+        `select * from ${proposalsTable} where idempotency_key = $1`,
+        [idempotencyKey],
+      );
+      return result.rows[0] ? mapGovernanceProposal(result.rows[0]) : null;
+    },
+    async listProposals(filters) {
+      const clauses: string[] = [];
+      const params: unknown[] = [];
+      if (filters?.workspace_id) {
+        params.push(filters.workspace_id);
+        clauses.push(`workspace_id = $${params.length}`);
+      }
+      if (filters?.status) {
+        params.push(filters.status);
+        clauses.push(`status = $${params.length}`);
+      }
+      if (filters?.proposal_type) {
+        params.push(filters.proposal_type);
+        clauses.push(`proposal_type = $${params.length}`);
+      }
+      params.push(filters?.limit ?? 100);
+      const result = await session.query(
+        `
+          select *
+          from ${proposalsTable}
+          ${clauses.length > 0 ? `where ${clauses.join(" and ")}` : ""}
+          order by created_at desc
+          limit $${params.length}
+        `,
+        params,
+      );
+      return result.rows.map(mapGovernanceProposal);
+    },
+    async listProposalTargets(proposalId) {
+      const result = await session.query(
+        `
+          select proposal_id, record_id, conflict_id, role
+          from ${proposalTargetsTable}
+          where proposal_id = $1
+          order by created_at asc
+        `,
+        [proposalId],
+      );
+      return result.rows.map((row) => ({
+        proposal_id: String(row.proposal_id),
+        record_id: nullableUuid(row.record_id),
+        conflict_id: nullableUuid(row.conflict_id),
+        role: String(row.role) as GovernanceProposalTarget["role"],
+      }));
+    },
+    async createExecution(input) {
+      const result = await session.query(
+        `
+          insert into ${executionsTable}
+            (
+              workspace_id, proposal_id, proposal_type, execution_status,
+              result_summary, error_message, source_service, started_at, finished_at
+            )
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          returning *
+        `,
+        [
+          input.workspace_id,
+          input.proposal_id,
+          input.proposal_type,
+          input.execution_status,
+          input.result_summary ?? null,
+          input.error_message ?? null,
+          input.source_service,
+          input.started_at,
+          input.finished_at ?? null,
+        ],
+      );
+      return mapGovernanceExecution(requireRow(result.rows[0], "memory_governance_executions insert"));
+    },
+    async updateExecution(executionId, patch) {
+      const assignments: string[] = [];
+      const params: unknown[] = [executionId];
+      if (patch.execution_status !== undefined) {
+        params.push(patch.execution_status);
+        assignments.push(`execution_status = $${params.length}`);
+      }
+      if (patch.result_summary !== undefined) {
+        params.push(patch.result_summary);
+        assignments.push(`result_summary = $${params.length}`);
+      }
+      if (patch.error_message !== undefined) {
+        params.push(patch.error_message);
+        assignments.push(`error_message = $${params.length}`);
+      }
+      if (patch.finished_at !== undefined) {
+        params.push(patch.finished_at);
+        assignments.push(`finished_at = $${params.length}`);
+      }
+      if (assignments.length === 0) {
+        const existing = await this.findExecutionById(executionId);
+        if (!existing) {
+          throw new NotFoundError("governance execution not found", { executionId });
+        }
+        return existing;
+      }
+      const result = await session.query(
+        `
+          update ${executionsTable}
+          set ${assignments.join(", ")}
+          where id = $1
+          returning *
+        `,
+        params,
+      );
+      if (!result.rows[0]) {
+        throw new NotFoundError("governance execution not found", { executionId });
+      }
+      return mapGovernanceExecution(result.rows[0]);
+    },
+    async findExecutionById(executionId) {
+      const result = await session.query(`select * from ${executionsTable} where id = $1`, [executionId]);
+      return result.rows[0] ? mapGovernanceExecution(result.rows[0]) : null;
+    },
+    async findExecutionByProposalId(proposalId) {
+      const result = await session.query(
+        `
+          select *
+          from ${executionsTable}
+          where proposal_id = $1
+          order by started_at desc
+          limit 1
+        `,
+        [proposalId],
+      );
+      return result.rows[0] ? mapGovernanceExecution(result.rows[0]) : null;
+    },
+    async listExecutions(filters) {
+      const clauses: string[] = [];
+      const params: unknown[] = [];
+      if (filters?.workspace_id) {
+        params.push(filters.workspace_id);
+        clauses.push(`workspace_id = $${params.length}`);
+      }
+      if (filters?.proposal_type) {
+        params.push(filters.proposal_type);
+        clauses.push(`proposal_type = $${params.length}`);
+      }
+      if (filters?.execution_status) {
+        params.push(filters.execution_status);
+        clauses.push(`execution_status = $${params.length}`);
+      }
+      params.push(filters?.limit ?? 100);
+      const result = await session.query(
+        `
+          select *
+          from ${executionsTable}
+          ${clauses.length > 0 ? `where ${clauses.join(" and ")}` : ""}
+          order by started_at desc
+          limit $${params.length}
+        `,
+        params,
+      );
+      return result.rows.map(mapGovernanceExecution);
     },
   };
 }
@@ -1053,6 +1313,48 @@ function mapConflict(row: Record<string, unknown>): MemoryConflict {
   };
 }
 
+function mapGovernanceProposal(row: Record<string, unknown>): GovernanceProposal {
+  return {
+    id: String(row.id),
+    workspace_id: String(row.workspace_id),
+    proposal_type: String(row.proposal_type) as GovernanceProposal["proposal_type"],
+    status: String(row.status) as GovernanceProposal["status"],
+    reason_code: String(row.reason_code),
+    reason_text: String(row.reason_text),
+    suggested_changes_json: (row.suggested_changes_json as Record<string, unknown> | null) ?? {},
+    evidence_json: (row.evidence_json as Record<string, unknown> | null) ?? {},
+    planner_model: String(row.planner_model),
+    planner_confidence: Number(row.planner_confidence ?? 0),
+    verifier_required: Boolean(row.verifier_required),
+    verifier_model: nullableString(row.verifier_model),
+    verifier_decision:
+      row.verifier_decision == null
+        ? null
+        : (String(row.verifier_decision) as GovernanceProposal["verifier_decision"]),
+    verifier_confidence: row.verifier_confidence == null ? null : Number(row.verifier_confidence),
+    verifier_notes: nullableString(row.verifier_notes),
+    policy_version: String(row.policy_version),
+    idempotency_key: String(row.idempotency_key),
+    created_at: toIsoString(row.created_at),
+    updated_at: toIsoString(row.updated_at),
+  };
+}
+
+function mapGovernanceExecution(row: Record<string, unknown>): GovernanceExecution {
+  return {
+    id: String(row.id),
+    workspace_id: String(row.workspace_id),
+    proposal_id: String(row.proposal_id),
+    proposal_type: String(row.proposal_type) as GovernanceExecution["proposal_type"],
+    execution_status: String(row.execution_status) as GovernanceExecution["execution_status"],
+    result_summary: nullableString(row.result_summary),
+    error_message: nullableString(row.error_message),
+    source_service: String(row.source_service),
+    started_at: toIsoString(row.started_at),
+    finished_at: nullableIsoString(row.finished_at),
+  };
+}
+
 function mapReadModel(row: Record<string, unknown>): ReadModelEntry {
   return {
     id: String(row.id),
@@ -1103,6 +1405,10 @@ function toIsoString(value: unknown): string {
 
 function nullableIsoString(value: unknown): string | null {
   return value ? toIsoString(value) : null;
+}
+
+function nullableUuid(value: unknown): string | null {
+  return value == null ? null : String(value);
 }
 
 function nullableString(value: unknown): string | null {

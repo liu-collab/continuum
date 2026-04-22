@@ -5,6 +5,7 @@ import type {
   ArchiveRecordInput,
   ConfirmRecordInput,
   DeleteRecordInput,
+  GovernanceExecutionBatchRequest,
   InvalidateRecordInput,
   RecordListPage,
   RecordHistoryEntry,
@@ -23,6 +24,7 @@ import type { EmbeddingsClient } from "./db/embeddings-client.js";
 import { hasCompleteStorageEmbeddingConfig } from "./embedding-config.js";
 import { normalizeCandidate } from "./domain/normalizer.js";
 import { GovernanceEngine } from "./domain/governance-engine.js";
+import { GovernanceExecutionEngine } from "./domain/governance-execution-engine.js";
 import { createRepositories, type StorageRepositories } from "./db/repositories.js";
 import { JobWorker } from "./jobs/job-worker.js";
 
@@ -58,6 +60,7 @@ export interface RecordListFilters {
 
 export class StorageService {
   private readonly governance: GovernanceEngine;
+  private readonly governanceExecution: GovernanceExecutionEngine;
   private readonly worker: JobWorker;
   private readonly embeddingsClient: EmbeddingsClient | undefined;
 
@@ -69,6 +72,7 @@ export class StorageService {
     embeddingsClient?: EmbeddingsClient,
   ) {
     this.governance = new GovernanceEngine(repositories);
+    this.governanceExecution = new GovernanceExecutionEngine(repositories);
     this.embeddingsClient = embeddingsClient;
     this.worker = new JobWorker(repositories, logger, {
       batch_size: config.write_job_batch_size,
@@ -238,6 +242,27 @@ export class StorageService {
 
   async resolveConflict(conflictId: string, input: ResolveConflictInput) {
     return this.governance.resolveConflict(conflictId, input);
+  }
+
+  async submitGovernanceExecutions(input: GovernanceExecutionBatchRequest) {
+    return this.governanceExecution.executeBatch(input);
+  }
+
+  async listGovernanceExecutions(filters?: {
+    workspace_id?: string;
+    proposal_type?: string;
+    execution_status?: string;
+    limit?: number;
+  }) {
+    return this.repositories.governance.listExecutions(filters);
+  }
+
+  async getGovernanceExecution(executionId: string) {
+    return this.repositories.governance.findExecutionById(executionId);
+  }
+
+  async retryGovernanceExecution(executionId: string) {
+    return this.governanceExecution.retryExecution(executionId);
   }
 
   async getMetrics() {

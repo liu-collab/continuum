@@ -132,6 +132,9 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
             'memory_write_jobs',
             'memory_conflicts',
             'memory_governance_actions',
+            'memory_governance_proposals',
+            'memory_governance_proposal_targets',
+            'memory_governance_executions',
             'memory_read_model_refresh_jobs'
           ))
              or (table_schema = $2 and table_name = 'memory_read_model_v1')
@@ -140,7 +143,7 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
         [context.privateSchema, context.sharedSchema],
       );
 
-      expect(tableCheck.rows).toHaveLength(7);
+      expect(tableCheck.rows).toHaveLength(10);
 
       const readModelColumns = await context.database.session().query<{
         column_name: string;
@@ -213,6 +216,23 @@ describe.skipIf(!testDatabaseUrl)("storage migrations against postgres", () => {
       );
 
       expect(governanceConstraint.rows[0]?.check_clause).toContain("invalidate");
+
+      const proposalConstraint = await context.database.session().query<{
+        check_clause: string;
+      }>(
+        `
+          select cc.check_clause
+          from information_schema.table_constraints tc
+          join information_schema.check_constraints cc
+            on tc.constraint_name = cc.constraint_name
+          where tc.table_schema = $1
+            and tc.table_name = 'memory_governance_proposals'
+            and tc.constraint_name = 'memory_governance_proposals_type_check'
+        `,
+        [context.privateSchema],
+      );
+
+      expect(proposalConstraint.rows[0]?.check_clause).toContain("summarize");
     } finally {
       await context.cleanup();
     }

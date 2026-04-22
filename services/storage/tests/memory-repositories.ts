@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import type {
   GovernanceAction,
+  GovernanceExecution,
+  GovernanceProposal,
+  GovernanceProposalTarget,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -41,6 +44,9 @@ export function createMemoryRepositories(
     versions: [...(seed?.versions ?? [])],
     conflicts: [...(seed?.conflicts ?? [])],
     governanceActions: [] as Array<Record<string, unknown>>,
+    governanceProposals: [] as GovernanceProposal[],
+    governanceProposalTargets: [] as GovernanceProposalTarget[],
+    governanceExecutions: [] as GovernanceExecution[],
     readModel: [...(seed?.readModel ?? [])],
     refreshJobs: [...(seed?.refreshJobs ?? [])],
   };
@@ -298,6 +304,89 @@ export function createMemoryRepositories(
           actor_id: String(action.actor_id),
           created_at: new Date().toISOString(),
         }));
+    },
+    async createProposal(input) {
+      const now = new Date().toISOString();
+      const created: GovernanceProposal = {
+        id: randomUUID(),
+        ...input.proposal,
+        created_at: now,
+        updated_at: now,
+      };
+      state.governanceProposals.push(created);
+      state.governanceProposalTargets.push(
+        ...input.targets.map((target) => ({
+          ...target,
+          proposal_id: created.id,
+        })),
+      );
+      return created;
+    },
+    async findProposalById(proposalId) {
+      return state.governanceProposals.find((proposal) => proposal.id === proposalId) ?? null;
+    },
+    async findProposalByIdempotencyKey(idempotencyKey) {
+      return (
+        state.governanceProposals.find((proposal) => proposal.idempotency_key === idempotencyKey) ??
+        null
+      );
+    },
+    async listProposals(filters) {
+      return state.governanceProposals
+        .filter((proposal) => {
+          if (filters?.workspace_id && proposal.workspace_id !== filters.workspace_id) return false;
+          if (filters?.status && proposal.status !== filters.status) return false;
+          if (filters?.proposal_type && proposal.proposal_type !== filters.proposal_type) return false;
+          return true;
+        })
+        .sort((left, right) => right.created_at.localeCompare(left.created_at))
+        .slice(0, filters?.limit ?? 100);
+    },
+    async listProposalTargets(proposalId) {
+      return state.governanceProposalTargets.filter((target) => target.proposal_id === proposalId);
+    },
+    async createExecution(input) {
+      const created: GovernanceExecution = {
+        id: randomUUID(),
+        workspace_id: input.workspace_id,
+        proposal_id: input.proposal_id,
+        proposal_type: input.proposal_type,
+        execution_status: input.execution_status,
+        result_summary: input.result_summary ?? null,
+        error_message: input.error_message ?? null,
+        source_service: input.source_service,
+        started_at: input.started_at,
+        finished_at: input.finished_at ?? null,
+      };
+      state.governanceExecutions.push(created);
+      return created;
+    },
+    async updateExecution(executionId, patch) {
+      const execution = state.governanceExecutions.find((item) => item.id === executionId);
+      if (!execution) throw new NotFoundError("governance execution not found", { executionId });
+      Object.assign(execution, patch);
+      return execution;
+    },
+    async findExecutionById(executionId) {
+      return state.governanceExecutions.find((execution) => execution.id === executionId) ?? null;
+    },
+    async findExecutionByProposalId(proposalId) {
+      return (
+        state.governanceExecutions.find((execution) => execution.proposal_id === proposalId) ?? null
+      );
+    },
+    async listExecutions(filters) {
+      return state.governanceExecutions
+        .filter((execution) => {
+          if (filters?.workspace_id && execution.workspace_id !== filters.workspace_id) return false;
+          if (filters?.proposal_type && execution.proposal_type !== filters.proposal_type) return false;
+          if (filters?.execution_status && execution.execution_status !== filters.execution_status) {
+            return false;
+          }
+          return true;
+        })
+        .sort((left, right) => right.started_at.localeCompare(left.started_at))
+        .slice(0, filters?.limit ?? 100);
     },
   };
 
