@@ -133,4 +133,38 @@ describe("governance execution engine", () => {
     expect((await repositories.records.findById(first.id))?.summary).toBe("Repository default is pnpm");
     expect((await repositories.records.findById(second.id))?.status).toBe("archived");
   });
+
+  it("cancels execution when target record status changed before apply", async () => {
+    const seed = {
+      ...buildSeed("Old task state"),
+      status: "archived" as const,
+    };
+    const repositories = createMemoryRepositories({
+      records: [seed],
+    });
+    const engine = new GovernanceExecutionEngine(repositories);
+
+    const result = await engine.executeBatch({
+      workspace_id: seed.workspace_id,
+      source_service: "retrieval-runtime",
+      items: [
+        {
+          proposal_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          proposal_type: "archive",
+          targets: { record_ids: [seed.id] },
+          suggested_changes: { status: "archived" },
+          reason_code: "superseded_record",
+          reason_text: "archive outdated task state",
+          evidence: { seed_record_ids: [seed.id] },
+          planner: { model: "writeback_llm", confidence: 0.9 },
+          verifier: { required: false },
+          policy_version: "memory-governance-v1",
+          idempotency_key: "archive-cancelled-one",
+        },
+      ],
+    });
+
+    expect(result[0]?.execution.execution_status).toBe("cancelled");
+    expect(result[0]?.execution.error_message).toContain("status changed before execution");
+  });
 });

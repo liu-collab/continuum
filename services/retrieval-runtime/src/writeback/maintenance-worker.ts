@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
+import { ConflictAppError } from "../errors.js";
 import type {
   GovernanceAction,
   GovernancePlan,
@@ -52,7 +53,8 @@ function summarizePlanText(value: string, maxLength = 220) {
 
 export class WritebackMaintenanceWorker {
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private sweepRunning = false;
+  private readonly workspaceLocks = new Set<string>();
 
   constructor(
     private readonly repository: RuntimeRepository,
@@ -98,27 +100,46 @@ export class WritebackMaintenanceWorker {
       next_checkpoint: nowIso(),
     };
 
-    if (this.running) {
+    if (!options.workspaceId && this.sweepRunning) {
       summary.degraded = true;
       summary.degradation_reason = "maintenance_already_running";
       return summary;
     }
-    this.running = true;
+    if (options.workspaceId) {
+      if (this.workspaceLocks.has(options.workspaceId)) {
+        throw new ConflictAppError("maintenance workspace is already running", {
+          workspace_id: options.workspaceId,
+        });
+      }
+      this.workspaceLocks.add(options.workspaceId);
+    }
+    if (!options.workspaceId) {
+      this.sweepRunning = true;
+    }
     try {
       const workspaces = await this.selectWorkspaces(options, summary.next_checkpoint);
       for (const workspaceId of workspaces) {
-        await this.processWorkspace(workspaceId, summary).catch((error) => {
-          summary.degraded = true;
-          summary.degradation_reason = summary.degradation_reason ?? (error instanceof Error ? error.message : String(error));
-          this.logger.warn({ err: error, workspace_id: workspaceId }, "maintenance workspace failed");
-        });
+        if (options.workspaceId) {
+          await this.processWorkspace(workspaceId, summary);
+        } else {
+          await this.withWorkspaceLock(workspaceId, () => this.processWorkspace(workspaceId, summary)).catch((error) => {
+            summary.degraded = true;
+            summary.degradation_reason = summary.degradation_reason ?? (error instanceof Error ? error.message : String(error));
+            this.logger.warn({ err: error, workspace_id: workspaceId }, "maintenance workspace failed");
+          });
+        }
         summary.workspace_ids_scanned.push(workspaceId);
       }
 
       this.logger.info({ maintenance: summary }, "writeback maintenance tick");
       return summary;
     } finally {
-      this.running = false;
+      if (options.workspaceId) {
+        this.workspaceLocks.delete(options.workspaceId);
+      }
+      if (!options.workspaceId) {
+        this.sweepRunning = false;
+      }
     }
   }
 
@@ -645,5 +666,23 @@ export class WritebackMaintenanceWorker {
         }),
       )
       .digest("hex");
+  }
+
+  private async withWorkspaceLock<T>(
+    workspaceId: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    if (this.workspaceLocks.has(workspaceId)) {
+      throw new ConflictAppError("maintenance workspace is already running", {
+        workspace_id: workspaceId,
+      });
+    }
+
+    this.workspaceLocks.add(workspaceId);
+    try {
+      return await task();
+    } finally {
+      this.workspaceLocks.delete(workspaceId);
+    }
   }
 }

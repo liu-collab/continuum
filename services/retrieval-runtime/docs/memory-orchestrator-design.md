@@ -1315,7 +1315,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 | T3 | 部分完成 | maintenance worker 与 runtime service 联测已覆盖统一 governance 接口接线，旧入口兼容层独立联测仍待继续 |
 | T4 | 已完成 | 已补 `memory_llm` 连续失败、失败率触发降级、冷却后恢复三类测试，并接入可配置恢复窗口 |
 | T5 | 已完成 | 已补可视化配置、健康检查与状态展示联动测试 |
-| T6 | 待开发 | 并发和竞态条件测试 |
+| T6 | 已完成 | 已补同 session `prepareContext` 串行、同 workspace maintenance 冲突与治理执行 `cancelled` 竞态测试 |
 
 ---
 

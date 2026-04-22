@@ -73,6 +73,18 @@ export class GovernanceExecutionEngine {
         execution: finished,
       };
     } catch (error) {
+      if (error instanceof GovernanceExecutionCancelledError) {
+        const cancelled = await this.repositories.governance.updateExecution(execution.id, {
+          execution_status: "cancelled",
+          error_message: error.message,
+          finished_at: new Date().toISOString(),
+        });
+        return {
+          proposal,
+          execution: cancelled,
+        };
+      }
+
       const failed = await this.repositories.governance.updateExecution(execution.id, {
         execution_status: "failed",
         error_message: error instanceof Error ? error.message : String(error),
@@ -339,8 +351,11 @@ export class GovernanceExecutionEngine {
     if (!record) {
       throw new NotFoundError("memory record not found", { recordId });
     }
-    if (record.status === "deleted") {
-      throw new Error(`record ${recordId} is already deleted`);
+    if (record.status !== "active" && record.status !== "pending_confirmation") {
+      throw new GovernanceExecutionCancelledError(`record ${recordId} status changed before execution`, {
+        recordId,
+        actual_status: record.status,
+      });
     }
     return record;
   }
@@ -376,5 +391,12 @@ export class GovernanceExecutionEngine {
       policy_version: proposal.policy_version,
       idempotency_key: proposal.idempotency_key,
     };
+  }
+}
+
+class GovernanceExecutionCancelledError extends Error {
+  constructor(message: string, readonly details?: Record<string, unknown>) {
+    super(message);
+    this.name = "GovernanceExecutionCancelledError";
   }
 }

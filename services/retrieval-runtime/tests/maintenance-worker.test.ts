@@ -69,6 +69,8 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
 
 class RecordingStorageClient implements StorageWritebackClient {
   public governanceBatches: Array<unknown> = [];
+  public waitForBatch = false;
+  private batchResolvers: Array<() => void> = [];
 
   constructor(
     private readonly seeds: MemoryRecordSnapshot[],
@@ -109,6 +111,11 @@ class RecordingStorageClient implements StorageWritebackClient {
 
   async submitGovernanceExecutions(batch: unknown): Promise<GovernanceExecutionResponseItem[]> {
     this.governanceBatches.push(batch);
+    if (this.waitForBatch) {
+      await new Promise<void>((resolve) => {
+        this.batchResolvers.push(resolve);
+      });
+    }
     const typed = batch as { workspace_id: string; items: Array<{ proposal_id: string; proposal_type: GovernanceExecutionResponseItem["execution"]["proposal_type"] }> };
     return typed.items.map((item, index) => ({
       proposal: {
@@ -146,6 +153,11 @@ class RecordingStorageClient implements StorageWritebackClient {
       },
     }));
   }
+
+  releaseNextBatch() {
+    const resolve = this.batchResolvers.shift();
+    resolve?.();
+  }
 }
 
 class StubPlanner implements LlmMaintenancePlanner {
@@ -173,6 +185,24 @@ class StubVerifier implements GovernanceVerifier {
   async verify(input: GovernanceVerifierInput): Promise<GovernanceVerifierResult> {
     this.verifyCalls.push(input);
     return this.result;
+  }
+}
+
+class BlockingPlanner implements LlmMaintenancePlanner {
+  private readonly waiters: Array<() => void> = [];
+
+  constructor(private readonly result: MaintenancePlan) {}
+
+  async plan(_input: MaintenancePlanInput): Promise<MaintenancePlan> {
+    await new Promise<void>((resolve) => {
+      this.waiters.push(resolve);
+    });
+    return this.result;
+  }
+
+  releaseNext() {
+    const resolve = this.waiters.shift();
+    resolve?.();
   }
 }
 
@@ -415,5 +445,47 @@ describe("WritebackMaintenanceWorker", () => {
     expect(summary.actions_applied).toBe(1);
     expect(summary.actions_skipped).toBe(0);
     expect(storage.governanceBatches).toHaveLength(0);
+  });
+
+  it("rejects concurrent manual runs for the same workspace", async () => {
+    const seed = makeRecord("seed-lock", "默认使用中文输出", 4);
+    const related = makeRecord("rel-lock", "偏好中文输出", 3);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new BlockingPlanner({
+      actions: [
+        {
+          type: "merge",
+          target_record_ids: [seed.id, related.id],
+          merged_summary: "默认使用中文输出（合并后）",
+          merged_importance: 5,
+          reason: "duplicate stable preference",
+        },
+      ],
+    });
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      new StubVerifier(),
+      guard,
+      makeConfig(),
+      logger,
+    );
+
+    const firstRun = worker.runOnce({ workspaceId, forced: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await expect(worker.runOnce({ workspaceId, forced: true })).rejects.toMatchObject({
+      code: "conflict_error",
+      statusCode: 409,
+    });
+
+    planner.releaseNext();
+    const summary = await firstRun;
+    expect(summary.actions_applied).toBe(1);
   });
 });

@@ -119,6 +119,9 @@ async function resolveTraceId(
 }
 
 export class RetrievalRuntimeService {
+  private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
+  private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
+
   constructor(
     private readonly triggerEngine: TriggerEngine,
     private readonly queryEngine: QueryEngine,
@@ -161,6 +164,39 @@ export class RetrievalRuntimeService {
       ...context,
       memory_mode: resolveMemoryMode(context.memory_mode),
     };
+    const idempotencyKey = normalizedContext.turn_id
+      ? `${normalizedContext.session_id}:${normalizedContext.turn_id}`
+      : undefined;
+    const existing = idempotencyKey
+      ? this.inflightPrepareContexts.get(idempotencyKey)
+      : undefined;
+
+    if (existing) {
+      return existing;
+    }
+
+    const execution = this.runSerializedPrepare(
+      normalizedContext.session_id,
+      () => this.prepareContextInternal(normalizedContext),
+    );
+
+    if (!idempotencyKey) {
+      return execution;
+    }
+
+    this.inflightPrepareContexts.set(idempotencyKey, execution);
+    execution.finally(() => {
+      if (this.inflightPrepareContexts.get(idempotencyKey) === execution) {
+        this.inflightPrepareContexts.delete(idempotencyKey);
+      }
+    });
+
+    return execution;
+  }
+
+  private async prepareContextInternal(
+    normalizedContext: TriggerContext & { memory_mode: MemoryMode },
+  ): Promise<PrepareContextResponse> {
     const traceId = await resolveTraceId(this.repository, {
       session_id: normalizedContext.session_id,
       turn_id: normalizedContext.turn_id,
@@ -721,6 +757,27 @@ export class RetrievalRuntimeService {
 
   private queryResultCanBePlanned(candidates: CandidateMemory[]) {
     return Array.isArray(candidates) && candidates.length > 0;
+  }
+
+  private runSerializedPrepare<T>(
+    sessionId: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.sessionPrepareQueues.get(sessionId) ?? Promise.resolve();
+    const scheduled = previous.catch(() => undefined).then(task);
+    const settled = scheduled.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    this.sessionPrepareQueues.set(sessionId, settled);
+    settled.finally(() => {
+      if (this.sessionPrepareQueues.get(sessionId) === settled) {
+        this.sessionPrepareQueues.delete(sessionId);
+      }
+    });
+
+    return scheduled;
   }
 
   private async finalizePreparedContextResponse(input: {

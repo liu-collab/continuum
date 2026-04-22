@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
+import { ConflictAppError } from "../src/errors.js";
 import { InjectionEngine } from "../src/injection/injection-engine.js";
 import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
@@ -38,6 +39,7 @@ import type {
   LlmRefineResult,
 } from "../src/writeback/llm-extractor.js";
 import { FinalizeIdempotencyCache } from "../src/writeback/finalize-idempotency-cache.js";
+import { WritebackMaintenanceWorker } from "../src/writeback/maintenance-worker.js";
 import type {
   RecordListPage,
   RecordPatchPayload,
@@ -202,6 +204,54 @@ class StubEmbeddingsClient implements EmbeddingsClient {
   }
 }
 
+class BlockingReadModelRepository extends InMemoryReadModelRepository {
+  public maxConcurrent = 0;
+  public active = 0;
+  public readonly starts: string[] = [];
+  private readonly releaseQueue: Array<() => void> = [];
+
+  constructor(records: CandidateMemory[]) {
+    super(records);
+  }
+
+  override async searchCandidates(query: Parameters<InMemoryReadModelRepository["searchCandidates"]>[0], signal?: AbortSignal) {
+    this.active += 1;
+    this.maxConcurrent = Math.max(this.maxConcurrent, this.active);
+    this.starts.push(`${query.session_id}:${query.semantic_query_text}`);
+    await new Promise<void>((resolve, reject) => {
+      const release = () => resolve();
+      this.releaseQueue.push(release);
+      if (signal) {
+        signal.addEventListener(
+          "abort",
+          () => reject(signal.reason instanceof Error ? signal.reason : new Error("aborted")),
+          { once: true },
+        );
+      }
+    });
+    try {
+      return await super.searchCandidates(query, signal);
+    } finally {
+      this.active -= 1;
+    }
+  }
+
+  releaseNext() {
+    const release = this.releaseQueue.shift();
+    release?.();
+  }
+}
+
+async function waitForCondition(check: () => boolean, timeoutMs = 1000) {
+  const startedAt = Date.now();
+  while (!check()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("timed out waiting for condition");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 class StubStorageClient implements StorageWritebackClient {
   public callCount = 0;
 
@@ -363,12 +413,14 @@ function createRuntime(overrides?: {
   storageClient?: StorageWritebackClient;
   llmExtractor?: LlmExtractor;
   llmRecallPlanner?: LlmRecallPlanner;
+  readModelRepository?: InMemoryReadModelRepository;
   config?: Partial<AppConfig>;
 }) {
   const repository = new InMemoryRuntimeRepository();
   const logger = pino({ enabled: false });
   const dependencyGuard = new DependencyGuard(repository, logger);
-  const readModelRepository = new InMemoryReadModelRepository(overrides?.records ?? sampleRecords);
+  const readModelRepository =
+    overrides?.readModelRepository ?? new InMemoryReadModelRepository(overrides?.records ?? sampleRecords);
   const embeddingsClient = overrides?.embeddingsClient ?? new StubEmbeddingsClient();
   const storageClient = overrides?.storageClient ?? new StubStorageClient();
   const config = { ...baseConfig, ...overrides?.config };
@@ -491,6 +543,90 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block).not.toBeNull();
     expect(response.memory_packet?.records.map((record) => record.id)).toEqual(["mem-preference", "mem-task"]);
     expect(response.injection_block?.memory_summary).toContain("偏好与任务状态");
+  });
+
+  it("serializes concurrent prepare-context calls inside the same session", async () => {
+    const readModelRepository = new BlockingReadModelRepository(sampleRecords);
+    const { service } = createRuntime({
+      readModelRepository,
+      embeddingsClient: new StubEmbeddingsClient([0.95, 0.05, 0]),
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const first = service.prepareContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次确定过的当前任务状态和偏好，这次继续沿用。",
+      turn_id: "same-session-turn-1",
+    });
+    const second = service.prepareContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "之前那套任务状态和偏好，这一轮也继续沿用。",
+      turn_id: "same-session-turn-2",
+    });
+
+    await waitForCondition(() => readModelRepository.starts.length >= 1);
+    expect(readModelRepository.maxConcurrent).toBe(1);
+    expect(readModelRepository.starts).toHaveLength(1);
+
+    readModelRepository.releaseNext();
+    await waitForCondition(() => readModelRepository.starts.length >= 2);
+    expect(readModelRepository.starts).toHaveLength(2);
+    expect(readModelRepository.maxConcurrent).toBe(1);
+
+    readModelRepository.releaseNext();
+    await Promise.all([first, second]);
+  });
+
+  it("allows concurrent prepare-context calls across different sessions", async () => {
+    const readModelRepository = new BlockingReadModelRepository(sampleRecords);
+    const { service } = createRuntime({
+      readModelRepository,
+      embeddingsClient: new StubEmbeddingsClient([0.95, 0.05, 0]),
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const first = service.prepareContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次确定过的当前任务状态和偏好，这次继续沿用。",
+      turn_id: "cross-session-turn-1",
+    });
+    const second = service.prepareContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: "550e8400-e29b-41d4-a716-446655440099",
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "之前那套任务状态和偏好，在另一个会话里也继续沿用。",
+      turn_id: "cross-session-turn-2",
+    });
+
+    await waitForCondition(() => readModelRepository.starts.length >= 2);
+    expect(readModelRepository.maxConcurrent).toBe(2);
+    expect(readModelRepository.starts).toHaveLength(2);
+
+    readModelRepository.releaseNext();
+    readModelRepository.releaseNext();
+    await Promise.all([first, second]);
   });
 
   it("respects llm recall planner refusal and skips injection", async () => {
@@ -1421,6 +1557,63 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block).not.toBeNull();
     expect(response.additional_context).toContain("恢复");
     expect(response.injection_block?.memory_summary).toContain("偏好与约束");
+  });
+
+  it("surfaces maintenance conflict responses through the HTTP layer", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const dependencyGuard = new DependencyGuard(repository, logger);
+    const readModelRepository = new InMemoryReadModelRepository(sampleRecords);
+    const storageClient = new StubStorageClient();
+    const embeddingsClient = new StubEmbeddingsClient();
+    const worker = {
+      runOnce: async () => {
+        throw new ConflictAppError("maintenance workspace is already running", {
+          workspace_id: ids.workspace,
+        });
+      },
+    } as unknown as WritebackMaintenanceWorker;
+    const memoryOrchestrator = createMemoryOrchestrator({ config: baseConfig });
+    const service = new RetrievalRuntimeService(
+      new TriggerEngine(
+        baseConfig,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+      ),
+      new QueryEngine(baseConfig, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
+      new InjectionEngine(baseConfig),
+      new WritebackEngine(baseConfig, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      repository,
+      dependencyGuard,
+      logger,
+      new FinalizeIdempotencyCache(baseConfig),
+      baseConfig.EMBEDDING_TIMEOUT_MS,
+      memoryOrchestrator,
+      worker,
+    );
+    const app = createApp(service);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/writeback-maintenance/run",
+      payload: {
+        workspace_id: ids.workspace,
+        force: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "conflict_error",
+        message: "maintenance workspace is already running",
+      },
+    });
+    await app.close();
   });
 
   it("reuses the latest session trace for session_start when the session already has runtime history", async () => {

@@ -26,6 +26,12 @@ export class ValidationError extends AppError {
   }
 }
 
+export class ConflictAppError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, { code: "conflict_error", statusCode: 409, details, expose: true });
+  }
+}
+
 export class DependencyUnavailableError extends AppError {
   constructor(message: string, details?: unknown) {
     super(message, { code: "dependency_unavailable", statusCode: 503, details, expose: true });
