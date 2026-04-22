@@ -345,10 +345,14 @@ export const MemoryPlanRunSchema = z.object({
   traceId: z.string(),
   phase: z.string().nullable(),
   planKind: z.enum([
+    "memory_intent_plan",
     "memory_search_plan",
     "memory_injection_plan",
     "memory_writeback_plan",
-    "memory_governance_plan"
+    "memory_governance_plan",
+    "memory_relation_plan",
+    "memory_recommendation_plan",
+    "memory_evolution_plan"
   ]),
   inputSummary: z.string().nullable(),
   outputSummary: z.string().nullable(),

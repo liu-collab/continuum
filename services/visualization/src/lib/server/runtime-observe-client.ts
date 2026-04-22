@@ -140,10 +140,14 @@ export type RuntimeMemoryPlanRecord = {
   traceId: string;
   phase: string | null;
   planKind:
+    | "memory_intent_plan"
     | "memory_search_plan"
     | "memory_injection_plan"
     | "memory_writeback_plan"
-    | "memory_governance_plan";
+    | "memory_governance_plan"
+    | "memory_relation_plan"
+    | "memory_recommendation_plan"
+    | "memory_evolution_plan";
   inputSummary: string | null;
   outputSummary: string | null;
   promptVersion: string | null;
@@ -459,10 +463,14 @@ function mapMemoryPlanRun(value: unknown): RuntimeMemoryPlanRecord | null {
 
   const planKind = pickString(record, "plan_kind", "planKind");
   if (
+    planKind !== "memory_intent_plan" &&
     planKind !== "memory_search_plan" &&
     planKind !== "memory_injection_plan" &&
     planKind !== "memory_writeback_plan" &&
-    planKind !== "memory_governance_plan"
+    planKind !== "memory_governance_plan" &&
+    planKind !== "memory_relation_plan" &&
+    planKind !== "memory_recommendation_plan" &&
+    planKind !== "memory_evolution_plan"
   ) {
     return null;
   }

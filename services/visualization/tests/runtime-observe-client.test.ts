@@ -293,5 +293,71 @@ describe("runtime observe contract parsing", () => {
       "memory_llm"
     ]);
   });
+
+  it("keeps newly added memory plan kinds in the run trace payload", () => {
+    const snapshot = normalizeRuntimeRunsPayload({
+      memory_plan_runs: [
+        {
+          trace_id: "trace-2",
+          phase: "before_response",
+          plan_kind: "memory_intent_plan",
+          input_summary: "input=继续上次任务",
+          output_summary: "needs_memory=true",
+          prompt_version: "memory-intent-plan-v1",
+          schema_version: "memory-plan-schema-v1",
+          degraded: false,
+          result_state: "planned",
+          duration_ms: 3,
+          created_at: "2026-04-22T00:00:00Z"
+        },
+        {
+          trace_id: "trace-2",
+          phase: "before_response",
+          plan_kind: "memory_relation_plan",
+          input_summary: "seed=mem-task",
+          output_summary: "relations=1; expanded=1",
+          prompt_version: "memory-relation-plan-v1",
+          schema_version: "memory-plan-schema-v1",
+          degraded: false,
+          result_state: "planned",
+          duration_ms: 2,
+          created_at: "2026-04-22T00:00:01Z"
+        },
+        {
+          trace_id: "trace-2",
+          phase: "session_start",
+          plan_kind: "memory_recommendation_plan",
+          input_summary: "available=3",
+          output_summary: "recommendations=1",
+          prompt_version: "memory-recommendation-plan-v1",
+          schema_version: "memory-plan-schema-v1",
+          degraded: false,
+          result_state: "planned",
+          duration_ms: 4,
+          created_at: "2026-04-22T00:00:02Z"
+        },
+        {
+          trace_id: "trace-2",
+          phase: "after_response",
+          plan_kind: "memory_evolution_plan",
+          input_summary: "workspace=ws",
+          output_summary: "knowledge=1",
+          prompt_version: "memory-evolution-plan-v1",
+          schema_version: "memory-plan-schema-v1",
+          degraded: false,
+          result_state: "planned",
+          duration_ms: 5,
+          created_at: "2026-04-22T00:00:03Z"
+        }
+      ]
+    });
+
+    expect(snapshot.memoryPlanRuns.map((run) => run.planKind)).toEqual([
+      "memory_intent_plan",
+      "memory_relation_plan",
+      "memory_recommendation_plan",
+      "memory_evolution_plan"
+    ]);
+  });
 });
 

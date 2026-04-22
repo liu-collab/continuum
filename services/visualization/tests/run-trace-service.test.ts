@@ -309,6 +309,75 @@ describe("run trace narrative", () => {
 
     expect(narrative.outcomeCode).toBe("plan_only");
   });
+
+  it("summarizes newly added plan kinds in phase narratives", () => {
+    const narratives = buildPhaseNarratives({
+      ...baseDetail,
+      memoryPlanRuns: [
+        {
+          traceId: "trace-plan",
+          phase: "before_response",
+          planKind: "memory_intent_plan",
+          inputSummary: "input=继续上次任务",
+          outputSummary: "needs_memory=true",
+          promptVersion: "memory-intent-plan-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 3,
+          createdAt: null
+        },
+        {
+          traceId: "trace-plan",
+          phase: "before_response",
+          planKind: "memory_relation_plan",
+          inputSummary: "seed=mem-task",
+          outputSummary: "relations=1",
+          promptVersion: "memory-relation-plan-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 2,
+          createdAt: null
+        },
+        {
+          traceId: "trace-plan",
+          phase: "session_start",
+          planKind: "memory_recommendation_plan",
+          inputSummary: "available=3",
+          outputSummary: "recommendations=1",
+          promptVersion: "memory-recommendation-plan-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 4,
+          createdAt: null
+        },
+        {
+          traceId: "trace-plan",
+          phase: "after_response",
+          planKind: "memory_evolution_plan",
+          inputSummary: "workspace=ws",
+          outputSummary: "knowledge=1",
+          promptVersion: "memory-evolution-plan-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 5,
+          createdAt: null
+        }
+      ]
+    });
+
+    const planNarratives = narratives.filter((item) => item.key === "plan");
+    expect(planNarratives.some((item) => item.summary.includes("memory_intent_plan"))).toBe(true);
+    expect(planNarratives.some((item) => item.summary.includes("memory_recommendation_plan"))).toBe(true);
+    expect(planNarratives.some((item) => item.details.some((detail) => detail.includes("memory_evolution_plan")))).toBe(true);
+  });
 });
 
 describe("run trace empty state", () => {

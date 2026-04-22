@@ -1303,7 +1303,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 | C2 | 已完成 | `retrieval-runtime` 依赖状态桶已从 `writeback_llm` 更新为 `memory_llm` |
 | C3 | 已完成 | 页面配置项已统一改口径为 `memory llm` |
 | C4 | 已完成 | 页面状态探针已从 `writeback llm` 升级为统一记忆模型状态 |
-| C5 | 已完成 | 运行时已新增 `memory_search_plan / memory_injection_plan / memory_writeback_plan / memory_governance_plan` 观测记录，`visualization` 运行轨迹页已补 plan 级调试视图 |
+| C5 | 已完成 | 运行时已新增 `memory_intent_plan / memory_search_plan / memory_injection_plan / memory_writeback_plan / memory_governance_plan / memory_relation_plan / memory_recommendation_plan / memory_evolution_plan` 观测记录，`visualization` 运行轨迹页已补 plan 级调试视图 |
 | C6 | 已完成 | 已补配置迁移文档与批量替换脚本，支持将 `WRITEBACK_LLM_*` 迁移到 `MEMORY_LLM_*` |
 
 ### 14.4 测试清单
@@ -1468,7 +1468,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 **阶段 1 交付标准**：
 - [x] 召回、写入、治理链路全部使用模型决策
 - [x] 降级策略完善，LLM 不可用时有兜底
-- [ ] 观测面板展示 plan 级别数据
+- [x] 观测面板展示 plan 级别数据
 - [x] 配置迁移完成（MEMORY_LLM_*）
 - [ ] 核心指标：召回准确率 > 80%，治理正确率 > 85%
 
