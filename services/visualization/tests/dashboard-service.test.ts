@@ -311,6 +311,7 @@ describe("dashboard trend aggregation", () => {
         }
       ],
       injectionRuns: [],
+      memoryPlanRuns: [],
       writeBackRuns: [],
       dependencyStatus: []
     });

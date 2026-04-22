@@ -22,6 +22,9 @@ import type {
 import { jaccardOverlap, nowIso } from "../shared/utils.js";
 import type { StorageWritebackClient } from "./storage-client.js";
 
+const GOVERNANCE_PLAN_PROMPT_VERSION = "memory-governance-plan-v1";
+const GOVERNANCE_PLAN_SCHEMA_VERSION = "memory-governance-schema-v1";
+
 export interface MaintenanceWorkerOptions {
   workspaceId?: string;
   forced?: boolean;
@@ -37,6 +40,14 @@ interface WorkspaceMaintenanceContext {
   seed_records: MemoryRecordSnapshot[];
   related_records: MemoryRecordSnapshot[];
   open_conflicts: MemoryConflictSnapshot[];
+}
+
+function summarizePlanText(value: string, maxLength = 220) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
 export class WritebackMaintenanceWorker {
@@ -143,6 +154,19 @@ export class WritebackMaintenanceWorker {
   }
 
   private async processWorkspace(workspaceId: string, summary: MaintenanceRunSummary): Promise<void> {
+    const traceId = `maintenance:${workspaceId}:${summary.next_checkpoint}`;
+    await this.repository.recordTurn({
+      trace_id: traceId,
+      host: "memory_native_agent",
+      workspace_id: workspaceId,
+      user_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
+      session_id: `maintenance:${workspaceId}`,
+      phase: "after_response",
+      current_input: `governance maintenance scan for workspace ${workspaceId}`,
+      assistant_output: "memory governance maintenance",
+      created_at: summary.next_checkpoint,
+    });
+
     const seeds = await this.fetchSeeds(workspaceId);
     summary.seeds_inspected += seeds.length;
 
@@ -174,6 +198,7 @@ export class WritebackMaintenanceWorker {
       return;
     }
 
+    const planStartedAt = Date.now();
     const planResult = await this.dependencyGuard.run(
       "memory_llm",
       this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
@@ -186,6 +211,22 @@ export class WritebackMaintenanceWorker {
     );
 
     if (!planResult.ok || !planResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: "after_response",
+        plan_kind: "memory_governance_plan",
+        input_summary: summarizePlanText(
+          `workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}; conflicts=${conflicts.length}`,
+        ),
+        output_summary: summarizePlanText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+        prompt_version: GOVERNANCE_PLAN_PROMPT_VERSION,
+        schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - planStartedAt,
+        created_at: summary.next_checkpoint,
+      });
       summary.degraded = true;
       summary.degradation_reason = summary.degradation_reason ?? planResult.error?.code ?? "memory_llm_unavailable";
       await this.repository.upsertMaintenanceCheckpoint({
@@ -196,6 +237,23 @@ export class WritebackMaintenanceWorker {
     }
 
     const plan = this.capPlan(planResult.value);
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: "after_response",
+      plan_kind: "memory_governance_plan",
+      input_summary: summarizePlanText(
+        `workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}; conflicts=${conflicts.length}`,
+      ),
+      output_summary: summarizePlanText(
+        `actions=${plan.actions.length}; notes=${plan.notes ?? ""}; action_types=${plan.actions.map((action) => action.type).join(",")}`,
+      ),
+      prompt_version: GOVERNANCE_PLAN_PROMPT_VERSION,
+      schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: plan.actions.length > 0 ? "planned" : "skipped",
+      duration_ms: Date.now() - planStartedAt,
+      created_at: summary.next_checkpoint,
+    });
     summary.actions_proposed += plan.actions.length;
 
     const outcome = await this.applyActions(workspaceId, plan, workspaceContext);

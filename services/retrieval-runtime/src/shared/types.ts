@@ -94,6 +94,9 @@ export interface TriggerDecision {
   candidate_limit?: number;
   llm_used?: boolean;
   llm_decision_reason?: string;
+  search_plan_attempted?: boolean;
+  search_plan_degraded?: boolean;
+  search_plan_degradation_reason?: string;
   degraded?: boolean;
   degradation_reason?: string;
 }
@@ -342,6 +345,27 @@ export interface WritebackSubmissionRecord {
   created_at: string;
 }
 
+export type MemoryPlanKind =
+  | "memory_search_plan"
+  | "memory_injection_plan"
+  | "memory_writeback_plan"
+  | "memory_governance_plan";
+
+export interface MemoryPlanRunRecord {
+  trace_id: string;
+  phase: RuntimePhase;
+  plan_kind: MemoryPlanKind;
+  input_summary: string;
+  output_summary: string;
+  prompt_version: string;
+  schema_version: string;
+  degraded: boolean;
+  degradation_reason?: string;
+  result_state: "planned" | "skipped" | "fallback" | "failed";
+  duration_ms: number;
+  created_at: string;
+}
+
 export interface ObserveRunsFilters {
   session_id?: string;
   turn_id?: string;
@@ -355,6 +379,7 @@ export interface ObserveRunsResponse {
   trigger_runs: TriggerRunRecord[];
   recall_runs: RecallRunRecord[];
   injection_runs: InjectionRunRecord[];
+  memory_plan_runs: MemoryPlanRunRecord[];
   writeback_submissions: WritebackSubmissionRecord[];
   total: number;
   page: number;

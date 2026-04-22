@@ -4,6 +4,7 @@ import type {
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
   MaintenanceCheckpointRecord,
+  MemoryPlanRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -30,6 +31,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly triggerRuns: TriggerRunRecord[] = [];
   private readonly recallRuns: RecallRunRecord[] = [];
   private readonly injectionRuns: InjectionRunRecord[] = [];
+  private readonly memoryPlanRuns: MemoryPlanRunRecord[] = [];
   private readonly writebackSubmissions: WritebackSubmissionRecord[] = [];
   private readonly writebackOutbox: WritebackOutboxRecord[] = [];
   private readonly finalizeIdempotencyRecords = new Map<string, FinalizeIdempotencyRecord>();
@@ -72,6 +74,10 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
 
   async recordInjectionRun(run: InjectionRunRecord): Promise<void> {
     this.upsertByTraceAndPhase(this.injectionRuns, run);
+  }
+
+  async recordMemoryPlanRun(run: MemoryPlanRunRecord): Promise<void> {
+    this.upsertByTracePhaseAndKind(this.memoryPlanRuns, run);
   }
 
   async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {
@@ -266,6 +272,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       trigger_runs: byTrace(this.triggerRuns),
       recall_runs: byTrace(this.recallRuns),
       injection_runs: byTrace(this.injectionRuns),
+      memory_plan_runs: byTrace(this.memoryPlanRuns),
       writeback_submissions: byTrace(this.writebackSubmissions),
       total,
       page,
@@ -312,6 +319,18 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
 
   private upsertByTraceAndPhase<T extends { trace_id: string; phase: string }>(records: T[], next: T) {
     const existingIndex = records.findIndex((record) => record.trace_id === next.trace_id && record.phase === next.phase);
+    if (existingIndex >= 0) {
+      records[existingIndex] = next;
+      return;
+    }
+
+    records.unshift(next);
+  }
+
+  private upsertByTracePhaseAndKind<T extends { trace_id: string; phase: string; plan_kind: string }>(records: T[], next: T) {
+    const existingIndex = records.findIndex((record) => {
+      return record.trace_id === next.trace_id && record.phase === next.phase && record.plan_kind === next.plan_kind;
+    });
     if (existingIndex >= 0) {
       records[existingIndex] = next;
       return;

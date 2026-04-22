@@ -1022,6 +1022,7 @@ describe("retrieval-runtime service", () => {
 
     const runs = await repository.getRuns({ trace_id: prepared.trace_id });
     expect(runs.trigger_runs[0]?.memory_mode).toBe("workspace_only");
+    expect(runs.memory_plan_runs[0]?.plan_kind).toBe("memory_search_plan");
     expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.recall_runs[0]?.matched_scopes).toContain("workspace");
     expect(runs.injection_runs[0]?.selected_scopes).toContain("workspace");
@@ -1137,6 +1138,7 @@ describe("retrieval-runtime service", () => {
     expect(runs.trigger_runs).toHaveLength(2);
     expect(runs.recall_runs).toHaveLength(2);
     expect(runs.injection_runs).toHaveLength(2);
+    expect(runs.memory_plan_runs.some((run) => run.plan_kind === "memory_writeback_plan")).toBe(true);
     expect(runs.writeback_submissions).toHaveLength(1);
     expect(runs.writeback_submissions[0]?.phase).toBe("after_response");
   });

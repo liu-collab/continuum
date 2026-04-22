@@ -31,6 +31,7 @@ export type RuntimeObserveRunsSnapshot = {
   triggerRuns: RuntimeTriggerRecord[];
   recallRuns: RuntimeRecallRecord[];
   injectionRuns: RuntimeInjectionRecord[];
+  memoryPlanRuns: RuntimeMemoryPlanRecord[];
   writeBackRuns: RuntimeWritebackRecord[];
   dependencyStatus: RuntimeDependencyRecord[];
 };
@@ -135,6 +136,25 @@ export type RuntimeWritebackRecord = {
   createdAt: string | null;
 };
 
+export type RuntimeMemoryPlanRecord = {
+  traceId: string;
+  phase: string | null;
+  planKind:
+    | "memory_search_plan"
+    | "memory_injection_plan"
+    | "memory_writeback_plan"
+    | "memory_governance_plan";
+  inputSummary: string | null;
+  outputSummary: string | null;
+  promptVersion: string | null;
+  schemaVersion: string | null;
+  degraded: boolean;
+  degradationReason: string | null;
+  resultState: string;
+  durationMs: number | null;
+  createdAt: string | null;
+};
+
 export type RuntimeDependencyRecord = {
   name: string;
   status: string;
@@ -169,6 +189,7 @@ export function normalizeRuntimeRunsPayload(value: unknown): RuntimeObserveRunsS
       triggerRuns: [],
       recallRuns: [],
       injectionRuns: [],
+      memoryPlanRuns: [],
       writeBackRuns: [],
       dependencyStatus: []
     };
@@ -180,6 +201,9 @@ export function normalizeRuntimeRunsPayload(value: unknown): RuntimeObserveRunsS
     recallRuns: pickArray(root, "recall_runs", "recallRuns").map(mapRecallRun).filter(isDefined),
     injectionRuns: pickArray(root, "injection_runs", "injectionRuns")
       .map(mapInjectionRun)
+      .filter(isDefined),
+    memoryPlanRuns: pickArray(root, "memory_plan_runs", "memoryPlanRuns")
+      .map(mapMemoryPlanRun)
       .filter(isDefined),
     writeBackRuns: pickArray(root, "writeback_submissions", "writeBackRuns", "write_back_runs")
       .map(mapWriteBackRun)
@@ -426,6 +450,39 @@ function mapWriteBackRun(value: unknown): RuntimeWritebackRecord | null {
   };
 }
 
+function mapMemoryPlanRun(value: unknown): RuntimeMemoryPlanRecord | null {
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const planKind = pickString(record, "plan_kind", "planKind");
+  if (
+    planKind !== "memory_search_plan" &&
+    planKind !== "memory_injection_plan" &&
+    planKind !== "memory_writeback_plan" &&
+    planKind !== "memory_governance_plan"
+  ) {
+    return null;
+  }
+
+  return {
+    traceId: pickString(record, "trace_id", "traceId") ?? "unknown-trace",
+    phase: pickNullableString(record, "phase"),
+    planKind,
+    inputSummary: pickNullableString(record, "input_summary", "inputSummary"),
+    outputSummary: pickNullableString(record, "output_summary", "outputSummary"),
+    promptVersion: pickNullableString(record, "prompt_version", "promptVersion"),
+    schemaVersion: pickNullableString(record, "schema_version", "schemaVersion"),
+    degraded: pickBoolean(record, "degraded") ?? false,
+    degradationReason: pickNullableString(record, "degradation_reason", "degradationReason"),
+    resultState: pickString(record, "result_state", "resultState") ?? "unknown",
+    durationMs: pickNumber(record, "duration_ms", "durationMs") ?? null,
+    createdAt: pickNullableString(record, "created_at", "createdAt")
+  };
+}
+
 function mapDependencyStatus(value: unknown): RuntimeDependencyRecord[] {
   const record = asRecord(value);
 
@@ -527,6 +584,7 @@ export async function fetchRuntimeRuns(query: string) {
         triggerRuns: [],
         recallRuns: [],
         injectionRuns: [],
+        memoryPlanRuns: [],
         writeBackRuns: [],
         dependencyStatus: []
       } satisfies RuntimeObserveRunsSnapshot
@@ -548,6 +606,7 @@ export async function fetchRuntimeRuns(query: string) {
         triggerRuns: [],
         recallRuns: [],
         injectionRuns: [],
+        memoryPlanRuns: [],
         writeBackRuns: [],
         dependencyStatus: []
       } satisfies RuntimeObserveRunsSnapshot

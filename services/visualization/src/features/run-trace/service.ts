@@ -6,6 +6,7 @@ import { toRunTraceQuery } from "@/lib/query-params";
 import {
   RuntimeDependencyRecord,
   RuntimeInjectionRecord,
+  RuntimeMemoryPlanRecord,
   RuntimeObserveRunsSnapshot,
   RuntimeRecallRecord,
   RuntimeTriggerRecord,
@@ -20,6 +21,7 @@ type RunAggregate = {
   triggerRuns: RuntimeTriggerRecord[];
   recallRuns: RuntimeRecallRecord[];
   injectionRuns: RuntimeInjectionRecord[];
+  memoryPlanRuns: RuntimeMemoryPlanRecord[];
   writeBackRuns: RuntimeWritebackRecord[];
   dependencyStatus: RuntimeDependencyRecord[];
 };
@@ -30,6 +32,7 @@ type PhaseAggregate = {
   triggerRun?: RuntimeTriggerRecord;
   recallRun?: RuntimeRecallRecord;
   injectionRun?: RuntimeInjectionRecord;
+  memoryPlanRuns: RuntimeMemoryPlanRecord[];
   writeBackRun?: RuntimeWritebackRecord;
 };
 
@@ -61,6 +64,14 @@ function summarizeRecall(run?: RuntimeRecallRecord) {
   return `从 ${formatScopeList(run.selectedScopes)} 中选中了 ${run.selectedCount} 条记录`;
 }
 
+function summarizePlanRuns(runs: RuntimeMemoryPlanRecord[]) {
+  if (runs.length === 0) {
+    return "未记录 plan 级事件。";
+  }
+
+  return `记录了 ${runs.length} 条 plan 级事件：${runs.map((run) => run.planKind).join("、")}。`;
+}
+
 function summarizeScopes(detail: RunAggregate) {
   const primary = pickPrimaryPhase(detail);
   const triggerRun = primary?.triggerRun;
@@ -84,6 +95,7 @@ function groupByPhase(detail: RunAggregate): PhaseAggregate[] {
       ...detail.triggerRuns.map((item) => item.phase),
       ...detail.recallRuns.map((item) => item.phase),
       ...detail.injectionRuns.map((item) => item.phase),
+      ...detail.memoryPlanRuns.map((item) => item.phase),
       ...detail.writeBackRuns.map((item) => item.phase)
     ].filter((item): item is string => Boolean(item))
   );
@@ -95,6 +107,7 @@ function groupByPhase(detail: RunAggregate): PhaseAggregate[] {
       triggerRun: detail.triggerRuns.find((item) => item.phase === phase),
       recallRun: detail.recallRuns.find((item) => item.phase === phase),
       injectionRun: detail.injectionRuns.find((item) => item.phase === phase),
+      memoryPlanRuns: detail.memoryPlanRuns.filter((item) => item.phase === phase),
       writeBackRun: detail.writeBackRuns.find((item) => item.phase === phase)
     }))
     .sort((left, right) => {
@@ -123,23 +136,25 @@ function groupByTrace(data: RuntimeObserveRunsSnapshot) {
     ...data.triggerRuns.map((item) => item.traceId),
     ...data.recallRuns.map((item) => item.traceId),
     ...data.injectionRuns.map((item) => item.traceId),
+    ...data.memoryPlanRuns.map((item) => item.traceId),
     ...data.writeBackRuns.map((item) => item.traceId)
   ]);
 
   return Array.from(traceIds).map((traceId) => {
     const turns = data.turns.filter((item) => item.traceId === traceId);
+    const planRuns = data.memoryPlanRuns.filter((item) => item.traceId === traceId);
     const turn = turns[0] ?? {
       traceId,
-      turnId: null,
+      turnId: traceId,
       workspaceId: null,
       taskId: null,
       sessionId: null,
       threadId: null,
-      host: null,
-      phase: null,
-      currentInput: null,
-      assistantOutput: null,
-      createdAt: null
+      host: "retrieval-runtime",
+      phase: planRuns[0]?.phase ?? null,
+      currentInput: planRuns[0]?.inputSummary ?? null,
+      assistantOutput: planRuns[0]?.outputSummary ?? null,
+      createdAt: planRuns[0]?.createdAt ?? null
     };
 
     return {
@@ -148,6 +163,7 @@ function groupByTrace(data: RuntimeObserveRunsSnapshot) {
       triggerRuns: data.triggerRuns.filter((item) => item.traceId === traceId),
       recallRuns: data.recallRuns.filter((item) => item.traceId === traceId),
       injectionRuns: data.injectionRuns.filter((item) => item.traceId === traceId),
+      memoryPlanRuns: planRuns,
       writeBackRuns: data.writeBackRuns.filter((item) => item.traceId === traceId),
       dependencyStatus: data.dependencyStatus
     } satisfies RunAggregate;
@@ -160,11 +176,26 @@ export function buildNarrative(detail: RunAggregate) {
   const recallRun = primary?.recallRun;
   const injectionRun = primary?.injectionRun;
   const writeBackRun = primary?.writeBackRun;
+  const hasPlanOnlyTrace =
+    detail.memoryPlanRuns.length > 0 &&
+    detail.triggerRuns.length === 0 &&
+    detail.recallRuns.length === 0 &&
+    detail.injectionRuns.length === 0 &&
+    detail.writeBackRuns.length === 0;
   const incomplete =
     detail.triggerRuns.length === 0 ||
     detail.recallRuns.length === 0 ||
     detail.injectionRuns.length === 0 ||
     detail.writeBackRuns.length === 0;
+
+  if (hasPlanOnlyTrace) {
+    return {
+      outcomeCode: "plan_only",
+      outcomeLabel: "仅计划轨迹",
+      explanation: "这条轨迹主要记录了 plan 级观测事件，用来调试治理或编排决策。",
+      incomplete: false
+    };
+  }
 
   if (!triggerRun || !triggerRun.triggerHit) {
     return {
@@ -302,6 +333,17 @@ function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
           `裁剪记录：${phase.injectionRun?.trimmedRecordIds.join(", ") || "未记录"}`,
           `裁剪原因：${phase.injectionRun?.trimReasons.join(", ") || "未记录"}`
         ]
+      },
+      {
+        key: "plan" as const,
+        title: `Plan / ${phase.phase}`,
+        summary: summarizePlanRuns(phase.memoryPlanRuns),
+        details: phase.memoryPlanRuns.flatMap((run) => [
+          `${run.planKind}：${run.resultState}${run.degraded ? "（降级）" : ""}`,
+          `输入摘要：${run.inputSummary ?? "未记录"}`,
+          `输出摘要：${run.outputSummary ?? "未记录"}`,
+          `版本：prompt=${run.promptVersion ?? "未记录"} / schema=${run.schemaVersion ?? "未记录"}`
+        ])
       },
       {
         key: "writeback" as const,
@@ -481,6 +523,20 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             dropReasons: run.trimReasons,
             tokenEstimate: run.tokenEstimate,
             droppedRecordIds: run.trimmedRecordIds,
+            latencyMs: run.durationMs,
+            createdAt: run.createdAt
+          })),
+          memoryPlanRuns: selected.memoryPlanRuns.map((run) => ({
+            traceId: run.traceId,
+            phase: run.phase,
+            planKind: run.planKind,
+            inputSummary: run.inputSummary,
+            outputSummary: run.outputSummary,
+            promptVersion: run.promptVersion,
+            schemaVersion: run.schemaVersion,
+            degraded: run.degraded,
+            degradationReason: run.degradationReason,
+            resultState: run.resultState,
             latencyMs: run.durationMs,
             createdAt: run.createdAt
           })),

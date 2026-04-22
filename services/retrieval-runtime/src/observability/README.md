@@ -3,6 +3,7 @@
 这里放运行时可观测能力：
 
 - `runtime_turns`
+- `runtime_memory_plan_runs`
 - `runtime_recall_runs`
 - `runtime_injection_runs`
 - `runtime_writeback_submissions`

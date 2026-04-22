@@ -4,6 +4,7 @@ import type {
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
   MaintenanceCheckpointRecord,
+  MemoryPlanRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -45,6 +46,10 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
 
   async recordInjectionRun(run: InjectionRunRecord): Promise<void> {
     await this.tryPrimaryOrFallback((repository) => repository.recordInjectionRun(run));
+  }
+
+  async recordMemoryPlanRun(run: MemoryPlanRunRecord): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.recordMemoryPlanRun(run));
   }
 
   async recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void> {

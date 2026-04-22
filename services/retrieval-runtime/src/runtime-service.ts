@@ -33,6 +33,11 @@ import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 
+const MEMORY_SEARCH_PROMPT_VERSION = "memory-recall-search-v1";
+const MEMORY_INJECTION_PROMPT_VERSION = "memory-recall-injection-v1";
+const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
+const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
+
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
 }
@@ -65,6 +70,24 @@ function buildFinalizeIdempotencyRecord(
     created_at: createdAt,
     expires_at: new Date(Date.parse(createdAt) + ttlMs).toISOString(),
   };
+}
+
+function summarizeText(value: string | undefined, maxLength = 220) {
+  if (!value) {
+    return "";
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function summarizeCandidateIds(candidates: CandidateMemory[], selectedIds?: string[]) {
+  if (selectedIds && selectedIds.length > 0) {
+    return `selected=${selectedIds.join(",")}`;
+  }
+  return `candidate_count=${candidates.length}`;
 }
 
 async function resolveTraceId(
@@ -160,6 +183,28 @@ export class RetrievalRuntimeService {
 
     const triggerStartedAt = Date.now();
     const decision = await this.triggerEngine.decide(normalizedContext);
+    if (normalizedContext.phase === "before_response") {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: normalizedContext.phase,
+        plan_kind: "memory_search_plan",
+        input_summary: summarizeText(
+          `input=${normalizedContext.current_input}; scopes=${(decision.requested_scopes ?? []).join(",")}; types=${(
+            decision.requested_memory_types ?? []
+          ).join(",")}`,
+        ),
+        output_summary: summarizeText(
+          `hit=${decision.hit}; reason=${decision.llm_decision_reason ?? decision.trigger_reason}; query_hint=${decision.query_hint ?? ""}; candidate_limit=${decision.candidate_limit ?? ""}`,
+        ),
+        prompt_version: decision.search_plan_attempted ? MEMORY_SEARCH_PROMPT_VERSION : MEMORY_SEARCH_RULES_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: Boolean(decision.search_plan_degraded),
+        degradation_reason: decision.search_plan_degradation_reason,
+        result_state: decision.search_plan_degraded ? "fallback" : decision.hit ? "planned" : "skipped",
+        duration_ms: Date.now() - triggerStartedAt,
+        created_at: nowIso(),
+      });
+    }
     await this.repository.recordTriggerRun({
       trace_id: traceId,
       phase: normalizedContext.phase,
@@ -245,6 +290,7 @@ export class RetrievalRuntimeService {
       && this.queryResultCanBePlanned(queryResult.candidates)
     ) {
       const recallInjectionPlanner = this.memoryOrchestrator.recall.injection;
+      const injectionPlanStartedAt = Date.now();
       const planResult = await this.dependencyGuard.run(
         "memory_llm",
         this.embeddingTimeoutMs,
@@ -262,6 +308,27 @@ export class RetrievalRuntimeService {
       );
 
       if (planResult.ok && planResult.value) {
+        await this.repository.recordMemoryPlanRun({
+          trace_id: traceId,
+          phase: normalizedContext.phase,
+          plan_kind: "memory_injection_plan",
+          input_summary: summarizeText(
+            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(queryResult.candidates)}`,
+          ),
+          output_summary: summarizeText(
+            `should_inject=${planResult.value.should_inject}; reason=${planResult.value.reason}; ${summarizeCandidateIds(
+              queryResult.candidates,
+              planResult.value.selected_record_ids,
+            )}; summary=${planResult.value.memory_summary ?? ""}`,
+          ),
+          prompt_version: MEMORY_INJECTION_PROMPT_VERSION,
+          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+          degraded: false,
+          result_state: planResult.value.should_inject ? "planned" : "skipped",
+          duration_ms: Date.now() - injectionPlanStartedAt,
+          created_at: nowIso(),
+        });
+
         finalTriggerReason = planResult.value.reason;
         if (!planResult.value.should_inject) {
           selectedCandidates = [];
@@ -294,6 +361,22 @@ export class RetrievalRuntimeService {
           });
         }
       } else {
+        await this.repository.recordMemoryPlanRun({
+          trace_id: traceId,
+          phase: normalizedContext.phase,
+          plan_kind: "memory_injection_plan",
+          input_summary: summarizeText(
+            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(queryResult.candidates)}`,
+          ),
+          output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+          prompt_version: MEMORY_INJECTION_PROMPT_VERSION,
+          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+          degraded: true,
+          degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+          result_state: "fallback",
+          duration_ms: Date.now() - injectionPlanStartedAt,
+          created_at: nowIso(),
+        });
         degraded = true;
         degradationReason = degradationReason ?? planResult.error?.code ?? "memory_llm_unavailable";
       }
@@ -429,6 +512,22 @@ export class RetrievalRuntimeService {
     });
 
     const extraction = await this.writebackEngine.submit(normalizedInput);
+    if (extraction.plan_observation) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: "after_response",
+        plan_kind: "memory_writeback_plan",
+        input_summary: extraction.plan_observation.input_summary,
+        output_summary: extraction.plan_observation.output_summary,
+        prompt_version: extraction.plan_observation.prompt_version,
+        schema_version: extraction.plan_observation.schema_version,
+        degraded: extraction.plan_observation.degraded,
+        degradation_reason: extraction.plan_observation.degradation_reason,
+        result_state: extraction.plan_observation.result_state,
+        duration_ms: extraction.plan_observation.duration_ms,
+        created_at: nowIso(),
+      });
+    }
 
     let submittedJobs = extraction.candidates.map((candidate) => ({
       candidate_summary: candidate.summary,

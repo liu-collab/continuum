@@ -4,6 +4,7 @@ import type {
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
   MaintenanceCheckpointRecord,
+  MemoryPlanRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -20,6 +21,7 @@ export interface RuntimeRepository {
   recordTriggerRun(run: TriggerRunRecord): Promise<void>;
   recordRecallRun(run: RecallRunRecord): Promise<void>;
   recordInjectionRun(run: InjectionRunRecord): Promise<void>;
+  recordMemoryPlanRun(run: MemoryPlanRunRecord): Promise<void>;
   recordWritebackSubmission(run: WritebackSubmissionRecord): Promise<void>;
   enqueueWritebackOutbox(records: Array<{
     trace_id: string;

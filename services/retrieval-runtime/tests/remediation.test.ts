@@ -377,10 +377,24 @@ describe("retrieval-runtime remediation", () => {
       duration_ms: 20,
       created_at: "2026-04-15T12:00:00.000Z",
     });
+    await repository.recordMemoryPlanRun({
+      trace_id: "trace-1",
+      phase: "before_response",
+      plan_kind: "memory_search_plan",
+      input_summary: "input=上次那个约定继续沿用",
+      output_summary: "hit=true; reason=history_reference",
+      prompt_version: "memory-recall-search-v1",
+      schema_version: "memory-plan-schema-v1",
+      degraded: false,
+      result_state: "planned",
+      duration_ms: 5,
+      created_at: "2026-04-15T12:00:00.000Z",
+    });
 
     expect(pool.queries.some((entry) => entry.text.includes("CREATE TABLE IF NOT EXISTS") && entry.text.includes("runtime_trigger_runs"))).toBe(true);
     expect(pool.queries.some((entry) => entry.text.includes(".runtime_turns"))).toBe(true);
     expect(pool.queries.some((entry) => entry.text.includes(".runtime_trigger_runs"))).toBe(true);
+    expect(pool.queries.some((entry) => entry.text.includes(".runtime_memory_plan_runs"))).toBe(true);
     expect(pool.queries.some((entry) => entry.text.includes(".runtime_writeback_submissions"))).toBe(true);
   });
 
@@ -525,12 +539,26 @@ describe("retrieval-runtime remediation", () => {
       duration_ms: 9,
       created_at: "2026-04-15T12:00:00.000Z",
     });
+    await repository.recordMemoryPlanRun({
+      trace_id: "trace-2",
+      phase: "before_response",
+      plan_kind: "memory_search_plan",
+      input_summary: "input=之前那个约束继续保留",
+      output_summary: "hit=true; reason=history_reference",
+      prompt_version: "memory-recall-search-v1",
+      schema_version: "memory-plan-schema-v1",
+      degraded: false,
+      result_state: "planned",
+      duration_ms: 6,
+      created_at: "2026-04-15T12:00:00.000Z",
+    });
 
     const runs = await repository.getRuns({ trace_id: "trace-2" });
 
     expect(runs.trigger_runs).toHaveLength(1);
     expect(runs.total).toBe(1);
     expect(runs.recall_runs[0]?.result_state).toBe("empty");
+    expect(runs.memory_plan_runs[0]?.plan_kind).toBe("memory_search_plan");
     expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.writeback_submissions[0]?.filtered_count).toBe(2);
     expect(runs.writeback_submissions[0]?.filtered_reasons).toContain("duplicate_candidate");

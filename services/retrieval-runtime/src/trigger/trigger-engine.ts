@@ -168,6 +168,8 @@ export class TriggerEngine {
             cooldown_applied: false,
             llm_used: true,
             llm_decision_reason: llmDecision.value.reason,
+            search_plan_attempted: true,
+            search_plan_degraded: false,
           };
         }
 
@@ -192,6 +194,8 @@ export class TriggerEngine {
           candidate_limit: llmDecision.value.candidate_limit,
           llm_used: true,
           llm_decision_reason: llmDecision.value.reason,
+          search_plan_attempted: true,
+          search_plan_degraded: false,
         };
       }
 
@@ -202,6 +206,19 @@ export class TriggerEngine {
         },
         "llm recall search planner degraded, falling back to semantic trigger",
       );
+
+      return {
+        ...(await this.semanticFallbackDecision(
+          context,
+          memoryMode,
+          scopePlan.scopes,
+          requestedMemoryTypes,
+          scopePlan.reason,
+        )),
+        search_plan_attempted: true,
+        search_plan_degraded: true,
+        search_plan_degradation_reason: llmDecision.error?.code ?? "memory_llm_unavailable",
+      };
     }
 
     if (shouldSkipForShortInput(context.current_input)) {
@@ -259,6 +276,74 @@ export class TriggerEngine {
       memory_mode: memoryMode,
       requested_scopes: scopePlan.scopes,
       scope_reason: scopePlan.reason,
+      importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+      cooldown_applied: false,
+      semantic_score: semanticScore.score,
+    };
+  }
+
+  private async semanticFallbackDecision(
+    context: TriggerContext,
+    memoryMode: MemoryMode,
+    requestedScopes: ScopeType[],
+    requestedMemoryTypes: MemoryType[],
+    scopeReason: string,
+  ): Promise<TriggerDecision> {
+    if (shouldSkipForShortInput(context.current_input)) {
+      return {
+        hit: false,
+        trigger_type: "no_trigger",
+        trigger_reason: runtimeMessages.shortInputSkipReason,
+        requested_memory_types: [],
+        memory_mode: memoryMode,
+        requested_scopes: requestedScopes,
+        scope_reason: scopeReason,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        cooldown_applied: false,
+      };
+    }
+
+    const semanticScore = await this.semanticFallbackScore(context, memoryMode, requestedScopes);
+    if (semanticScore.degraded) {
+      return {
+        hit: false,
+        trigger_type: "no_trigger",
+        trigger_reason: runtimeMessages.semanticDegradedReason,
+        requested_memory_types: [],
+        memory_mode: memoryMode,
+        requested_scopes: requestedScopes,
+        scope_reason: scopeReason,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        cooldown_applied: false,
+        semantic_score: semanticScore.score,
+        degraded: true,
+        degradation_reason: semanticScore.degradation_reason,
+      };
+    }
+
+    if (semanticScore.score >= semanticScore.threshold) {
+      return {
+        hit: true,
+        trigger_type: "semantic_fallback",
+        trigger_reason: runtimeMessages.semanticFallbackReason,
+        requested_memory_types: requestedMemoryTypes,
+        memory_mode: memoryMode,
+        requested_scopes: requestedScopes,
+        scope_reason: scopeReason,
+        importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
+        cooldown_applied: false,
+        semantic_score: semanticScore.score,
+      };
+    }
+
+    return {
+      hit: false,
+      trigger_type: "no_trigger",
+      trigger_reason: runtimeMessages.noTriggerReason,
+      requested_memory_types: [],
+      memory_mode: memoryMode,
+      requested_scopes: requestedScopes,
+      scope_reason: scopeReason,
       importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
       cooldown_applied: false,
       semantic_score: semanticScore.score,

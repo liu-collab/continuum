@@ -20,6 +20,16 @@ export interface WritebackEngineResult {
   filtered_count: number;
   filtered_reasons: string[];
   scope_reasons: string[];
+  plan_observation?: {
+    input_summary: string;
+    output_summary: string;
+    prompt_version: string;
+    schema_version: string;
+    degraded: boolean;
+    degradation_reason?: string;
+    result_state: "planned" | "skipped" | "fallback" | "failed";
+    duration_ms: number;
+  };
 }
 
 interface CandidateDraft {
@@ -76,6 +86,17 @@ const STABLE_PREFERENCE_HINTS = [
   "usually",
   "always",
 ];
+
+const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
+const MEMORY_WRITEBACK_SCHEMA_VERSION = "memory-writeback-schema-v1";
+
+function summarizeObservationText(value: string, maxLength = 220) {
+  const normalized = normalizeText(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
 
 function extractPreferenceDetails(text: string): Record<string, unknown> {
   const normalized = normalizeText(text);
@@ -214,11 +235,28 @@ export class WritebackEngine {
 
   async extractCandidates(
     input: FinalizeTurnInput,
-  ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] }> {
+  ): Promise<WritebackEngineResult> {
+    const startedAt = Date.now();
     const ruleResult = this.runRulesOnly(input);
 
     if (!this.writebackPlanner || !this.config.WRITEBACK_REFINE_ENABLED) {
-      return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      const result = this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      return {
+        ...result,
+        plan_observation: {
+          input_summary: summarizeObservationText(
+            `rules_only current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}`,
+          ),
+          output_summary: summarizeObservationText(
+            `candidates=${result.candidates.length}; filtered=${result.filtered_count}; reasons=${result.filtered_reasons.join(",")}`,
+          ),
+          prompt_version: MEMORY_WRITEBACK_PROMPT_VERSION,
+          schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
+          degraded: false,
+          result_state: result.candidates.length > 0 ? "planned" : "skipped",
+          duration_ms: Date.now() - startedAt,
+        },
+      };
     }
 
     try {
@@ -230,14 +268,47 @@ export class WritebackEngine {
         rule_candidates: ruleResult.drafts.map((draft, index) => toRuleDigest(draft, index)),
       });
       const merged = this.applyRefineResult(input, ruleResult.drafts, refined);
-      return this.postProcess(
+      const result = this.postProcess(
         input,
         merged.drafts,
         [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
       );
+      return {
+        ...result,
+        plan_observation: {
+          input_summary: summarizeObservationText(
+            `current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}`,
+          ),
+          output_summary: summarizeObservationText(
+            `candidates=${result.candidates.length}; filtered=${result.filtered_count}; reasons=${result.filtered_reasons.join(",")}`,
+          ),
+          prompt_version: MEMORY_WRITEBACK_PROMPT_VERSION,
+          schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
+          degraded: false,
+          result_state: result.candidates.length > 0 ? "planned" : "skipped",
+          duration_ms: Date.now() - startedAt,
+        },
+      };
     } catch (error) {
       this.logger?.warn?.({ err: error }, "memory llm refine failed, using rule output");
-      return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      const result = this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      return {
+        ...result,
+        plan_observation: {
+          input_summary: summarizeObservationText(
+            `current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}`,
+          ),
+          output_summary: summarizeObservationText(
+            `fallback=${error instanceof Error ? error.message : "memory_llm_unavailable"}; candidates=${result.candidates.length}; filtered=${result.filtered_count}`,
+          ),
+          prompt_version: MEMORY_WRITEBACK_PROMPT_VERSION,
+          schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
+          degraded: true,
+          degradation_reason: error instanceof Error ? error.message : "memory_llm_unavailable",
+          result_state: "fallback",
+          duration_ms: Date.now() - startedAt,
+        },
+      };
     }
   }
 
@@ -685,12 +756,13 @@ export class WritebackEngine {
 
   async submit(input: FinalizeTurnInput): Promise<WritebackEngineResult> {
     const extraction = await this.extractCandidates(input);
-    const { candidates, filtered_count, filtered_reasons, scope_reasons } = extraction;
+    const { candidates, filtered_count, filtered_reasons, scope_reasons, plan_observation } = extraction;
     return {
       candidates,
       filtered_count,
       filtered_reasons,
       scope_reasons,
+      plan_observation,
     };
   }
 

@@ -6,6 +6,7 @@ import type {
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
   MaintenanceCheckpointRecord,
+  MemoryPlanRunRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -86,6 +87,19 @@ interface InjectionRunRow extends RuntimeRowBase {
   trimmed_record_ids: unknown;
   trim_reasons: unknown;
   result_state: InjectionRunRecord["result_state"];
+  duration_ms: number;
+}
+
+interface MemoryPlanRunRow extends RuntimeRowBase {
+  phase: string;
+  plan_kind: MemoryPlanRunRecord["plan_kind"];
+  input_summary: string;
+  output_summary: string;
+  prompt_version: string;
+  schema_version: string;
+  degraded: boolean;
+  degradation_reason: string | null;
+  result_state: MemoryPlanRunRecord["result_state"];
   duration_ms: number;
 }
 
@@ -237,6 +251,23 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         duration_ms INTEGER NOT NULL,
         created_at TIMESTAMPTZ NOT NULL,
         PRIMARY KEY (trace_id, phase)
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_memory_plan_runs (
+        trace_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        plan_kind TEXT NOT NULL,
+        input_summary TEXT NOT NULL,
+        output_summary TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        schema_version TEXT NOT NULL,
+        degraded BOOLEAN NOT NULL,
+        degradation_reason TEXT NULL,
+        result_state TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (trace_id, phase, plan_kind)
       )
     `);
     await this.pool.query(`
@@ -459,6 +490,41 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         JSON.stringify(run.selected_scopes),
         JSON.stringify(run.trimmed_record_ids),
         JSON.stringify(run.trim_reasons),
+        run.result_state,
+        run.duration_ms,
+        run.created_at,
+      ],
+    );
+  }
+
+  async recordMemoryPlanRun(run: MemoryPlanRunRecord): Promise<void> {
+    await this.pool.query(
+      `
+      INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_memory_plan_runs (
+        trace_id, phase, plan_kind, input_summary, output_summary, prompt_version, schema_version,
+        degraded, degradation_reason, result_state, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ON CONFLICT (trace_id, phase, plan_kind) DO UPDATE
+      SET input_summary = EXCLUDED.input_summary,
+          output_summary = EXCLUDED.output_summary,
+          prompt_version = EXCLUDED.prompt_version,
+          schema_version = EXCLUDED.schema_version,
+          degraded = EXCLUDED.degraded,
+          degradation_reason = EXCLUDED.degradation_reason,
+          result_state = EXCLUDED.result_state,
+          duration_ms = EXCLUDED.duration_ms,
+          created_at = EXCLUDED.created_at
+      `,
+      [
+        run.trace_id,
+        run.phase,
+        run.plan_kind,
+        run.input_summary,
+        run.output_summary,
+        run.prompt_version,
+        run.schema_version,
+        run.degraded,
+        run.degradation_reason ?? null,
         run.result_state,
         run.duration_ms,
         run.created_at,
@@ -818,6 +884,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         trigger_runs: [],
         recall_runs: [],
         injection_runs: [],
+        memory_plan_runs: [],
         writeback_submissions: [],
         total,
         page,
@@ -826,7 +893,7 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       };
     }
 
-    const [triggerRows, recallRows, injectionRows, writebackRows] = await Promise.all([
+    const [triggerRows, recallRows, injectionRows, memoryPlanRows, writebackRows] = await Promise.all([
       this.pool.query<TriggerRunRow>(
         `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
         [traceIds],
@@ -837,6 +904,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       ),
       this.pool.query<InjectionRunRow>(
         `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
+        [traceIds],
+      ),
+      this.pool.query<MemoryPlanRunRow>(
+        `SELECT * FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_memory_plan_runs WHERE trace_id = ANY($1::text[]) ORDER BY created_at DESC`,
         [traceIds],
       ),
       this.pool.query<WritebackRunRow>(
@@ -910,6 +981,20 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         selected_scopes: asStringArray(row.selected_scopes) as InjectionRunRecord["selected_scopes"],
         trimmed_record_ids: asStringArray(row.trimmed_record_ids),
         trim_reasons: asStringArray(row.trim_reasons),
+        result_state: row.result_state,
+        duration_ms: Number(row.duration_ms),
+        created_at: toIso(row.created_at),
+      })),
+      memory_plan_runs: memoryPlanRows.rows.map((row) => ({
+        trace_id: row.trace_id,
+        phase: row.phase as MemoryPlanRunRecord["phase"],
+        plan_kind: row.plan_kind,
+        input_summary: row.input_summary,
+        output_summary: row.output_summary,
+        prompt_version: row.prompt_version,
+        schema_version: row.schema_version,
+        degraded: row.degraded,
+        degradation_reason: row.degradation_reason ?? undefined,
         result_state: row.result_state,
         duration_ms: Number(row.duration_ms),
         created_at: toIso(row.created_at),

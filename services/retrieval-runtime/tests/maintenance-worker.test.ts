@@ -211,6 +211,8 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.actions_applied).toBe(1);
     expect(summary.actions_skipped).toBe(0);
+    const runs = await repository.getRuns();
+    expect(runs.memory_plan_runs.some((run) => run.plan_kind === "memory_governance_plan")).toBe(true);
     expect(storage.governanceBatches).toHaveLength(1);
     const batch = storage.governanceBatches[0] as { items: Array<{ proposal_type: string; targets: { record_ids: string[] } }> };
     expect(batch.items[0]?.proposal_type).toBe("merge");

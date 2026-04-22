@@ -23,6 +23,7 @@ describe("run trace narrative", () => {
     triggerRuns: [],
     recallRuns: [],
     injectionRuns: [],
+    memoryPlanRuns: [],
     writeBackRuns: [],
     dependencyStatus: []
   };
@@ -259,6 +260,22 @@ describe("run trace narrative", () => {
           createdAt: null
         }
       ],
+      memoryPlanRuns: [
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          planKind: "memory_search_plan",
+          inputSummary: "input=继续回答",
+          outputSummary: "hit=true",
+          promptVersion: "memory-recall-search-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 4,
+          createdAt: null
+        }
+      ],
       injectionRuns: [],
       writeBackRuns: [],
       dependencyStatus: []
@@ -266,6 +283,31 @@ describe("run trace narrative", () => {
 
     expect(narratives.some((item) => item.title === "Turn / task_start")).toBe(true);
     expect(narratives.some((item) => item.title === "Recall / before_response")).toBe(true);
+    expect(narratives.some((item) => item.title === "Plan / before_response")).toBe(true);
+  });
+
+  it("describes governance plan-only traces", () => {
+    const narrative = buildNarrative({
+      ...baseDetail,
+      memoryPlanRuns: [
+        {
+          traceId: "trace-plan",
+          phase: "after_response",
+          planKind: "memory_governance_plan",
+          inputSummary: "workspace=ws",
+          outputSummary: "actions=1",
+          promptVersion: "memory-governance-plan-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "planned",
+          durationMs: 10,
+          createdAt: null
+        }
+      ]
+    });
+
+    expect(narrative.outcomeCode).toBe("plan_only");
   });
 });
 

@@ -334,12 +334,33 @@ export const RunNarrativeSchema = z.object({
 export type RunNarrative = z.infer<typeof RunNarrativeSchema>;
 
 export const RunTracePhaseNarrativeSchema = z.object({
-  key: z.enum(["turn", "trigger", "recall", "injection", "writeback"]),
+  key: z.enum(["turn", "trigger", "recall", "injection", "plan", "writeback"]),
   title: z.string(),
   summary: z.string(),
   details: z.array(z.string())
 });
 export type RunTracePhaseNarrative = z.infer<typeof RunTracePhaseNarrativeSchema>;
+
+export const MemoryPlanRunSchema = z.object({
+  traceId: z.string(),
+  phase: z.string().nullable(),
+  planKind: z.enum([
+    "memory_search_plan",
+    "memory_injection_plan",
+    "memory_writeback_plan",
+    "memory_governance_plan"
+  ]),
+  inputSummary: z.string().nullable(),
+  outputSummary: z.string().nullable(),
+  promptVersion: z.string().nullable(),
+  schemaVersion: z.string().nullable(),
+  degraded: z.boolean(),
+  degradationReason: z.string().nullable(),
+  resultState: z.string(),
+  latencyMs: z.number().nullable(),
+  createdAt: z.string().nullable()
+});
+export type MemoryPlanRun = z.infer<typeof MemoryPlanRunSchema>;
 
 export const RuntimeDependencySchema = z.object({
   name: z.string(),
@@ -356,6 +377,7 @@ export const RunTraceDetailSchema = z.object({
   triggerRuns: z.array(TriggerRunSchema),
   recallRuns: z.array(RecallRunSchema),
   injectionRuns: z.array(InjectionRunSchema),
+  memoryPlanRuns: z.array(MemoryPlanRunSchema),
   writeBackRuns: z.array(WriteBackRunSchema),
   dependencyStatus: z.array(RuntimeDependencySchema),
   phaseNarratives: z.array(RunTracePhaseNarrativeSchema),

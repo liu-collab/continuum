@@ -69,6 +69,21 @@ describe("runtime observe contract parsing", () => {
             created_at: "2026-04-15T12:00:02.000Z"
           }
         ],
+        memory_plan_runs: [
+          {
+            trace_id: "trace-1",
+            phase: "before_response",
+            plan_kind: "memory_search_plan",
+            input_summary: "input=之前那个偏好继续保留",
+            output_summary: "hit=true; reason=history_reference",
+            prompt_version: "memory-recall-search-v1",
+            schema_version: "memory-plan-schema-v1",
+            degraded: false,
+            result_state: "planned",
+            duration_ms: 4,
+            created_at: "2026-04-15T12:00:01.500Z"
+          }
+        ],
         writeback_submissions: [
           {
             trace_id: "trace-1",
@@ -99,6 +114,7 @@ describe("runtime observe contract parsing", () => {
     expect(snapshot.recallRuns[0]?.selectedScopes).toEqual(["user"]);
     expect(snapshot.recallRuns[0]?.scopeHitCounts).toEqual([{ scope: "user", count: 1 }]);
     expect(snapshot.injectionRuns[0]?.trimmedRecordIds).toEqual(["memory-2"]);
+    expect(snapshot.memoryPlanRuns[0]?.planKind).toBe("memory_search_plan");
     expect(snapshot.writeBackRuns[0]?.resultState).toBe("submitted");
     expect(snapshot.dependencyStatus[0]?.name).toBe("read_model");
   });
@@ -170,6 +186,21 @@ describe("runtime observe contract parsing", () => {
           trim_reasons: [],
           result_state: "injected",
           duration_ms: 3,
+          created_at: "2026-04-16T00:00:00Z"
+        }
+      ],
+      memory_plan_runs: [
+        {
+          trace_id: "t1",
+          phase: "before_response",
+          plan_kind: "memory_search_plan",
+          input_summary: "input=hello",
+          output_summary: "hit=true",
+          prompt_version: "memory-recall-search-v1",
+          schema_version: "memory-plan-schema-v1",
+          degraded: false,
+          result_state: "planned",
+          duration_ms: 2,
           created_at: "2026-04-16T00:00:00Z"
         }
       ],
@@ -245,6 +276,10 @@ describe("runtime observe contract parsing", () => {
       injected: true,
       injectedCount: 2,
       tokenEstimate: 120
+    });
+    expect(snapshot.memoryPlanRuns[0]).toMatchObject({
+      planKind: "memory_search_plan",
+      resultState: "planned"
     });
     expect(snapshot.writeBackRuns[0]).toMatchObject({
       submittedCount: 1,
