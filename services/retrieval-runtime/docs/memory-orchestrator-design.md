@@ -18,7 +18,7 @@
 | #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型、schema、prompt 与 LLM client，召回/写回/治理开始通过 orchestrator 接口接线，具体 planner 文件仍在继续迁移 |
 | #6 | 已完成 | `retrieval-runtime` 已切换到 `MEMORY_LLM_*`，不再兼容旧配置；依赖健康检查与状态桶已统一为 `memory_llm` |
 | #7 | 已完成 | `visualization` 与 `memory-native-agent` 已统一切到 `memory llm` 配置、状态探针和依赖展示口径 |
-| #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 的具体实现文件仍待迁移到新目录 |
+| #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 具体实现已迁到新目录，旧入口兼容层仍保留 |
 
 ---
 
@@ -1274,10 +1274,10 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 | M2 | 已完成 | 已抽统一 `llm-client.ts`、`prompts.ts`，运行时装配改为优先使用新目录下 planner 实现 | P0 |
 | M3 | 部分完成 | 召回搜索规划已通过 orchestrator 入口接线，具体实现仍在旧目录 | P0 |
 | M4 | 部分完成 | 注入规划已通过 orchestrator 入口接线，具体实现仍在旧目录 | P0 |
-| M5 | 部分完成 | `writeback-engine` 已改走统一 planner 接口，具体 planner 文件仍在旧目录 | P0 |
-| M6 | 部分完成 | 治理 worker 已改走统一 planner / verifier 接口，具体实现仍在旧目录 | P0 |
+| M5 | 已完成 | `writeback-engine` 已改走统一 planner 接口，具体 writeback planner 实现已迁到新目录，旧入口保留兼容包装 | P0 |
+| M6 | 已完成 | 治理 worker 已改走统一 planner / verifier 接口，具体治理实现已迁到新目录，旧入口保留兼容包装 | P0 |
 | M7 | 已完成 | 抽统一 `fallback-policy.ts` | P0 |
-| M8 | 部分完成 | 已抽统一类型定义与核心 planner schema，旧目录兼容包装与剩余 schema 迁移仍待继续 | P0 |
+| M8 | 部分完成 | 已抽统一类型定义与核心 planner schema，旧目录已改为兼容包装，召回旧入口与剩余 schema 迁移仍待继续 | P0 |
 | M9 | 待开发 | 抽 `writeback/quality-assessor.ts` | P1 |
 | M10 | 待开发 | 抽 `recall/effectiveness-evaluator.ts` | P1 |
 | M11 | 待开发 | 抽 `intent/intent-analyzer.ts` | P2 |
@@ -1312,7 +1312,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 |---|---|---|
 | T1 | 待开发 | 召回链路影子模式对比测试 |
 | T2 | 部分完成 | 已补 orchestrator 工厂、共享 LLM client 与核心 plan schema 单测，旧目录兼容包装联测仍待继续 |
-| T3 | 部分完成 | 现有 maintenance worker 联测已覆盖统一 governance 接口接线，planner / verifier 独立联测仍待补齐 |
+| T3 | 部分完成 | maintenance worker 与 runtime service 联测已覆盖统一 governance 接口接线，旧入口兼容层独立联测仍待继续 |
 | T4 | 待开发 | 降级和恢复机制测试 |
 | T5 | 已完成 | 已补可视化配置、健康检查与状态展示联动测试 |
 | T6 | 待开发 | 并发和竞态条件测试 |

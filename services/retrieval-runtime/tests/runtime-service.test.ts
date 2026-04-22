@@ -20,6 +20,13 @@ import type {
   WriteBackCandidate,
 } from "../src/shared/types.js";
 import type {
+  RecallInjectionInput,
+  RecallInjectionPlanner,
+  RecallSearchInput,
+  RecallSearchPlanner,
+  WritebackPlanner,
+} from "../src/memory-orchestrator/types.js";
+import type {
   LlmRecallPlan,
   LlmRecallPlanner,
   LlmRecallSearchPlan,
@@ -323,6 +330,30 @@ class StubLlmRecallPlanner implements LlmRecallPlanner {
   }
 }
 
+class StubRecallSearchPlanner implements RecallSearchPlanner {
+  constructor(private readonly planner: LlmRecallPlanner) {}
+
+  async plan(input: RecallSearchInput) {
+    return this.planner.planSearch(input);
+  }
+
+  async healthCheck(): Promise<void> {
+    await this.planner.healthCheck?.();
+  }
+}
+
+class StubRecallInjectionPlanner implements RecallInjectionPlanner {
+  constructor(private readonly planner: LlmRecallPlanner) {}
+
+  async plan(input: RecallInjectionInput) {
+    return this.planner.planInjection(input);
+  }
+
+  async healthCheck(): Promise<void> {
+    await this.planner.healthCheck?.();
+  }
+}
+
 function createRuntime(overrides?: {
   records?: CandidateMemory[];
   embeddingsClient?: EmbeddingsClient;
@@ -339,10 +370,17 @@ function createRuntime(overrides?: {
   const storageClient = overrides?.storageClient ?? new StubStorageClient();
   const config = { ...baseConfig, ...overrides?.config };
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
+  const recallPlanner =
+    overrides?.llmRecallPlanner
+      ? {
+          search: new StubRecallSearchPlanner(overrides.llmRecallPlanner),
+          injection: new StubRecallInjectionPlanner(overrides.llmRecallPlanner),
+        }
+      : undefined;
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
-    recallPlanner: overrides?.llmRecallPlanner as never,
-    writebackPlanner: overrides?.llmExtractor as never,
+    recallPlanner,
+    writebackPlanner: overrides?.llmExtractor as WritebackPlanner | undefined,
   });
 
   const service = new RetrievalRuntimeService(
