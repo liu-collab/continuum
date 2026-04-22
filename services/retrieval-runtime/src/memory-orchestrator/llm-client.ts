@@ -48,59 +48,58 @@ export async function callMemoryLlm(
       protocol === "anthropic"
         ? new URL("/v1/messages", config.MEMORY_LLM_BASE_URL)
         : new URL("/v1/chat/completions", config.MEMORY_LLM_BASE_URL);
-    const response = await fetch(requestUrl, {
-      method: "POST",
-      headers:
-        protocol === "anthropic"
-          ? {
-              "content-type": "application/json",
-              "anthropic-version": "2023-06-01",
-              ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
-            }
-          : {
-              "content-type": "application/json",
-              ...(config.MEMORY_LLM_API_KEY
-                ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
-                : {}),
-            },
-      body: JSON.stringify(
-        protocol === "anthropic"
-          ? {
-              model: config.MEMORY_LLM_MODEL,
-              system: systemPrompt,
-              max_tokens: maxTokens,
-              thinking: mapAnthropicThinking(config.MEMORY_LLM_EFFORT),
-              messages: [
-                {
-                  role: "user",
-                  content: JSON.stringify(userPayload),
-                },
-              ],
-            }
-          : {
-              model: config.MEMORY_LLM_MODEL,
-              messages: [
-                {
-                  role: "system",
-                  content: systemPrompt,
-                },
-                {
-                  role: "user",
-                  content: JSON.stringify(userPayload),
-                },
-              ],
-              response_format: {
-                type: "json_object",
-              },
-              max_tokens: maxTokens,
-              reasoning_effort: mapOpenAiReasoningEffort(config.MEMORY_LLM_EFFORT),
-            },
-      ),
-      signal: controller.signal,
-    });
+    const headers =
+      protocol === "anthropic"
+        ? {
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+            ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
+          }
+        : {
+            "content-type": "application/json",
+            ...(config.MEMORY_LLM_API_KEY
+              ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
+              : {}),
+          };
 
-    if (!response.ok) {
-      throw new Error(`memory llm request failed with ${response.status}`);
+    const requestBodies =
+      protocol === "anthropic"
+        ? [buildAnthropicBody(config, systemPrompt, userPayload, maxTokens)]
+        : [
+            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+              includeResponseFormat: true,
+              includeReasoningEffort: true,
+            }),
+            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+              includeResponseFormat: false,
+              includeReasoningEffort: true,
+            }),
+            buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+              includeResponseFormat: false,
+              includeReasoningEffort: false,
+            }),
+          ];
+
+    let response: Response | undefined;
+    for (const requestBody of requestBodies) {
+      response = await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        break;
+      }
+
+      if (protocol !== "openai-compatible") {
+        break;
+      }
+    }
+
+    if (!response?.ok) {
+      throw new Error(`memory llm request failed with ${response?.status ?? "unknown"}`);
     }
 
     const payload = (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload;
@@ -159,6 +158,64 @@ function mapAnthropicThinking(
   return {
     type: "enabled",
     budget_tokens: budgetMap[effort],
+  };
+}
+
+function buildAnthropicBody(
+  config: MemoryLlmConfig,
+  systemPrompt: string,
+  userPayload: unknown,
+  maxTokens: number,
+) {
+  return {
+    model: config.MEMORY_LLM_MODEL,
+    system: systemPrompt,
+    max_tokens: maxTokens,
+    thinking: mapAnthropicThinking(config.MEMORY_LLM_EFFORT),
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify(userPayload),
+      },
+    ],
+  };
+}
+
+function buildOpenAiBody(
+  config: MemoryLlmConfig,
+  systemPrompt: string,
+  userPayload: unknown,
+  maxTokens: number,
+  options: {
+    includeResponseFormat: boolean;
+    includeReasoningEffort: boolean;
+  },
+) {
+  return {
+    model: config.MEMORY_LLM_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
+      {
+        role: "user",
+        content: JSON.stringify(userPayload),
+      },
+    ],
+    ...(options.includeResponseFormat
+      ? {
+          response_format: {
+            type: "json_object",
+          },
+        }
+      : {}),
+    max_tokens: maxTokens,
+    ...(options.includeReasoningEffort
+      ? {
+          reasoning_effort: mapOpenAiReasoningEffort(config.MEMORY_LLM_EFFORT),
+        }
+      : {}),
   };
 }
 

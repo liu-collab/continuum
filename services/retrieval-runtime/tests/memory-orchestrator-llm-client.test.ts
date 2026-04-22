@@ -84,6 +84,57 @@ describe("memory orchestrator llm client", () => {
     expect(result).toBe("{\"ok\":true,\"source\":\"openai\"}");
   });
 
+  it("retries openai-compatible requests without response_format for compatibility endpoints", async () => {
+    let callCount = 0;
+
+    globalThis.fetch = (async (_input, init) => {
+      callCount += 1;
+      const parsedBody = JSON.parse(String(init?.body)) as {
+        response_format?: unknown;
+      };
+
+      if (callCount === 1) {
+        expect(parsedBody.response_format).toEqual({ type: "json_object" });
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: "unsupported response_format" } }),
+        } as Response;
+      }
+
+      expect(parsedBody.response_format).toBeUndefined();
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: "{\"ok\":true,\"source\":\"fallback\"}",
+              },
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await callMemoryLlm(
+      {
+        MEMORY_LLM_BASE_URL: "https://compat.example.com/v1",
+        MEMORY_LLM_MODEL: "gpt-5.3-codex-spark",
+        MEMORY_LLM_API_KEY: "compat-key",
+        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_TIMEOUT_MS: 500,
+        MEMORY_LLM_EFFORT: "medium",
+      },
+      "system",
+      { ping: true },
+      64,
+    );
+
+    expect(callCount).toBe(2);
+    expect(result).toBe("{\"ok\":true,\"source\":\"fallback\"}");
+  });
+
   it("parses fenced json payloads", () => {
     expect(
       parseMemoryLlmJsonPayload("```json\n{\"reason\":\"ok\",\"should_search\":true}\n```"),
