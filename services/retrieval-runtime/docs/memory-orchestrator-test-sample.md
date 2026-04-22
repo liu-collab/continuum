@@ -54,7 +54,8 @@
 | `retrieval-runtime` 相关回归测试 | 100% 通过 | 62 / 62 = 100% | 通过 |
 | `storage` 关系 API 测试 | 100% 通过 | 14 / 14 = 100% | 通过 |
 | `visualization` plan 展示测试 | 100% 通过 | 10 / 10 = 100% | 通过 |
-| 本轮相关自动化测试合计 | 100% 通过 | 86 / 86 = 100% | 通过 |
+| `memory-native-agent` 真实链路 E2E | 100% 通过 | 1 / 1 = 100% | 通过 |
+| 本轮相关自动化测试合计 | 100% 通过 | 87 / 87 = 100% | 通过 |
 
 ### 4.1.1 真实模型离线评测
 
@@ -71,6 +72,24 @@
 
 > 真实模型离线评测报告：`services/retrieval-runtime/docs/memory-orchestrator-real-llm-eval.md`  
 > 真实模型原始结果：`services/retrieval-runtime/docs/memory-orchestrator-real-llm-eval.json`
+
+### 4.1.2 主模型 + 记忆模型完整链路 E2E
+
+| 项目 | 预期指标 | 实际指标 | 结果 |
+|---|---|---|---|
+| 第一轮主模型回答成功 | 1 / 1 = 100% | 1 / 1 = 100% | 通过 |
+| 第一轮写回计划生成 | 1 / 1 = 100% | 1 / 1 = 100% | 通过 |
+| 存储写回成功 | 1 / 1 = 100% | 1 / 1 = 100% | 通过 |
+| 第二轮注入命中 `typescript` 记忆 | 1 / 1 = 100% | 1 / 1 = 100% | 通过 |
+| 第二轮回答显式提到 `TypeScript` | 1 / 1 = 100% | 1 / 1 = 100% | 通过 |
+| 核心 plan 记录完整 | 4 / 4 = 100% | 4 / 4 = 100% | 通过 |
+
+说明：
+
+- 这轮走的是完整链路：`mna 主模型 -> retrieval-runtime -> memory orchestrator -> storage -> 下一轮 recall 注入 -> 主模型回答`。
+- 主模型使用本机 `mna` 托管配置里的模型，当前实际为 `gpt-5.4`。
+- 记忆模型单独使用 `gpt-5.3-codex-spark`，协议为 `openai-compatible`。
+- 完整链路测试文件：`services/memory-native-agent/tests/e2e/real-model-memory-orchestrator.e2e.test.ts`
 
 ### 4.2 类型检查
 
@@ -89,7 +108,7 @@
 | 指标 | 口径 | 预期指标 | 实际指标 | 结果 |
 |---|---|---|---|---|
 | plan 面板覆盖率 | 新增 plan 类型是否可被轨迹页识别和展示 | 8 / 8 = 100% | 8 / 8 = 100% | 通过 |
-| 相关测试通过率 | 本轮直接相关自动化测试是否通过 | 100% | 86 / 86 = 100% | 通过 |
+| 相关测试通过率 | 本轮直接相关自动化测试是否通过 | 100% | 87 / 87 = 100% | 通过 |
 | 类型检查通过率 | 三个相关服务类型检查是否通过 | 100% | 3 / 3 = 100% | 通过 |
 
 > 当前 8 类 plan 包括：`memory_intent_plan`、`memory_search_plan`、`memory_injection_plan`、`memory_writeback_plan`、`memory_governance_plan`、`memory_relation_plan`、`memory_recommendation_plan`、`memory_evolution_plan`。
@@ -124,6 +143,20 @@
 - 这轮不是 mock（模拟）测试，走的是当前仓库真实 `prompt`（提示词）、真实 `schema`（结构校验）和真实 LLM 调用链路。
 - 评测脚本位置：`services/retrieval-runtime/src/cli/memory-orchestrator-real-eval.ts`
 - 真实模型兼容修复已落到 `services/retrieval-runtime/src/memory-orchestrator/llm-client.ts`，会对不支持 `response_format`（结构化输出约束）的兼容端点自动降级重试。
+
+本轮完整链路 E2E 使用的是同一套本地接口，但主模型与记忆模型分开配置：
+
+- 主模型：复用 `mna` 托管配置中的当前主模型，当前实际为 `gpt-5.4`
+- 记忆模型：`gpt-5.3-codex-spark`
+- 协议：两者都走 `openai-compatible`
+- 地址：`http://localhost:8090/v1`
+- `api key`（接口密钥）：复用 `mna`（memory-native-agent）已配置的托管密钥
+
+补充说明：
+
+- `gpt-5.3-codex-spark` 当前不适合作为 `mna` 主模型直接承接流式主对话，请求会返回 `500 auth_unavailable`。
+- 这不影响它作为记忆模型参与 `intent / search / injection / writeback` 等记忆计划。
+- 所以完整测试里采用“主模型用托管主模型，记忆模型用 `gpt-5.3-codex-spark`”的实际部署口径。
 
 ---
 
@@ -162,6 +195,20 @@
 - 预期：触发检索，并返回合法整数 `importance_threshold`（重要度阈值）
 - 实际：未通过，模型返回了不符合 `schema`（结构约束）的浮点阈值，导致结构校验失败
 
+### 7.5 样本 E：完整链路第一轮写回
+
+- 场景：主模型正常回答，系统在 `finalize-turn`（轮次收尾）阶段调用记忆模型生成写回计划
+- 第一轮用户输入：`请记住，我偏好使用 TypeScript。回复一句确认即可。`
+- 预期：第一轮回答成功，并生成 `memory_writeback_plan`（写回计划），写入存储
+- 实际：通过
+
+### 7.6 样本 F：完整链路第二轮召回
+
+- 场景：第二轮新会话触发召回和注入
+- 第二轮用户输入：`我偏好什么语言？请只回答一句话。`
+- 预期：出现 `injection_banner`（注入横幅），注入摘要包含 `typescript`，最终回答显式提到 `TypeScript`
+- 实际：通过
+
 ---
 
 ## 8. 建议的采样方法
@@ -199,5 +246,6 @@
 - 功能开发验收已经完成。
 - 工程回归和类型检查已经通过。
 - 已经有一轮真实模型离线代理值，其中大部分模块通过，当前唯一明确暴露的问题是检索规划的数值输出和 `schema` 约束还不够稳。
+- 主模型 + 记忆模型的完整端到端链路也已经跑通，当前验证口径是“主模型复用托管主模型，记忆模型使用 `gpt-5.3-codex-spark`”。
 - 人工标注、线上采纳率和满意度这类效果指标仍然没有形成正式“实际值”。
-- 对外如果要表述当前状态，更准确的说法是：“功能已完成，真实模型离线评测已跑通，线上效果指标待验收。”  
+- 对外如果要表述当前状态，更准确的说法是：“功能已完成，真实模型离线评测和完整链路 E2E 已跑通，线上效果指标待验收。”  
