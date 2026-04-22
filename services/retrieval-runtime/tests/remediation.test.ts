@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import pino from "pino";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import type { AppConfig } from "../src/config.js";
@@ -95,6 +95,9 @@ const config: AppConfig = {
   MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
   MEMORY_LLM_PROTOCOL: "openai-compatible",
   MEMORY_LLM_TIMEOUT_MS: 15000,
+  MEMORY_LLM_FALLBACK_ENABLED: true,
+  MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+  MEMORY_LLM_RECOVERY_INTERVAL_MS: 5 * 60 * 1000,
   RECALL_LLM_JUDGE_ENABLED: true,
   RECALL_LLM_JUDGE_MAX_TOKENS: 400,
   RECALL_LLM_CANDIDATE_LIMIT: 12,
@@ -698,6 +701,92 @@ describe("retrieval-runtime remediation", () => {
     expect(decision.hit).toBe(false);
     expect(decision.degraded).toBe(true);
     expect(decision.degradation_reason).toBe("dependency_unavailable");
+  });
+
+  it("opens a temporary recovery window for memory_llm after repeated failures", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const guard = new DependencyGuard(repository, pino({ enabled: false }), {
+      MEMORY_LLM_FALLBACK_ENABLED: true,
+      MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+      MEMORY_LLM_RECOVERY_INTERVAL_MS: 60_000,
+    });
+
+    for (let index = 0; index < 3; index += 1) {
+      const result = await guard.run("memory_llm", 20, async () => {
+        throw new Error("memory llm unavailable");
+      });
+      expect(result.ok).toBe(false);
+    }
+
+    const blocked = await guard.run("memory_llm", 20, async () => "should-not-run");
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error?.message).toContain("recovery window");
+    expect(blocked.status.status).toBe("degraded");
+  });
+
+  it("opens a temporary recovery window when recent failure rate exceeds threshold", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const guard = new DependencyGuard(repository, pino({ enabled: false }), {
+      MEMORY_LLM_FALLBACK_ENABLED: true,
+      MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+      MEMORY_LLM_RECOVERY_INTERVAL_MS: 60_000,
+    });
+
+    await expect(guard.run("memory_llm", 20, async () => "ok")).resolves.toMatchObject({ ok: true });
+    await expect(guard.run("memory_llm", 20, async () => "ok")).resolves.toMatchObject({ ok: true });
+    await expect(
+      guard.run("memory_llm", 20, async () => {
+        throw new Error("memory llm unavailable");
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(
+      guard.run("memory_llm", 20, async () => {
+        throw new Error("memory llm unavailable");
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(
+      guard.run("memory_llm", 20, async () => {
+        throw new Error("memory llm unavailable");
+      }),
+    ).resolves.toMatchObject({ ok: false });
+
+    const blocked = await guard.run("memory_llm", 20, async () => "should-not-run");
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error?.message).toContain("recovery window");
+    expect(blocked.status.status).toBe("degraded");
+  });
+
+  it("recovers memory_llm after cooldown and three successful attempts", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    const baseNow = Date.now();
+    nowSpy.mockReturnValue(baseNow);
+
+    try {
+      const repository = new InMemoryRuntimeRepository();
+      const guard = new DependencyGuard(repository, pino({ enabled: false }), {
+        MEMORY_LLM_FALLBACK_ENABLED: true,
+        MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+        MEMORY_LLM_RECOVERY_INTERVAL_MS: 100,
+      });
+
+      for (let index = 0; index < 3; index += 1) {
+        await guard.run("memory_llm", 20, async () => {
+          throw new Error("memory llm unavailable");
+        });
+      }
+
+      nowSpy.mockReturnValue(baseNow + 200);
+      for (let index = 0; index < 3; index += 1) {
+        const result = await guard.run("memory_llm", 20, async () => "ok");
+        expect(result.ok).toBe(true);
+      }
+
+      const stable = await guard.run("memory_llm", 20, async () => "ok");
+      expect(stable.ok).toBe(true);
+      expect(stable.status.status).toBe("healthy");
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("estimates more tokens for chinese text than for equivalent latin text", () => {
