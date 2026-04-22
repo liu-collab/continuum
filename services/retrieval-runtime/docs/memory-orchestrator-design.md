@@ -1304,7 +1304,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 | C3 | 已完成 | 页面配置项已统一改口径为 `memory llm` |
 | C4 | 已完成 | 页面状态探针已从 `writeback llm` 升级为统一记忆模型状态 |
 | C5 | 待开发 | 补 plan 级观测面板和调试面板 |
-| C6 | 待开发 | 编写配置迁移文档和脚本 |
+| C6 | 已完成 | 已补配置迁移文档与批量替换脚本，支持将 `WRITEBACK_LLM_*` 迁移到 `MEMORY_LLM_*` |
 
 ### 14.4 测试清单
 
