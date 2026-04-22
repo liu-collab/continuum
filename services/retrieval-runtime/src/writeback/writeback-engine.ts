@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto";
 
+import type { Logger } from "pino";
+
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { FinalizeTurnInput, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
+import type { FinalizeTurnInput, MemoryType, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
 import { jaccardOverlap, normalizeText } from "../shared/utils.js";
-import type { LlmExtractionCandidate, LlmExtractor } from "./llm-extractor.js";
+import type {
+  LlmExtractionCandidate,
+  LlmExtractor,
+  LlmRefineItem,
+  LlmRefineResult,
+  RuleCandidateDigest,
+} from "./llm-extractor.js";
 import type { StorageWritebackClient } from "./storage-client.js";
 
 export interface WritebackEngineResult {
@@ -201,34 +209,44 @@ export class WritebackEngine {
     private readonly storageClient: StorageWritebackClient,
     private readonly dependencyGuard: DependencyGuard,
     private readonly llmExtractor?: LlmExtractor,
+    private readonly logger?: Logger,
   ) {}
 
   async extractCandidates(
     input: FinalizeTurnInput,
   ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] }> {
-    if (this.llmExtractor) {
-      try {
-        const llmResult = await this.llmExtractor.extract({
-          current_input: input.current_input,
-          assistant_output: input.assistant_output,
-          tool_results_summary: input.tool_results_summary,
-          task_id: input.task_id,
-        });
+    const ruleResult = this.runRulesOnly(input);
 
-        return this.postProcess(
-          input,
-          llmResult.candidates.map((candidate) => this.toDraftFromLlm(input, candidate)),
-          [],
-        );
-      } catch {
-        return this.extractByRules(input);
-      }
+    if (!this.llmExtractor || !this.config.WRITEBACK_REFINE_ENABLED) {
+      return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
     }
 
-    return this.extractByRules(input);
+    try {
+      const refined = await this.llmExtractor.refine({
+        current_input: input.current_input,
+        assistant_output: input.assistant_output,
+        tool_results_summary: input.tool_results_summary,
+        task_id: input.task_id,
+        rule_candidates: ruleResult.drafts.map((draft, index) => toRuleDigest(draft, index)),
+      });
+      const merged = this.applyRefineResult(input, ruleResult.drafts, refined);
+      return this.postProcess(
+        input,
+        merged.drafts,
+        [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
+      );
+    } catch (error) {
+      this.logger?.warn?.({ err: error }, "writeback llm refine failed, using rule output");
+      return this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+    }
   }
 
   private extractByRules(input: FinalizeTurnInput): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
+    const rules = this.runRulesOnly(input);
+    return this.postProcess(input, rules.drafts, rules.filtered_reasons);
+  }
+
+  private runRulesOnly(input: FinalizeTurnInput): { drafts: CandidateDraft[]; filtered_reasons: string[] } {
     const rawCandidates: CandidateDraft[] = [];
     const filteredReasons: string[] = [];
     const normalizedUser = normalizeText(input.current_input);
@@ -344,7 +362,7 @@ export class WritebackEngine {
       filteredReasons.push("tool_summary_below_threshold");
     }
 
-    return this.postProcess(input, rawCandidates, filteredReasons);
+    return { drafts: rawCandidates, filtered_reasons: filteredReasons };
   }
 
   private postProcess(
@@ -414,6 +432,131 @@ export class WritebackEngine {
       filtered_count: filteredReasons.length,
       filtered_reasons: filteredReasons,
       scope_reasons: scopeReasons.slice(0, limited.length),
+    };
+  }
+
+  private applyRefineResult(
+    input: FinalizeTurnInput,
+    ruleDrafts: CandidateDraft[],
+    refined: LlmRefineResult,
+  ): { drafts: CandidateDraft[]; filtered_reasons: string[] } {
+    const droppedIndices = new Set<number>();
+    const consumedIndices = new Set<number>();
+    const out: CandidateDraft[] = [];
+    const filtered: string[] = [];
+
+    for (const item of refined.refined_candidates) {
+      if (item.action === "drop") {
+        const idx = parseRuleIndex(item.source);
+        if (idx !== null) {
+          droppedIndices.add(idx);
+          consumedIndices.add(idx);
+          filtered.push(`llm_drop:${idx}`);
+        }
+        continue;
+      }
+
+      if (item.action === "keep") {
+        const idx = parseRuleIndex(item.source);
+        if (idx === null || !ruleDrafts[idx]) {
+          continue;
+        }
+        consumedIndices.add(idx);
+        out.push(mergeLlmCorrections(ruleDrafts[idx], item, input));
+        continue;
+      }
+
+      if (item.action === "merge") {
+        const anchor = parseRuleIndex(item.source);
+        const others = (item.merge_with ?? [])
+          .map(parseRuleIndex)
+          .filter((n): n is number => n !== null);
+        const anchorDraft = anchor !== null ? ruleDrafts[anchor] : undefined;
+        if (!anchorDraft) {
+          continue;
+        }
+        consumedIndices.add(anchor!);
+        for (const n of others) {
+          consumedIndices.add(n);
+        }
+        out.push(this.buildMergedDraft(anchorDraft, item, input));
+        continue;
+      }
+
+      if (item.action === "new") {
+        const draft = this.buildDraftFromLlmNew(item, input);
+        if (draft) {
+          out.push(draft);
+        }
+      }
+    }
+
+    ruleDrafts.forEach((draft, idx) => {
+      if (droppedIndices.has(idx) || consumedIndices.has(idx)) {
+        return;
+      }
+      out.push(draft);
+    });
+
+    return { drafts: out, filtered_reasons: filtered };
+  }
+
+  private buildMergedDraft(
+    anchor: CandidateDraft,
+    item: LlmRefineItem,
+    input: FinalizeTurnInput,
+  ): CandidateDraft {
+    const scope = item.scope ?? anchor.scope;
+    const normalizedScope = scope === "task" && !input.task_id ? "workspace" : scope;
+    const summary = normalizeText(item.summary ?? anchor.summary);
+    return {
+      candidate_type: item.candidate_type ?? anchor.candidate_type,
+      scope: normalizedScope,
+      summary,
+      details: {
+        ...anchor.details,
+        extraction_method: "llm",
+        refine_action: "merge",
+        refine_reason: item.reason,
+      },
+      importance: item.importance ?? anchor.importance,
+      confidence: item.confidence ?? anchor.confidence,
+      write_reason: item.reason,
+      source_type: "writeback_llm",
+      source_ref: anchor.source_ref,
+      confirmed_by_user: anchor.confirmed_by_user,
+      extraction_method: "llm",
+    };
+  }
+
+  private buildDraftFromLlmNew(
+    item: LlmRefineItem,
+    input: FinalizeTurnInput,
+  ): CandidateDraft | null {
+    if (!item.summary || !item.candidate_type || !item.scope || item.importance === undefined || item.confidence === undefined) {
+      return null;
+    }
+    const normalizedSummary = normalizeText(item.summary);
+    const scope = item.scope === "task" && !input.task_id ? "workspace" : item.scope;
+    return {
+      candidate_type: item.candidate_type,
+      scope,
+      summary: normalizedSummary,
+      details: {
+        extraction_method: "llm",
+        refine_action: "new",
+        refine_reason: item.reason,
+        extracted_summary: normalizedSummary,
+        candidate_type: item.candidate_type,
+        ...(scope === "task" && input.task_id ? { task_id: input.task_id } : {}),
+      },
+      importance: item.importance,
+      confidence: item.confidence,
+      write_reason: item.reason,
+      source_type: "writeback_llm",
+      source_ref: input.turn_id ?? input.session_id,
+      confirmed_by_user: item.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
+      extraction_method: "llm",
     };
   }
 
@@ -585,4 +728,54 @@ export class WritebackEngine {
       submitted_jobs: writebackResult.value ?? [],
     };
   }
+}
+
+function toRuleDigest(draft: CandidateDraft, index: number): RuleCandidateDigest {
+  return {
+    index,
+    candidate_type: draft.candidate_type,
+    scope: draft.scope,
+    summary: draft.summary,
+    importance: draft.importance,
+    confidence: draft.confidence,
+    write_reason: draft.write_reason,
+  };
+}
+
+function parseRuleIndex(source: LlmRefineItem["source"]): number | null {
+  if (source === "llm_new") {
+    return null;
+  }
+  const match = source.match(/^rule_index:(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[1]!, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mergeLlmCorrections(
+  draft: CandidateDraft,
+  item: LlmRefineItem,
+  input: FinalizeTurnInput,
+): CandidateDraft {
+  const scope = item.scope ?? draft.scope;
+  const normalizedScope = scope === "task" && !input.task_id ? "workspace" : scope;
+  return {
+    ...draft,
+    candidate_type: item.candidate_type ?? draft.candidate_type,
+    scope: normalizedScope,
+    summary: item.summary ? normalizeText(item.summary) : draft.summary,
+    importance: item.importance ?? draft.importance,
+    confidence: item.confidence ?? draft.confidence,
+    write_reason: item.reason ?? draft.write_reason,
+    details: {
+      ...draft.details,
+      extraction_method: "llm",
+      refine_action: "keep",
+      refine_reason: item.reason,
+    },
+    source_type: "writeback_llm",
+    extraction_method: "llm",
+  };
 }

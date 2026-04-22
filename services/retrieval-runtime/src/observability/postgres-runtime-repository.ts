@@ -5,6 +5,7 @@ import type {
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
+  MaintenanceCheckpointRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -288,6 +289,12 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         response_json JSONB NOT NULL,
         created_at TIMESTAMPTZ NOT NULL,
         expires_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_maintenance_checkpoints (
+        workspace_id TEXT PRIMARY KEY,
+        last_scanned_at TIMESTAMPTZ NOT NULL
       )
     `);
   }
@@ -973,6 +980,61 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       outbox_dead_letter_count: outboxMetrics.dead_letter_count,
       outbox_submit_latency_ms: outboxMetrics.submit_latency_ms,
     };
+  }
+
+  async getMaintenanceCheckpoints(
+    now: string,
+    minIntervalMs: number,
+    limit: number,
+  ): Promise<MaintenanceCheckpointRecord[]> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) {
+      return [];
+    }
+    const threshold = new Date(nowMs - minIntervalMs).toISOString();
+    const result = await this.pool.query<{ workspace_id: string; last_scanned_at: Date | string }>(
+      `
+        SELECT workspace_id, last_scanned_at
+        FROM ${schema}.runtime_maintenance_checkpoints
+        WHERE last_scanned_at <= $1
+        ORDER BY last_scanned_at ASC
+        LIMIT $2
+      `,
+      [threshold, limit],
+    );
+    return result.rows.map((row) => ({
+      workspace_id: row.workspace_id,
+      last_scanned_at: toIso(row.last_scanned_at),
+    }));
+  }
+
+  async upsertMaintenanceCheckpoint(record: MaintenanceCheckpointRecord): Promise<void> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    await this.pool.query(
+      `
+        INSERT INTO ${schema}.runtime_maintenance_checkpoints (workspace_id, last_scanned_at)
+        VALUES ($1, $2)
+        ON CONFLICT (workspace_id) DO UPDATE
+        SET last_scanned_at = EXCLUDED.last_scanned_at
+      `,
+      [record.workspace_id, record.last_scanned_at],
+    );
+  }
+
+  async listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    const result = await this.pool.query<{ workspace_id: string }>(
+      `
+        SELECT DISTINCT workspace_id
+        FROM ${schema}.runtime_turns
+        WHERE created_at >= $1
+        ORDER BY workspace_id
+        LIMIT $2
+      `,
+      [sinceIso, limit],
+    );
+    return result.rows.map((row) => row.workspace_id);
   }
 
   private mapWritebackOutbox(row: WritebackOutboxRow): WritebackOutboxRecord {

@@ -3,6 +3,7 @@ import type {
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
+  MaintenanceCheckpointRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -50,4 +51,11 @@ export interface RuntimeRepository {
   getDependencyStatus(): Promise<DependencyStatusSnapshot>;
   getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse>;
   getMetrics(): Promise<ObserveMetricsResponse>;
+  getMaintenanceCheckpoints(
+    now: string,
+    minIntervalMs: number,
+    limit: number,
+  ): Promise<MaintenanceCheckpointRecord[]>;
+  upsertMaintenanceCheckpoint(record: MaintenanceCheckpointRecord): Promise<void>;
+  listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]>;
 }

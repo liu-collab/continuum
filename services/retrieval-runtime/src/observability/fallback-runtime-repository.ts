@@ -3,6 +3,7 @@ import type {
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
+  MaintenanceCheckpointRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -120,6 +121,22 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
 
   async getMetrics(): Promise<ObserveMetricsResponse> {
     return this.tryRead((repository) => repository.getMetrics());
+  }
+
+  async getMaintenanceCheckpoints(
+    now: string,
+    minIntervalMs: number,
+    limit: number,
+  ): Promise<MaintenanceCheckpointRecord[]> {
+    return this.tryRead((repository) => repository.getMaintenanceCheckpoints(now, minIntervalMs, limit));
+  }
+
+  async upsertMaintenanceCheckpoint(record: MaintenanceCheckpointRecord): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.upsertMaintenanceCheckpoint(record));
+  }
+
+  async listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]> {
+    return this.tryRead((repository) => repository.listWorkspacesWithRecentWrites(sinceIso, limit));
   }
 
   private async tryPrimaryOrFallback(task: (repository: RuntimeRepository) => Promise<void>): Promise<void> {

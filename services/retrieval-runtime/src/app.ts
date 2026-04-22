@@ -102,5 +102,18 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
 
   app.get("/v1/runtime/observe/metrics", async () => runtimeService.getMetrics());
 
+  app.post("/v1/runtime/writeback-maintenance/run", async (request) => {
+    const payloadSchema = z
+      .object({
+        workspace_id: z.string().uuid().optional(),
+        force: z.boolean().optional(),
+      });
+    const parsed = payloadSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new ValidationError("Invalid writeback-maintenance payload", parsed.error.flatten());
+    }
+    return runtimeService.runMaintenance(parsed.data);
+  });
+
   return app;
 }

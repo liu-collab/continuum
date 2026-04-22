@@ -2,6 +2,22 @@ import { z } from "zod";
 
 import { ConfigurationError } from "./errors.js";
 
+const booleanCoerceSchema = z
+  .union([z.boolean(), z.string()])
+  .transform((value) => {
+    if (typeof value === "boolean") {
+      return value;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["0", "false", "no", "off", ""].includes(normalized)) {
+      return false;
+    }
+    throw new Error(`invalid boolean literal: ${value}`);
+  });
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().default("0.0.0.0"),
@@ -24,10 +40,25 @@ const envSchema = z.object({
   WRITEBACK_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   WRITEBACK_LLM_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
   WRITEBACK_LLM_MAX_TOKENS: z.coerce.number().int().positive().optional(),
+  WRITEBACK_LLM_REFINE_MAX_TOKENS: z.coerce.number().int().positive().default(800),
+  WRITEBACK_REFINE_ENABLED: booleanCoerceSchema.default(true),
   WRITEBACK_MAX_CANDIDATES: z.coerce.number().int().positive().max(5).default(3),
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   WRITEBACK_OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(200).default(50),
   WRITEBACK_OUTBOX_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(5),
+  WRITEBACK_MAINTENANCE_ENABLED: booleanCoerceSchema.default(false),
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+  WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
+  WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: z.coerce.number().int().min(1).max(20).default(3),
+  WRITEBACK_MAINTENANCE_SEED_LIMIT: z.coerce.number().int().min(1).max(100).default(20),
+  WRITEBACK_MAINTENANCE_RELATED_LIMIT: z.coerce.number().int().min(1).max(200).default(40),
+  WRITEBACK_MAINTENANCE_SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.35),
+  WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
+  WRITEBACK_MAINTENANCE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: z.coerce.number().int().positive().default(1500),
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: z.coerce.number().int().min(1).max(100).default(10),
+  WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: z.coerce.number().int().min(1).max(5).default(2),
+  WRITEBACK_MAINTENANCE_ACTOR_ID: z.string().min(1).default("retrieval-runtime-maintenance"),
   FINALIZE_IDEMPOTENCY_TTL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: z.coerce.number().int().positive().default(500),
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: z.coerce.number().min(0).max(1).default(0.2),

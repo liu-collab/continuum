@@ -11,6 +11,7 @@ import type {
   FinalizeIdempotencyRecord,
   FinalizeTurnInput,
   FinalizeTurnResponse,
+  MaintenanceRunSummary,
   MemoryMode,
   ObserveRunsFilters,
   PrepareContextResponse,
@@ -24,6 +25,7 @@ import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import type { LlmExtractor } from "./writeback/llm-extractor.js";
+import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
@@ -100,7 +102,30 @@ export class RetrievalRuntimeService {
     private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
     private readonly embeddingTimeoutMs = 800,
     private readonly writebackLlmExtractor?: LlmExtractor,
+    private readonly maintenanceWorker?: WritebackMaintenanceWorker,
   ) {}
+
+  async runMaintenance(input?: { workspace_id?: string; force?: boolean }): Promise<MaintenanceRunSummary> {
+    if (!this.maintenanceWorker) {
+      const fallback: MaintenanceRunSummary = {
+        workspace_ids_scanned: [],
+        seeds_inspected: 0,
+        related_fetched: 0,
+        actions_proposed: 0,
+        actions_applied: 0,
+        actions_skipped: 0,
+        conflicts_resolved: 0,
+        degraded: true,
+        degradation_reason: "maintenance_worker_disabled",
+        next_checkpoint: nowIso(),
+      };
+      return fallback;
+    }
+    return this.maintenanceWorker.runOnce({
+      workspaceId: input?.workspace_id,
+      forced: input?.force ?? false,
+    });
+  }
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
     const normalizedContext = {

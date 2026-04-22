@@ -10,11 +10,27 @@ import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
 import { QueryEngine } from "../src/query/query-engine.js";
 import { RetrievalRuntimeService } from "../src/runtime-service.js";
-import type { CandidateMemory, SubmittedWriteBackJob, WriteBackCandidate } from "../src/shared/types.js";
+import type {
+  CandidateMemory,
+  MemoryConflictSnapshot,
+  MemoryRecordSnapshot,
+  SubmittedWriteBackJob,
+  WriteBackCandidate,
+} from "../src/shared/types.js";
 import { TriggerEngine } from "../src/trigger/trigger-engine.js";
-import type { LlmExtractionResult, LlmExtractor } from "../src/writeback/llm-extractor.js";
+import type {
+  LlmExtractionResult,
+  LlmExtractor,
+  LlmRefineResult,
+} from "../src/writeback/llm-extractor.js";
 import { FinalizeIdempotencyCache } from "../src/writeback/finalize-idempotency-cache.js";
-import type { StorageWritebackClient } from "../src/writeback/storage-client.js";
+import type {
+  RecordListPage,
+  RecordPatchPayload,
+  ResolveConflictPayload,
+  StorageMutationPayload,
+  StorageWritebackClient,
+} from "../src/writeback/storage-client.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
 
 const baseConfig: AppConfig = {
@@ -33,10 +49,25 @@ const baseConfig: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 5000,
+  WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
+  WRITEBACK_REFINE_ENABLED: true,
   WRITEBACK_MAX_CANDIDATES: 3,
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5_000,
   WRITEBACK_OUTBOX_BATCH_SIZE: 50,
   WRITEBACK_OUTBOX_MAX_RETRIES: 5,
+  WRITEBACK_MAINTENANCE_ENABLED: false,
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: 15 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS: 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: 3,
+  WRITEBACK_MAINTENANCE_SEED_LIMIT: 20,
+  WRITEBACK_MAINTENANCE_RELATED_LIMIT: 40,
+  WRITEBACK_MAINTENANCE_SIMILARITY_THRESHOLD: 0.35,
+  WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: 24 * 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_TIMEOUT_MS: 5_000,
+  WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: 1500,
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+  WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
+  WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
@@ -166,6 +197,26 @@ class StubStorageClient implements StorageWritebackClient {
           }))
     ) as SubmittedWriteBackJob[];
   }
+
+  async listRecords(): Promise<RecordListPage> {
+    return { items: [], total: 0, page: 1, page_size: 20 };
+  }
+
+  async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
+    throw new Error("stub storage client does not implement patchRecord");
+  }
+
+  async archiveRecord(_recordId: string, _payload: StorageMutationPayload): Promise<MemoryRecordSnapshot> {
+    throw new Error("stub storage client does not implement archiveRecord");
+  }
+
+  async listConflicts(): Promise<MemoryConflictSnapshot[]> {
+    return [];
+  }
+
+  async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
+    throw new Error("stub storage client does not implement resolveConflict");
+  }
 }
 
 class StubLlmExtractor implements LlmExtractor {
@@ -177,16 +228,51 @@ class StubLlmExtractor implements LlmExtractor {
     }
     return this.result;
   }
+
+  async refine(): Promise<LlmRefineResult> {
+    if (this.shouldFail) {
+      throw new Error("writeback llm refine timeout");
+    }
+    return {
+      refined_candidates: this.result.candidates.map((candidate) => ({
+        source: "llm_new" as const,
+        action: "new" as const,
+        summary: candidate.summary,
+        importance: candidate.importance,
+        confidence: candidate.confidence,
+        scope: candidate.scope,
+        candidate_type: candidate.candidate_type,
+        reason: candidate.write_reason,
+      })),
+    };
+  }
 }
 
 class SpyLlmExtractor implements LlmExtractor {
   public callCount = 0;
+  public refineCallCount = 0;
 
   constructor(private readonly result: LlmExtractionResult) {}
 
   async extract(): Promise<LlmExtractionResult> {
     this.callCount += 1;
     return this.result;
+  }
+
+  async refine(): Promise<LlmRefineResult> {
+    this.refineCallCount += 1;
+    return {
+      refined_candidates: this.result.candidates.map((candidate) => ({
+        source: "llm_new" as const,
+        action: "new" as const,
+        summary: candidate.summary,
+        importance: candidate.importance,
+        confidence: candidate.confidence,
+        scope: candidate.scope,
+        candidate_type: candidate.candidate_type,
+        reason: candidate.write_reason,
+      })),
+    };
   }
 }
 
@@ -320,6 +406,7 @@ describe("retrieval-runtime service", () => {
     const { service } = createRuntime({
       llmExtractor: {
         extract: async () => ({ candidates: [] }),
+        refine: async () => ({ refined_candidates: [] }),
         healthCheck: async () => undefined,
       },
     });
@@ -351,6 +438,7 @@ describe("retrieval-runtime service", () => {
     const { service } = createRuntime({
       llmExtractor: {
         extract: async () => ({ candidates: [] }),
+        refine: async () => ({ refined_candidates: [] }),
         healthCheck: async () => {
           throw new Error("writeback llm request failed with 401");
         },
@@ -965,7 +1053,7 @@ describe("retrieval-runtime service", () => {
     };
 
     const first = await firstService.finalizeTurn(request);
-    expect(llmExtractor.callCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(1);
 
     const secondService = new RetrievalRuntimeService(
       new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
@@ -983,7 +1071,7 @@ describe("retrieval-runtime service", () => {
     const second = await secondService.finalizeTurn(request);
 
     expect(second).toEqual(first);
-    expect(llmExtractor.callCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(1);
   });
 
   it("keeps upstream scope suggestions for llm candidates and leaves final arbitration to storage", async () => {
@@ -1019,7 +1107,10 @@ describe("retrieval-runtime service", () => {
       assistant_output: "好的，我会按这个约定继续处理。",
     });
 
-    expect(response.write_back_candidates.map((candidate) => candidate.scope)).toEqual(["workspace", "workspace"]);
+    const llmCandidates = response.write_back_candidates.filter(
+      (candidate) => candidate.source.extraction_method === "llm",
+    );
+    expect(llmCandidates.map((candidate) => candidate.scope)).toEqual(["workspace", "workspace"]);
   });
 
   it("serves public HTTP endpoints with stable response shapes", async () => {

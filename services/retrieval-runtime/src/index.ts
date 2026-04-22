@@ -11,9 +11,11 @@ import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
 import { TriggerEngine } from "./trigger/trigger-engine.js";
 import { HttpLlmExtractor } from "./writeback/llm-extractor.js";
+import { HttpLlmMaintenancePlanner } from "./writeback/llm-maintenance-planner.js";
 import { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
 import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js";
+import { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
 import { hasCompleteRuntimeEmbeddingConfig } from "./embedding-config.js";
@@ -48,21 +50,42 @@ async function main() {
       WRITEBACK_LLM_MAX_TOKENS: activeWritebackLlmConfig.maxTokens ?? config.WRITEBACK_LLM_MAX_TOKENS,
     })
     : undefined;
+  const maintenancePlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpLlmMaintenancePlanner({
+        WRITEBACK_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        WRITEBACK_LLM_MODEL: activeWritebackLlmConfig.model ?? config.WRITEBACK_LLM_MODEL,
+        WRITEBACK_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        WRITEBACK_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.WRITEBACK_LLM_PROTOCOL,
+        WRITEBACK_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.WRITEBACK_LLM_TIMEOUT_MS,
+        WRITEBACK_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.WRITEBACK_LLM_EFFORT,
+        WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: config.WRITEBACK_MAINTENANCE_MAX_ACTIONS,
+      })
+    : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
   const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
+  const maintenanceWorker = new WritebackMaintenanceWorker(
+    repository,
+    storageClient,
+    maintenancePlanner,
+    dependencyGuard,
+    config,
+    logger,
+  );
 
   const runtimeService = new RetrievalRuntimeService(
     new TriggerEngine(config, embeddingsClient, readModelRepository, dependencyGuard, logger),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor),
+    new WritebackEngine(config, storageClient, dependencyGuard, llmExtractor, logger),
     repository,
     dependencyGuard,
     logger,
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
     llmExtractor,
+    maintenanceWorker,
   );
 
   if (!hasCompleteRuntimeEmbeddingConfig(config)) {
@@ -86,10 +109,12 @@ async function main() {
   const app = createApp(runtimeService);
   app.addHook("onClose", async () => {
     outboxFlusher.stop();
+    maintenanceWorker.stop();
   });
 
   try {
     outboxFlusher.start();
+    maintenanceWorker.start();
     await app.listen({ host: config.HOST, port: config.PORT });
     logger.info({ host: config.HOST, port: config.PORT }, "retrieval-runtime listening");
   } catch (error) {

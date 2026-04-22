@@ -365,3 +365,53 @@ export interface ObserveMetricsResponse {
   outbox_dead_letter_count: number;
   outbox_submit_latency_ms: number;
 }
+
+export interface MemoryRecordSnapshot {
+  id: string;
+  workspace_id: string;
+  user_id: string | null;
+  task_id: string | null;
+  session_id: string | null;
+  memory_type: MemoryType;
+  scope: ScopeType;
+  status: RecordStatus;
+  summary: string;
+  details: Record<string, unknown> | null;
+  importance: number;
+  confidence: number;
+  dedupe_key?: string;
+  created_at: string;
+  updated_at: string;
+  last_used_at?: string | null;
+}
+
+export type ConflictStatus = "open" | "resolved" | "ignored";
+
+export interface MemoryConflictSnapshot {
+  id: string;
+  workspace_id: string;
+  record_id: string;
+  conflict_with_record_id: string;
+  conflict_type: string;
+  conflict_summary: string;
+  status: ConflictStatus;
+  created_at: string;
+}
+
+export interface MaintenanceCheckpointRecord {
+  workspace_id: string;
+  last_scanned_at: string;
+}
+
+export interface MaintenanceRunSummary {
+  workspace_ids_scanned: string[];
+  seeds_inspected: number;
+  related_fetched: number;
+  actions_proposed: number;
+  actions_applied: number;
+  actions_skipped: number;
+  conflicts_resolved: number;
+  degraded: boolean;
+  degradation_reason?: string;
+  next_checkpoint: string;
+}

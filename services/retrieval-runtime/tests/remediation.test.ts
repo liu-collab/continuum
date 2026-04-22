@@ -94,10 +94,25 @@ const config: AppConfig = {
   WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
   WRITEBACK_LLM_PROTOCOL: "openai-compatible",
   WRITEBACK_LLM_TIMEOUT_MS: 40,
+  WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
+  WRITEBACK_REFINE_ENABLED: true,
   WRITEBACK_MAX_CANDIDATES: 3,
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5000,
   WRITEBACK_OUTBOX_BATCH_SIZE: 50,
   WRITEBACK_OUTBOX_MAX_RETRIES: 5,
+  WRITEBACK_MAINTENANCE_ENABLED: false,
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: 15 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS: 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: 3,
+  WRITEBACK_MAINTENANCE_SEED_LIMIT: 20,
+  WRITEBACK_MAINTENANCE_RELATED_LIMIT: 40,
+  WRITEBACK_MAINTENANCE_SIMILARITY_THRESHOLD: 0.35,
+  WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: 24 * 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_TIMEOUT_MS: 5_000,
+  WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: 1500,
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+  WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
+  WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
@@ -184,10 +199,31 @@ class StubStorageClient {
       status: "accepted_async" as const,
     }));
   }
+
+  async listRecords() {
+    return { items: [], total: 0, page: 1, page_size: 20 };
+  }
+
+  async patchRecord(): Promise<never> {
+    throw new Error("StubStorageClient.patchRecord not implemented in test");
+  }
+
+  async archiveRecord(): Promise<never> {
+    throw new Error("StubStorageClient.archiveRecord not implemented in test");
+  }
+
+  async listConflicts() {
+    return [];
+  }
+
+  async resolveConflict(): Promise<never> {
+    throw new Error("StubStorageClient.resolveConflict not implemented in test");
+  }
 }
 
 class CountingLlmExtractor {
   public callCount = 0;
+  public refineCallCount = 0;
 
   async extract() {
     this.callCount += 1;
@@ -200,6 +236,24 @@ class CountingLlmExtractor {
           importance: 5,
           confidence: 0.93,
           write_reason: "stable preference",
+        },
+      ],
+    };
+  }
+
+  async refine() {
+    this.refineCallCount += 1;
+    return {
+      refined_candidates: [
+        {
+          source: "llm_new" as const,
+          action: "new" as const,
+          summary: "默认中文输出",
+          importance: 5,
+          confidence: 0.93,
+          scope: "user" as const,
+          candidate_type: "fact_preference" as const,
+          reason: "stable preference",
         },
       ],
     };
@@ -475,6 +529,11 @@ describe("retrieval-runtime remediation", () => {
       config,
       {
         submitCandidates: async () => [],
+        listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        patchRecord: async () => { throw new Error("not implemented"); },
+        archiveRecord: async () => { throw new Error("not implemented"); },
+        listConflicts: async () => [],
+        resolveConflict: async () => { throw new Error("not implemented"); },
       },
       guard,
     );
@@ -649,6 +708,11 @@ describe("retrieval-runtime remediation", () => {
       config,
       {
         submitCandidates: async () => [],
+        listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        patchRecord: async () => { throw new Error("not implemented"); },
+        archiveRecord: async () => { throw new Error("not implemented"); },
+        listConflicts: async () => [],
+        resolveConflict: async () => { throw new Error("not implemented"); },
       },
       guard,
     );
@@ -763,7 +827,7 @@ describe("retrieval-runtime remediation", () => {
     const second = await secondService.finalizeTurn(request);
 
     expect(first).toEqual(second);
-    expect(llmExtractor.callCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(1);
     expect(storageClient.callCount).toBe(1);
   });
 

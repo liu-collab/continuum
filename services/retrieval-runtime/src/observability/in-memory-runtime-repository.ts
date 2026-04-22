@@ -3,6 +3,7 @@ import type {
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
   InjectionRunRecord,
+  MaintenanceCheckpointRecord,
   ObserveMetricsResponse,
   ObserveRunsFilters,
   ObserveRunsResponse,
@@ -32,6 +33,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly writebackSubmissions: WritebackSubmissionRecord[] = [];
   private readonly writebackOutbox: WritebackOutboxRecord[] = [];
   private readonly finalizeIdempotencyRecords = new Map<string, FinalizeIdempotencyRecord>();
+  private readonly maintenanceCheckpoints = new Map<string, MaintenanceCheckpointRecord>();
   private readonly dependencies: Map<DependencyStatus["name"], DependencyStatus> = new Map([
     ["read_model", defaultDependencyStatus("read_model")],
     ["embeddings", defaultDependencyStatus("embeddings")],
@@ -316,5 +318,42 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
     }
 
     records.unshift(next);
+  }
+
+  async getMaintenanceCheckpoints(
+    now: string,
+    minIntervalMs: number,
+    limit: number,
+  ): Promise<MaintenanceCheckpointRecord[]> {
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) {
+      return [];
+    }
+    return [...this.maintenanceCheckpoints.values()]
+      .filter((record) => nowMs - Date.parse(record.last_scanned_at) >= minIntervalMs)
+      .sort((a, b) => Date.parse(a.last_scanned_at) - Date.parse(b.last_scanned_at))
+      .slice(0, limit)
+      .map((record) => ({ ...record }));
+  }
+
+  async upsertMaintenanceCheckpoint(record: MaintenanceCheckpointRecord): Promise<void> {
+    this.maintenanceCheckpoints.set(record.workspace_id, { ...record });
+  }
+
+  async listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]> {
+    const sinceMs = Date.parse(sinceIso);
+    if (!Number.isFinite(sinceMs)) {
+      return [];
+    }
+    const seen = new Set<string>();
+    for (const turn of this.turns) {
+      if (seen.size >= limit) {
+        break;
+      }
+      if (Date.parse(turn.created_at) >= sinceMs) {
+        seen.add(turn.workspace_id);
+      }
+    }
+    return [...seen];
   }
 }
