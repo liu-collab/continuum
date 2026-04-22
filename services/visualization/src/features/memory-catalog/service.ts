@@ -2,7 +2,14 @@ import "server-only";
 
 import type { Route } from "next";
 
-import { MemoryCatalogDetail, MemoryCatalogFilters, MemoryCatalogItem, MemoryCatalogResponse } from "@/lib/contracts";
+import {
+  GovernanceExecutionFilters,
+  GovernanceExecutionResponse,
+  MemoryCatalogDetail,
+  MemoryCatalogFilters,
+  MemoryCatalogItem,
+  MemoryCatalogResponse,
+} from "@/lib/contracts";
 import {
   memoryStatusExplanation,
   memoryStatusLabel,
@@ -18,6 +25,10 @@ import {
   mapSource,
   queryCatalogView
 } from "@/lib/server/storage-read-model-client";
+import {
+  fetchGovernanceExecutionDetail,
+  fetchGovernanceExecutions,
+} from "@/lib/server/storage-governance-executions-client";
 
 export type MemoryCatalogQuickView = {
   key: string;
@@ -312,12 +323,42 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
   };
   const base = toCatalogItem(record, filters);
   const sourceParts = [base.sourceType, base.sourceRef, base.sourceServiceName].filter(Boolean);
+  const governanceResult = await fetchGovernanceExecutions({
+    workspaceId: record.workspace_id ?? undefined,
+    proposalType: undefined,
+    executionStatus: undefined,
+    limit: 50,
+  });
+  const governanceHistory = governanceResult.items.filter((item: (typeof governanceResult.items)[number]) =>
+    item.targetSummary.includes(id),
+  );
 
   return {
     ...base,
     details: record.details,
     detailsFormatted: JSON.stringify(record.details ?? {}, null, 2),
     sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : "未知",
-    createdAt: record.created_at
+    createdAt: record.created_at,
+    governanceHistory,
+    governanceSummary:
+      governanceHistory.length > 0
+        ? `最近 ${governanceHistory.length} 次自动治理命中过这条记忆。`
+        : "当前还没有自动治理命中这条记忆。",
   };
+}
+
+export async function getGovernanceHistory(
+  filters: GovernanceExecutionFilters,
+): Promise<GovernanceExecutionResponse> {
+  const result = await fetchGovernanceExecutions(filters);
+
+  return {
+    items: result.items,
+    appliedFilters: filters,
+    sourceStatus: result.status,
+  };
+}
+
+export async function getGovernanceExecutionDetail(executionId: string) {
+  return fetchGovernanceExecutionDetail(executionId);
 }

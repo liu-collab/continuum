@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
-import { Activity, BookText, Bot, ChartSpline, HeartPulse } from "lucide-react";
+import { Activity, BookText, Bot, ChartSpline, HeartPulse, ShieldCheck } from "lucide-react";
 
 import { Providers } from "@/app/providers";
 import { BrandMark } from "@/components/brand-mark";
@@ -24,6 +24,7 @@ const navigation = [
   { href: "/" as Route, label: "概览", icon: Activity },
   { href: "/agent" as Route, label: "Agent", icon: Bot },
   { href: "/memories" as Route, label: "记忆", icon: BookText },
+  { href: "/governance" as Route, label: "治理", icon: ShieldCheck },
   { href: "/runs" as Route, label: "运行", icon: HeartPulse },
   { href: "/dashboard" as Route, label: "看板", icon: ChartSpline }
 ];

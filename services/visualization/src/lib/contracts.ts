@@ -91,9 +91,90 @@ export const MemoryCatalogDetailSchema = MemoryCatalogItemSchema.extend({
   details: z.record(z.string(), z.unknown()).nullable(),
   detailsFormatted: z.string(),
   sourceFormatted: z.string(),
-  createdAt: z.string().nullable()
+  createdAt: z.string().nullable(),
+  governanceHistory: z.array(z.object({
+    executionId: z.string(),
+    proposalId: z.string(),
+    proposalType: z.string(),
+    proposalTypeLabel: z.string(),
+    executionStatus: z.string(),
+    executionStatusLabel: z.string(),
+    reasonCode: z.string(),
+    reasonText: z.string(),
+    resultSummary: z.string().nullable(),
+    errorMessage: z.string().nullable(),
+    deleteReason: z.string().nullable(),
+    startedAt: z.string().nullable(),
+    finishedAt: z.string().nullable(),
+    plannerModel: z.string(),
+    plannerConfidence: z.number().nullable(),
+    verifierRequired: z.boolean(),
+    verifierDecision: z.string().nullable(),
+    verifierConfidence: z.number().nullable(),
+    verifierNotes: z.string().nullable(),
+    targetSummary: z.string(),
+  })),
+  governanceSummary: z.string()
 });
 export type MemoryCatalogDetail = z.infer<typeof MemoryCatalogDetailSchema>;
+
+export const GovernanceExecutionListItemSchema = z.object({
+  executionId: z.string(),
+  proposalId: z.string(),
+  workspaceId: z.string(),
+  proposalType: z.string(),
+  proposalTypeLabel: z.string(),
+  executionStatus: z.string(),
+  executionStatusLabel: z.string(),
+  reasonCode: z.string(),
+  reasonText: z.string(),
+  deleteReason: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  sourceService: z.string(),
+  plannerModel: z.string(),
+  plannerConfidence: z.number().nullable(),
+  verifierRequired: z.boolean(),
+  verifierModel: z.string().nullable(),
+  verifierDecision: z.string().nullable(),
+  verifierConfidence: z.number().nullable(),
+  verifierNotes: z.string().nullable(),
+  targetSummary: z.string(),
+  resultSummary: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+});
+export type GovernanceExecutionListItem = z.infer<typeof GovernanceExecutionListItemSchema>;
+
+export const GovernanceExecutionDetailSchema = GovernanceExecutionListItemSchema.extend({
+  policyVersion: z.string(),
+  verifierModel: z.string().nullable(),
+  verifierNotes: z.string().nullable(),
+  suggestedChanges: z.record(z.string(), z.unknown()),
+  evidence: z.record(z.string(), z.unknown()),
+  targets: z.array(
+    z.object({
+      recordId: z.string().nullable(),
+      conflictId: z.string().nullable(),
+      role: z.string(),
+    }),
+  ),
+});
+export type GovernanceExecutionDetail = z.infer<typeof GovernanceExecutionDetailSchema>;
+
+export const GovernanceExecutionFiltersSchema = z.object({
+  workspaceId: z.string().trim().optional(),
+  proposalType: z.string().trim().optional(),
+  executionStatus: z.string().trim().optional(),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+export type GovernanceExecutionFilters = z.infer<typeof GovernanceExecutionFiltersSchema>;
+
+export const GovernanceExecutionResponseSchema = z.object({
+  items: z.array(GovernanceExecutionListItemSchema),
+  appliedFilters: GovernanceExecutionFiltersSchema,
+  sourceStatus: SourceStatusSchema,
+});
+export type GovernanceExecutionResponse = z.infer<typeof GovernanceExecutionResponseSchema>;
 
 export const MemoryCatalogResponseSchema = z.object({
   items: z.array(MemoryCatalogItemSchema),

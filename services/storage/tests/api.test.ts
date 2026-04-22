@@ -705,7 +705,9 @@ describe("storage api", () => {
       url: `/v1/storage/governance-executions/${executionId}`,
     });
     expect(detailResponse.statusCode).toBe(200);
-    expect(detailResponse.json().data.id).toBe(executionId);
+    expect(detailResponse.json().data.execution.id).toBe(executionId);
+    expect(detailResponse.json().data.proposal.id).toBe(executeResponse.json().data[0].proposal.id);
+    expect(Array.isArray(detailResponse.json().data.targets)).toBe(true);
   });
 
   it("requires delete_reason for delete governance executions", async () => {

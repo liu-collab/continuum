@@ -6,7 +6,10 @@ import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { GovernancePanel } from "@/features/memory-catalog/governance-panel";
 import { getMemoryDetail } from "@/features/memory-catalog/service";
-import { formatTimestamp } from "@/lib/format";
+import {
+  formatTimestamp,
+  governanceStatusTone,
+} from "@/lib/format";
 
 function statusTone(status: string) {
   if (status === "active") return "success";
@@ -97,6 +100,59 @@ export default async function MemoryDetailPage({
           </div>
 
           <GovernancePanel detail={detail} />
+
+          <div className="rounded-lg border bg-surface p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  自动治理历史
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{detail.governanceSummary}</p>
+              </div>
+              <Link
+                href={`/governance?workspace_id=${encodeURIComponent(detail.workspaceId ?? "")}` as Route}
+                className="text-xs text-muted-foreground transition hover:text-foreground"
+              >
+                查看全部
+              </Link>
+            </div>
+
+            {detail.governanceHistory.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {detail.governanceHistory.map((item) => (
+                  <div key={item.executionId} className="rounded-md border bg-surface-muted/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-foreground">
+                            {item.proposalTypeLabel}
+                          </span>
+                          <StatusBadge tone={governanceStatusTone(item.executionStatus)}>
+                            {item.executionStatusLabel}
+                          </StatusBadge>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                          {item.reasonText}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                      <div>目标: {item.targetSummary}</div>
+                      <div>Planner: {item.plannerModel} / {item.plannerConfidence ?? "—"}</div>
+                      <div>Verifier: {item.verifierRequired ? item.verifierDecision ?? "待复核" : "不需要"}</div>
+                      <div>执行时间: {formatTimestamp(item.startedAt)}</div>
+                      {item.deleteReason ? <div>删除原因: {item.deleteReason}</div> : null}
+                      {item.errorMessage ? <div>失败原因: {item.errorMessage}</div> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                还没有治理执行记录。
+              </div>
+            )}
+          </div>
 
           <div className="rounded-lg border bg-surface p-4">
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">

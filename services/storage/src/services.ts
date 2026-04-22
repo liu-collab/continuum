@@ -6,6 +6,7 @@ import type {
   ConfirmRecordInput,
   DeleteRecordInput,
   GovernanceExecutionBatchRequest,
+  GovernanceExecutionDetail,
   InvalidateRecordInput,
   RecordListPage,
   RecordHistoryEntry,
@@ -258,7 +259,24 @@ export class StorageService {
   }
 
   async getGovernanceExecution(executionId: string) {
-    return this.repositories.governance.findExecutionById(executionId);
+    const execution = await this.repositories.governance.findExecutionById(executionId);
+    if (!execution) {
+      return null;
+    }
+
+    const proposal = await this.repositories.governance.findProposalById(execution.proposal_id);
+    if (!proposal) {
+      return null;
+    }
+
+    const targets = await this.repositories.governance.listProposalTargets(proposal.id);
+    const detail: GovernanceExecutionDetail = {
+      proposal,
+      targets,
+      execution,
+    };
+
+    return detail;
   }
 
   async retryGovernanceExecution(executionId: string) {

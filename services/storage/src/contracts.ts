@@ -592,6 +592,12 @@ export interface GovernanceExecution {
   finished_at: string | null;
 }
 
+export interface GovernanceExecutionDetail {
+  proposal: GovernanceProposal;
+  targets: GovernanceProposalTarget[];
+  execution: GovernanceExecution;
+}
+
 export interface RecordHistoryEntry {
   entry_type: "governance_action" | "record_version";
   created_at: string;

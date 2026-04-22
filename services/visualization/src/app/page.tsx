@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowUpRight, BookText, Bot, ChartSpline, HeartPulse } from "lucide-react";
+import { ArrowUpRight, BookText, Bot, ChartSpline, HeartPulse, ShieldCheck } from "lucide-react";
 
 const cards = [
   {
@@ -14,6 +14,12 @@ const cards = [
     title: "记忆",
     description: "结构化记录目录",
     icon: BookText,
+  },
+  {
+    href: "/governance" as Route,
+    title: "治理",
+    description: "自动治理历史与详情",
+    icon: ShieldCheck,
   },
   {
     href: "/runs" as Route,

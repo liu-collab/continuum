@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { queryCatalogViewMock } = vi.hoisted(() => ({
-  queryCatalogViewMock: vi.fn<() => Promise<any>>()
+const { queryCatalogViewMock, fetchGovernanceExecutionsMock, fetchGovernanceExecutionDetailMock } = vi.hoisted(() => ({
+  queryCatalogViewMock: vi.fn<() => Promise<any>>(),
+  fetchGovernanceExecutionsMock: vi.fn<() => Promise<any>>(),
+  fetchGovernanceExecutionDetailMock: vi.fn<() => Promise<any>>(),
 }));
 
 queryCatalogViewMock.mockImplementation(async () => ({
@@ -58,10 +60,72 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
   }))
 }));
 
+fetchGovernanceExecutionsMock.mockImplementation(async () => ({
+  status: {
+    name: "storage_governance_executions",
+    label: "Storage governance executions",
+    kind: "dependency",
+    status: "healthy",
+    checkedAt: new Date().toISOString(),
+    lastCheckedAt: new Date().toISOString(),
+    lastOkAt: new Date().toISOString(),
+    lastError: null,
+    responseTimeMs: 10,
+    detail: null,
+  },
+  items: [
+    {
+      executionId: "execution-1",
+      proposalId: "proposal-1",
+      workspaceId: "ws-1",
+      proposalType: "delete",
+      proposalTypeLabel: "软删除",
+      executionStatus: "executed",
+      executionStatusLabel: "执行成功",
+      reasonCode: "obsolete_task_state",
+      reasonText: "delete obsolete task state",
+      deleteReason: "replaced by newer state",
+      startedAt: "2026-04-22T00:00:00Z",
+      finishedAt: "2026-04-22T00:01:00Z",
+      sourceService: "retrieval-runtime",
+      plannerModel: "writeback_llm",
+      plannerConfidence: 0.95,
+      verifierRequired: true,
+      verifierDecision: "approve",
+      verifierConfidence: 0.91,
+      targetSummary: "target:memory-1",
+      resultSummary: "delete executed",
+      errorMessage: null,
+    },
+  ],
+}));
+
+fetchGovernanceExecutionDetailMock.mockImplementation(async () => ({
+  status: {
+    name: "storage_governance_execution_detail",
+    label: "Storage governance execution detail",
+    kind: "dependency",
+    status: "healthy",
+    checkedAt: new Date().toISOString(),
+    lastCheckedAt: new Date().toISOString(),
+    lastOkAt: new Date().toISOString(),
+    lastError: null,
+    responseTimeMs: 10,
+    detail: null,
+  },
+  detail: null,
+}));
+
+vi.mock("@/lib/server/storage-governance-executions-client", () => ({
+  fetchGovernanceExecutions: fetchGovernanceExecutionsMock,
+  fetchGovernanceExecutionDetail: fetchGovernanceExecutionDetailMock,
+}));
+
 import {
   buildMemoryCatalogQuickViews,
   describeCatalogFilterHints,
   describeCatalogEmptyState,
+  getGovernanceHistory,
   getMemoryCatalog,
   getMemoryDetail
 } from "@/features/memory-catalog/service";
@@ -120,6 +184,8 @@ describe("memory catalog service", () => {
     expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
+    expect(detail?.governanceHistory).toHaveLength(1);
+    expect(detail?.governanceSummary).toContain("自动治理");
   });
 
   it("returns workspace-only catalog view summary", async () => {
@@ -311,5 +377,18 @@ describe("memory catalog service", () => {
 
     expect(hints.join(" ")).toContain("平台级记忆");
     expect(hints.join(" ")).toContain("workspace_id");
+  });
+
+  it("returns governance history response from storage governance client", async () => {
+    const response = await getGovernanceHistory({
+      workspaceId: "ws-1",
+      proposalType: undefined,
+      executionStatus: undefined,
+      limit: 20,
+    });
+
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.proposalTypeLabel).toBe("软删除");
+    expect(response.sourceStatus.status).toBe("healthy");
   });
 });

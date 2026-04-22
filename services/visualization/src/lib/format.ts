@@ -2,6 +2,7 @@ import { format, formatDistanceToNow } from "date-fns";
 
 import {
   DashboardMetric,
+  GovernanceExecutionDetail,
   MemoryStatus,
   MemoryType,
   MemoryViewMode,
@@ -182,4 +183,80 @@ export function sourceStatusTone(status: SourceHealthStatus) {
     case "unavailable":
       return "danger";
   }
+}
+
+export function governanceProposalTypeLabel(value: string) {
+  switch (value) {
+    case "archive":
+      return "归档";
+    case "confirm":
+      return "确认";
+    case "delete":
+      return "软删除";
+    case "downgrade":
+      return "降级";
+    case "merge":
+      return "合并";
+    case "resolve_conflict":
+      return "解决冲突";
+    case "summarize":
+      return "摘要收敛";
+    default:
+      return value;
+  }
+}
+
+export function governanceExecutionStatusLabel(value: string) {
+  switch (value) {
+    case "executed":
+      return "执行成功";
+    case "failed":
+      return "执行失败";
+    case "executing":
+      return "执行中";
+    case "verified":
+      return "已复核";
+    case "proposed":
+      return "已提案";
+    case "rejected_by_guard":
+      return "已拦截";
+    case "cancelled":
+      return "已取消";
+    case "superseded":
+      return "已覆盖";
+    default:
+      return value;
+  }
+}
+
+export function governanceStatusTone(value: string) {
+  if (value === "executed" || value === "verified") {
+    return "success";
+  }
+
+  if (value === "failed" || value === "rejected_by_guard") {
+    return "danger";
+  }
+
+  if (value === "executing" || value === "proposed" || value === "cancelled" || value === "superseded") {
+    return "warning";
+  }
+
+  return "neutral";
+}
+
+export function summarizeGovernanceTarget(
+  targets: GovernanceExecutionDetail["targets"] | Array<{ recordId: string | null; conflictId: string | null; role: string }>,
+) {
+  const parts = targets.map((target) => {
+    if (target.recordId) {
+      return `${target.role}:${target.recordId}`;
+    }
+    if (target.conflictId) {
+      return `${target.role}:${target.conflictId}`;
+    }
+    return target.role;
+  });
+
+  return parts.length > 0 ? parts.join(" · ") : "未记录目标";
 }
