@@ -24,6 +24,21 @@ Rules:
 - Keep reason short and concrete in Chinese.
 `.trim();
 
+export const MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT = `
+You are the intent analyzer for a memory-native agent.
+Return strict JSON only with shape:
+{"needs_memory":boolean,"memory_types":[...],"urgency":"immediate|deferred|optional","confidence":number,"reason":"...","suggested_scopes":[...]}
+
+Your task is to judge whether the current input depends on prior context or durable memory.
+
+Rules:
+- Focus on whether the user is continuing earlier work, relying on preferences, or asking for continuity.
+- memory_types must only use: fact_preference | task_state | episodic.
+- suggested_scopes must only use: workspace | user | task | session.
+- If uncertain, prefer a conservative answer that keeps memory available.
+- Keep reason short and concrete in Chinese.
+`.trim();
+
 export const MEMORY_RECALL_INJECTION_SYSTEM_PROMPT = `
 You are the memory injection planner for a memory-native agent.
 Return strict JSON only with shape:
@@ -110,6 +125,44 @@ Behavioural rules:
 - Emit at most 9 items.
 `.trim();
 
+export const MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT = `
+You assess the quality of writeback candidates for durable agent memory.
+
+Input JSON carries:
+- writeback_candidates: [{ id, candidate_type, scope, summary, importance, confidence, write_reason }]
+- existing_similar_records: [{ id, scope, memory_type, status, summary, importance, confidence }]
+- turn_context: { user_input, assistant_output }
+
+Return strict JSON only with shape:
+{"assessments":[{"candidate_id":"...","quality_score":0-1,"confidence":0-1,"potential_conflicts":["..."],"suggested_importance":1-5,"suggested_status":"active|pending_confirmation","issues":[{"type":"duplicate|low_quality|conflict|vague","severity":"high|medium|low","description":"..."}],"reason":"..."}]}
+
+Rules:
+- candidate_id must refer to an input candidate id.
+- potential_conflicts must only contain ids from existing_similar_records.
+- Use pending_confirmation when the candidate is plausible but duplicate/conflict risk remains.
+- quality_score should be lower for vague, redundant, low-signal, or temporary content.
+- Keep reason and issue descriptions concise in Chinese.
+`.trim();
+
+export const MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT = `
+You evaluate whether injected memories were actually used by the main model response.
+
+Input JSON carries:
+- injected_memories: [{ record_id, summary, importance }]
+- assistant_output: string
+- user_feedback: { rating, comment } | null
+
+Return strict JSON only with shape:
+{"evaluations":[{"record_id":"...","was_used":boolean,"usage_confidence":0-1,"effectiveness_score":0-1,"suggested_importance_adjustment":-2..2,"usage_evidence":"...","reason":"..."}]}
+
+Rules:
+- record_id must refer to an injected memory.
+- Use usage_evidence only when you can point to a clear phrase or behavior in assistant_output.
+- Raise suggested_importance_adjustment only when the memory was clearly used and materially helpful.
+- Lower suggested_importance_adjustment when the memory was ignored or unnecessary.
+- Keep reason short and concrete in Chinese.
+`.trim();
+
 export const MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT = `
 You plan maintenance actions over a small set of durable memory records.
 
@@ -158,4 +211,59 @@ Rules:
 - Reject if the proposal resolves a conflict without enough evidence in related records.
 - Reject if the proposal appears to cross scopes incorrectly.
 - Approve only when the proposal is specific, well-supported, and low-ambiguity.
+`.trim();
+
+export const MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT = `
+You discover semantic relations between durable memory records.
+
+Input JSON carries:
+- source_record: { id, memory_type, scope, summary, importance, confidence }
+- candidate_records: [{ id, memory_type, scope, summary, importance, confidence }]
+- context: { workspace_id, user_id } | null
+
+Return strict JSON only with shape:
+{"source_record_id":"...","relations":[{"target_record_id":"...","relation_type":"depends_on|conflicts_with|extends|supersedes|related_to","strength":0-1,"bidirectional":boolean,"reason":"..."}]}
+
+Rules:
+- source_record_id must equal source_record.id.
+- target_record_id must come from candidate_records.
+- Emit only relations with clear semantic support.
+- Use conflicts_with only for genuine contradictions; use related_to when weaker but still useful.
+- Keep reason concise in Chinese.
+`.trim();
+
+export const MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT = `
+You proactively recommend useful memories for the current context.
+
+Input JSON carries:
+- current_context: { user_input, session_context, detected_task_type }
+- available_memories: [{ id, memory_type, scope, summary, importance, confidence, status }]
+
+Return strict JSON only with shape:
+{"recommendations":[{"record_id":"...","relevance_score":0-1,"trigger_reason":"task_similarity|forgotten_context|related_decision|conflict_warning","suggestion":"...","auto_inject":boolean}]}
+
+Rules:
+- record_id must come from available_memories.
+- auto_inject should usually be true only when relevance_score is very high and the context match is strong.
+- Prefer concise user-facing suggestions in Chinese.
+- Emit only the most relevant recommendations.
+`.trim();
+
+export const MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT = `
+You plan long-term memory evolution over a set of related records.
+
+Input JSON carries:
+- source_records: [{ id, memory_type, scope, summary, importance, confidence, created_at, updated_at }]
+- time_window: { start, end }
+- evolution_type: knowledge_extraction | pattern_discovery | summarization
+
+Return strict JSON only with shape:
+{"evolution_type":"...","source_records":["..."],"extracted_knowledge":{"pattern":"...","confidence":0-1,"evidence_count":N,"suggested_scope":"user|workspace","suggested_importance":1-5},"consolidation_plan":{"new_summary":"...","records_to_archive":["..."]}}
+
+Rules:
+- source_records must only contain ids from the input.
+- For knowledge_extraction or pattern_discovery, extracted_knowledge should be present.
+- For summarization, consolidation_plan should usually be present.
+- Keep extracted knowledge concise and evidence-based.
+- Do not invent new record ids.
 `.trim();

@@ -4,6 +4,7 @@ export const memoryScopeSchema = z.enum(["workspace", "user", "task", "session"]
 export const memoryTypeSchema = z.enum(["fact_preference", "task_state", "episodic"]);
 export const memoryImportanceSchema = z.number().int().min(1).max(5);
 export const memoryCandidateLimitSchema = z.number().int().min(1).max(50);
+export const memoryConfidenceSchema = z.number().min(0).max(1);
 
 export const memoryRecallSearchSchema = z.object({
   should_search: z.boolean(),
@@ -40,12 +41,35 @@ export const memoryRecallInjectionSchema = z.discriminatedUnion("should_inject",
   memoryRecallSkipSchema,
 ]);
 
+export const memoryIntentAnalyzerInputSchema = z.object({
+  current_input: z.string().min(1),
+  session_context: z.object({
+    session_id: z.string().min(1),
+    workspace_id: z.string().min(1),
+    recent_turns: z.array(
+      z.object({
+        user_input: z.string(),
+        assistant_output: z.string(),
+      }),
+    ),
+  }),
+});
+
+export const memoryIntentAnalyzerSchema = z.object({
+  needs_memory: z.boolean(),
+  memory_types: z.array(memoryTypeSchema),
+  urgency: z.enum(["immediate", "deferred", "optional"]),
+  confidence: memoryConfidenceSchema,
+  reason: z.string().min(1),
+  suggested_scopes: z.array(memoryScopeSchema).optional(),
+});
+
 export const memoryWritebackCandidateSchema = z.object({
   candidate_type: memoryTypeSchema,
   scope: memoryScopeSchema,
   summary: z.string().min(1),
   importance: memoryImportanceSchema,
-  confidence: z.number().min(0).max(1),
+  confidence: memoryConfidenceSchema,
   write_reason: z.string().min(1),
 });
 
@@ -60,7 +84,7 @@ export const memoryWritebackRefineItemSchema = z.object({
   action: z.enum(["keep", "drop", "merge", "new"]),
   summary: z.string().min(1).optional(),
   importance: memoryImportanceSchema.optional(),
-  confidence: z.number().min(0).max(1).optional(),
+  confidence: memoryConfidenceSchema.optional(),
   scope: memoryScopeSchema.optional(),
   candidate_type: memoryTypeSchema.optional(),
   merge_with: z.array(z.string().regex(ruleIndexPattern)).optional(),
@@ -69,6 +93,41 @@ export const memoryWritebackRefineItemSchema = z.object({
 
 export const memoryWritebackRefineSchema = z.object({
   refined_candidates: z.array(memoryWritebackRefineItemSchema),
+});
+
+export const memoryQualityIssueSchema = z.object({
+  type: z.enum(["duplicate", "low_quality", "conflict", "vague"]),
+  severity: z.enum(["high", "medium", "low"]),
+  description: z.string().min(1),
+});
+
+export const memoryQualityAssessmentSchema = z.object({
+  candidate_id: z.string().min(1),
+  quality_score: memoryConfidenceSchema,
+  confidence: memoryConfidenceSchema,
+  potential_conflicts: z.array(z.string().min(1)),
+  suggested_importance: memoryImportanceSchema,
+  suggested_status: z.enum(["active", "pending_confirmation"]),
+  issues: z.array(memoryQualityIssueSchema),
+  reason: z.string().min(1),
+});
+
+export const memoryQualityAssessmentResultSchema = z.object({
+  assessments: z.array(memoryQualityAssessmentSchema),
+});
+
+export const memoryEffectivenessEvaluationSchema = z.object({
+  record_id: z.string().min(1),
+  was_used: z.boolean(),
+  usage_confidence: memoryConfidenceSchema,
+  effectiveness_score: memoryConfidenceSchema,
+  suggested_importance_adjustment: z.number().int().min(-2).max(2),
+  usage_evidence: z.string().min(1).optional(),
+  reason: z.string().min(1),
+});
+
+export const memoryEffectivenessEvaluationResultSchema = z.object({
+  evaluations: z.array(memoryEffectivenessEvaluationSchema),
 });
 
 export const memoryGovernanceMergeActionSchema = z.object({
@@ -133,16 +192,86 @@ export const memoryGovernancePlanSchema = z.object({
 
 export const memoryGovernanceVerificationSchema = z.object({
   decision: z.enum(["approve", "reject"]),
-  confidence: z.number().min(0).max(1),
+  confidence: memoryConfidenceSchema,
   notes: z.string().min(1),
+});
+
+export const memoryRelationTypeSchema = z.enum([
+  "depends_on",
+  "conflicts_with",
+  "extends",
+  "supersedes",
+  "related_to",
+]);
+
+export const memoryRelationDiscoveryItemSchema = z.object({
+  target_record_id: z.string().min(1),
+  relation_type: memoryRelationTypeSchema,
+  strength: memoryConfidenceSchema,
+  bidirectional: z.boolean(),
+  reason: z.string().min(1),
+});
+
+export const memoryRelationDiscoverySchema = z.object({
+  source_record_id: z.string().min(1),
+  relations: z.array(memoryRelationDiscoveryItemSchema),
+});
+
+export const memoryRecommendationTriggerReasonSchema = z.enum([
+  "task_similarity",
+  "forgotten_context",
+  "related_decision",
+  "conflict_warning",
+]);
+
+export const memoryProactiveRecommendationItemSchema = z.object({
+  record_id: z.string().min(1),
+  relevance_score: memoryConfidenceSchema,
+  trigger_reason: memoryRecommendationTriggerReasonSchema,
+  suggestion: z.string().min(1),
+  auto_inject: z.boolean(),
+});
+
+export const memoryProactiveRecommendationSchema = z.object({
+  recommendations: z.array(memoryProactiveRecommendationItemSchema),
+});
+
+export const memoryEvolutionTypeSchema = z.enum([
+  "knowledge_extraction",
+  "pattern_discovery",
+  "summarization",
+]);
+
+export const memoryEvolutionPlanSchema = z.object({
+  evolution_type: memoryEvolutionTypeSchema,
+  source_records: z.array(z.string().min(1)).min(1),
+  extracted_knowledge: z.object({
+    pattern: z.string().min(1),
+    confidence: memoryConfidenceSchema,
+    evidence_count: z.number().int().min(1),
+    suggested_scope: z.enum(["user", "workspace"]),
+    suggested_importance: memoryImportanceSchema,
+  }).optional(),
+  consolidation_plan: z.object({
+    new_summary: z.string().min(1),
+    records_to_archive: z.array(z.string().min(1)).min(1),
+  }).optional(),
 });
 
 export type MemoryRecallSearchSchema = z.infer<typeof memoryRecallSearchSchema>;
 export type MemoryRecallInjectionSchema = z.infer<typeof memoryRecallInjectionSchema>;
+export type MemoryIntentAnalyzerSchema = z.infer<typeof memoryIntentAnalyzerSchema>;
 export type MemoryWritebackCandidateSchema = z.infer<typeof memoryWritebackCandidateSchema>;
 export type MemoryWritebackExtractionSchema = z.infer<typeof memoryWritebackExtractionSchema>;
 export type MemoryWritebackRefineItemSchema = z.infer<typeof memoryWritebackRefineItemSchema>;
 export type MemoryWritebackRefineSchema = z.infer<typeof memoryWritebackRefineSchema>;
+export type MemoryQualityAssessmentSchema = z.infer<typeof memoryQualityAssessmentSchema>;
+export type MemoryQualityAssessmentResultSchema = z.infer<typeof memoryQualityAssessmentResultSchema>;
+export type MemoryEffectivenessEvaluationSchema = z.infer<typeof memoryEffectivenessEvaluationSchema>;
+export type MemoryEffectivenessEvaluationResultSchema = z.infer<typeof memoryEffectivenessEvaluationResultSchema>;
 export type MemoryGovernanceActionSchema = z.infer<typeof memoryGovernanceActionSchema>;
 export type MemoryGovernancePlanSchema = z.infer<typeof memoryGovernancePlanSchema>;
 export type MemoryGovernanceVerificationSchema = z.infer<typeof memoryGovernanceVerificationSchema>;
+export type MemoryRelationDiscoverySchema = z.infer<typeof memoryRelationDiscoverySchema>;
+export type MemoryProactiveRecommendationSchema = z.infer<typeof memoryProactiveRecommendationSchema>;
+export type MemoryEvolutionPlanSchema = z.infer<typeof memoryEvolutionPlanSchema>;
