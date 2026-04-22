@@ -66,7 +66,7 @@ export default function RootLayout({
                 </nav>
               </div>
             </header>
-            <main className="min-h-0 w-full flex-1 overflow-hidden p-6">
+            <main className="min-h-0 w-full flex-1 overflow-auto p-6">
               {children}
             </main>
           </div>

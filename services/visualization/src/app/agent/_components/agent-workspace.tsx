@@ -76,8 +76,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="grid h-full min-h-0 flex-1 gap-6 xl:grid-cols-[20rem_minmax(0,1fr)_22rem]">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        <div className="grid h-full min-h-0 flex-1 overflow-hidden xl:grid-cols-[20rem_minmax(0,1fr)_22rem] [grid-template-rows:minmax(0,1fr)] gap-6">
           <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
@@ -135,7 +135,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             </div>
           </section>
 
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-col gap-4">
             {workspace.state.replayGapDetected ? (
               <ErrorState
                 testId="agent-replay-gap"

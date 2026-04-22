@@ -138,7 +138,7 @@ export function ChatPanel({
   }
 
   return (
-    <div className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
+    <div className={`flex flex-1 ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
         <div className="flex min-w-0 items-center gap-2">
           <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
