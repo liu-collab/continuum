@@ -1,0 +1,24 @@
+groups:
+  - name: agent-memory-runtime
+    rules:
+      - alert: RetrievalRuntimeUnavailable
+        expr: up{job="retrieval-runtime"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: retrieval-runtime unavailable
+      - alert: StorageUnavailable
+        expr: up{job="storage"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: storage unavailable
+      - alert: RuntimeOutboxBacklogHigh
+        expr: runtime_outbox_pending_count > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: runtime outbox backlog is high

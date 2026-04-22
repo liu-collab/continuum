@@ -766,6 +766,88 @@ describe("storage api", () => {
     expect(Array.isArray(detailResponse.json().data.targets)).toBe(true);
   });
 
+  it("upserts and lists memory relations", async () => {
+    const repositories = createMemoryRepositories();
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+
+    const jobA = await service.submitWriteBackCandidate(buildCandidate({ idempotency_key: "rel-a" }));
+    const jobB = await service.submitWriteBackCandidate(buildCandidate({
+      idempotency_key: "rel-b",
+      summary: "Repository requires API tests before commit",
+      scope: "workspace",
+      user_id: null,
+      source: {
+        source_type: "assistant_final",
+        source_ref: "turn-2",
+        service_name: "retrieval-runtime",
+        origin_workspace_id: "11111111-1111-4111-8111-111111111111",
+      },
+    }));
+    expect(jobA.id).toBeTruthy();
+    expect(jobB.id).toBeTruthy();
+    await service.processWriteJobs();
+
+    const records = await service.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      page: 1,
+      page_size: 10,
+    });
+    const [first, second] = records.items;
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const upsertResponse = await app.inject({
+      method: "POST",
+      url: "/v1/storage/relations",
+      payload: {
+        relations: [
+          {
+            workspace_id: "11111111-1111-4111-8111-111111111111",
+            source_record_id: first!.id,
+            target_record_id: second!.id,
+            relation_type: "related_to",
+            strength: 0.88,
+            bidirectional: true,
+            reason: "同一工作区约束",
+            created_by_service: "retrieval-runtime",
+          },
+        ],
+      },
+    });
+
+    expect(upsertResponse.statusCode).toBe(200);
+    expect(upsertResponse.json().data).toHaveLength(1);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/v1/storage/relations?workspace_id=11111111-1111-4111-8111-111111111111&record_id=${first!.id}`,
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().data).toHaveLength(1);
+    expect(listResponse.json().data[0].target_record_id).toBe(second!.id);
+  });
+
   it("requires delete_reason for delete governance executions", async () => {
     const app = createApp(
       createStorageService({

@@ -162,6 +162,13 @@ export function createApp(service: StorageService): FastifyInstance {
     return ok(records);
   });
 
+  app.post("/v1/storage/records/by-ids", async (request) => {
+    const payload = z.object({
+      ids: z.array(z.uuid()).min(1).max(200),
+    }).parse(request.body);
+    return ok(await service.getRecordsByIds(payload.ids));
+  });
+
   app.patch("/v1/storage/records/:recordId", async (request) => {
     const params = z.object({ recordId: z.uuid() }).parse(request.params);
     const payload = recordPatchSchema.parse(request.body);
@@ -232,6 +239,37 @@ export function createApp(service: StorageService): FastifyInstance {
   app.post("/v1/storage/governance-executions", async (request) => {
     const payload = governanceExecutionBatchRequestSchema.parse(request.body);
     return ok(await service.submitGovernanceExecutions(payload));
+  });
+
+  app.post("/v1/storage/relations", async (request) => {
+    const payload = z.object({
+      relations: z.array(z.object({
+        workspace_id: z.uuid(),
+        source_record_id: z.uuid(),
+        target_record_id: z.uuid(),
+        relation_type: z.enum(["depends_on", "conflicts_with", "extends", "supersedes", "related_to"]),
+        strength: z.number().min(0).max(1),
+        bidirectional: z.boolean(),
+        reason: z.string().trim().min(3).max(240),
+        created_by_service: z.string().trim().min(1).default("retrieval-runtime"),
+      })).min(1).max(100),
+    }).parse(request.body);
+    return ok(await service.upsertRelations(payload.relations));
+  });
+
+  app.get("/v1/storage/relations", async (request) => {
+    const query = z.object({
+      workspace_id: z.uuid(),
+      record_id: z.uuid().optional(),
+      relation_type: z.enum(["depends_on", "conflicts_with", "extends", "supersedes", "related_to"]).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }).parse(request.query);
+    return ok(await service.listRelations({
+      workspace_id: query.workspace_id,
+      ...(query.record_id ? { record_id: query.record_id } : {}),
+      ...(query.relation_type ? { relation_type: query.relation_type } : {}),
+      limit: query.limit,
+    }));
   });
 
   app.get("/v1/storage/governance-executions", async (request) => {

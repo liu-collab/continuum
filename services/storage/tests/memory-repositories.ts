@@ -5,6 +5,8 @@ import type {
   GovernanceExecution,
   GovernanceProposal,
   GovernanceProposalTarget,
+  MemoryRelation,
+  MemoryRelationUpsertInput,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -22,6 +24,7 @@ import type {
   JobCreateInput,
   MetricsRepository,
   ReadModelRepository,
+  RelationRepository,
   RecordRepository,
   StorageRepositories,
   WriteJobRepository,
@@ -47,6 +50,7 @@ export function createMemoryRepositories(
     governanceProposals: [] as GovernanceProposal[],
     governanceProposalTargets: [] as GovernanceProposalTarget[],
     governanceExecutions: [] as GovernanceExecution[],
+    relations: [] as MemoryRelation[],
     readModel: [...(seed?.readModel ?? [])],
     refreshJobs: [...(seed?.refreshJobs ?? [])],
   };
@@ -143,6 +147,10 @@ export function createMemoryRepositories(
   const records: RecordRepository = {
     async findById(recordId) {
       return state.records.find((record) => record.id === recordId) ?? null;
+    },
+    async findByIds(recordIds) {
+      const idSet = new Set(recordIds);
+      return state.records.filter((record) => idSet.has(record.id));
     },
     async findByDedupeScope(input) {
       return state.records
@@ -390,6 +398,71 @@ export function createMemoryRepositories(
     },
   };
 
+  const relations: RelationRepository = {
+    async upsertRelations(input: MemoryRelationUpsertInput[]) {
+      const now = new Date().toISOString();
+      const saved: MemoryRelation[] = [];
+
+      for (const relation of input) {
+        const existing = state.relations.find((item) => {
+          return item.workspace_id === relation.workspace_id
+            && item.source_record_id === relation.source_record_id
+            && item.target_record_id === relation.target_record_id
+            && item.relation_type === relation.relation_type;
+        });
+
+        if (existing) {
+          existing.strength = relation.strength;
+          existing.bidirectional = relation.bidirectional;
+          existing.reason = relation.reason;
+          existing.created_by_service = relation.created_by_service;
+          existing.updated_at = now;
+          saved.push(existing);
+          continue;
+        }
+
+        const created: MemoryRelation = {
+          id: randomUUID(),
+          workspace_id: relation.workspace_id,
+          source_record_id: relation.source_record_id,
+          target_record_id: relation.target_record_id,
+          relation_type: relation.relation_type,
+          strength: relation.strength,
+          bidirectional: relation.bidirectional,
+          reason: relation.reason,
+          created_by_service: relation.created_by_service,
+          created_at: now,
+          updated_at: now,
+        };
+        state.relations.push(created);
+        saved.push(created);
+      }
+
+      return saved;
+    },
+    async listRelations(filters) {
+      return state.relations
+        .filter((relation) => {
+          if (relation.workspace_id !== filters.workspace_id) {
+            return false;
+          }
+          if (
+            filters.record_id
+            && relation.source_record_id !== filters.record_id
+            && relation.target_record_id !== filters.record_id
+          ) {
+            return false;
+          }
+          if (filters.relation_type && relation.relation_type !== filters.relation_type) {
+            return false;
+          }
+          return true;
+        })
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+        .slice(0, filters.limit ?? 100);
+    },
+  };
+
   const readModel: ReadModelRepository = {
     async upsert(entry) {
       const normalizedEntry =
@@ -571,6 +644,7 @@ export function createMemoryRepositories(
     records,
     conflicts,
     governance,
+    relations,
     readModel,
     metrics,
     async transaction<T>(callback: (repositories: StorageRepositories) => Promise<T>) {

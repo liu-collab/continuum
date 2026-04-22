@@ -4,8 +4,12 @@ import { InjectionEngine } from "./injection/injection-engine.js";
 import { createLogger } from "./logger.js";
 import { HttpMemoryGovernancePlanner } from "./memory-orchestrator/governance/planner.js";
 import { HttpMemoryGovernanceVerifier } from "./memory-orchestrator/governance/verifier.js";
+import { HttpMemoryEvolutionPlanner } from "./memory-orchestrator/governance/evolution-planner.js";
+import { HttpMemoryIntentAnalyzer } from "./memory-orchestrator/intent/intent-analyzer.js";
 import { createMemoryOrchestrator } from "./memory-orchestrator/index.js";
+import { HttpMemoryProactiveRecommender } from "./memory-orchestrator/recommendation/proactive-recommender.js";
 import { HttpMemoryQualityAssessor } from "./memory-orchestrator/writeback/quality-assessor.js";
+import { HttpMemoryRelationDiscoverer } from "./memory-orchestrator/relation/relation-discoverer.js";
 import { HttpMemoryRecallInjectionPlanner } from "./memory-orchestrator/recall/injection-planner.js";
 import { HttpMemoryRecallSearchPlanner } from "./memory-orchestrator/recall/search-planner.js";
 import { HttpMemoryWritebackPlanner } from "./memory-orchestrator/writeback/planner.js";
@@ -79,6 +83,51 @@ async function main() {
         RECALL_LLM_CANDIDATE_LIMIT: config.RECALL_LLM_CANDIDATE_LIMIT,
       })
     : undefined;
+  const intentAnalyzer = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryIntentAnalyzer({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        RECALL_LLM_JUDGE_MAX_TOKENS: config.RECALL_LLM_JUDGE_MAX_TOKENS,
+      })
+    : undefined;
+  const relationDiscoverer = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryRelationDiscoverer({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
+      })
+    : undefined;
+  const proactiveRecommender = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryProactiveRecommender({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        RECALL_LLM_JUDGE_MAX_TOKENS: config.RECALL_LLM_JUDGE_MAX_TOKENS,
+        RECALL_LLM_CANDIDATE_LIMIT: config.RECALL_LLM_CANDIDATE_LIMIT,
+      })
+    : undefined;
+  const evolutionPlanner = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryEvolutionPlanner({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
+      })
+    : undefined;
   const maintenancePlanner = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpMemoryGovernancePlanner({
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
@@ -123,9 +172,12 @@ async function main() {
     dependencyGuard,
     config,
     logger,
+    relationDiscoverer,
+    evolutionPlanner,
   );
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
+    intentAnalyzer,
     recallPlanner:
       recallSearchPlanner && recallInjectionPlanner
         ? {
@@ -135,8 +187,11 @@ async function main() {
         : undefined,
     writebackPlanner,
     qualityAssessor,
+    relationDiscoverer,
+    proactiveRecommender,
     governancePlanner: maintenancePlanner,
     governanceVerifier,
+    evolutionPlanner,
   });
 
   const runtimeService = new RetrievalRuntimeService(
@@ -147,6 +202,7 @@ async function main() {
       dependencyGuard,
       logger,
       memoryOrchestrator?.recall?.search,
+      memoryOrchestrator?.intent,
     ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
@@ -166,6 +222,7 @@ async function main() {
     config.EMBEDDING_TIMEOUT_MS,
     memoryOrchestrator,
     maintenanceWorker,
+    storageClient,
   );
 
   if (!hasCompleteRuntimeEmbeddingConfig(config)) {

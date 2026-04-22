@@ -16,11 +16,13 @@ import type {
   CandidateMemory,
   GovernanceExecutionResponseItem,
   MemoryConflictSnapshot,
+  MemoryRelationSnapshot,
   MemoryRecordSnapshot,
   SubmittedWriteBackJob,
   WriteBackCandidate,
 } from "../src/shared/types.js";
 import type {
+  IntentAnalyzer,
   QualityAssessor,
   RecallEffectivenessEvaluator,
   RecallInjectionInput,
@@ -257,7 +259,12 @@ async function waitForCondition(check: () => boolean, timeoutMs = 1000) {
 class StubStorageClient implements StorageWritebackClient {
   public callCount = 0;
 
-  constructor(private readonly jobs: SubmittedWriteBackJob[] = [], private readonly shouldFail = false) {}
+  constructor(
+    private readonly jobs: SubmittedWriteBackJob[] = [],
+    private readonly shouldFail = false,
+    private readonly recordItems: MemoryRecordSnapshot[] = [],
+    private readonly relationItems: MemoryRelationSnapshot[] = [],
+  ) {}
 
   async submitCandidates(candidates: WriteBackCandidate[]): Promise<SubmittedWriteBackJob[]> {
     this.callCount += 1;
@@ -276,7 +283,12 @@ class StubStorageClient implements StorageWritebackClient {
   }
 
   async listRecords(): Promise<RecordListPage> {
-    return { items: [], total: 0, page: 1, page_size: 20 };
+    return { items: this.recordItems, total: this.recordItems.length, page: 1, page_size: 20 };
+  }
+
+  async getRecordsByIds(recordIds: string[]): Promise<MemoryRecordSnapshot[]> {
+    const idSet = new Set(recordIds);
+    return this.recordItems.filter((item) => idSet.has(item.id));
   }
 
   async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
@@ -293,6 +305,21 @@ class StubStorageClient implements StorageWritebackClient {
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
     throw new Error("stub storage client does not implement resolveConflict");
+  }
+
+  async upsertRelations(
+    relations: Parameters<StorageWritebackClient["upsertRelations"]>[0],
+  ): Promise<MemoryRelationSnapshot[]> {
+    return relations.map((relation, index) => ({
+      id: `rel-${index}`,
+      ...relation,
+      created_at: "2026-04-22T00:00:00.000Z",
+      updated_at: "2026-04-22T00:00:00.000Z",
+    }));
+  }
+
+  async listRelations(): Promise<MemoryRelationSnapshot[]> {
+    return this.relationItems;
   }
 
   async submitGovernanceExecutions(): Promise<GovernanceExecutionResponseItem[]> {
@@ -466,6 +493,23 @@ class StubRecallInjectionPlanner implements RecallInjectionPlanner {
   }
 }
 
+class StubIntentAnalyzer implements IntentAnalyzer {
+  constructor(
+    private readonly output: {
+      needs_memory: boolean;
+      memory_types: Array<"fact_preference" | "task_state" | "episodic">;
+      urgency: "immediate" | "deferred" | "optional";
+      confidence: number;
+      reason: string;
+      suggested_scopes?: Array<"workspace" | "user" | "task" | "session">;
+    },
+  ) {}
+
+  async analyze() {
+    return this.output;
+  }
+}
+
 function createRuntime(overrides?: {
   records?: CandidateMemory[];
   embeddingsClient?: EmbeddingsClient;
@@ -474,6 +518,7 @@ function createRuntime(overrides?: {
   qualityAssessor?: QualityAssessor;
   recallEffectivenessEvaluator?: RecallEffectivenessEvaluator;
   llmRecallPlanner?: LlmRecallPlanner;
+  intentAnalyzer?: IntentAnalyzer;
   readModelRepository?: InMemoryReadModelRepository;
   config?: Partial<AppConfig>;
 }) {
@@ -495,6 +540,7 @@ function createRuntime(overrides?: {
       : undefined;
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
+    intentAnalyzer: overrides?.intentAnalyzer,
     recallPlanner,
     recallEffectivenessEvaluator: overrides?.recallEffectivenessEvaluator,
     writebackPlanner: overrides?.llmExtractor as WritebackPlanner | undefined,
@@ -509,6 +555,7 @@ function createRuntime(overrides?: {
       dependencyGuard,
       logger,
       memoryOrchestrator?.recall?.search,
+      memoryOrchestrator?.intent,
     ),
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
@@ -526,6 +573,8 @@ function createRuntime(overrides?: {
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
     memoryOrchestrator,
+    undefined,
+    storageClient,
   );
 
   return { service, repository, storageClient };
@@ -612,6 +661,217 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block).not.toBeNull();
     expect(response.memory_packet?.records.map((record) => record.id)).toEqual(["mem-preference", "mem-task"]);
     expect(response.injection_block?.memory_summary).toContain("偏好与任务状态");
+  });
+
+  it("records memory intent plan when intent analyzer is configured", async () => {
+    const { service, repository } = createRuntime({
+      intentAnalyzer: new StubIntentAnalyzer({
+        needs_memory: true,
+        memory_types: ["fact_preference", "task_state"],
+        urgency: "immediate",
+        confidence: 0.92,
+        reason: "用户在继续之前的任务，需要恢复偏好和任务状态。",
+        suggested_scopes: ["user", "task"],
+      }),
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: true,
+        reason: "继续任务前先恢复记忆。",
+        requested_scopes: ["user", "task"],
+        requested_memory_types: ["fact_preference", "task_state"],
+        importance_threshold: 3,
+        query_hint: "继续之前的任务与偏好",
+        candidate_limit: 6,
+      }, {
+        should_inject: true,
+        reason: "需要注入偏好与当前任务状态。",
+        selected_record_ids: ["mem-preference", "mem-task"],
+        memory_summary: "延续用户偏好，并恢复当前任务状态。",
+      }),
+    });
+
+    await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-intent-plan",
+      phase: "before_response",
+      current_input: "继续上次那个任务，沿用之前的偏好。",
+    });
+
+    const runs = await repository.getRuns();
+    const intentPlan = runs.memory_plan_runs.find((run) => run.plan_kind === "memory_intent_plan");
+    expect(intentPlan).toBeTruthy();
+    expect(intentPlan?.result_state).toBe("planned");
+    expect(intentPlan?.output_summary).toContain("needs_memory=true");
+  });
+
+  it("returns proactive recommendations on session start", async () => {
+    const storageClient = new StubStorageClient(
+      [],
+      false,
+      [
+        {
+          id: "rec-recommend",
+          workspace_id: ids.workspace,
+          user_id: ids.user,
+          task_id: ids.task,
+          session_id: ids.session,
+          memory_type: "fact_preference",
+          scope: "user",
+          status: "active",
+          summary: "默认用中文输出",
+          details: null,
+          importance: 5,
+          confidence: 0.95,
+          created_at: "2026-04-22T00:00:00.000Z",
+          updated_at: "2026-04-22T00:00:00.000Z",
+          last_used_at: null,
+        },
+      ],
+    );
+    const recommender = {
+      async recommend() {
+        return {
+          recommendations: [
+            {
+              record_id: "rec-recommend",
+              relevance_score: 0.93,
+              trigger_reason: "task_similarity" as const,
+              suggestion: "这轮继续沿用中文输出约定。",
+              auto_inject: true,
+            },
+          ],
+        };
+      },
+    };
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const dependencyGuard = new DependencyGuard(repository, logger);
+    const readModelRepository = new InMemoryReadModelRepository(sampleRecords);
+    const embeddingsClient = new StubEmbeddingsClient();
+    const config = { ...baseConfig };
+    const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
+    const memoryOrchestrator = createMemoryOrchestrator({
+      config,
+      proactiveRecommender: recommender,
+    });
+
+    const service = new RetrievalRuntimeService(
+      new TriggerEngine(
+        config,
+        embeddingsClient,
+        readModelRepository,
+        dependencyGuard,
+        logger,
+        memoryOrchestrator?.recall?.search,
+        memoryOrchestrator?.intent,
+      ),
+      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      embeddingsClient,
+      new InjectionEngine(config),
+      new WritebackEngine(
+        config,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
+      repository,
+      dependencyGuard,
+      logger,
+      finalizeIdempotencyCache,
+      config.EMBEDDING_TIMEOUT_MS,
+      memoryOrchestrator,
+      undefined,
+      storageClient,
+    );
+
+    const response = await service.sessionStartContext({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "恢复当前会话",
+    });
+
+    expect(response.proactive_recommendations).toHaveLength(1);
+    expect(response.proactive_recommendations[0]?.record_id).toBe("rec-recommend");
+  });
+
+  it("expands recall candidates with related memories from storage relations", async () => {
+    const storageClient = new StubStorageClient(
+      [],
+      false,
+      [
+        {
+          id: "related-memory",
+          workspace_id: ids.workspace,
+          user_id: ids.user,
+          task_id: ids.task,
+          session_id: ids.session,
+          memory_type: "episodic",
+          scope: "task",
+          status: "active",
+          summary: "相关历史：之前已经确认过 Fastify 接口结构。",
+          details: null,
+          importance: 4,
+          confidence: 0.88,
+          created_at: "2026-04-22T00:00:00.000Z",
+          updated_at: "2026-04-22T00:00:00.000Z",
+          last_used_at: null,
+        },
+      ],
+      [
+        {
+          id: "rel-1",
+          workspace_id: ids.workspace,
+          source_record_id: "mem-task",
+          target_record_id: "related-memory",
+          relation_type: "related_to",
+          strength: 0.86,
+          bidirectional: true,
+          reason: "同一任务上下文",
+          created_by_service: "retrieval-runtime",
+          created_at: "2026-04-22T00:00:00.000Z",
+          updated_at: "2026-04-22T00:00:00.000Z",
+        },
+      ],
+    );
+
+    const { service } = createRuntime({
+      storageClient,
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: true,
+        reason: "继续当前任务，需要先查相关记忆。",
+        requested_scopes: ["task", "user", "workspace"],
+        requested_memory_types: ["task_state", "fact_preference", "episodic"],
+        importance_threshold: 3,
+        query_hint: "继续当前任务",
+        candidate_limit: 6,
+      }, {
+        should_inject: true,
+        reason: "需要注入当前任务与相关历史。",
+        selected_record_ids: ["mem-task", "related-memory"],
+        memory_summary: "恢复当前任务状态，并补充相关历史决策。",
+      }),
+    });
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-related-recall",
+      phase: "before_response",
+      current_input: "继续当前任务，把之前确认过的接口结构也带上。",
+    });
+
+    expect(response.injection_block?.memory_records.some((record) => record.id === "related-memory")).toBe(true);
+    expect(response.trigger_reason).toContain("关联");
   });
 
   it("serializes concurrent prepare-context calls inside the same session", async () => {
@@ -1371,8 +1631,9 @@ describe("retrieval-runtime service", () => {
     });
 
     const runs = await repository.getRuns({ trace_id: prepared.trace_id });
+    const searchPlan = runs.memory_plan_runs.find((run) => run.plan_kind === "memory_search_plan");
     expect(runs.trigger_runs[0]?.memory_mode).toBe("workspace_only");
-    expect(runs.memory_plan_runs[0]?.plan_kind).toBe("memory_search_plan");
+    expect(searchPlan).toBeTruthy();
     expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.recall_runs[0]?.matched_scopes).toContain("workspace");
     expect(runs.injection_runs[0]?.selected_scopes).toContain("workspace");

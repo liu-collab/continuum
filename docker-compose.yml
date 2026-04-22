@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_DB: agent_memory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  storage:
+    build:
+      context: ./services/storage
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/agent_memory
+      STORAGE_SCHEMA_PRIVATE: storage_private
+      STORAGE_SCHEMA_SHARED: storage_shared_v1
+      HOST: 0.0.0.0
+      PORT: 3001
+    depends_on:
+      - postgres
+    ports:
+      - "3001:3001"
+
+  retrieval-runtime:
+    build:
+      context: ./services/retrieval-runtime
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/agent_memory
+      STORAGE_WRITEBACK_URL: http://storage:3001
+      READ_MODEL_SCHEMA: storage_shared_v1
+      READ_MODEL_TABLE: memory_read_model_v1
+      RUNTIME_SCHEMA: runtime_private
+      HOST: 0.0.0.0
+      PORT: 3002
+      EMBEDDING_BASE_URL: http://host.docker.internal:11434/v1
+      MEMORY_LLM_BASE_URL: http://host.docker.internal:11434/v1
+      MEMORY_LLM_MODEL: gpt-5-mini
+    depends_on:
+      - postgres
+      - storage
+    ports:
+      - "3002:3002"
+
+  visualization:
+    build:
+      context: ./services/visualization
+    environment:
+      STORAGE_API_BASE_URL: http://storage:3001
+      RUNTIME_API_BASE_URL: http://retrieval-runtime:3002
+    depends_on:
+      - storage
+      - retrieval-runtime
+    ports:
+      - "3003:3003"
+
+volumes:
+  pgdata:

@@ -23,6 +23,13 @@ function recordToInjectionRecord(record: MemoryPacket["records"][number]): Injec
 export class InjectionEngine {
   constructor(private readonly config: AppConfig) {}
 
+  private buildMemoryHigh(records: InjectionRecord[]) {
+    return records
+      .filter((record) => record.importance >= 4)
+      .slice(0, 3)
+      .map((record) => record.summary);
+  }
+
   build(packet: MemoryPacket): InjectionBlock | null {
     if (packet.records.length === 0) {
       return null;
@@ -68,6 +75,7 @@ export class InjectionEngine {
 
     return {
       injection_reason: packet.trigger,
+      memory_high: this.buildMemoryHigh(kept),
       memory_summary: packet.packet_summary,
       memory_records: kept,
       token_estimate: usedTokens,

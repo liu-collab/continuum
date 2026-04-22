@@ -8,6 +8,8 @@ import type {
   GovernanceExecutionBatchRequest,
   GovernanceExecutionDetail,
   InvalidateRecordInput,
+  MemoryRelationType,
+  MemoryRelationUpsertInput,
   RecordListPage,
   RecordHistoryEntry,
   RecordPatchInput,
@@ -187,6 +189,10 @@ export class StorageService {
     return this.repositories.records.listRecords(filters);
   }
 
+  async getRecordsByIds(recordIds: string[]) {
+    return this.repositories.records.findByIds(recordIds);
+  }
+
   async patchRecord(recordId: string, input: RecordPatchInput) {
     return this.governance.patchRecord(recordId, input);
   }
@@ -247,6 +253,19 @@ export class StorageService {
 
   async submitGovernanceExecutions(input: GovernanceExecutionBatchRequest) {
     return this.governanceExecution.executeBatch(input);
+  }
+
+  async upsertRelations(input: MemoryRelationUpsertInput[]) {
+    return this.repositories.relations.upsertRelations(input);
+  }
+
+  async listRelations(filters: {
+    workspace_id: string;
+    record_id?: string;
+    relation_type?: MemoryRelationType;
+    limit?: number;
+  }) {
+    return this.repositories.relations.listRelations(filters);
   }
 
   async listGovernanceExecutions(filters?: {

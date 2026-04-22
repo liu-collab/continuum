@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   customType,
   index,
@@ -158,6 +159,34 @@ export const memoryConflicts = privateSchema.table(
     index("memory_conflicts_status_idx").on(table.status, table.createdAt),
     index("memory_conflicts_record_idx").on(table.recordId),
     index("memory_conflicts_with_record_idx").on(table.conflictWithRecordId),
+  ],
+);
+
+export const memoryRelations = privateSchema.table(
+  "memory_relations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id").notNull(),
+    sourceRecordId: uuid("source_record_id").notNull(),
+    targetRecordId: uuid("target_record_id").notNull(),
+    relationType: text("relation_type").notNull(),
+    strength: numeric("strength", { precision: 3, scale: 2 }).notNull(),
+    bidirectional: boolean("bidirectional").notNull(),
+    reason: text("reason").notNull(),
+    createdByService: text("created_by_service").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("memory_relations_strength_check", sql`${table.strength} between 0 and 1`),
+    index("memory_relations_source_idx").on(table.workspaceId, table.sourceRecordId, table.updatedAt),
+    index("memory_relations_target_idx").on(table.workspaceId, table.targetRecordId, table.updatedAt),
+    uniqueIndex("memory_relations_unique_idx").on(
+      table.workspaceId,
+      table.sourceRecordId,
+      table.targetRecordId,
+      table.relationType,
+    ),
   ],
 );
 

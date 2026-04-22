@@ -8,6 +8,8 @@ import type {
   GovernanceAction,
   GovernancePlan,
   GovernancePlanner,
+  RelationDiscoverer,
+  EvolutionPlanner,
   GovernanceVerifier,
 } from "../memory-orchestrator/index.js";
 import type { RuntimeRepository } from "../observability/runtime-repository.js";
@@ -25,6 +27,8 @@ import type { StorageWritebackClient } from "./storage-client.js";
 
 const GOVERNANCE_PLAN_PROMPT_VERSION = "memory-governance-plan-v1";
 const GOVERNANCE_PLAN_SCHEMA_VERSION = "memory-governance-schema-v1";
+const RELATION_PLAN_PROMPT_VERSION = "memory-relation-plan-v1";
+const EVOLUTION_PLAN_PROMPT_VERSION = "memory-evolution-plan-v1";
 
 export interface MaintenanceWorkerOptions {
   workspaceId?: string;
@@ -64,6 +68,8 @@ export class WritebackMaintenanceWorker {
     private readonly dependencyGuard: DependencyGuard,
     private readonly config: AppConfig,
     private readonly logger: Logger,
+    private readonly relationDiscoverer?: RelationDiscoverer,
+    private readonly evolutionPlanner?: EvolutionPlanner,
   ) {}
 
   start(): void {
@@ -201,6 +207,9 @@ export class WritebackMaintenanceWorker {
       open_conflicts: conflicts,
     };
 
+    await this.discoverRelations(workspaceId, seeds, related, traceId, summary.next_checkpoint);
+    await this.planEvolution(workspaceId, seeds, related, traceId, summary.next_checkpoint);
+
     if (seeds.length + related.length < 2 && conflicts.length === 0) {
       await this.repository.upsertMaintenanceCheckpoint({
         workspace_id: workspaceId,
@@ -285,6 +294,194 @@ export class WritebackMaintenanceWorker {
     await this.repository.upsertMaintenanceCheckpoint({
       workspace_id: workspaceId,
       last_scanned_at: summary.next_checkpoint,
+    });
+  }
+
+  private async discoverRelations(
+    workspaceId: string,
+    seeds: MemoryRecordSnapshot[],
+    related: MemoryRecordSnapshot[],
+    traceId: string,
+    createdAt: string,
+  ) {
+    if (!this.relationDiscoverer || seeds.length === 0 || related.length === 0) {
+      return;
+    }
+
+    const startedAt = Date.now();
+    let proposed = 0;
+    for (const seed of seeds.slice(0, 5)) {
+      const candidates = related.filter((record) => record.id !== seed.id).slice(0, 10);
+      if (candidates.length === 0) {
+        continue;
+      }
+
+      const planResult = await this.dependencyGuard.run(
+        "memory_llm",
+        this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
+        () =>
+          this.relationDiscoverer!.discover({
+            source_record: seed,
+            candidate_records: candidates,
+            context: {
+              workspace_id: workspaceId,
+              user_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
+            },
+          }),
+      );
+
+      if (!planResult.ok || !planResult.value) {
+        await this.repository.recordMemoryPlanRun({
+          trace_id: traceId,
+          phase: "after_response",
+          plan_kind: "memory_relation_plan",
+          input_summary: summarizePlanText(`workspace=${workspaceId}; source=${seed.id}; candidates=${candidates.length}`),
+          output_summary: summarizePlanText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+          prompt_version: RELATION_PLAN_PROMPT_VERSION,
+          schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+          degraded: true,
+          degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+          result_state: "fallback",
+          duration_ms: Date.now() - startedAt,
+          created_at: createdAt,
+        });
+        continue;
+      }
+
+      const relations = planResult.value.relations
+        .filter((relation) => relation.strength >= 0.7)
+        .map((relation) => ({
+          workspace_id: workspaceId,
+          source_record_id: seed.id,
+          target_record_id: relation.target_record_id,
+          relation_type: relation.relation_type,
+          strength: relation.strength,
+          bidirectional: relation.bidirectional,
+          reason: relation.reason,
+          created_by_service: "retrieval-runtime",
+        }));
+
+      proposed += relations.length;
+      if (relations.length > 0) {
+        await this.runStorage((signal) => this.storageClient.upsertRelations(relations, signal));
+      }
+    }
+
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: "after_response",
+      plan_kind: "memory_relation_plan",
+      input_summary: summarizePlanText(`workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}`),
+      output_summary: summarizePlanText(`relations=${proposed}`),
+      prompt_version: RELATION_PLAN_PROMPT_VERSION,
+      schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: proposed > 0 ? "planned" : "skipped",
+      duration_ms: Date.now() - startedAt,
+      created_at: createdAt,
+    });
+  }
+
+  private async planEvolution(
+    workspaceId: string,
+    seeds: MemoryRecordSnapshot[],
+    related: MemoryRecordSnapshot[],
+    traceId: string,
+    createdAt: string,
+  ) {
+    if (!this.evolutionPlanner) {
+      return;
+    }
+
+    const sourceRecords = [...seeds, ...related].slice(0, 12);
+    if (sourceRecords.length < 2) {
+      return;
+    }
+
+    const startedAt = Date.now();
+    const planResult = await this.dependencyGuard.run(
+      "memory_llm",
+      this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
+      () =>
+        this.evolutionPlanner!.plan({
+          source_records: sourceRecords,
+          time_window: {
+            start: new Date(Date.now() - this.config.WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS).toISOString(),
+            end: createdAt,
+          },
+          evolution_type: sourceRecords.length >= 6 ? "knowledge_extraction" : "summarization",
+        }),
+    );
+
+    if (!planResult.ok || !planResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: "after_response",
+        plan_kind: "memory_evolution_plan",
+        input_summary: summarizePlanText(`workspace=${workspaceId}; sources=${sourceRecords.length}`),
+        output_summary: summarizePlanText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+        prompt_version: EVOLUTION_PLAN_PROMPT_VERSION,
+        schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - startedAt,
+        created_at: createdAt,
+      });
+      return;
+    }
+
+    const evolutionPlan = planResult.value;
+
+    if (evolutionPlan.extracted_knowledge) {
+      const knowledge = evolutionPlan.extracted_knowledge;
+      const candidate_type = knowledge.suggested_scope === "user" ? "fact_preference" : "episodic";
+      await this.runStorage((signal) =>
+        this.storageClient.submitCandidates(
+          [
+            {
+              workspace_id: workspaceId,
+              user_id: knowledge.suggested_scope === "user" ? sourceRecords[0]?.user_id ?? null : null,
+              task_id: null,
+              session_id: null,
+              candidate_type,
+              scope: knowledge.suggested_scope,
+              summary: knowledge.pattern,
+              details: {
+                evolution_type: evolutionPlan.evolution_type,
+                evidence_count: knowledge.evidence_count,
+                source_record_ids: evolutionPlan.source_records,
+              },
+              importance: knowledge.suggested_importance,
+              confidence: knowledge.confidence,
+              write_reason: `memory evolution ${evolutionPlan.evolution_type}`,
+              source: {
+                source_type: "memory_evolution",
+                source_ref: traceId,
+                service_name: "retrieval-runtime",
+              },
+              idempotency_key: `${traceId}:${evolutionPlan.evolution_type}:${knowledge.pattern}`,
+            },
+          ],
+          signal,
+        ),
+      );
+    }
+
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: "after_response",
+      plan_kind: "memory_evolution_plan",
+      input_summary: summarizePlanText(`workspace=${workspaceId}; sources=${sourceRecords.length}`),
+      output_summary: summarizePlanText(
+        `evolution_type=${evolutionPlan.evolution_type}; knowledge=${evolutionPlan.extracted_knowledge ? 1 : 0}; archive=${evolutionPlan.consolidation_plan?.records_to_archive.length ?? 0}`,
+      ),
+      prompt_version: EVOLUTION_PLAN_PROMPT_VERSION,
+      schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: evolutionPlan.extracted_knowledge || evolutionPlan.consolidation_plan ? "planned" : "skipped",
+      duration_ms: Date.now() - startedAt,
+      created_at: createdAt,
     });
   }
 

@@ -20,9 +20,11 @@ import type {
   FinalizeTurnResponse,
   MaintenanceRunSummary,
   MemoryPacket,
+  MemoryRelationSnapshot,
   MemoryMode,
   MemoryType,
   ObserveRunsFilters,
+  ProactiveRecommendation,
   PrepareContextResponse,
   RetrievalQuery,
   SessionStartResponse,
@@ -37,10 +39,14 @@ import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
 import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
+import type { StorageWritebackClient } from "./writeback/storage-client.js";
 
 const MEMORY_SEARCH_PROMPT_VERSION = "memory-recall-search-v1";
+const MEMORY_INTENT_PROMPT_VERSION = "memory-intent-plan-v1";
 const MEMORY_INJECTION_PROMPT_VERSION = "memory-recall-injection-v1";
 const MEMORY_EFFECTIVENESS_PROMPT_VERSION = "memory-recall-effectiveness-v1";
+const MEMORY_RELATION_PROMPT_VERSION = "memory-relation-plan-v1";
+const MEMORY_RECOMMENDATION_PROMPT_VERSION = "memory-recommendation-plan-v1";
 const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
 const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
 const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
@@ -97,6 +103,24 @@ function summarizeCandidateIds(candidates: CandidateMemory[], selectedIds?: stri
   return `candidate_count=${candidates.length}`;
 }
 
+function dedupeCandidates(candidates: CandidateMemory[]) {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    if (seen.has(candidate.id)) {
+      return false;
+    }
+    seen.add(candidate.id);
+    return true;
+  });
+}
+
+function mergeTriggerReason(primary: string, secondary?: string) {
+  if (!secondary || secondary.trim().length === 0 || secondary === primary) {
+    return primary;
+  }
+  return `${primary}; ${secondary}`;
+}
+
 async function resolveTraceId(
   repository: RuntimeRepository,
   input: {
@@ -132,6 +156,10 @@ export class RetrievalRuntimeService {
     memories: RecallEffectivenessInputMemory[];
     created_at: number;
   }>();
+  private readonly relatedMemoryCache = new Map<string, {
+    relations: MemoryRelationSnapshot[];
+    created_at: number;
+  }>();
 
   constructor(
     private readonly triggerEngine: TriggerEngine,
@@ -146,6 +174,7 @@ export class RetrievalRuntimeService {
     private readonly embeddingTimeoutMs = 800,
     private readonly memoryOrchestrator?: MemoryOrchestrator,
     private readonly maintenanceWorker?: WritebackMaintenanceWorker,
+    private readonly storageClient?: StorageWritebackClient,
   ) {}
 
   async runMaintenance(input?: { workspace_id?: string; force?: boolean }): Promise<MaintenanceRunSummary> {
@@ -271,6 +300,25 @@ export class RetrievalRuntimeService {
       created_at: nowIso(),
     });
 
+    if (normalizedContext.phase === "before_response" && decision.intent_plan_attempted) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: normalizedContext.phase,
+        plan_kind: "memory_intent_plan",
+        input_summary: summarizeText(`input=${normalizedContext.current_input}`),
+        output_summary: summarizeText(
+          `needs_memory=${decision.intent_needs_memory ?? decision.hit}; reason=${decision.intent_reason ?? ""}; confidence=${decision.intent_confidence ?? ""}; scopes=${(decision.intent_scopes ?? []).join(",")}; types=${(decision.intent_memory_types ?? []).join(",")}`,
+        ),
+        prompt_version: MEMORY_INTENT_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: Boolean(decision.intent_plan_degraded),
+        degradation_reason: decision.intent_plan_degradation_reason,
+        result_state: decision.intent_needs_memory === false ? "skipped" : decision.intent_plan_degraded ? "fallback" : "planned",
+        duration_ms: Date.now() - triggerStartedAt,
+        created_at: nowIso(),
+      });
+    }
+
     if (!decision.hit) {
       await this.repository.recordRecallRun({
         trace_id: traceId,
@@ -316,6 +364,7 @@ export class RetrievalRuntimeService {
         trigger_reason: decision.trigger_reason,
         memory_packet: null,
         injection_block: null,
+        proactive_recommendations: [],
         degraded: Boolean(decision.degraded),
         dependency_status: await this.dependencyGuard.snapshot(),
         budget_used: 0,
@@ -326,10 +375,25 @@ export class RetrievalRuntimeService {
     const recallStartedAt = Date.now();
     const queryResult = await this.queryEngine.query(normalizedContext, decision);
     let selectedCandidates = queryResult.candidates;
-    let finalTriggerReason = decision.trigger_reason;
+    let plannedCandidates = queryResult.candidates;
+    let finalTriggerReason = mergeTriggerReason(decision.trigger_reason, decision.intent_reason);
     let forceNoInjection = false;
     let degraded = queryResult.degraded;
     let degradationReason = queryResult.degradation_reason;
+    const proactiveRecommendations = normalizedContext.phase === "session_start"
+      ? await this.collectProactiveRecommendations(normalizedContext, traceId)
+      : [];
+
+    const relationCandidates = await this.expandCandidatesWithRelations(
+      normalizedContext,
+      selectedCandidates,
+      traceId,
+    );
+    if (relationCandidates.length > 0) {
+      selectedCandidates = dedupeCandidates([...selectedCandidates, ...relationCandidates]);
+      plannedCandidates = selectedCandidates;
+      finalTriggerReason = mergeTriggerReason(finalTriggerReason, "包含关联记忆补充");
+    }
 
     if (
       normalizedContext.phase === "before_response"
@@ -347,7 +411,7 @@ export class RetrievalRuntimeService {
             memory_mode: decision.memory_mode,
             requested_scopes: decision.requested_scopes,
             requested_memory_types: decision.requested_memory_types,
-            candidates: queryResult.candidates,
+            candidates: plannedCandidates,
             search_reason: decision.llm_decision_reason,
             semantic_score: decision.semantic_score,
             semantic_threshold: undefined,
@@ -360,11 +424,11 @@ export class RetrievalRuntimeService {
           phase: normalizedContext.phase,
           plan_kind: "memory_injection_plan",
           input_summary: summarizeText(
-            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(queryResult.candidates)}`,
+            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(plannedCandidates)}`,
           ),
           output_summary: summarizeText(
             `should_inject=${planResult.value.should_inject}; reason=${planResult.value.reason}; ${summarizeCandidateIds(
-              queryResult.candidates,
+              plannedCandidates,
               planResult.value.selected_record_ids,
             )}; summary=${planResult.value.memory_summary ?? ""}`,
           ),
@@ -376,13 +440,13 @@ export class RetrievalRuntimeService {
           created_at: nowIso(),
         });
 
-        finalTriggerReason = planResult.value.reason;
+        finalTriggerReason = mergeTriggerReason(finalTriggerReason, planResult.value.reason);
         if (!planResult.value.should_inject) {
           selectedCandidates = [];
           forceNoInjection = true;
         } else {
           selectedCandidates = reorderSelectedCandidates(
-            queryResult.candidates,
+            plannedCandidates,
             planResult.value.selected_record_ids ?? [],
           );
         }
@@ -407,6 +471,7 @@ export class RetrievalRuntimeService {
             recallStartedAt,
             injectionStartedAt: Date.now(),
             dependencyStatus: await this.dependencyGuard.snapshot(),
+            proactiveRecommendations,
           });
         }
       } else {
@@ -415,7 +480,7 @@ export class RetrievalRuntimeService {
           phase: normalizedContext.phase,
           plan_kind: "memory_injection_plan",
           input_summary: summarizeText(
-            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(queryResult.candidates)}`,
+            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(plannedCandidates)}`,
           ),
           output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
           prompt_version: MEMORY_INJECTION_PROMPT_VERSION,
@@ -501,6 +566,7 @@ export class RetrievalRuntimeService {
       trigger_reason: finalTriggerReason,
       memory_packet: forceNoInjection ? null : packet,
       injection_block: injectionBlock,
+      proactive_recommendations: proactiveRecommendations,
       degraded,
       dependency_status: await this.dependencyGuard.snapshot(),
       budget_used: injectionBlock?.token_estimate ?? 0,
@@ -521,6 +587,7 @@ export class RetrievalRuntimeService {
       additional_context: additionalContext,
       active_task_summary: activeTaskSummary,
       injection_block: prepared.injection_block,
+      proactive_recommendations: prepared.proactive_recommendations,
       memory_mode: context.memory_mode ?? "workspace_plus_global",
       dependency_status: prepared.dependency_status,
       degraded: prepared.degraded,
@@ -814,6 +881,7 @@ export class RetrievalRuntimeService {
     recallStartedAt: number;
     injectionStartedAt: number;
     dependencyStatus: DependencyStatusSnapshot;
+    proactiveRecommendations: ProactiveRecommendation[];
   }): Promise<PrepareContextResponse> {
     const scopeHitCounts = input.queryResult.candidates.reduce<Partial<Record<typeof input.packet.selected_scopes[number], number>>>((acc, candidate) => {
       acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
@@ -886,11 +954,284 @@ export class RetrievalRuntimeService {
       trigger_reason: input.triggerReason,
       memory_packet: input.packet,
       injection_block: injectionBlock,
+      proactive_recommendations: input.proactiveRecommendations,
       degraded: input.queryResult.degraded,
       dependency_status: input.dependencyStatus,
       budget_used: injectionBlock?.token_estimate ?? 0,
       memory_packet_ids: [input.packet.packet_id],
     };
+  }
+
+  private async collectProactiveRecommendations(
+    context: TriggerContext & { memory_mode: MemoryMode },
+    traceId: string,
+  ): Promise<ProactiveRecommendation[]> {
+    const recommender = this.memoryOrchestrator?.recommendation;
+    if (!recommender || !this.storageClient) {
+      return [];
+    }
+
+    const startedAt = Date.now();
+    const recordsResult = await this.dependencyGuard.run(
+      "storage_writeback",
+      this.embeddingTimeoutMs,
+      (signal) =>
+        this.storageClient!.listRecords(
+          {
+            workspace_id: context.workspace_id,
+            user_id: context.user_id,
+            status: "active",
+            page: 1,
+            page_size: 12,
+          },
+          signal,
+        ),
+    );
+
+    if (!recordsResult.ok || !recordsResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: context.phase,
+        plan_kind: "memory_recommendation_plan",
+        input_summary: summarizeText(`session=${context.session_id}`),
+        output_summary: summarizeText(`fallback=${recordsResult.error?.code ?? "storage_writeback_unavailable"}`),
+        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: recordsResult.error?.code ?? "storage_writeback_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return [];
+    }
+
+    const availableMemories = recordsResult.value.items.slice(0, 12);
+    if (availableMemories.length === 0) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: context.phase,
+        plan_kind: "memory_recommendation_plan",
+        input_summary: summarizeText(`session=${context.session_id}`),
+        output_summary: summarizeText("recommendations=0"),
+        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: false,
+        result_state: "skipped",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return [];
+    }
+
+    const planResult = await this.dependencyGuard.run(
+      "memory_llm",
+      this.embeddingTimeoutMs,
+      () =>
+        recommender.recommend({
+          current_context: {
+            user_input: context.current_input,
+            session_context: {
+              session_id: context.session_id,
+              workspace_id: context.workspace_id,
+              user_id: context.user_id,
+              recent_context_summary: context.recent_context_summary,
+            },
+          },
+          available_memories: availableMemories,
+        }),
+    );
+
+    if (!planResult.ok || !planResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: context.phase,
+        plan_kind: "memory_recommendation_plan",
+        input_summary: summarizeText(`available=${availableMemories.length}`),
+        output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return [];
+    }
+
+    const recommendations = planResult.value.recommendations
+      .filter((item) => item.relevance_score >= 0.7)
+      .map((item) => ({
+        record_id: item.record_id,
+        relevance_score: item.relevance_score,
+        trigger_reason: item.trigger_reason,
+        suggestion: item.suggestion,
+        auto_inject: item.auto_inject || item.relevance_score > 0.9,
+      })) satisfies ProactiveRecommendation[];
+
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: context.phase,
+      plan_kind: "memory_recommendation_plan",
+      input_summary: summarizeText(`available=${availableMemories.length}`),
+      output_summary: summarizeText(`recommendations=${recommendations.length}; auto_inject=${recommendations.filter((item) => item.auto_inject).length}`),
+      prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
+      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: recommendations.length > 0 ? "planned" : "skipped",
+      duration_ms: Date.now() - startedAt,
+      created_at: nowIso(),
+    });
+
+    return recommendations;
+  }
+
+  private async expandCandidatesWithRelations(
+    context: TriggerContext & { memory_mode: MemoryMode },
+    candidates: CandidateMemory[],
+    traceId: string,
+  ): Promise<CandidateMemory[]> {
+    if (!this.storageClient || candidates.length === 0) {
+      return [];
+    }
+
+    const startedAt = Date.now();
+    const sourceIds = candidates.slice(0, 5).map((candidate) => candidate.id);
+    const relationItems: MemoryRelationSnapshot[] = [];
+
+    for (const recordId of sourceIds) {
+      const relationsResult = await this.dependencyGuard.run(
+        "storage_writeback",
+        this.embeddingTimeoutMs,
+        (signal) =>
+          this.storageClient!.listRelations(
+            {
+              workspace_id: context.workspace_id,
+              record_id: recordId,
+              limit: 20,
+            },
+            signal,
+          ),
+      );
+      if (!relationsResult.ok || !relationsResult.value) {
+        await this.repository.recordMemoryPlanRun({
+          trace_id: traceId,
+          phase: context.phase,
+          plan_kind: "memory_relation_plan",
+          input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
+          output_summary: summarizeText(`fallback=${relationsResult.error?.code ?? "storage_writeback_unavailable"}`),
+          prompt_version: MEMORY_RELATION_PROMPT_VERSION,
+          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+          degraded: true,
+          degradation_reason: relationsResult.error?.code ?? "storage_writeback_unavailable",
+          result_state: "fallback",
+          duration_ms: Date.now() - startedAt,
+          created_at: nowIso(),
+        });
+        return [];
+      }
+      relationItems.push(...relationsResult.value);
+    }
+
+    const relationTargetIds = [...new Set(
+      relationItems
+        .filter((relation) => relation.strength >= 0.7)
+        .map((relation) => relation.source_record_id === relation.target_record_id ? null : relation.target_record_id)
+        .filter((id): id is string => typeof id === "string" && !sourceIds.includes(id))
+    )];
+
+    if (relationTargetIds.length === 0) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: context.phase,
+        plan_kind: "memory_relation_plan",
+        input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
+        output_summary: summarizeText("relations=0"),
+        prompt_version: MEMORY_RELATION_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: false,
+        result_state: "skipped",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return [];
+    }
+
+    const relatedRecordsResult = await this.dependencyGuard.run(
+      "storage_writeback",
+      this.embeddingTimeoutMs,
+      (signal) => this.storageClient!.getRecordsByIds(relationTargetIds, signal),
+    );
+
+    if (!relatedRecordsResult.ok || !relatedRecordsResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: context.phase,
+        plan_kind: "memory_relation_plan",
+        input_summary: summarizeText(`targets=${relationTargetIds.join(",")}`),
+        output_summary: summarizeText(`fallback=${relatedRecordsResult.error?.code ?? "storage_writeback_unavailable"}`),
+        prompt_version: MEMORY_RELATION_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: relatedRecordsResult.error?.code ?? "storage_writeback_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return [];
+    }
+
+    const relationByTarget = new Map<string, MemoryRelationSnapshot>();
+    for (const relation of relationItems) {
+      if (!relationByTarget.has(relation.target_record_id)) {
+        relationByTarget.set(relation.target_record_id, relation);
+      }
+    }
+
+    const relatedCandidates = relatedRecordsResult.value
+      .filter((record) => record.status === "active")
+      .map((record) => {
+        const relation = relationByTarget.get(record.id);
+        return {
+          id: record.id,
+          workspace_id: record.workspace_id,
+          user_id: record.user_id ?? context.user_id,
+          task_id: record.task_id ?? null,
+          session_id: record.session_id ?? null,
+          memory_type: record.memory_type,
+          scope: record.scope,
+          summary: record.summary,
+          details: {
+            ...(record.details ?? {}),
+            relation_type: relation?.relation_type,
+            relation_reason: relation?.reason,
+            relation_strength: relation?.strength,
+          },
+          importance: Math.max(record.importance, relation?.strength ? Math.round(relation.strength * 5) : record.importance),
+          confidence: record.confidence,
+          status: record.status,
+          updated_at: record.updated_at,
+          last_confirmed_at: null,
+          rerank_score: relation?.strength ?? 0.7,
+        } satisfies CandidateMemory;
+      });
+
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: context.phase,
+      plan_kind: "memory_relation_plan",
+      input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
+      output_summary: summarizeText(`relations=${relationItems.length}; expanded=${relatedCandidates.length}`),
+      prompt_version: MEMORY_RELATION_PROMPT_VERSION,
+      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: relatedCandidates.length > 0 ? "planned" : "skipped",
+      duration_ms: Date.now() - startedAt,
+      created_at: nowIso(),
+    });
+
+    return relatedCandidates;
   }
 
   private storeInjectionContext(

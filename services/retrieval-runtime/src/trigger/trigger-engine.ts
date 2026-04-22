@@ -1,6 +1,6 @@
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { RecallSearchPlanner } from "../memory-orchestrator/index.js";
+import type { IntentAnalyzer, RecallSearchPlanner } from "../memory-orchestrator/index.js";
 import type { EmbeddingsClient } from "../query/embeddings-client.js";
 import type { ReadModelRepository } from "../query/read-model-repository.js";
 import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/messages.js";
@@ -85,6 +85,7 @@ export class TriggerEngine {
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
     private readonly recallSearchPlanner?: RecallSearchPlanner,
+    private readonly intentAnalyzer?: IntentAnalyzer,
   ) {}
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
@@ -107,6 +108,75 @@ export class TriggerEngine {
 
     const normalizedInput = normalizeText(context.current_input).toLowerCase();
     const requestedMemoryTypes = requestedTypesByPhase(context.phase);
+    let intentDecision:
+      | {
+          requestedMemoryTypes: MemoryType[];
+          requestedScopes: ScopeType[];
+          reason: string;
+          confidence: number;
+          needsMemory: boolean;
+          degraded: boolean;
+          degradationReason?: string;
+        }
+      | undefined;
+
+    if (this.intentAnalyzer && context.phase === "before_response") {
+      const intentResult = await this.dependencyGuard.run(
+        "memory_llm",
+        this.config.MEMORY_LLM_TIMEOUT_MS,
+        () =>
+          this.intentAnalyzer!.analyze({
+            current_input: context.current_input,
+            session_context: {
+              session_id: context.session_id,
+              workspace_id: context.workspace_id,
+              recent_turns: [],
+            },
+          }),
+      );
+
+      if (intentResult.ok && intentResult.value) {
+        intentDecision = {
+          requestedMemoryTypes:
+            intentResult.value.memory_types.length > 0
+              ? intentResult.value.memory_types
+              : requestedMemoryTypes,
+          requestedScopes:
+            intentResult.value.suggested_scopes && intentResult.value.suggested_scopes.length > 0
+              ? dedupeScopes(intentResult.value.suggested_scopes)
+              : scopePlan.scopes,
+          reason: intentResult.value.reason,
+          confidence: intentResult.value.confidence,
+          needsMemory: intentResult.value.needs_memory,
+          degraded: false,
+        };
+      } else {
+        intentDecision = {
+          requestedMemoryTypes,
+          requestedScopes: scopePlan.scopes,
+          reason: "intent_analyzer_unavailable",
+          confidence: 0,
+          needsMemory: true,
+          degraded: true,
+          degradationReason: intentResult.error?.code ?? "memory_llm_unavailable",
+        };
+      }
+    }
+
+    const withIntent = (base: TriggerDecision): TriggerDecision =>
+      intentDecision
+        ? {
+            ...base,
+            intent_reason: intentDecision.reason,
+            intent_confidence: intentDecision.confidence,
+            intent_needs_memory: intentDecision.needsMemory,
+            intent_memory_types: intentDecision.requestedMemoryTypes,
+            intent_scopes: intentDecision.requestedScopes,
+            intent_plan_attempted: true,
+            intent_plan_degraded: intentDecision.degraded,
+            intent_plan_degradation_reason: intentDecision.degradationReason,
+          }
+        : base;
 
     if (context.phase !== "before_response") {
       return {
@@ -126,17 +196,17 @@ export class TriggerEngine {
     }
 
     if (HISTORY_PATTERNS.some((pattern) => normalizedInput.includes(pattern.toLowerCase()))) {
-      return {
+      return withIntent({
         hit: true,
         trigger_type: "history_reference",
         trigger_reason: runtimeMessages.historyReferenceReason,
-        requested_memory_types: requestedMemoryTypes,
+        requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
         memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
+        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
-      };
+      });
     }
 
     if (this.config.RECALL_LLM_JUDGE_ENABLED && this.recallSearchPlanner) {
@@ -147,8 +217,8 @@ export class TriggerEngine {
           this.recallSearchPlanner!.plan({
             context,
             memory_mode: memoryMode,
-            requested_scopes: scopePlan.scopes,
-            requested_memory_types: requestedMemoryTypes,
+            requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+            requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
             semantic_score: undefined,
             semantic_threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
           }),
@@ -162,12 +232,20 @@ export class TriggerEngine {
             trigger_reason: llmDecision.value.reason,
             requested_memory_types: [],
             memory_mode: memoryMode,
-            requested_scopes: scopePlan.scopes,
+            requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
             scope_reason: scopePlan.reason,
             importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
             cooldown_applied: false,
             llm_used: true,
             llm_decision_reason: llmDecision.value.reason,
+            intent_reason: intentDecision?.reason,
+            intent_confidence: intentDecision?.confidence,
+            intent_needs_memory: intentDecision?.needsMemory,
+            intent_memory_types: intentDecision?.requestedMemoryTypes,
+            intent_scopes: intentDecision?.requestedScopes,
+            intent_plan_attempted: Boolean(intentDecision),
+            intent_plan_degraded: intentDecision?.degraded,
+            intent_plan_degradation_reason: intentDecision?.degradationReason,
             search_plan_attempted: true,
             search_plan_degraded: false,
           };
@@ -180,12 +258,12 @@ export class TriggerEngine {
           requested_memory_types:
             llmDecision.value.requested_memory_types?.length
               ? llmDecision.value.requested_memory_types
-              : requestedMemoryTypes,
+              : intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
           memory_mode: memoryMode,
           requested_scopes:
             llmDecision.value.requested_scopes?.length
               ? dedupeScopes(llmDecision.value.requested_scopes)
-              : scopePlan.scopes,
+              : intentDecision?.requestedScopes ?? scopePlan.scopes,
           scope_reason: scopePlan.reason,
           importance_threshold:
             llmDecision.value.importance_threshold ?? this.config.IMPORTANCE_THRESHOLD_DEFAULT,
@@ -194,6 +272,14 @@ export class TriggerEngine {
           candidate_limit: llmDecision.value.candidate_limit,
           llm_used: true,
           llm_decision_reason: llmDecision.value.reason,
+          intent_reason: intentDecision?.reason,
+          intent_confidence: intentDecision?.confidence,
+          intent_needs_memory: intentDecision?.needsMemory,
+          intent_memory_types: intentDecision?.requestedMemoryTypes,
+          intent_scopes: intentDecision?.requestedScopes,
+          intent_plan_attempted: Boolean(intentDecision),
+          intent_plan_degraded: intentDecision?.degraded,
+          intent_plan_degradation_reason: intentDecision?.degradationReason,
           search_plan_attempted: true,
           search_plan_degraded: false,
         };
@@ -211,10 +297,18 @@ export class TriggerEngine {
         ...(await this.semanticFallbackDecision(
           context,
           memoryMode,
-          scopePlan.scopes,
-          requestedMemoryTypes,
+          intentDecision?.requestedScopes ?? scopePlan.scopes,
+          intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
           scopePlan.reason,
         )),
+        intent_reason: intentDecision?.reason,
+        intent_confidence: intentDecision?.confidence,
+        intent_needs_memory: intentDecision?.needsMemory,
+        intent_memory_types: intentDecision?.requestedMemoryTypes,
+        intent_scopes: intentDecision?.requestedScopes,
+        intent_plan_attempted: Boolean(intentDecision),
+        intent_plan_degraded: intentDecision?.degraded,
+        intent_plan_degradation_reason: intentDecision?.degradationReason,
         search_plan_attempted: true,
         search_plan_degraded: true,
         search_plan_degradation_reason: llmDecision.error?.code ?? "memory_llm_unavailable",
@@ -222,64 +316,64 @@ export class TriggerEngine {
     }
 
     if (shouldSkipForShortInput(context.current_input)) {
-      return {
+      return withIntent({
         hit: false,
         trigger_type: "no_trigger",
         trigger_reason: runtimeMessages.shortInputSkipReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
+        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
-      };
+      });
     }
 
     const semanticScore = await this.semanticFallbackScore(context, memoryMode, scopePlan.scopes);
     if (semanticScore.degraded) {
-      return {
+      return withIntent({
         hit: false,
         trigger_type: "no_trigger",
         trigger_reason: runtimeMessages.semanticDegradedReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
+        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
         degraded: true,
         degradation_reason: semanticScore.degradation_reason,
-      };
+      });
     }
 
     if (semanticScore.score >= semanticScore.threshold) {
-      return {
+      return withIntent({
         hit: true,
         trigger_type: "semantic_fallback",
         trigger_reason: runtimeMessages.semanticFallbackReason,
-        requested_memory_types: requestedMemoryTypes,
+        requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
         memory_mode: memoryMode,
-        requested_scopes: scopePlan.scopes,
+        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
-      };
+      });
     }
 
-    return {
+    return withIntent({
       hit: false,
       trigger_type: "no_trigger",
       trigger_reason: runtimeMessages.noTriggerReason,
       requested_memory_types: [],
       memory_mode: memoryMode,
-      requested_scopes: scopePlan.scopes,
+      requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
       scope_reason: scopePlan.reason,
       importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
       cooldown_applied: false,
       semantic_score: semanticScore.score,
-    };
+    });
   }
 
   private async semanticFallbackDecision(

@@ -216,6 +216,10 @@ class StubStorageClient {
     return { items: [], total: 0, page: 1, page_size: 20 };
   }
 
+  async getRecordsByIds() {
+    return [];
+  }
+
   async patchRecord(): Promise<never> {
     throw new Error("StubStorageClient.patchRecord not implemented in test");
   }
@@ -230,6 +234,14 @@ class StubStorageClient {
 
   async resolveConflict(): Promise<never> {
     throw new Error("StubStorageClient.resolveConflict not implemented in test");
+  }
+
+  async upsertRelations() {
+    return [];
+  }
+
+  async listRelations() {
+    return [];
   }
 
   async submitGovernanceExecutions() {
@@ -574,10 +586,13 @@ describe("retrieval-runtime remediation", () => {
       {
         submitCandidates: async () => [],
         listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        getRecordsByIds: async () => [],
         patchRecord: async () => { throw new Error("not implemented"); },
         archiveRecord: async () => { throw new Error("not implemented"); },
         listConflicts: async () => [],
         resolveConflict: async () => { throw new Error("not implemented"); },
+        upsertRelations: async () => [],
+        listRelations: async () => [],
         submitGovernanceExecutions: async () => [],
       },
       guard,
@@ -842,10 +857,13 @@ describe("retrieval-runtime remediation", () => {
       {
         submitCandidates: async () => [],
         listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        getRecordsByIds: async () => [],
         patchRecord: async () => { throw new Error("not implemented"); },
         archiveRecord: async () => { throw new Error("not implemented"); },
         listConflicts: async () => [],
         resolveConflict: async () => { throw new Error("not implemented"); },
+        upsertRelations: async () => [],
+        listRelations: async () => [],
         submitGovernanceExecutions: async () => [],
       },
       guard,
@@ -949,6 +967,8 @@ describe("retrieval-runtime remediation", () => {
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
       memoryOrchestrator,
+      undefined,
+      storageClient,
     );
 
     const request = {
@@ -988,6 +1008,8 @@ describe("retrieval-runtime remediation", () => {
       new FinalizeIdempotencyCache(config),
       config.EMBEDDING_TIMEOUT_MS,
       memoryOrchestrator,
+      undefined,
+      storageClient,
     );
 
     const second = await secondService.finalizeTurn(request);

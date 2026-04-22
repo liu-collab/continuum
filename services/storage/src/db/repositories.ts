@@ -7,6 +7,9 @@ import type {
   GovernanceExecutionItem,
   GovernanceProposal,
   GovernanceProposalTarget,
+  MemoryRelation,
+  MemoryRelationType,
+  MemoryRelationUpsertInput,
   MemoryConflict,
   MemoryRecord,
   MemoryRecordVersion,
@@ -51,6 +54,7 @@ export interface WriteJobRepository {
 
 export interface RecordRepository {
   findById(recordId: string): Promise<MemoryRecord | null>;
+  findByIds(recordIds: string[]): Promise<MemoryRecord[]>;
   findByDedupeScope(input: {
     workspace_id: string;
     user_id: string | null;
@@ -146,6 +150,16 @@ export interface GovernanceRepository {
   }): Promise<GovernanceExecution[]>;
 }
 
+export interface RelationRepository {
+  upsertRelations(relations: MemoryRelationUpsertInput[]): Promise<MemoryRelation[]>;
+  listRelations(filters: {
+    workspace_id: string;
+    record_id?: string;
+    relation_type?: MemoryRelationType;
+    limit?: number;
+  }): Promise<MemoryRelation[]>;
+}
+
 export interface ReadModelRepository {
   upsert(entry: ReadModelEntry): Promise<void>;
   delete(recordId: string): Promise<void>;
@@ -177,6 +191,7 @@ export interface StorageRepositories {
   records: RecordRepository;
   conflicts: ConflictRepository;
   governance: GovernanceRepository;
+  relations: RelationRepository;
   readModel: ReadModelRepository;
   metrics: MetricsRepository;
   transaction<T>(callback: (repositories: StorageRepositories) => Promise<T>): Promise<T>;
@@ -193,6 +208,7 @@ export function createRepositories(database: StorageDatabase): StorageRepositori
       records: createRecordRepository(session),
       conflicts: createConflictRepository(session),
       governance: createGovernanceRepository(session),
+      relations: createRelationRepository(session),
       readModel: createReadModelRepository(session),
       metrics: createMetricsRepository(session),
       transaction: async <T>(callback: (repositories: StorageRepositories) => Promise<T>) =>
@@ -369,6 +385,17 @@ function createRecordRepository(session: DbSession): RecordRepository {
     async findById(recordId) {
       const result = await session.query(`select * from ${table} where id = $1`, [recordId]);
       return result.rows[0] ? mapMemoryRecord(result.rows[0]) : null;
+    },
+
+    async findByIds(recordIds) {
+      if (recordIds.length === 0) {
+        return [];
+      }
+      const result = await session.query(
+        `select * from ${table} where id = any($1::uuid[])`,
+        [recordIds],
+      );
+      return result.rows.map(mapMemoryRecord);
     },
 
     async findByDedupeScope(input) {
@@ -647,6 +674,84 @@ function createConflictRepository(session: DbSession): ConflictRepository {
       }
 
       return mapConflict(result.rows[0]);
+    },
+  };
+}
+
+function createRelationRepository(session: DbSession): RelationRepository {
+  const table = tableName(session.privateSchema, "memory_relations");
+
+  return {
+    async upsertRelations(relations) {
+      const saved: MemoryRelation[] = [];
+      for (const relation of relations) {
+        const result = await session.query(
+          `
+            insert into ${table}
+              (
+                workspace_id,
+                source_record_id,
+                target_record_id,
+                relation_type,
+                strength,
+                bidirectional,
+                reason,
+                created_by_service
+              )
+            values
+              ($1, $2, $3, $4, $5, $6, $7, $8)
+            on conflict (workspace_id, source_record_id, target_record_id, relation_type)
+            do update set
+              strength = excluded.strength,
+              bidirectional = excluded.bidirectional,
+              reason = excluded.reason,
+              created_by_service = excluded.created_by_service,
+              updated_at = now()
+            returning *
+          `,
+          [
+            relation.workspace_id,
+            relation.source_record_id,
+            relation.target_record_id,
+            relation.relation_type,
+            relation.strength,
+            relation.bidirectional,
+            relation.reason,
+            relation.created_by_service,
+          ],
+        );
+        saved.push(mapRelation(requireRow(result.rows[0], "memory_relations upsert")));
+      }
+      return saved;
+    },
+
+    async listRelations(filters) {
+      const values: unknown[] = [filters.workspace_id];
+      const conditions = ["workspace_id = $1"];
+
+      if (filters.record_id) {
+        values.push(filters.record_id);
+        conditions.push(`(source_record_id = $${values.length} or target_record_id = $${values.length})`);
+      }
+
+      if (filters.relation_type) {
+        values.push(filters.relation_type);
+        conditions.push(`relation_type = $${values.length}`);
+      }
+
+      values.push(filters.limit ?? 100);
+      const result = await session.query(
+        `
+          select *
+          from ${table}
+          where ${conditions.join(" and ")}
+          order by updated_at desc
+          limit $${values.length}
+        `,
+        values,
+      );
+
+      return result.rows.map(mapRelation);
     },
   };
 }
@@ -1334,6 +1439,22 @@ function mapConflict(row: Record<string, unknown>): MemoryConflict {
     resolved_by: nullableString(row.resolved_by),
     created_at: toIsoString(row.created_at),
     resolved_at: nullableIsoString(row.resolved_at),
+  };
+}
+
+function mapRelation(row: Record<string, unknown>): MemoryRelation {
+  return {
+    id: String(row.id),
+    workspace_id: String(row.workspace_id),
+    source_record_id: String(row.source_record_id),
+    target_record_id: String(row.target_record_id),
+    relation_type: String(row.relation_type) as MemoryRelationType,
+    strength: Number(row.strength),
+    bidirectional: Boolean(row.bidirectional),
+    reason: String(row.reason),
+    created_by_service: String(row.created_by_service),
+    created_at: toIsoString(row.created_at),
+    updated_at: toIsoString(row.updated_at),
   };
 }
 

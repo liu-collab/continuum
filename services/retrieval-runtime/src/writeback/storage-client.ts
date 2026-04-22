@@ -3,7 +3,9 @@ import type {
   ConflictStatus,
   GovernanceExecutionBatch,
   GovernanceExecutionResponseItem,
+  MemoryRelationType,
   MemoryConflictSnapshot,
+  MemoryRelationSnapshot,
   MemoryRecordSnapshot,
   MemoryType,
   RecordStatus,
@@ -40,6 +42,17 @@ export interface StorageMutationPayload {
   reason: string;
 }
 
+export interface RelationUpsertPayload {
+  workspace_id: string;
+  source_record_id: string;
+  target_record_id: string;
+  relation_type: MemoryRelationType;
+  strength: number;
+  bidirectional: boolean;
+  reason: string;
+  created_by_service: string;
+}
+
 export interface RecordPatchPayload extends StorageMutationPayload {
   summary?: string;
   details_json?: Record<string, unknown>;
@@ -63,6 +76,7 @@ export interface StorageWritebackClient {
     signal?: AbortSignal,
   ): Promise<SubmittedWriteBackJob[]>;
   listRecords(filters: RecordListFilters, signal?: AbortSignal): Promise<RecordListPage>;
+  getRecordsByIds(recordIds: string[], signal?: AbortSignal): Promise<MemoryRecordSnapshot[]>;
   patchRecord(
     recordId: string,
     payload: RecordPatchPayload,
@@ -82,6 +96,19 @@ export interface StorageWritebackClient {
     payload: ResolveConflictPayload,
     signal?: AbortSignal,
   ): Promise<MemoryConflictSnapshot>;
+  upsertRelations(
+    relations: RelationUpsertPayload[],
+    signal?: AbortSignal,
+  ): Promise<MemoryRelationSnapshot[]>;
+  listRelations(
+    filters: {
+      workspace_id: string;
+      record_id?: string;
+      relation_type?: MemoryRelationType;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<MemoryRelationSnapshot[]>;
   submitGovernanceExecutions(
     batch: GovernanceExecutionBatch,
     signal?: AbortSignal,
@@ -128,6 +155,17 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
       page: envelope.data?.page ?? filters.page ?? 1,
       page_size: envelope.data?.page_size ?? filters.page_size ?? 20,
     };
+  }
+
+  async getRecordsByIds(recordIds: string[], signal?: AbortSignal): Promise<MemoryRecordSnapshot[]> {
+    const url = new URL("/v1/storage/records/by-ids", this.config.STORAGE_WRITEBACK_URL);
+    const envelope = await fetchJson<{ data?: unknown[] }>(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: recordIds }),
+      signal,
+    });
+    return (envelope.data ?? []).map(mapMemoryRecordRow);
   }
 
   async patchRecord(
@@ -192,6 +230,38 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
       signal,
     });
     return mapConflictRow(envelope.data);
+  }
+
+  async upsertRelations(
+    relations: RelationUpsertPayload[],
+    signal?: AbortSignal,
+  ): Promise<MemoryRelationSnapshot[]> {
+    const url = new URL("/v1/storage/relations", this.config.STORAGE_WRITEBACK_URL);
+    const envelope = await fetchJson<{ data?: unknown[] }>(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ relations }),
+      signal,
+    });
+    return (envelope.data ?? []).map(mapRelationRow);
+  }
+
+  async listRelations(
+    filters: {
+      workspace_id: string;
+      record_id?: string;
+      relation_type?: MemoryRelationType;
+      limit?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<MemoryRelationSnapshot[]> {
+    const url = new URL("/v1/storage/relations", this.config.STORAGE_WRITEBACK_URL);
+    url.searchParams.set("workspace_id", filters.workspace_id);
+    if (filters.record_id) url.searchParams.set("record_id", filters.record_id);
+    if (filters.relation_type) url.searchParams.set("relation_type", filters.relation_type);
+    if (filters.limit) url.searchParams.set("limit", String(filters.limit));
+    const envelope = await fetchJson<{ data?: unknown[] }>(url, { method: "GET", signal });
+    return (envelope.data ?? []).map(mapRelationRow);
   }
 
   async submitGovernanceExecutions(
@@ -266,6 +336,26 @@ function mapConflictRow(row: unknown): MemoryConflictSnapshot {
     conflict_summary: String(r.conflict_summary ?? ""),
     status: r.status as ConflictStatus,
     created_at: String(r.created_at ?? ""),
+  };
+}
+
+function mapRelationRow(row: unknown): MemoryRelationSnapshot {
+  if (!row || typeof row !== "object") {
+    throw new Error("storage relation row is not an object");
+  }
+  const r = row as Record<string, unknown>;
+  return {
+    id: String(r.id),
+    workspace_id: String(r.workspace_id),
+    source_record_id: String(r.source_record_id),
+    target_record_id: String(r.target_record_id),
+    relation_type: r.relation_type as MemoryRelationType,
+    strength: Number(r.strength ?? 0),
+    bidirectional: Boolean(r.bidirectional),
+    reason: String(r.reason ?? ""),
+    created_by_service: String(r.created_by_service ?? ""),
+    created_at: String(r.created_at ?? ""),
+    updated_at: String(r.updated_at ?? ""),
   };
 }
 

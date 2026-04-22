@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-memory
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage
+  namespace: agent-memory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage
+  template:
+    metadata:
+      labels:
+        app: storage
+    spec:
+      containers:
+        - name: storage
+          image: agent-memory/storage:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-memory-secrets
+                  key: database_url
+            - name: STORAGE_SCHEMA_PRIVATE
+              value: storage_private
+            - name: STORAGE_SCHEMA_SHARED
+              value: storage_shared_v1
+          ports:
+            - containerPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-runtime
+  namespace: agent-memory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: retrieval-runtime
+  template:
+    metadata:
+      labels:
+        app: retrieval-runtime
+    spec:
+      containers:
+        - name: retrieval-runtime
+          image: agent-memory/retrieval-runtime:latest
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-memory-secrets
+                  key: database_url
+            - name: STORAGE_WRITEBACK_URL
+              value: http://storage:3001
+            - name: READ_MODEL_SCHEMA
+              value: storage_shared_v1
+            - name: READ_MODEL_TABLE
+              value: memory_read_model_v1
+            - name: RUNTIME_SCHEMA
+              value: runtime_private
+            - name: EMBEDDING_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-memory-secrets
+                  key: embedding_base_url
+            - name: MEMORY_LLM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-memory-secrets
+                  key: memory_llm_base_url
+            - name: MEMORY_LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-memory-secrets
+                  key: memory_llm_model
+          ports:
+            - containerPort: 3002

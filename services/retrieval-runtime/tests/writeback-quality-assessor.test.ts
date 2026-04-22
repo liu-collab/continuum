@@ -95,6 +95,10 @@ class StubStorageClient implements StorageWritebackClient {
     return { items: [], total: 0, page: 1, page_size: 20 };
   }
 
+  async getRecordsByIds(): Promise<MemoryRecordSnapshot[]> {
+    return [];
+  }
+
   async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
     throw new Error("not implemented");
   }
@@ -109,6 +113,14 @@ class StubStorageClient implements StorageWritebackClient {
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
     throw new Error("not implemented");
+  }
+
+  async upsertRelations() {
+    return [];
+  }
+
+  async listRelations() {
+    return [];
   }
 
   async submitGovernanceExecutions(): Promise<GovernanceExecutionResponseItem[]> {

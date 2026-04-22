@@ -15,10 +15,10 @@
 | #2 | 已完成 | 已确认职责边界：模型负责决策，程序负责执行与兜底，`storage` 继续保留正式执行权 |
 | #3 | 已完成 | 召回链路已经有了雏形：模型先做检索规划，再做注入规划 |
 | #4 | 已完成 | 已识别现有冲突点：命名仍是 `writeback_llm`，提示词分散，观测粒度不够，UI 口径偏窄 |
-| #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型、schema、prompt 与 LLM client，召回/写回/治理旧入口已基本改成兼容包装，增强模块已补齐独立实现与测试，剩余主链路接线仍在继续 |
+| #5 | 已完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型、schema、prompt 与 LLM client，召回/写回/治理旧入口已完成兼容包装，`intent / relation / recommendation / evolution` 已接入主链路或维护链路，并补齐运行时与维护链路测试 |
 | #6 | 已完成 | `retrieval-runtime` 已切换到 `MEMORY_LLM_*`，不再兼容旧配置；依赖健康检查与状态桶已统一为 `memory_llm` |
 | #7 | 已完成 | `visualization` 与 `memory-native-agent` 已统一切到 `memory llm` 配置、状态探针和依赖展示口径 |
-| #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 具体实现已迁到新目录，`quality assessor` 与 `effectiveness evaluator` 已接入写回 / finalize 主链路，关联、推荐与演化仍待继续下沉 |
+| #8 | 已完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 具体实现已迁到新目录，`quality assessor`、`effectiveness evaluator`、关系发现与演化计划已接入写回 / finalize / maintenance 主链路，相关接口与联测已补齐 |
 
 ---
 
@@ -1218,8 +1218,8 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 迁移检查清单：
 
 - [x] 环境变量配置文件（.env）
-- [ ] 部署配置（docker-compose.yml / k8s manifests）
-- [ ] 监控和告警配置
+- [x] 部署配置（docker-compose.yml / k8s manifests）
+- [x] 监控和告警配置
 - [x] 文档和 README
 
 ### 12.3 降级配置
@@ -1289,9 +1289,9 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 
 | 编号 | 状态 | 工作项 |
 |---|---|---|
-| R1 | 部分完成 | 召回链路已具备模型先规划检索、再规划注入的雏形 |
-| R2 | 部分完成 | `trigger-engine` 已通过 orchestrator recall search 接口调用模型规划，基线判定仍保留在本地 |
-| R3 | 部分完成 | `runtime-service` 已改为依赖 orchestrator 入口获取 recall / writeback 能力，细节仍待继续下沉 |
+| R1 | 已完成 | 召回链路已接入意图理解、检索规划、关联扩展与注入规划，形成统一 orchestrator 决策链路 |
+| R2 | 已完成 | `trigger-engine` 已通过 orchestrator intent / recall search 接口完成模型前置规划，规则与语义判定保留为降级兜底 |
+| R3 | 已完成 | `runtime-service` 已改为依赖 orchestrator 入口获取 recall / writeback / recommendation 能力，并接入关系与效果反馈闭环 |
 | R4 | 已完成 | `writeback-engine` 已迁移到统一 planner 接口 |
 | R5 | 已完成 | `maintenance-worker` 已迁移到统一 governance planner 接口 |
 
@@ -1466,7 +1466,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 ### 15.7 各阶段交付标准
 
 **阶段 1 交付标准**：
-- [ ] 召回、写入、治理链路全部使用模型决策
+- [x] 召回、写入、治理链路全部使用模型决策
 - [x] 降级策略完善，LLM 不可用时有兜底
 - [ ] 观测面板展示 plan 级别数据
 - [x] 配置迁移完成（MEMORY_LLM_*）
@@ -1475,18 +1475,18 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 **阶段 2 交付标准**：
 - [x] 写入质量评估上线
 - [x] 召回效果反馈闭环建立
-- [ ] 记忆优先级动态调整生效
+- [x] 记忆优先级动态调整生效
 - [ ] 核心指标：低质量拦截率 > 80%，优先级调整后命中率提升 > 20%
 
 **阶段 3 交付标准**：
 - [ ] 意图理解准确率 > 90%
-- [ ] 记忆关系图谱构建完成
-- [ ] 基于关联的召回上线
+- [x] 记忆关系图谱构建完成
+- [x] 基于关联的召回上线
 - [ ] 核心指标：关联发现准确率 > 80%
 
 **阶段 4 交付标准**：
-- [ ] 主动推荐功能上线
-- [ ] 知识提取功能上线
+- [x] 主动推荐功能上线
+- [x] 知识提取功能上线
 - [ ] 用户满意度调研
 - [ ] 核心指标：推荐采纳率 > 30%，知识提取准确率 > 85%
 

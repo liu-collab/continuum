@@ -94,6 +94,14 @@ export interface TriggerDecision {
   candidate_limit?: number;
   llm_used?: boolean;
   llm_decision_reason?: string;
+  intent_reason?: string;
+  intent_confidence?: number;
+  intent_needs_memory?: boolean;
+  intent_memory_types?: MemoryType[];
+  intent_scopes?: ScopeType[];
+  intent_plan_attempted?: boolean;
+  intent_plan_degraded?: boolean;
+  intent_plan_degradation_reason?: string;
   search_plan_attempted?: boolean;
   search_plan_degraded?: boolean;
   search_plan_degradation_reason?: string;
@@ -129,6 +137,7 @@ export interface InjectionRecord {
 
 export interface InjectionBlock {
   injection_reason: string;
+  memory_high: string[];
   memory_summary: string;
   memory_records: InjectionRecord[];
   token_estimate: number;
@@ -214,6 +223,7 @@ export interface PrepareContextResponse {
   trigger_reason: string;
   memory_packet: MemoryPacket | null;
   injection_block: InjectionBlock | null;
+  proactive_recommendations: ProactiveRecommendation[];
   degraded: boolean;
   dependency_status: DependencyStatusSnapshot;
   budget_used: number;
@@ -225,6 +235,7 @@ export interface SessionStartResponse {
   additional_context: string;
   active_task_summary: string | null;
   injection_block: InjectionBlock | null;
+  proactive_recommendations: ProactiveRecommendation[];
   memory_mode: MemoryMode;
   dependency_status: DependencyStatusSnapshot;
   degraded: boolean;
@@ -347,11 +358,23 @@ export interface WritebackSubmissionRecord {
 }
 
 export type MemoryPlanKind =
+  | "memory_intent_plan"
   | "memory_search_plan"
   | "memory_injection_plan"
   | "memory_effectiveness_plan"
   | "memory_writeback_plan"
-  | "memory_governance_plan";
+  | "memory_governance_plan"
+  | "memory_relation_plan"
+  | "memory_recommendation_plan"
+  | "memory_evolution_plan";
+
+export interface ProactiveRecommendation {
+  record_id: string;
+  relevance_score: number;
+  trigger_reason: "task_similarity" | "forgotten_context" | "related_decision" | "conflict_warning";
+  suggestion: string;
+  auto_inject: boolean;
+}
 
 export interface MemoryPlanRunRecord {
   trace_id: string;
@@ -471,6 +494,27 @@ export type GovernanceExecutionStatus =
   | "failed"
   | "superseded"
   | "cancelled";
+
+export type MemoryRelationType =
+  | "depends_on"
+  | "conflicts_with"
+  | "extends"
+  | "supersedes"
+  | "related_to";
+
+export interface MemoryRelationSnapshot {
+  id: string;
+  workspace_id: string;
+  source_record_id: string;
+  target_record_id: string;
+  relation_type: MemoryRelationType;
+  strength: number;
+  bidirectional: boolean;
+  reason: string;
+  created_by_service: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface GovernanceExecutionItem {
   proposal_id: string;

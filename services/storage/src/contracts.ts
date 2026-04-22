@@ -609,6 +609,38 @@ export interface GovernanceExecutionDetail {
   execution: GovernanceExecution;
 }
 
+export type MemoryRelationType =
+  | "depends_on"
+  | "conflicts_with"
+  | "extends"
+  | "supersedes"
+  | "related_to";
+
+export interface MemoryRelation {
+  id: string;
+  workspace_id: string;
+  source_record_id: string;
+  target_record_id: string;
+  relation_type: MemoryRelationType;
+  strength: number;
+  bidirectional: boolean;
+  reason: string;
+  created_by_service: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryRelationUpsertInput {
+  workspace_id: string;
+  source_record_id: string;
+  target_record_id: string;
+  relation_type: MemoryRelationType;
+  strength: number;
+  bidirectional: boolean;
+  reason: string;
+  created_by_service: string;
+}
+
 export interface RecordHistoryEntry {
   entry_type: "governance_action" | "record_version";
   created_at: string;

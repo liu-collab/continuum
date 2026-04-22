@@ -192,6 +192,10 @@ class StubStorageClient implements StorageWritebackClient {
     return { items: [], total: 0, page: 1, page_size: 20 };
   }
 
+  async getRecordsByIds(): Promise<MemoryRecordSnapshot[]> {
+    return [];
+  }
+
   async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
     throw new Error("patchRecord is not used in host memory injection tests");
   }
@@ -206,6 +210,14 @@ class StubStorageClient implements StorageWritebackClient {
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
     throw new Error("resolveConflict is not used in host memory injection tests");
+  }
+
+  async upsertRelations() {
+    return [];
+  }
+
+  async listRelations() {
+    return [];
   }
 
   async submitGovernanceExecutions(): Promise<GovernanceExecutionResponseItem[]> {
@@ -248,6 +260,8 @@ function createRuntimeApp(records: CandidateMemory[] = sampleRecords) {
     finalizeIdempotencyCache,
     config.EMBEDDING_TIMEOUT_MS,
     memoryOrchestrator,
+    undefined,
+    storageClient,
   );
 
   return createApp(service);

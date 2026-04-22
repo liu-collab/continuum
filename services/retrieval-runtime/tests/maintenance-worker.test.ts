@@ -29,6 +29,7 @@ import type {
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
 } from "../src/shared/types.js";
+import type { EvolutionPlanner, RelationDiscoverer } from "../src/memory-orchestrator/types.js";
 
 const workspaceId = "550e8400-e29b-41d4-a716-446655440000";
 
@@ -69,6 +70,8 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
 
 class RecordingStorageClient implements StorageWritebackClient {
   public governanceBatches: Array<unknown> = [];
+  public relationBatches: Array<unknown> = [];
+  public writebackCandidates: Array<unknown> = [];
   public waitForBatch = false;
   private batchResolvers: Array<() => void> = [];
 
@@ -78,8 +81,12 @@ class RecordingStorageClient implements StorageWritebackClient {
     private readonly conflicts: MemoryConflictSnapshot[] = [],
   ) {}
 
-  async submitCandidates(): Promise<never> {
-    throw new Error("submitCandidates should not be called by governance worker");
+  async submitCandidates(candidates: Parameters<StorageWritebackClient["submitCandidates"]>[0]) {
+    this.writebackCandidates.push(candidates);
+    return candidates.map((candidate) => ({
+      candidate_summary: candidate.summary,
+      status: "accepted_async" as const,
+    }));
   }
 
   async listRecords(filters: RecordListFilters): Promise<RecordListPage> {
@@ -97,6 +104,12 @@ class RecordingStorageClient implements StorageWritebackClient {
     throw new Error("patchRecord should not be called by governance worker");
   }
 
+  async getRecordsByIds(recordIds: string[]): Promise<MemoryRecordSnapshot[]> {
+    const all = [...this.seeds, ...this.related];
+    const idSet = new Set(recordIds);
+    return all.filter((item) => idSet.has(item.id));
+  }
+
   async archiveRecord(_recordId: string, _payload: StorageMutationPayload): Promise<never> {
     throw new Error("archiveRecord should not be called by governance worker");
   }
@@ -107,6 +120,20 @@ class RecordingStorageClient implements StorageWritebackClient {
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<never> {
     throw new Error("resolveConflict should not be called by governance worker");
+  }
+
+  async upsertRelations(relations: Parameters<StorageWritebackClient["upsertRelations"]>[0]) {
+    this.relationBatches.push(relations);
+    return relations.map((relation, index) => ({
+      id: `rel-${index}`,
+      ...relation,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+  }
+
+  async listRelations() {
+    return [];
   }
 
   async submitGovernanceExecutions(batch: unknown): Promise<GovernanceExecutionResponseItem[]> {
@@ -203,6 +230,37 @@ class BlockingPlanner implements LlmMaintenancePlanner {
   releaseNext() {
     const resolve = this.waiters.shift();
     resolve?.();
+  }
+}
+
+class StubRelationDiscoverer implements RelationDiscoverer {
+  async discover(input: { candidate_records: MemoryRecordSnapshot[] }) {
+    return {
+      source_record_id: "seed-1",
+      relations: input.candidate_records.slice(0, 1).map((record) => ({
+        target_record_id: record.id,
+        relation_type: "related_to" as const,
+        strength: 0.88,
+        bidirectional: true,
+        reason: "同一约束上下文",
+      })),
+    };
+  }
+}
+
+class StubEvolutionPlanner implements EvolutionPlanner {
+  async plan(input: { source_records: MemoryRecordSnapshot[] }) {
+    return {
+      evolution_type: "knowledge_extraction" as const,
+      source_records: input.source_records.map((record) => record.id),
+      extracted_knowledge: {
+        pattern: "用户长期偏好：默认中文输出",
+        confidence: 0.9,
+        evidence_count: input.source_records.length,
+        suggested_scope: "workspace" as const,
+        suggested_importance: 4,
+      },
+    };
   }
 }
 
@@ -445,6 +503,60 @@ describe("WritebackMaintenanceWorker", () => {
     expect(summary.actions_applied).toBe(1);
     expect(summary.actions_skipped).toBe(0);
     expect(storage.governanceBatches).toHaveLength(0);
+  });
+
+  it("discovers relations during maintenance and persists them", async () => {
+    const seed = makeRecord("seed-rel", "默认中文输出，代码注释也保持中文", 4);
+    const related = makeRecord("rel-rel", "代码注释保持中文，默认中文输出", 4);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig(),
+      logger,
+      new StubRelationDiscoverer(),
+    );
+
+    await worker.runOnce({ workspaceId, forced: true });
+
+    expect(storage.relationBatches).toHaveLength(1);
+    const relationBatch = storage.relationBatches[0] as Array<{ source_record_id: string; target_record_id: string }>;
+    expect(relationBatch[0]?.source_record_id).toBe(seed.id);
+    expect(relationBatch[0]?.target_record_id).toBe(related.id);
+  });
+
+  it("writes evolved knowledge during maintenance", async () => {
+    const seed = makeRecord("seed-evo", "默认中文输出，回答尽量简短直接", 4);
+    const related = makeRecord("rel-evo", "回答尽量简短直接，默认中文输出", 4);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig(),
+      logger,
+      undefined,
+      new StubEvolutionPlanner(),
+    );
+
+    await worker.runOnce({ workspaceId, forced: true });
+
+    expect(storage.writebackCandidates).toHaveLength(1);
+    const candidates = storage.writebackCandidates[0] as Array<{ summary: string }>;
+    expect(candidates[0]?.summary).toBe("用户长期偏好：默认中文输出");
   });
 
   it("rejects concurrent manual runs for the same workspace", async () => {
