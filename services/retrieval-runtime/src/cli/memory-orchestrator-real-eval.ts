@@ -317,6 +317,63 @@ function buildCases(): Array<EvalCase<unknown>> {
       },
     },
     {
+      id: "inject-irrelevant-memory-skip",
+      metric: "recall_accuracy_proxy",
+      module: "recall-injection-planner",
+      promptName: "MEMORY_RECALL_INJECTION_SYSTEM_PROMPT",
+      expected: "当候选记忆与当前问题无关时，应跳过注入",
+      systemPrompt: MEMORY_RECALL_INJECTION_SYSTEM_PROMPT,
+      payload: {
+        current_input: "解释一下 HTTP 204 和 304 的区别，用最短的话说清楚。",
+        recent_context_summary: "当前是一次独立的协议知识问答。",
+        phase: "before_response",
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["workspace", "user", "task"],
+        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        search_reason: "语义检索有弱命中，但未确认是否适合注入。",
+        candidates: [
+          {
+            id: "mem-style-2",
+            scope: "user",
+            memory_type: "fact_preference",
+            summary: "用户偏好：默认中文，先给一句结论，再补 3 个短点。",
+            importance: 5,
+            confidence: 0.95,
+            rerank_score: 0.31,
+            semantic_score: 0.28,
+            updated_at: "2026-04-22T10:00:00.000Z",
+          },
+          {
+            id: "mem-task-old-2",
+            scope: "task",
+            memory_type: "task_state",
+            summary: "当前任务：补 memory orchestrator 测试样本文档。",
+            importance: 4,
+            confidence: 0.92,
+            rerank_score: 0.18,
+            semantic_score: 0.16,
+            updated_at: "2026-04-22T10:05:00.000Z",
+          },
+        ],
+        semantic_score: 0.41,
+        semantic_threshold: 0.72,
+        task_id_present: false,
+      },
+      schema: memoryRecallInjectionSchema,
+      maxTokens: 1000,
+      check: (output) => {
+        const typed = output as z.infer<typeof memoryRecallInjectionSchema>;
+        return {
+          pass: typed.should_inject === false,
+          actual: JSON.stringify({
+            should_inject: typed.should_inject,
+            selected_record_ids: typed.selected_record_ids ?? [],
+            memory_summary: typed.memory_summary ?? "",
+          }),
+        };
+      },
+    },
+    {
       id: "quality-low-signal",
       metric: "low_quality_intercept_rate",
       module: "writeback-quality-assessor",
@@ -426,11 +483,60 @@ function buildCases(): Array<EvalCase<unknown>> {
       },
     },
     {
+      id: "relation-no-clear-link",
+      metric: "relation_discovery_accuracy",
+      module: "relation-discoverer",
+      promptName: "MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT",
+      expected: "当候选记录没有明确语义关联时，不应强行输出关系",
+      systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
+      payload: {
+        source_record: {
+          id: "rec-source-2",
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "用户偏好：默认中文回答。",
+          importance: 5,
+          confidence: 0.95,
+        },
+        candidate_records: [
+          {
+            id: "rec-unrelated-2",
+            memory_type: "episodic",
+            scope: "workspace",
+            summary: "上周处理过一个 nginx 日志切割问题。",
+            importance: 2,
+            confidence: 0.58,
+          },
+          {
+            id: "rec-unrelated-3",
+            memory_type: "task_state",
+            scope: "task",
+            summary: "当前任务：补一份前端配色稿。",
+            importance: 3,
+            confidence: 0.72,
+          },
+        ],
+        context: {
+          workspace_id: "eval-workspace",
+          user_id: "eval-user",
+        },
+      },
+      schema: memoryRelationDiscoverySchema,
+      maxTokens: 1000,
+      check: (output) => {
+        const typed = output as z.infer<typeof memoryRelationDiscoverySchema>;
+        return {
+          pass: typed.relations.length === 0,
+          actual: JSON.stringify(typed.relations),
+        };
+      },
+    },
+    {
       id: "recommend-task-memory",
-      metric: "recommendation_relevance_proxy",
+      metric: "recommendation_acceptance_proxy",
       module: "proactive-recommender",
       promptName: "MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT",
-      expected: "应推荐与当前任务连续性相关的高价值记忆",
+      expected: "应推荐与当前任务连续性相关、宿主大概率会采纳的高价值记忆",
       systemPrompt: MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT,
       payload: {
         current_context: {
@@ -477,9 +583,62 @@ function buildCases(): Array<EvalCase<unknown>> {
       maxTokens: 1000,
       check: (output) => {
         const typed = output as z.infer<typeof memoryProactiveRecommendationSchema>;
-        const hit = typed.recommendations.some((item) => item.record_id === "mem-rec-1" || item.record_id === "mem-rec-2");
+        const hit = typed.recommendations.some(
+          (item) =>
+            (item.record_id === "mem-rec-1" || item.record_id === "mem-rec-2")
+            && item.relevance_score >= 0.7,
+        );
         return {
           pass: hit,
+          actual: JSON.stringify(typed.recommendations),
+        };
+      },
+    },
+    {
+      id: "recommend-noisy-memory-skip",
+      metric: "recommendation_acceptance_proxy",
+      module: "proactive-recommender",
+      promptName: "MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT",
+      expected: "当上下文没有明确连续性时，不应推荐低价值或过期记忆",
+      systemPrompt: MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT,
+      payload: {
+        current_context: {
+          user_input: "解释一下 TCP 三次握手，给一个最短版本。",
+          session_context: {
+            session_id: "eval-session-recommend-2",
+            workspace_id: "eval-workspace",
+            user_id: "eval-user",
+            recent_context_summary: "这是一个新的网络基础知识问题。",
+          },
+          detected_task_type: "qa",
+        },
+        available_memories: [
+          {
+            id: "mem-rec-noise-1",
+            memory_type: "episodic",
+            scope: "workspace",
+            status: "active",
+            summary: "两个月前讨论过 memory orchestrator 的验收文档。",
+            importance: 2,
+            confidence: 0.62,
+          },
+          {
+            id: "mem-rec-noise-2",
+            memory_type: "task_state",
+            scope: "task",
+            status: "archived",
+            summary: "上一个任务：整理前端视觉稿。",
+            importance: 1,
+            confidence: 0.45,
+          },
+        ],
+      },
+      schema: memoryProactiveRecommendationSchema,
+      maxTokens: 1000,
+      check: (output) => {
+        const typed = output as z.infer<typeof memoryProactiveRecommendationSchema>;
+        return {
+          pass: typed.recommendations.length === 0,
           actual: JSON.stringify(typed.recommendations),
         };
       },
@@ -545,6 +704,71 @@ function buildCases(): Array<EvalCase<unknown>> {
       },
     },
     {
+      id: "evolution-pattern-knowledge-extraction",
+      metric: "knowledge_extraction_accuracy",
+      module: "evolution-planner",
+      promptName: "MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT",
+      expected: "应从多条任务状态中提炼出稳定的长期工作模式",
+      systemPrompt: MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT,
+      payload: {
+        source_records: [
+          {
+            id: "evo-task-1",
+            memory_type: "task_state",
+            scope: "workspace",
+            summary: "最近 3 次验收任务都先补测试样本，再补实际指标。",
+            importance: 4,
+            confidence: 0.9,
+            created_at: "2026-04-01T08:00:00.000Z",
+            updated_at: "2026-04-18T08:00:00.000Z",
+          },
+          {
+            id: "evo-task-2",
+            memory_type: "task_state",
+            scope: "workspace",
+            summary: "最近 2 次真实模型评测都先做链路验证，再回写指标文档。",
+            importance: 4,
+            confidence: 0.89,
+            created_at: "2026-04-10T08:00:00.000Z",
+            updated_at: "2026-04-20T08:00:00.000Z",
+          },
+          {
+            id: "evo-task-3",
+            memory_type: "task_state",
+            scope: "workspace",
+            summary: "当前团队验收习惯：先通链路，再补统计数。",
+            importance: 4,
+            confidence: 0.87,
+            created_at: "2026-04-15T08:00:00.000Z",
+            updated_at: "2026-04-22T08:00:00.000Z",
+          },
+        ],
+        time_window: {
+          start: "2026-04-01T00:00:00.000Z",
+          end: "2026-04-22T23:59:59.000Z",
+        },
+        evolution_type: "knowledge_extraction",
+      },
+      schema: memoryEvolutionPlanSchema,
+      maxTokens: 1200,
+      check: (output) => {
+        const typed = output as z.infer<typeof memoryEvolutionPlanSchema>;
+        const pattern = typed.extracted_knowledge?.pattern ?? "";
+        const pass =
+          typed.evolution_type === "knowledge_extraction"
+          && typed.source_records.length >= 2
+          && (pattern.includes("先") || pattern.includes("链路") || pattern.includes("验收"));
+        return {
+          pass,
+          actual: JSON.stringify({
+            evolution_type: typed.evolution_type,
+            source_records: typed.source_records,
+            extracted_knowledge: typed.extracted_knowledge ?? null,
+          }),
+        };
+      },
+    },
+    {
       id: "governance-verify-reject-delete",
       metric: "governance_correctness_proxy",
       module: "governance-verifier",
@@ -600,6 +824,84 @@ function buildCases(): Array<EvalCase<unknown>> {
         const typed = output as z.infer<typeof memoryGovernanceVerificationSchema>;
         return {
           pass: typed.decision === "reject",
+          actual: JSON.stringify(typed),
+        };
+      },
+    },
+    {
+      id: "governance-verify-approve-archive",
+      metric: "governance_correctness_proxy",
+      module: "governance-verifier",
+      promptName: "MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT",
+      expected: "对于证据充分、目标明确的归档提案，应允许通过",
+      systemPrompt: MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT,
+      payload: {
+        proposal: {
+          proposal_id: "proposal-2",
+          proposal_type: "archive",
+          targets: {
+            record_ids: ["gov-2"],
+          },
+          suggested_changes: {
+            status: "archived",
+          },
+          reason_code: "superseded",
+          reason_text: "该记录已被更新的同类偏好替代，保留会造成重复召回。",
+          evidence: {
+            matched_records: 2,
+            replacement_record_ids: ["gov-3"],
+          },
+          planner: {
+            model: DEFAULT_MODEL,
+            confidence: 0.91,
+          },
+        },
+        seed_records: [
+          {
+            id: "gov-2",
+            workspace_id: "eval-workspace",
+            user_id: "eval-user",
+            task_id: null,
+            session_id: null,
+            memory_type: "fact_preference",
+            scope: "user",
+            status: "active",
+            summary: "用户偏好：回答尽量简短。",
+            details: null,
+            importance: 3,
+            confidence: 0.84,
+            created_at: "2026-04-01T09:00:00.000Z",
+            updated_at: "2026-04-01T09:00:00.000Z",
+            last_used_at: "2026-04-05T09:00:00.000Z",
+          },
+        ],
+        related_records: [
+          {
+            id: "gov-3",
+            workspace_id: "eval-workspace",
+            user_id: "eval-user",
+            task_id: null,
+            session_id: null,
+            memory_type: "fact_preference",
+            scope: "user",
+            status: "active",
+            summary: "用户偏好：默认中文，回答自然且尽量简短。",
+            details: null,
+            importance: 5,
+            confidence: 0.95,
+            created_at: "2026-04-20T09:00:00.000Z",
+            updated_at: "2026-04-20T09:00:00.000Z",
+            last_used_at: "2026-04-22T09:00:00.000Z",
+          },
+        ],
+        open_conflicts: [],
+      },
+      schema: memoryGovernanceVerificationSchema,
+      maxTokens: 1000,
+      check: (output) => {
+        const typed = output as z.infer<typeof memoryGovernanceVerificationSchema>;
+        return {
+          pass: typed.decision === "approve",
           actual: JSON.stringify(typed),
         };
       },
