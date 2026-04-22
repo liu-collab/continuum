@@ -5,6 +5,7 @@ import {
   installClaudePlugin,
   packageRootFromImportMeta,
   rewriteClaudePluginCommands,
+  uninstallClaudePlugin,
   vendorPath,
 } from "./utils.js";
 
@@ -31,4 +32,20 @@ export async function runClaudeInstallCommand(
 
   process.stdout.write(`Claude plugin installed to ${targetDir}\n`);
   process.stdout.write(`Start with: claude --plugin-dir "${targetDir}"\n`);
+}
+
+export async function runClaudeUninstallCommand(options: Record<string, string | boolean>) {
+  const targetDir =
+    typeof options["plugin-dir"] === "string"
+      ? options["plugin-dir"]
+      : defaultClaudePluginInstallDir();
+
+  const removed = await uninstallClaudePlugin(targetDir);
+
+  if (removed) {
+    process.stdout.write(`Claude plugin removed from ${targetDir}\n`);
+    return;
+  }
+
+  process.stdout.write(`Claude plugin is not installed at ${targetDir}\n`);
 }

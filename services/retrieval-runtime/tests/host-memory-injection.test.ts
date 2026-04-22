@@ -272,6 +272,31 @@ function expectInjectedMemory(body: {
   expect(body.dependency_status.embeddings.status).toBe("healthy");
 }
 
+function expectSessionStartMemory(body: {
+  additional_context: string;
+  injection_block: {
+    memory_summary: string;
+    memory_records: Array<{ summary: string }>;
+    requested_scopes: string[];
+    selected_scopes: string[];
+  } | null;
+  dependency_status: {
+    read_model: { status: string };
+    embeddings: { status: string };
+  };
+}) {
+  expect(body.additional_context).toContain("会话启动阶段需要恢复基础上下文。");
+  expect(body.additional_context).toContain("偏好与约束");
+  expect(body.injection_block).not.toBeNull();
+  expect(body.injection_block?.memory_records.some((record) => record.summary.includes("默认中文输出"))).toBe(true);
+  expect(body.injection_block?.memory_records.some((record) => record.summary.includes("回答简短直接"))).toBe(true);
+  expect(body.injection_block?.memory_records.some((record) => record.summary.includes("记忆注入链路"))).toBe(false);
+  expect(body.injection_block?.requested_scopes).toEqual(expect.arrayContaining(["workspace", "user"]));
+  expect(body.injection_block?.selected_scopes).toEqual(expect.arrayContaining(["workspace", "user"]));
+  expect(body.dependency_status.read_model.status).toBe("healthy");
+  expect(body.dependency_status.embeddings.status).toBe("healthy");
+}
+
 describe("host memory injection", () => {
   it("injects memory for Claude Code prepare-context requests", async () => {
     const app = createRuntimeApp();
@@ -323,5 +348,27 @@ describe("host memory injection", () => {
 
     expect(response.statusCode).toBe(200);
     expectInjectedMemory(response.json());
+  });
+
+  it("restores memory for Codex session-start requests", async () => {
+    const app = createRuntimeApp();
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/session-start-context",
+      payload: {
+        host: "codex_app_server",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        cwd: "C:/workspace/work/agent-memory",
+        source: "codex_proxy",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expectSessionStartMemory(response.json());
   });
 });

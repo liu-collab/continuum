@@ -9,6 +9,7 @@ export const DEFAULT_RUNTIME_URL = "http://127.0.0.1:3002";
 export const DEFAULT_STORAGE_URL = "http://127.0.0.1:3001";
 export const DEFAULT_UI_URL = "http://127.0.0.1:3003";
 export const DEFAULT_TIMEOUT_MS = 2000;
+export const DEFAULT_CODEX_MCP_SERVER_NAME = "memory";
 
 export function packageRootFromImportMeta(importMetaUrl: string) {
   const currentFile = fileURLToPath(importMetaUrl);
@@ -86,6 +87,54 @@ export async function openBrowser(url: string) {
   }).unref();
 }
 
+type RunCommandOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  captureOutput?: boolean;
+};
+
+export async function runCommand(command: string, args: string[], options: RunCommandOptions = {}) {
+  const { cwd, env, captureOutput = false } = options;
+
+  return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
+    const child =
+      process.platform === "win32"
+        ? spawn("cmd", ["/c", command, ...args], {
+            cwd,
+            env,
+            stdio: captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
+          })
+        : spawn(command, args, {
+            cwd,
+            env,
+            stdio: captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
+          });
+
+    let stdout = "";
+    let stderr = "";
+
+    if (captureOutput) {
+      child.stdout?.setEncoding("utf8");
+      child.stdout?.on("data", (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr?.setEncoding("utf8");
+      child.stderr?.on("data", (chunk) => {
+        stderr += chunk;
+      });
+    }
+
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      resolve({
+        code: code ?? 1,
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
 export async function installClaudePlugin(options: {
   sourceDir: string;
   targetDir: string;
@@ -104,6 +153,92 @@ export async function installClaudePlugin(options: {
 
   await mkdir(path.dirname(targetDir), { recursive: true });
   await cp(sourceDir, targetDir, { recursive: true });
+}
+
+export async function uninstallClaudePlugin(targetDir: string) {
+  const exists = await pathExists(targetDir);
+  if (!exists) {
+    return false;
+  }
+
+  await rm(targetDir, { recursive: true, force: true });
+  return true;
+}
+
+function buildCodexCommandEnv(codexHome?: string) {
+  return codexHome
+    ? {
+        ...process.env,
+        CODEX_HOME: codexHome,
+      }
+    : process.env;
+}
+
+export async function installCodexMcpServer(options: {
+  name: string;
+  cliEntryPath: string;
+  runtimeUrl: string;
+  codexHome?: string;
+  force: boolean;
+}) {
+  const { name, cliEntryPath, runtimeUrl, codexHome, force } = options;
+  const env = buildCodexCommandEnv(codexHome);
+
+  if (codexHome) {
+    await mkdir(codexHome, { recursive: true });
+  }
+
+  if (force) {
+    await uninstallCodexMcpServer({ name, codexHome }).catch(() => undefined);
+  }
+
+  const result = await runCommand(
+    "codex",
+    [
+      "mcp",
+      "add",
+      name,
+      "--env",
+      `MEMORY_RUNTIME_BASE_URL=${runtimeUrl}`,
+      "--",
+      process.execPath,
+      cliEntryPath,
+      "mcp-server",
+    ],
+    {
+      env,
+      captureOutput: true,
+    },
+  );
+
+  if (result.code === 0) {
+    return;
+  }
+
+  const errorText = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  throw new Error(errorText || `codex mcp add failed with exit code ${result.code}`);
+}
+
+export async function uninstallCodexMcpServer(options: { name: string; codexHome?: string }) {
+  const { name, codexHome } = options;
+  const result = await runCommand("codex", ["mcp", "remove", name], {
+    env: buildCodexCommandEnv(codexHome),
+    captureOutput: true,
+  });
+
+  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const notFound =
+    output.includes(`No MCP server named '${name}'`) || output.includes(`No MCP server named "${name}"`);
+
+  if (notFound) {
+    return false;
+  }
+
+  if (result.code === 0) {
+    return true;
+  }
+
+  throw new Error(output || `codex mcp remove failed with exit code ${result.code}`);
 }
 
 export async function rewriteClaudePluginCommands(

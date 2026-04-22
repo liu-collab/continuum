@@ -8,7 +8,11 @@ Commands:
   continuum ui [--host HOST] [--port PORT] [--open] [--url URL] [--runtime-url URL] [--storage-url URL] [--database-url URL] [--mna-url URL] [--mna-token-path PATH]
   continuum mna <install|start|stop|logs|token> [--mna-url URL] [--mna-host HOST] [--mna-port PORT] [--mna-home PATH] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV] [--rotate]
   continuum claude install [--plugin-dir PATH] [--package PKG] [--force]
-  continuum codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false]
+  continuum claude uninstall [--plugin-dir PATH]
+  continuum codex install [--runtime-url URL] [--codex-home PATH] [--server-name NAME] [--force]
+  continuum codex uninstall [--codex-home PATH] [--server-name NAME]
+  continuum codex use [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
+  continuum codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
 
 Options:
   --bind-host HOST    绑定地址 (默认: 127.0.0.1, 仅本机访问; 使用 0.0.0.0 允许局域网访问)

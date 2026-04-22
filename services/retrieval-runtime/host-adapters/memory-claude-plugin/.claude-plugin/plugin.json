@@ -2,8 +2,7 @@
   "name": "continuum",
   "version": "0.1.0",
   "description": "Continuum plugin for Claude Code memory recovery and writeback.",
-  "author": "continuum",
-  "hooks": "./hooks/hooks.json",
-  "mcp": "./.mcp.json",
-  "settings": "./settings.json"
+  "author": {
+    "name": "continuum"
+  }
 }

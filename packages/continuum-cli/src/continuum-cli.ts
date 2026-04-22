@@ -1,8 +1,12 @@
 import process from "node:process";
 
 import { parseArgs } from "./args.js";
-import { runClaudeInstallCommand } from "./claude-command.js";
-import { runCodexCommand } from "./codex-command.js";
+import { runClaudeInstallCommand, runClaudeUninstallCommand } from "./claude-command.js";
+import {
+  runCodexInstallCommand,
+  runCodexUninstallCommand,
+  runCodexUseCommand,
+} from "./codex-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runMnaCommand } from "./mna-command.js";
@@ -45,8 +49,23 @@ export async function runCli(argv: string[], importMetaUrl: string) {
     return 0;
   }
 
+  if (primary === "claude" && secondary === "uninstall") {
+    await runClaudeUninstallCommand(parsed.options);
+    return 0;
+  }
+
+  if (primary === "codex" && secondary === "install") {
+    await runCodexInstallCommand(parsed.options, importMetaUrl);
+    return 0;
+  }
+
+  if (primary === "codex" && secondary === "uninstall") {
+    await runCodexUninstallCommand(parsed.options);
+    return 0;
+  }
+
   if (primary === "codex") {
-    await runCodexCommand(parsed.options, importMetaUrl);
+    await runCodexUseCommand(parsed.options, importMetaUrl);
     return 0;
   }
 

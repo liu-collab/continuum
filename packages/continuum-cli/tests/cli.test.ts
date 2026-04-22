@@ -95,6 +95,35 @@ describe("continuum cli", () => {
     expect(renderHelp()).toContain("continuum stop");
   });
 
+  it("exposes Claude uninstall in help", () => {
+    const parsed = parseArgs(["claude", "uninstall", "--plugin-dir", "C:/tmp/plugin"]);
+
+    expect(parsed.command).toEqual(["claude", "uninstall"]);
+    expect(parsed.options["plugin-dir"]).toBe("C:/tmp/plugin");
+    expect(renderHelp()).toContain("continuum claude uninstall");
+  });
+
+  it("parses the codex install command and exposes it in help", () => {
+    const parsed = parseArgs([
+      "codex",
+      "install",
+      "--runtime-url",
+      "http://127.0.0.1:3002",
+      "--codex-home",
+      "C:/tmp/.codex",
+      "--server-name",
+      "memory",
+    ]);
+
+    expect(parsed.command).toEqual(["codex", "install"]);
+    expect(parsed.options["runtime-url"]).toBe("http://127.0.0.1:3002");
+    expect(parsed.options["codex-home"]).toBe("C:/tmp/.codex");
+    expect(parsed.options["server-name"]).toBe("memory");
+    expect(renderHelp()).toContain("continuum codex install");
+    expect(renderHelp()).toContain("continuum codex uninstall");
+    expect(renderHelp()).toContain("continuum codex use");
+  });
+
   it("parses the mna command and exposes it in help", () => {
     const parsed = parseArgs(["mna", "start", "--mna-port", "4193", "--mna-home", "C:/tmp/.mna"]);
 

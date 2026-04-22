@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
 
@@ -245,7 +246,9 @@ export async function handleLine(line) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`) {
+const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+
+if (entryUrl && import.meta.url === entryUrl) {
   let buffer = "";
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (chunk) => {

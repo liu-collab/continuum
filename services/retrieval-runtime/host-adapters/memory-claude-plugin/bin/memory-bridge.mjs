@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const mode = process.argv[2];
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
@@ -119,7 +120,10 @@ async function main() {
       const response = await postJson("/v1/runtime/session-start-context", buildSessionStartPayload(event));
       process.stdout.write(
         JSON.stringify({
-          additionalContext: response.additional_context ?? "",
+          hookSpecificOutput: {
+            hookEventName: "SessionStart",
+            additionalContext: response.additional_context ?? ""
+          },
           traceId: response.trace_id,
           dependencyStatus: response.dependency_status
         }),
@@ -131,9 +135,12 @@ async function main() {
       const response = await postJson("/v1/runtime/prepare-context", buildPreparePayload(event));
       process.stdout.write(
         JSON.stringify({
-          additionalContext: response.injection_block
-            ? `${response.injection_block.injection_reason}\n${response.injection_block.memory_summary}`
-            : "",
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: response.injection_block
+              ? `${response.injection_block.injection_reason}\n${response.injection_block.memory_summary}`
+              : ""
+          },
           traceId: response.trace_id,
           memoryPacketIds: response.memory_packet_ids ?? []
         }),
@@ -145,6 +152,9 @@ async function main() {
       const response = await postJson("/v1/runtime/finalize-turn", buildFinalizePayload(event));
       process.stdout.write(
         JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "Stop"
+          },
           traceId: response.trace_id,
           writebackSubmitted: response.writeback_submitted,
           candidateCount: response.candidate_count
@@ -157,7 +167,22 @@ async function main() {
   } catch (error) {
     process.stdout.write(
       JSON.stringify({
-        additionalContext: "",
+        hookSpecificOutput:
+          mode === "session-start"
+            ? {
+                hookEventName: "SessionStart",
+                additionalContext: ""
+              }
+            : mode === "prepare-context"
+              ? {
+                  hookEventName: "UserPromptSubmit",
+                  additionalContext: ""
+                }
+              : mode === "finalize-turn"
+                ? {
+                    hookEventName: "Stop"
+                  }
+                : undefined,
         error: error instanceof Error ? error.message : String(error)
       }),
     );
@@ -165,6 +190,8 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`) {
+const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+
+if (entryUrl && import.meta.url === entryUrl) {
   void main();
 }

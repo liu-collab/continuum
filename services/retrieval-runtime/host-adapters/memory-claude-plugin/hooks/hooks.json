@@ -1,13 +1,35 @@
 {
+  "description": "Continuum memory hooks for session restore, prompt injection, and writeback.",
   "hooks": {
-    "SessionStart": {
-      "command": "node ./bin/memory-bridge.mjs session-start"
-    },
-    "UserPromptSubmit": {
-      "command": "node ./bin/memory-bridge.mjs prepare-context"
-    },
-    "Stop": {
-      "command": "node ./bin/memory-bridge.mjs finalize-turn"
-    }
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/memory-bridge.mjs session-start"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/memory-bridge.mjs prepare-context"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/memory-bridge.mjs finalize-turn"
+          }
+        ]
+      }
+    ]
   }
 }
