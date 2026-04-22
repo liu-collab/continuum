@@ -1,0 +1,192 @@
+import pino from "pino";
+import { describe, expect, it } from "vitest";
+
+import type { AppConfig } from "../src/config.js";
+import { DependencyGuard } from "../src/dependency/dependency-guard.js";
+import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
+import type { QualityAssessor } from "../src/memory-orchestrator/types.js";
+import type {
+  GovernanceExecutionResponseItem,
+  MemoryConflictSnapshot,
+  MemoryRecordSnapshot,
+  SubmittedWriteBackJob,
+  WriteBackCandidate,
+} from "../src/shared/types.js";
+import type {
+  RecordListPage,
+  RecordPatchPayload,
+  ResolveConflictPayload,
+  StorageMutationPayload,
+  StorageWritebackClient,
+} from "../src/writeback/storage-client.js";
+import { WritebackEngine } from "../src/writeback/writeback-engine.js";
+
+const config: AppConfig = {
+  NODE_ENV: "test",
+  HOST: "127.0.0.1",
+  PORT: 3002,
+  LOG_LEVEL: "info",
+  DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
+  READ_MODEL_SCHEMA: "storage_shared_v1",
+  READ_MODEL_TABLE: "memory_read_model_v1",
+  RUNTIME_SCHEMA: "runtime_private",
+  STORAGE_WRITEBACK_URL: "http://localhost:3001",
+  EMBEDDING_BASE_URL: "http://localhost:8090/v1",
+  EMBEDDING_MODEL: "text-embedding-3-small",
+  EMBEDDING_API_KEY: "test-key",
+  MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+  MEMORY_LLM_PROTOCOL: "openai-compatible",
+  MEMORY_LLM_TIMEOUT_MS: 15000,
+  MEMORY_LLM_FALLBACK_ENABLED: true,
+  MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+  MEMORY_LLM_RECOVERY_INTERVAL_MS: 5 * 60 * 1000,
+  RECALL_LLM_JUDGE_ENABLED: true,
+  RECALL_LLM_JUDGE_MAX_TOKENS: 400,
+  RECALL_LLM_CANDIDATE_LIMIT: 12,
+  WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
+  WRITEBACK_REFINE_ENABLED: true,
+  WRITEBACK_MAX_CANDIDATES: 3,
+  WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5_000,
+  WRITEBACK_OUTBOX_BATCH_SIZE: 50,
+  WRITEBACK_OUTBOX_MAX_RETRIES: 5,
+  WRITEBACK_MAINTENANCE_ENABLED: false,
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: 15 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS: 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: 3,
+  WRITEBACK_MAINTENANCE_SEED_LIMIT: 20,
+  WRITEBACK_MAINTENANCE_RELATED_LIMIT: 40,
+  WRITEBACK_MAINTENANCE_SIMILARITY_THRESHOLD: 0.35,
+  WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: 24 * 60 * 60 * 1000,
+  WRITEBACK_MAINTENANCE_TIMEOUT_MS: 5_000,
+  WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: 1500,
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+  WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
+  WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+  WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: 1000,
+  WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE: 0.85,
+  WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE: 0.92,
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+  FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
+  FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
+  WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
+  QUERY_TIMEOUT_MS: 50,
+  STORAGE_TIMEOUT_MS: 50,
+  EMBEDDING_TIMEOUT_MS: 50,
+  QUERY_CANDIDATE_LIMIT: 30,
+  PACKET_RECORD_LIMIT: 10,
+  INJECTION_RECORD_LIMIT: 2,
+  INJECTION_TOKEN_BUDGET: 256,
+  SEMANTIC_TRIGGER_THRESHOLD: 0.72,
+  IMPORTANCE_THRESHOLD_SESSION_START: 4,
+  IMPORTANCE_THRESHOLD_DEFAULT: 3,
+  IMPORTANCE_THRESHOLD_SEMANTIC: 4,
+};
+
+class StubStorageClient implements StorageWritebackClient {
+  async submitCandidates(candidates: WriteBackCandidate[]): Promise<SubmittedWriteBackJob[]> {
+    return candidates.map((candidate) => ({
+      candidate_summary: candidate.summary,
+      status: "accepted_async",
+    }));
+  }
+
+  async listRecords(): Promise<RecordListPage> {
+    return { items: [], total: 0, page: 1, page_size: 20 };
+  }
+
+  async patchRecord(_recordId: string, _payload: RecordPatchPayload): Promise<MemoryRecordSnapshot> {
+    throw new Error("not implemented");
+  }
+
+  async archiveRecord(_recordId: string, _payload: StorageMutationPayload): Promise<MemoryRecordSnapshot> {
+    throw new Error("not implemented");
+  }
+
+  async listConflicts(): Promise<MemoryConflictSnapshot[]> {
+    return [];
+  }
+
+  async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
+    throw new Error("not implemented");
+  }
+
+  async submitGovernanceExecutions(): Promise<GovernanceExecutionResponseItem[]> {
+    return [];
+  }
+}
+
+class StubQualityAssessor implements QualityAssessor {
+  constructor(
+    private readonly quality_score: number,
+    private readonly suggested_status: "active" | "pending_confirmation",
+    private readonly suggested_importance: number,
+  ) {}
+
+  async assess(input: { writeback_candidates: Array<{ idempotency_key: string }> }) {
+    return {
+      assessments: input.writeback_candidates.map((candidate) => ({
+        candidate_id: candidate.idempotency_key,
+        quality_score: this.quality_score,
+        confidence: 0.88,
+        potential_conflicts: ["rec-existing"],
+        suggested_importance: this.suggested_importance,
+        suggested_status: this.suggested_status,
+        issues: [],
+        reason: this.suggested_status === "pending_confirmation" ? "建议人工确认" : "质量稳定",
+      })),
+    };
+  }
+}
+
+describe("writeback quality assessor integration", () => {
+  it("blocks candidates below the quality threshold", async () => {
+    const engine = new WritebackEngine(
+      config,
+      new StubStorageClient(),
+      new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false })),
+      undefined,
+      new StubQualityAssessor(0.4, "pending_confirmation", 3),
+    );
+
+    const result = await engine.extractCandidates({
+      host: "codex_app_server",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+      user_id: "550e8400-e29b-41d4-a716-446655440001",
+      session_id: "550e8400-e29b-41d4-a716-446655440002",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    });
+
+    expect(result.candidates).toHaveLength(0);
+    expect(result.filtered_reasons).toContain("quality_blocked:fact_preference");
+  });
+
+  it("marks candidates as pending confirmation when quality assessor requests review", async () => {
+    const engine = new WritebackEngine(
+      config,
+      new StubStorageClient(),
+      new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false })),
+      undefined,
+      new StubQualityAssessor(0.72, "pending_confirmation", 4),
+    );
+
+    const result = await engine.extractCandidates({
+      host: "codex_app_server",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+      user_id: "550e8400-e29b-41d4-a716-446655440001",
+      session_id: "550e8400-e29b-41d4-a716-446655440002",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.suggested_status).toBe("pending_confirmation");
+    expect(result.candidates[0]?.importance).toBe(4);
+    expect(result.candidates[0]?.details).toMatchObject({
+      quality_score: 0.72,
+      quality_reason: "建议人工确认",
+      potential_conflicts: ["rec-existing"],
+    });
+  });
+});

@@ -47,6 +47,7 @@ export interface RecordPatchPayload extends StorageMutationPayload {
   importance?: number;
   confidence?: number;
   status?: Exclude<RecordStatus, "deleted">;
+  last_used_at?: string;
 }
 
 export interface ResolveConflictPayload {

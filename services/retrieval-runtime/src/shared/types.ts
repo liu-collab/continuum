@@ -159,6 +159,7 @@ export interface WriteBackCandidate {
     extraction_method?: string;
   };
   idempotency_key: string;
+  suggested_status?: "active" | "pending_confirmation";
 }
 
 export interface WritebackOutboxRecord {
@@ -348,6 +349,7 @@ export interface WritebackSubmissionRecord {
 export type MemoryPlanKind =
   | "memory_search_plan"
   | "memory_injection_plan"
+  | "memory_effectiveness_plan"
   | "memory_writeback_plan"
   | "memory_governance_plan";
 

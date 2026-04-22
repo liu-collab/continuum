@@ -3,7 +3,12 @@ import type { Logger } from "pino";
 
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
 import { buildMemoryPacket } from "./injection/packet-builder.js";
-import type { MemoryOrchestrator, RecallInjectionPlanner, WritebackPlanner } from "./memory-orchestrator/index.js";
+import type {
+  MemoryOrchestrator,
+  RecallEffectivenessInputMemory,
+  RecallInjectionPlanner,
+  WritebackPlanner,
+} from "./memory-orchestrator/index.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
 import type {
@@ -35,8 +40,10 @@ import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.
 
 const MEMORY_SEARCH_PROMPT_VERSION = "memory-recall-search-v1";
 const MEMORY_INJECTION_PROMPT_VERSION = "memory-recall-injection-v1";
+const MEMORY_EFFECTIVENESS_PROMPT_VERSION = "memory-recall-effectiveness-v1";
 const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
 const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
+const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
@@ -121,6 +128,10 @@ async function resolveTraceId(
 export class RetrievalRuntimeService {
   private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
   private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
+  private readonly recentInjectionContexts = new Map<string, {
+    memories: RecallEffectivenessInputMemory[];
+    created_at: number;
+  }>();
 
   constructor(
     private readonly triggerEngine: TriggerEngine,
@@ -382,6 +393,8 @@ export class RetrievalRuntimeService {
           packet.packet_summary = plannedMemorySummary;
           return this.finalizePreparedContextResponse({
             traceId,
+            sessionId: normalizedContext.session_id,
+            turnId: normalizedContext.turn_id,
             decision,
             triggerReason: finalTriggerReason,
             queryResult: {
@@ -477,6 +490,10 @@ export class RetrievalRuntimeService {
       duration_ms: Date.now() - injectionStartedAt,
       created_at: nowIso(),
     });
+
+    if (injectionBlock?.memory_records.length) {
+      this.storeInjectionContext(normalizedContext, injectionBlock.memory_records);
+    }
 
     return {
       trace_id: traceId,
@@ -642,6 +659,7 @@ export class RetrievalRuntimeService {
         this.finalizeIdempotencyCache?.ttlMs() ?? 5 * 60 * 1000,
       ),
     );
+    await this.evaluateRecallEffectivenessIfNeeded(normalizedInput, traceId);
     return response;
   }
 
@@ -782,6 +800,8 @@ export class RetrievalRuntimeService {
 
   private async finalizePreparedContextResponse(input: {
     traceId: string;
+    sessionId: string;
+    turnId?: string;
     decision: TriggerDecision;
     triggerReason: string;
     queryResult: {
@@ -849,6 +869,17 @@ export class RetrievalRuntimeService {
       created_at: nowIso(),
     });
 
+    if (injectionBlock?.memory_records.length) {
+      this.storeInjectionContext(
+        {
+          session_id: input.sessionId,
+          turn_id: input.turnId,
+        },
+        injectionBlock.memory_records,
+        input.traceId,
+      );
+    }
+
     return {
       trace_id: input.traceId,
       trigger: true,
@@ -860,6 +891,145 @@ export class RetrievalRuntimeService {
       budget_used: injectionBlock?.token_estimate ?? 0,
       memory_packet_ids: [input.packet.packet_id],
     };
+  }
+
+  private storeInjectionContext(
+    context: Pick<TriggerContext, "session_id" | "turn_id">,
+    records: Array<{ id: string; summary: string; importance: number }>,
+    traceIdOverride?: string,
+  ) {
+    this.cleanupExpiredInjectionContexts();
+    const key = this.getInjectionContextKey(
+      context.session_id,
+      context.turn_id,
+      traceIdOverride,
+    );
+    if (!key || records.length === 0) {
+      return;
+    }
+    this.recentInjectionContexts.set(key, {
+      memories: records.map((record) => ({
+        record_id: record.id,
+        summary: record.summary,
+        importance: record.importance,
+      })),
+      created_at: Date.now(),
+    });
+  }
+
+  private async evaluateRecallEffectivenessIfNeeded(
+    input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "assistant_output">,
+    traceId: string,
+  ): Promise<void> {
+    const evaluator = this.memoryOrchestrator?.recall?.effectiveness;
+    if (!evaluator) {
+      return;
+    }
+
+    this.cleanupExpiredInjectionContexts();
+    const key = this.getInjectionContextKey(input.session_id, input.turn_id, traceId);
+    if (!key) {
+      return;
+    }
+    const context = this.recentInjectionContexts.get(key);
+    if (!context || context.memories.length === 0) {
+      return;
+    }
+
+    const startedAt = Date.now();
+    const planResult = await this.dependencyGuard.run(
+      "memory_llm",
+      this.embeddingTimeoutMs,
+      () =>
+        evaluator.evaluate({
+          injected_memories: context.memories,
+          assistant_output: input.assistant_output,
+        }),
+    );
+
+    if (!planResult.ok || !planResult.value) {
+      await this.repository.recordMemoryPlanRun({
+        trace_id: traceId,
+        phase: "after_response",
+        plan_kind: "memory_effectiveness_plan",
+        input_summary: summarizeText(`memories=${context.memories.length}`),
+        output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+        prompt_version: MEMORY_EFFECTIVENESS_PROMPT_VERSION,
+        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+        degraded: true,
+        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+        result_state: "fallback",
+        duration_ms: Date.now() - startedAt,
+        created_at: nowIso(),
+      });
+      return;
+    }
+
+    await this.repository.recordMemoryPlanRun({
+      trace_id: traceId,
+      phase: "after_response",
+      plan_kind: "memory_effectiveness_plan",
+      input_summary: summarizeText(`memories=${context.memories.length}`),
+      output_summary: summarizeText(
+        `evaluations=${planResult.value.evaluations.length}; used=${planResult.value.evaluations.filter((item) => item.was_used).length}`,
+      ),
+      prompt_version: MEMORY_EFFECTIVENESS_PROMPT_VERSION,
+      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
+      degraded: false,
+      result_state: planResult.value.evaluations.length > 0 ? "planned" : "skipped",
+      duration_ms: Date.now() - startedAt,
+      created_at: nowIso(),
+    });
+
+    await Promise.all(planResult.value.evaluations.map(async (evaluation) => {
+      if (evaluation.suggested_importance_adjustment === 0) {
+        return;
+      }
+      const current = context.memories.find((memory) => memory.record_id === evaluation.record_id);
+      if (!current) {
+        return;
+      }
+      const nextImportance = Math.max(1, Math.min(5, current.importance + evaluation.suggested_importance_adjustment));
+      await this.dependencyGuard.run(
+        "storage_writeback",
+        this.embeddingTimeoutMs,
+        () =>
+          this.writebackEngine.patchRecord(evaluation.record_id, {
+            importance: nextImportance,
+            ...(evaluation.was_used ? { last_used_at: nowIso() } : {}),
+            actor: {
+              actor_type: "system",
+              actor_id: "retrieval-runtime",
+            },
+            reason: evaluation.reason,
+          }),
+      );
+    }));
+
+    this.recentInjectionContexts.delete(key);
+  }
+
+  private cleanupExpiredInjectionContexts() {
+    const now = Date.now();
+    for (const [key, value] of this.recentInjectionContexts.entries()) {
+      if (now - value.created_at > INJECTION_EVALUATION_TTL_MS) {
+        this.recentInjectionContexts.delete(key);
+      }
+    }
+  }
+
+  private getInjectionContextKey(
+    sessionId: string,
+    turnId?: string,
+    traceId?: string,
+  ) {
+    if (turnId) {
+      return `${sessionId}:${turnId}`;
+    }
+    if (traceId) {
+      return `${sessionId}:${traceId}`;
+    }
+    return undefined;
   }
 }
 

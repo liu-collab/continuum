@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { WritebackPlanner } from "../memory-orchestrator/index.js";
+import type { QualityAssessor, WritebackPlanner } from "../memory-orchestrator/index.js";
 import type { FinalizeTurnInput, MemoryType, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
 import { jaccardOverlap, normalizeText } from "../shared/utils.js";
 import type {
@@ -89,7 +89,6 @@ const STABLE_PREFERENCE_HINTS = [
 
 const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
 const MEMORY_WRITEBACK_SCHEMA_VERSION = "memory-writeback-schema-v1";
-
 function summarizeObservationText(value: string, maxLength = 220) {
   const normalized = normalizeText(value);
   if (normalized.length <= maxLength) {
@@ -230,6 +229,7 @@ export class WritebackEngine {
     private readonly storageClient: StorageWritebackClient,
     private readonly dependencyGuard: DependencyGuard,
     private readonly writebackPlanner?: WritebackPlanner,
+    private readonly qualityAssessor?: QualityAssessor,
     private readonly logger?: Logger,
   ) {}
 
@@ -240,7 +240,10 @@ export class WritebackEngine {
     const ruleResult = this.runRulesOnly(input);
 
     if (!this.writebackPlanner || !this.config.WRITEBACK_REFINE_ENABLED) {
-      const result = this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      const result = await this.applyQualityAssessment(
+        input,
+        this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons),
+      );
       return {
         ...result,
         plan_observation: {
@@ -268,10 +271,13 @@ export class WritebackEngine {
         rule_candidates: ruleResult.drafts.map((draft, index) => toRuleDigest(draft, index)),
       });
       const merged = this.applyRefineResult(input, ruleResult.drafts, refined);
-      const result = this.postProcess(
+      const result = await this.applyQualityAssessment(
         input,
-        merged.drafts,
-        [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
+        this.postProcess(
+          input,
+          merged.drafts,
+          [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
+        ),
       );
       return {
         ...result,
@@ -291,7 +297,10 @@ export class WritebackEngine {
       };
     } catch (error) {
       this.logger?.warn?.({ err: error }, "memory llm refine failed, using rule output");
-      const result = this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons);
+      const result = await this.applyQualityAssessment(
+        input,
+        this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons),
+      );
       return {
         ...result,
         plan_observation: {
@@ -799,6 +808,78 @@ export class WritebackEngine {
       ok: true,
       submitted_jobs: writebackResult.value ?? [],
     };
+  }
+
+  async patchRecord(
+    recordId: string,
+    payload: Parameters<StorageWritebackClient["patchRecord"]>[1],
+  ): Promise<void> {
+    await this.dependencyGuard.run(
+      "storage_writeback",
+      this.config.STORAGE_TIMEOUT_MS,
+      (signal) => this.storageClient.patchRecord(recordId, payload, signal),
+    );
+  }
+
+  private async applyQualityAssessment(
+    input: FinalizeTurnInput,
+    result: { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] },
+  ): Promise<{ candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] }> {
+    if (!this.qualityAssessor || result.candidates.length === 0) {
+      return result;
+    }
+
+    try {
+      const assessment = await this.qualityAssessor.assess({
+        writeback_candidates: result.candidates,
+        existing_similar_records: [],
+        turn_context: {
+          user_input: input.current_input,
+          assistant_output: input.assistant_output,
+        },
+      });
+
+      const byId = new Map(assessment.assessments.map((item) => [item.candidate_id, item]));
+      const filteredReasons = [...result.filtered_reasons];
+      const nextCandidates: WriteBackCandidate[] = [];
+
+      for (const candidate of result.candidates) {
+        const item = byId.get(candidate.idempotency_key);
+        if (!item) {
+          nextCandidates.push(candidate);
+          continue;
+        }
+
+        if (item.quality_score < 0.6) {
+          filteredReasons.push(`quality_blocked:${candidate.candidate_type}`);
+          continue;
+        }
+
+        nextCandidates.push({
+          ...candidate,
+          importance: item.suggested_importance,
+          suggested_status: item.suggested_status,
+          details: {
+            ...candidate.details,
+            quality_score: item.quality_score,
+            quality_confidence: item.confidence,
+            quality_reason: item.reason,
+            quality_issues: item.issues,
+            potential_conflicts: item.potential_conflicts,
+          },
+        });
+      }
+
+      return {
+        ...result,
+        candidates: nextCandidates,
+        filtered_count: filteredReasons.length,
+        filtered_reasons: filteredReasons,
+      };
+    } catch (error) {
+      this.logger?.warn?.({ err: error }, "memory quality assessor failed, using unassessed candidates");
+      return result;
+    }
   }
 }
 

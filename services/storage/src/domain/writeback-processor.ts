@@ -28,7 +28,16 @@ export class WritebackProcessor {
 
     if (decision.decision === "insert_new") {
       const inserted = await this.repositories.transaction(async (tx) => {
-        const record = await tx.records.insertRecord(buildRecordFromNormalized({ normalized }));
+        const record = await tx.records.insertRecord(buildRecordFromNormalized(
+          normalized.suggested_status
+            ? {
+                normalized,
+                status: normalized.suggested_status,
+              }
+            : {
+                normalized,
+              },
+        ));
 
         await tx.records.appendVersion({
           record_id: record.id,
@@ -77,7 +86,16 @@ export class WritebackProcessor {
         });
 
         if (conflict.can_auto_supersede) {
-          const inserted = await tx.records.insertRecord(buildRecordFromNormalized({ normalized }));
+          const inserted = await tx.records.insertRecord(buildRecordFromNormalized(
+            normalized.suggested_status
+              ? {
+                  normalized,
+                  status: normalized.suggested_status,
+                }
+              : {
+                  normalized,
+                },
+          ));
 
           await tx.records.appendVersion({
             record_id: inserted.id,

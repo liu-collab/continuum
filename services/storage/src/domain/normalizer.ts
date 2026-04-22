@@ -4,13 +4,14 @@ import type { NormalizedMemory, WriteBackCandidate } from "../contracts.js";
 import { computeDefaultConfidence, computeDefaultImportance } from "./scoring.js";
 
 export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMemory {
+  const { suggested_status, ...candidateRest } = candidate;
   const normalizedSummary = normalizeText(candidate.summary);
   const normalizedDetails = normalizeDetails(candidate.details);
   const normalizedScope = classifyCandidateScope(candidate, normalizedDetails);
   const dedupeKey = buildDedupeKey(candidate, normalizedDetails, normalizedScope);
 
-  return {
-    ...candidate,
+  const normalized = {
+    ...candidateRest,
     user_id: candidate.user_id ?? null,
     task_id: candidate.task_id ?? null,
     session_id: candidate.session_id ?? null,
@@ -38,6 +39,15 @@ export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMem
       write_reason: candidate.write_reason,
     }),
   };
+
+  if (suggested_status) {
+    return {
+      ...normalized,
+      suggested_status,
+    };
+  }
+
+  return normalized;
 }
 
 function buildDedupeKey(

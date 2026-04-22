@@ -172,6 +172,62 @@ describe("storage api", () => {
     expect(body.submitted_jobs[0].status).toBe("accepted_async");
   });
 
+  it("accepts suggested pending confirmation status from retrieval-runtime candidates", async () => {
+    const service = createStorageService({
+      repositories: createMemoryRepositories(),
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: "redis://localhost:6379",
+      },
+      database: {
+        session() {
+          throw new Error("not implemented");
+        },
+        async withTransaction() {
+          throw new Error("not implemented");
+        },
+        async ping() {
+          return;
+        },
+        async close() {
+          return;
+        },
+      } as never,
+    });
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/storage/write-back-candidates",
+      payload: {
+        candidates: [
+          {
+            ...buildCandidate(),
+            suggested_status: "pending_confirmation",
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().submitted_jobs[0].status).toBe("accepted_async");
+  });
+
   it("accepts runtime compatible batch contract and keeps compatibility mapping", async () => {
     const service = createStorageService({
       repositories: createMemoryRepositories(),

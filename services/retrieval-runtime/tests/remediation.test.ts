@@ -581,6 +581,8 @@ describe("retrieval-runtime remediation", () => {
         submitGovernanceExecutions: async () => [],
       },
       guard,
+      undefined,
+      undefined,
     );
 
     const extracted = await engine.extractCandidates({
@@ -847,6 +849,8 @@ describe("retrieval-runtime remediation", () => {
         submitGovernanceExecutions: async () => [],
       },
       guard,
+      undefined,
+      undefined,
     );
 
     const extracted = await engine.extractCandidates({
@@ -932,7 +936,13 @@ describe("retrieval-runtime remediation", () => {
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      new WritebackEngine(
+        config,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
       repository,
       dependencyGuard,
       logger,
@@ -965,7 +975,13 @@ describe("retrieval-runtime remediation", () => {
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      new WritebackEngine(
+        config,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
       repository,
       dependencyGuard,
       logger,

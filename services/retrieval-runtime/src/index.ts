@@ -5,6 +5,7 @@ import { createLogger } from "./logger.js";
 import { HttpMemoryGovernancePlanner } from "./memory-orchestrator/governance/planner.js";
 import { HttpMemoryGovernanceVerifier } from "./memory-orchestrator/governance/verifier.js";
 import { createMemoryOrchestrator } from "./memory-orchestrator/index.js";
+import { HttpMemoryQualityAssessor } from "./memory-orchestrator/writeback/quality-assessor.js";
 import { HttpMemoryRecallInjectionPlanner } from "./memory-orchestrator/recall/injection-planner.js";
 import { HttpMemoryRecallSearchPlanner } from "./memory-orchestrator/recall/search-planner.js";
 import { HttpMemoryWritebackPlanner } from "./memory-orchestrator/writeback/planner.js";
@@ -90,6 +91,17 @@ async function main() {
         WRITEBACK_MAINTENANCE_MAX_ACTIONS: config.WRITEBACK_MAINTENANCE_MAX_ACTIONS,
       })
     : undefined;
+  const qualityAssessor = hasCompleteRuntimeWritebackLlmConfig(config)
+    ? new HttpMemoryQualityAssessor({
+        MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
+        MEMORY_LLM_MODEL: activeWritebackLlmConfig.model ?? config.MEMORY_LLM_MODEL,
+        MEMORY_LLM_API_KEY: activeWritebackLlmConfig.apiKey,
+        MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
+        MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
+        MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
+        WRITEBACK_LLM_REFINE_MAX_TOKENS: config.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+      })
+    : undefined;
   const governanceVerifier = hasCompleteRuntimeWritebackLlmConfig(config)
     ? new HttpMemoryGovernanceVerifier({
         MEMORY_LLM_BASE_URL: activeWritebackLlmConfig.baseUrl,
@@ -122,6 +134,7 @@ async function main() {
           }
         : undefined,
     writebackPlanner,
+    qualityAssessor,
     governancePlanner: maintenancePlanner,
     governanceVerifier,
   });
@@ -138,7 +151,14 @@ async function main() {
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback, logger),
+    new WritebackEngine(
+      config,
+      storageClient,
+      dependencyGuard,
+      memoryOrchestrator?.writeback,
+      memoryOrchestrator?.quality,
+      logger,
+    ),
     repository,
     dependencyGuard,
     logger,

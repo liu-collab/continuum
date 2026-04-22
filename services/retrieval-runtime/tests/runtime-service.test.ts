@@ -21,6 +21,8 @@ import type {
   WriteBackCandidate,
 } from "../src/shared/types.js";
 import type {
+  QualityAssessor,
+  RecallEffectivenessEvaluator,
   RecallInjectionInput,
   RecallInjectionPlanner,
   RecallSearchInput,
@@ -355,6 +357,63 @@ class SpyLlmExtractor implements LlmExtractor {
   }
 }
 
+class StubQualityAssessor implements QualityAssessor {
+  constructor(
+    private readonly assessments: Array<{
+      candidate_id?: string;
+      quality_score: number;
+      confidence: number;
+      potential_conflicts: string[];
+      suggested_importance: number;
+      suggested_status: "active" | "pending_confirmation";
+      issues: Array<{
+        type: "duplicate" | "low_quality" | "conflict" | "vague";
+        severity: "high" | "medium" | "low";
+        description: string;
+      }>;
+      reason: string;
+    }>,
+    private readonly shouldFail = false,
+  ) {}
+
+  async assess(input: { writeback_candidates: Array<{ idempotency_key: string }> }) {
+    if (this.shouldFail) {
+      throw new Error("quality assessor unavailable");
+    }
+    return {
+      assessments: this.assessments.map((assessment, index) => ({
+        ...assessment,
+        candidate_id: assessment.candidate_id ?? input.writeback_candidates[index]?.idempotency_key ?? `dynamic-${index}`,
+      })),
+    };
+  }
+}
+
+class StubRecallEffectivenessEvaluator implements RecallEffectivenessEvaluator {
+  public callCount = 0;
+
+  constructor(
+    private readonly suggestedAdjustment = 1,
+  ) {}
+
+  async evaluate(input: {
+    injected_memories: Array<{ record_id: string }>;
+  }) {
+    this.callCount += 1;
+    return {
+      evaluations: input.injected_memories.map((memory) => ({
+        record_id: memory.record_id,
+        was_used: true,
+        usage_confidence: 0.9,
+        effectiveness_score: 0.92,
+        suggested_importance_adjustment: this.suggestedAdjustment,
+        usage_evidence: "已沿用之前的偏好",
+        reason: "记忆被明确使用",
+      })),
+    };
+  }
+}
+
 class StubLlmRecallPlanner implements LlmRecallPlanner {
   constructor(
     private readonly searchPlan: LlmRecallSearchPlan,
@@ -412,6 +471,8 @@ function createRuntime(overrides?: {
   embeddingsClient?: EmbeddingsClient;
   storageClient?: StorageWritebackClient;
   llmExtractor?: LlmExtractor;
+  qualityAssessor?: QualityAssessor;
+  recallEffectivenessEvaluator?: RecallEffectivenessEvaluator;
   llmRecallPlanner?: LlmRecallPlanner;
   readModelRepository?: InMemoryReadModelRepository;
   config?: Partial<AppConfig>;
@@ -435,7 +496,9 @@ function createRuntime(overrides?: {
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
     recallPlanner,
+    recallEffectivenessEvaluator: overrides?.recallEffectivenessEvaluator,
     writebackPlanner: overrides?.llmExtractor as WritebackPlanner | undefined,
+    qualityAssessor: overrides?.qualityAssessor,
   });
 
   const service = new RetrievalRuntimeService(
@@ -450,7 +513,13 @@ function createRuntime(overrides?: {
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+    new WritebackEngine(
+      config,
+      storageClient,
+      dependencyGuard,
+      memoryOrchestrator?.writeback,
+      memoryOrchestrator?.quality,
+    ),
     repository,
     dependencyGuard,
     logger,
@@ -940,6 +1009,148 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
   });
 
+  it("keeps writeback flow available when quality assessor is configured", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "默认用中文输出",
+            importance: 5,
+            confidence: 0.92,
+            write_reason: "stable preference confirmed in this turn",
+          },
+        ],
+      }),
+      qualityAssessor: new StubQualityAssessor([
+        {
+          candidate_id: undefined,
+          quality_score: 0.4,
+          confidence: 0.8,
+          potential_conflicts: [],
+          suggested_importance: 3,
+          suggested_status: "pending_confirmation",
+          issues: [
+            {
+              type: "low_quality",
+              severity: "high",
+              description: "信息不够稳定",
+            },
+          ],
+          reason: "内容过于临时",
+        },
+      ]),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "后续都用中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    });
+
+    expect(response.filtered_reasons).toContain("quality_blocked:fact_preference");
+  });
+
+  it("keeps writeback candidates compatible when quality assessor suggests manual review", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "默认用中文输出",
+            importance: 5,
+            confidence: 0.92,
+            write_reason: "stable preference confirmed in this turn",
+          },
+        ],
+      }),
+      qualityAssessor: new StubQualityAssessor([
+        {
+          candidate_id: undefined,
+          quality_score: 0.72,
+          confidence: 0.86,
+          potential_conflicts: ["rec-existing"],
+          suggested_importance: 4,
+          suggested_status: "pending_confirmation",
+          issues: [
+            {
+              type: "conflict",
+              severity: "medium",
+              description: "与历史偏好接近",
+            },
+          ],
+          reason: "建议人工确认",
+        },
+      ]),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "后续都用中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    });
+
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.summary).toBe("默认用中文输出");
+  });
+
+  it("records recall effectiveness evaluation after finalize-turn when injected memory was used", async () => {
+    const evaluator = new StubRecallEffectivenessEvaluator(1);
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: true,
+        reason: "需要继续之前的任务",
+        requested_scopes: ["workspace", "task", "session", "user"],
+        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        importance_threshold: 3,
+        query_hint: "继续之前的任务状态",
+        candidate_limit: 6,
+      }, {
+        should_inject: true,
+        reason: "需要注入任务状态",
+        selected_record_ids: ["mem-preference", "mem-task"],
+        memory_summary: "继续之前的偏好和任务状态。",
+      }),
+      recallEffectivenessEvaluator: evaluator,
+    });
+
+    const prepared = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "effectiveness-turn-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    expect(prepared.injection_block).not.toBeNull();
+
+    await service.finalizeTurn({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "effectiveness-turn-1",
+      current_input: "照旧，按之前定的方式继续。",
+      assistant_output: "收到，我会继续按之前的中文输出偏好和当前任务状态处理。",
+    });
+
+    const runs = await repository.getRuns({ trace_id: prepared.trace_id });
+    expect(evaluator.callCount).toBe(1);
+    expect(runs.memory_plan_runs.some((run) => run.plan_kind === "memory_effectiveness_plan")).toBe(true);
+  });
+
   it("deduplicates assistant confirmation when the same preference was already extracted from user input", async () => {
     const { service } = createRuntime();
 
@@ -1379,7 +1590,13 @@ describe("retrieval-runtime service", () => {
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      new WritebackEngine(
+        config,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
       repository,
       dependencyGuard,
       logger,
@@ -1413,7 +1630,13 @@ describe("retrieval-runtime service", () => {
       new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(config),
-      new WritebackEngine(config, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      new WritebackEngine(
+        config,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
       repository,
       dependencyGuard,
       logger,
@@ -1586,7 +1809,13 @@ describe("retrieval-runtime service", () => {
       new QueryEngine(baseConfig, readModelRepository, embeddingsClient, dependencyGuard, logger),
       embeddingsClient,
       new InjectionEngine(baseConfig),
-      new WritebackEngine(baseConfig, storageClient, dependencyGuard, memoryOrchestrator?.writeback),
+      new WritebackEngine(
+        baseConfig,
+        storageClient,
+        dependencyGuard,
+        memoryOrchestrator?.writeback,
+        memoryOrchestrator?.quality,
+      ),
       repository,
       dependencyGuard,
       logger,

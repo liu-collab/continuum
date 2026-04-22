@@ -233,6 +233,7 @@ export const writeBackCandidateSchema = z
     write_reason: z.string().trim().min(3).max(240),
     source: sourceSchema,
     idempotency_key: z.string().trim().min(8).max(128).optional(),
+    suggested_status: z.enum(["active", "pending_confirmation"]).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.scope === "workspace" && value.user_id) {
@@ -405,6 +406,7 @@ export interface NormalizedMemory extends WriteBackCandidate {
   user_id: string | null;
   task_id: string | null;
   session_id: string | null;
+  suggested_status?: "active" | "pending_confirmation";
   source: WriteBackCandidate["source"] & {
     confirmed_by_user: boolean;
   };
