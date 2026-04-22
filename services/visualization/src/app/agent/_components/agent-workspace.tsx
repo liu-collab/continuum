@@ -222,16 +222,16 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                         value={String(workspace.dependencyStatus.runtime.embeddings.status ?? "unknown")}
                       />
                     ) : null}
-                    {"writeback_llm" in workspace.dependencyStatus.runtime &&
-                    workspace.dependencyStatus.runtime.writeback_llm ? (
+                    {"memory_llm" in workspace.dependencyStatus.runtime &&
+                    workspace.dependencyStatus.runtime.memory_llm ? (
                       <DependencyRow
-                        label={t("workspace.writebackLlmLabel")}
+                        label={t("workspace.memoryLlmLabel")}
                         tone={
-                          workspace.dependencyStatus.runtime.writeback_llm.status === "healthy"
+                          workspace.dependencyStatus.runtime.memory_llm.status === "healthy"
                             ? "success"
                             : "warning"
                         }
-                        value={String(workspace.dependencyStatus.runtime.writeback_llm.status ?? "unknown")}
+                        value={String(workspace.dependencyStatus.runtime.memory_llm.status ?? "unknown")}
                       />
                     ) : null}
                   </div>
@@ -273,8 +273,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onCheckEmbeddings={() => {
           return workspace.checkEmbeddings();
         }}
-        onCheckWritebackLlm={() => {
-          return workspace.checkWritebackLlm();
+        onCheckMemoryLlm={() => {
+          return workspace.checkMemoryLlm();
         }}
       />
 
@@ -355,3 +355,4 @@ function resolveBootstrapDescription(
       return t("workspace.offlineDescription");
   }
 }
+

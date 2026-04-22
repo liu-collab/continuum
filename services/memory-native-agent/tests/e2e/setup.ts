@@ -124,8 +124,8 @@ const RUNTIME_BASE_CONFIG = {
   EMBEDDING_BASE_URL: "http://127.0.0.1:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
-  WRITEBACK_LLM_MODEL: "claude-haiku-4-5-20251001",
-  WRITEBACK_LLM_TIMEOUT_MS: 5_000,
+  MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+  MEMORY_LLM_TIMEOUT_MS: 5_000,
   WRITEBACK_MAX_CANDIDATES: 3,
   QUERY_TIMEOUT_MS: 100,
   STORAGE_TIMEOUT_MS: 100,
@@ -1484,3 +1484,4 @@ export async function runTurn(wsUrl: string, input: {
   });
   return result;
 }
+

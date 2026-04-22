@@ -18,7 +18,7 @@ const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(jsonValueSchema)]),
 );
 
-const dependencyNameSchema = z.enum(["read_model", "embeddings", "storage_writeback", "writeback_llm"]);
+const dependencyNameSchema = z.enum(["read_model", "embeddings", "storage_writeback", "memory_llm"]);
 
 export const dependencyStatusSchema = z.object({
   name: dependencyNameSchema,
@@ -33,7 +33,7 @@ export const dependencyStatusSnapshotSchema = z.object({
   read_model: dependencyStatusSchema,
   embeddings: dependencyStatusSchema,
   storage_writeback: dependencyStatusSchema,
-  writeback_llm: dependencyStatusSchema,
+  memory_llm: dependencyStatusSchema,
 });
 
 export const sessionStartRequestSchema = z.object({

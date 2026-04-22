@@ -27,7 +27,7 @@
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "embeddingLabel": "embeddings",
-    "writebackLlmLabel": "writeback llm",
+    "memoryLlmLabel": "memory llm",
     "loading": "加载中",
     "contextTitle": "当前会话上下文",
     "currentTurnMemories": "查看本轮记忆",
@@ -106,13 +106,13 @@
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY（可选）",
-    "writebackLlmTitle": "Writeback LLM 配置",
-    "writebackLlmDescription": "这里配置写回提取模型。配置完成后，运行时会优先用它来提取长期偏好、任务状态和可复用事实。",
-    "writebackLlmBaseUrl": "WRITEBACK_LLM_BASE_URL",
-    "writebackLlmModel": "WRITEBACK_LLM_MODEL",
-    "writebackLlmApiKey": "WRITEBACK_LLM_API_KEY（可选）",
-    "writebackLlmProtocol": "WRITEBACK_LLM_PROTOCOL",
-    "writebackLlmTimeoutMs": "WRITEBACK_LLM_TIMEOUT_MS",
+    "memoryLlmTitle": "Memory LLM 配置",
+    "memoryLlmDescription": "这里配置统一的记忆模型。配置完成后，运行时会优先用它来处理召回规划、写回提取和治理决策。",
+    "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
+    "memoryLlmModel": "MEMORY_LLM_MODEL",
+    "memoryLlmApiKey": "MEMORY_LLM_API_KEY（可选）",
+    "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
+    "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
     "providerTitle": "memory-native-agent 模型配置",
     "providerDescription": "按聊天产品常见方式直接填写模型地址、模型名和 API Key。页面里不再暴露环境变量式字段。",
     "mcpTitle": "MCP 服务配置",
@@ -127,7 +127,7 @@
     "mcpRemove": "删除服务",
     "providerStatus": "provider 状态",
     "embeddingStatus": "embedding 状态",
-    "writebackLlmStatus": "writeback llm 状态",
+    "memoryLlmStatus": "memory llm 状态",
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
@@ -135,16 +135,17 @@
     "providerMaxTokens": "最大输出 token",
     "checkEmbedding": "检查 embedding 配置",
     "checkingEmbedding": "检查中...",
-    "checkWritebackLlm": "检查 writeback llm 配置",
-    "checkingWritebackLlm": "检查中...",
-    "saveBeforeCheck": "请先保存当前 embedding 配置，再执行检查。",
-    "writebackLlmProtocolHint": "写回提取模型支持两种协议：`OpenAI-compatible`（兼容 `/v1/chat/completions`）和 `Anthropic`（兼容 `/v1/messages`）。请按目标服务实际协议选择。",
-    "writebackLlmProtocolOptions": {
+    "checkMemoryLlm": "检查 memory llm 配置",
+    "checkingMemoryLlm": "检查中...",
+    "saveEmbeddingBeforeCheck": "请先保存当前 embedding 配置，再执行检查。",
+    "saveMemoryLlmBeforeCheck": "请先保存当前 memory llm 配置，再执行检查。",
+    "memoryLlmProtocolHint": "记忆模型支持两种协议：`OpenAI-compatible`（兼容 `/v1/chat/completions`）和 `Anthropic`（兼容 `/v1/messages`）。请按目标服务实际协议选择。",
+    "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
     },
-    "writebackLlmEffort": "回写思考模式",
-    "writebackLlmMaxTokens": "回写最大输出 token",
+    "memoryLlmEffort": "记忆模型思考模式",
+    "memoryLlmMaxTokens": "记忆模型最大输出 token",
     "effortDisabled": "关闭",
     "effortOptions": {
       "low": "低",
@@ -160,9 +161,9 @@
       "providerApiKeyRequired": "当前 provider 需要填写 api_key。",
       "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
-      "writebackLlmModelRequired": "填写 WRITEBACK_LLM_BASE_URL 后，还需要填写 WRITEBACK_LLM_MODEL。",
-      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS 需要是正整数。",
-      "writebackLlmMaxTokensInvalid": "writeback 最大输出 token 需要是正整数。"
+      "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
+      "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS 需要是正整数。",
+      "memoryLlmMaxTokensInvalid": "memory llm 最大输出 token 需要是正整数。"
     }
   },
   "costBar": {
@@ -346,3 +347,4 @@
     "mcp": "MCP: {name}"
   }
 }
+

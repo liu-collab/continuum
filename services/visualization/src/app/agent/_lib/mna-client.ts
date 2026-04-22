@@ -241,8 +241,8 @@ export class MnaClient {
     });
   }
 
-  async checkWritebackLlm() {
-    return this.requestJson<MnaDependencyProbeResponse>("/v1/agent/dependency-status/writeback-llm/check", {
+  async checkMemoryLlm() {
+    return this.requestJson<MnaDependencyProbeResponse>("/v1/agent/dependency-status/memory-llm/check", {
       method: "POST",
     });
   }
@@ -274,7 +274,7 @@ export class MnaClient {
     planning?: {
       plan_mode?: "advisory" | "confirm";
     };
-    writeback_llm?: {
+    memory_llm?: {
       base_url?: string;
       model?: string;
       api_key?: string;

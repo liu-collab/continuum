@@ -173,9 +173,9 @@ describe("AgentWorkspace bootstrap states", () => {
             status: "not_configured",
             detail: "embedding config is not complete"
           },
-          writeback_llm: {
+          memory_llm: {
             status: "unknown",
-            detail: "writeback llm is not configured"
+            detail: "memory llm is not configured"
           }
         },
         provider: {
@@ -204,12 +204,12 @@ describe("AgentWorkspace bootstrap states", () => {
           model: null,
           api_key: null
         },
-        writeback_llm: {
+        memory_llm: {
           base_url: null,
           model: "claude-haiku-4-5-20251001",
           api_key: null,
           protocol: "openai-compatible",
-          timeout_ms: 5000,
+          timeout_ms: 15000,
           effort: null,
           max_tokens: null
         },
@@ -243,7 +243,7 @@ describe("AgentWorkspace bootstrap states", () => {
       refreshMcpState: vi.fn(),
       refreshWorkspaceList: vi.fn(),
       checkEmbeddings: vi.fn(),
-      checkWritebackLlm: vi.fn(),
+      checkMemoryLlm: vi.fn(),
       registerWorkspace: vi.fn(),
       pickWorkspace: vi.fn(),
       selectWorkspace: vi.fn(),
@@ -275,3 +275,4 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(createNewSession).toHaveBeenCalledTimes(1);
   });
 });
+

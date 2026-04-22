@@ -468,10 +468,10 @@ describe("dashboard window selection", () => {
           startedAt: new Date(now - 4 * 60_000).toISOString(),
           finishedAt: new Date(now - 3 * 60_000).toISOString(),
           sourceService: "retrieval-runtime",
-          plannerModel: "writeback_llm",
+          plannerModel: "memory_llm",
           plannerConfidence: 0.95,
           verifierRequired: true,
-          verifierModel: "writeback_llm",
+          verifierModel: "memory_llm",
           verifierDecision: "approve",
           verifierConfidence: 0.91,
           verifierNotes: "safe to delete",
@@ -494,10 +494,10 @@ describe("dashboard window selection", () => {
           startedAt: new Date(now - 14 * 60_000).toISOString(),
           finishedAt: new Date(now - 13 * 60_000).toISOString(),
           sourceService: "retrieval-runtime",
-          plannerModel: "writeback_llm",
+          plannerModel: "memory_llm",
           plannerConfidence: 0.95,
           verifierRequired: true,
-          verifierModel: "writeback_llm",
+          verifierModel: "memory_llm",
           verifierDecision: "approve",
           verifierConfidence: 0.91,
           verifierNotes: "safe to delete",
@@ -520,3 +520,4 @@ describe("dashboard window selection", () => {
     ).toBe(1);
   });
 });
+

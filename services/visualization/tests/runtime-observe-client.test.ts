@@ -207,8 +207,8 @@ describe("runtime observe contract parsing", () => {
           detail: "ok",
           last_checked_at: "2026-04-16T00:00:00Z"
         },
-        writeback_llm: {
-          name: "writeback_llm",
+        memory_llm: {
+          name: "memory_llm",
           status: "healthy",
           detail: "ok",
           last_checked_at: "2026-04-16T00:00:00Z"
@@ -255,7 +255,8 @@ describe("runtime observe contract parsing", () => {
       "read_model",
       "embeddings",
       "storage_writeback",
-      "writeback_llm"
+      "memory_llm"
     ]);
   });
 });
+

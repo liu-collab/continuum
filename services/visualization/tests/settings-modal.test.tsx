@@ -23,12 +23,12 @@ const baseConfig = {
     model: "text-embedding-3-small",
     api_key: "embed-key",
   },
-  writeback_llm: {
+  memory_llm: {
     base_url: "https://api.anthropic.com",
     model: "claude-haiku-4-5-20251001",
     api_key: "writeback-key",
     protocol: "anthropic" as const,
-    timeout_ms: 5000,
+    timeout_ms: 15000,
     effort: "medium" as const,
     max_tokens: 1200,
   },
@@ -72,9 +72,9 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
@@ -86,6 +86,57 @@ describe("SettingsModal", () => {
 
     expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
       "请先保存当前 embedding 配置，再执行检查。",
+    );
+  });
+
+  it("asks the user to save before running memory llm health check on unsaved changes", async () => {
+    const user = userEvent.setup();
+    const onCheckMemoryLlm = vi.fn(async () => ({
+      status: "healthy",
+      detail: "memory llm request completed",
+    }));
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={{
+            runtime: {
+              status: "unavailable",
+              embeddings: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+              memory_llm: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+            },
+            provider: {
+              status: "configured",
+            },
+          }}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={onCheckMemoryLlm}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
+    await user.type(screen.getByPlaceholderText("MEMORY_LLM_MODEL"), "claude-sonnet-4-5");
+    await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
+
+    expect(onCheckMemoryLlm).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
+      "请先保存当前 memory llm 配置，再执行检查。",
     );
   });
 
@@ -118,9 +169,9 @@ describe("SettingsModal", () => {
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={vi.fn(async () => undefined)}
           onCheckEmbeddings={onCheckEmbeddings}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
@@ -134,7 +185,7 @@ describe("SettingsModal", () => {
     );
   });
 
-  it("validates writeback llm fields before saving", async () => {
+  it("validates memory llm fields before saving", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
 
@@ -152,28 +203,28 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
     );
 
-    await user.clear(screen.getByPlaceholderText("WRITEBACK_LLM_MODEL"));
+    await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).not.toHaveBeenCalled();
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
-      "填写 WRITEBACK_LLM_BASE_URL 后，还需要填写 WRITEBACK_LLM_MODEL。",
+      "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
     );
   });
 
-  it("runs writeback llm health check with the saved config", async () => {
+  it("runs memory llm health check with the saved config", async () => {
     const user = userEvent.setup();
-    const onCheckWritebackLlm = vi.fn(async () => ({
+    const onCheckMemoryLlm = vi.fn(async () => ({
       status: "healthy",
-      detail: "writeback llm request completed",
+      detail: "memory llm request completed",
     }));
 
     render(
@@ -189,7 +240,7 @@ describe("SettingsModal", () => {
                 status: "unknown",
                 detail: "dependency has not been checked yet",
               },
-              writeback_llm: {
+              memory_llm: {
                 status: "unknown",
                 detail: "dependency has not been checked yet",
               },
@@ -205,20 +256,20 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={onCheckWritebackLlm}
+          onCheckMemoryLlm={onCheckMemoryLlm}
         />
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByTestId("runtime-config-check-writeback-llm"));
+    await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
-    expect(onCheckWritebackLlm).toHaveBeenCalledTimes(1);
+    expect(onCheckMemoryLlm).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
-      "healthy: writeback llm request completed",
+      "healthy: memory llm request completed",
     );
   });
 
-  it("shows writeback llm protocol options and keeps saved protocol", () => {
+  it("shows memory llm protocol options and keeps saved protocol", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <SettingsModal
@@ -233,19 +284,19 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
     );
 
     expect(screen.getByDisplayValue("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText(/写回提取模型支持两种协议/)).toBeInTheDocument();
+    expect(screen.getByText(/记忆模型支持两种协议/)).toBeInTheDocument();
   });
 
-  it("shows and submits provider and writeback thinking config", async () => {
+  it("shows and submits provider and memory llm thinking config", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
 
@@ -263,9 +314,9 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
@@ -275,8 +326,8 @@ describe("SettingsModal", () => {
     await user.clear(screen.getByPlaceholderText("最大输出 token"));
     await user.type(screen.getByPlaceholderText("最大输出 token"), "8192");
     await user.selectOptions(screen.getAllByRole("combobox")[5]!, "xhigh");
-    await user.clear(screen.getByPlaceholderText("回写最大输出 token"));
-    await user.type(screen.getByPlaceholderText("回写最大输出 token"), "2048");
+    await user.clear(screen.getByPlaceholderText("记忆模型最大输出 token"));
+    await user.type(screen.getByPlaceholderText("记忆模型最大输出 token"), "2048");
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(
@@ -288,7 +339,7 @@ describe("SettingsModal", () => {
         planning: expect.objectContaining({
           plan_mode: "advisory",
         }),
-        writeback_llm: expect.objectContaining({
+        memory_llm: expect.objectContaining({
           effort: "xhigh",
           max_tokens: 2048,
         }),
@@ -314,9 +365,9 @@ describe("SettingsModal", () => {
             status: "healthy",
             detail: "embedding request completed",
           }))}
-          onCheckWritebackLlm={vi.fn(async () => ({
+          onCheckMemoryLlm={vi.fn(async () => ({
             status: "healthy",
-            detail: "writeback llm request completed",
+            detail: "memory llm request completed",
           }))}
         />
       </AgentI18nProvider>,
@@ -334,3 +385,4 @@ describe("SettingsModal", () => {
     );
   });
 });
+

@@ -152,12 +152,12 @@ describe("MnaClient", () => {
             model: null,
             api_key: null,
           },
-          writeback_llm: {
+          memory_llm: {
             base_url: null,
             model: "claude-haiku-4-5-20251001",
             api_key: null,
             protocol: "openai-compatible",
-            timeout_ms: 5000,
+            timeout_ms: 15000,
             effort: null,
             max_tokens: null,
           },
@@ -186,7 +186,7 @@ describe("MnaClient", () => {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
       },
-      writeback_llm: {
+      memory_llm: {
         base_url: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
         protocol: "anthropic",
@@ -213,7 +213,7 @@ describe("MnaClient", () => {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
       },
-      writeback_llm: {
+      memory_llm: {
         base_url: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
         protocol: "anthropic",
@@ -261,7 +261,7 @@ describe("MnaClient", () => {
     );
   });
 
-  it("triggers an active writeback llm health check", async () => {
+  it("triggers an active memory llm health check", async () => {
     const fetchMock = vi
       .spyOn(global, "fetch")
       .mockResolvedValueOnce({
@@ -275,20 +275,20 @@ describe("MnaClient", () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          name: "writeback_llm",
+          name: "memory_llm",
           status: "healthy",
-          detail: "writeback llm request completed",
+          detail: "memory llm request completed",
           last_checked_at: "2026-04-21T12:00:00.000Z",
         }),
       } as Response);
 
     const client = new MnaClient();
-    const payload = await client.checkWritebackLlm();
+    const payload = await client.checkMemoryLlm();
 
     expect(payload.status).toBe("healthy");
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:4193/v1/agent/dependency-status/writeback-llm/check",
+      "http://127.0.0.1:4193/v1/agent/dependency-status/memory-llm/check",
       expect.objectContaining({
         method: "POST",
       }),
@@ -466,3 +466,4 @@ describe("MnaClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+

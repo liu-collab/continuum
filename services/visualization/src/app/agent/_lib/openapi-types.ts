@@ -281,7 +281,7 @@ export type MnaDependencyStatusResponse = {
       status?: string;
       detail?: string;
     };
-    writeback_llm?: {
+    memory_llm?: {
       status?: string;
       detail?: string;
     };
@@ -297,7 +297,7 @@ export type MnaDependencyStatusResponse = {
 };
 
 export type MnaDependencyProbeResponse = {
-  name: "read_model" | "embeddings" | "storage_writeback" | "writeback_llm";
+  name: "read_model" | "embeddings" | "storage_writeback" | "memory_llm";
   status: "healthy" | "degraded" | "unavailable" | "unknown";
   detail: string;
   last_checked_at: string;
@@ -326,7 +326,7 @@ export type MnaAgentConfigResponse = {
     model: string | null;
     api_key: string | null;
   };
-  writeback_llm: {
+  memory_llm: {
     base_url: string | null;
     model: string | null;
     api_key: string | null;

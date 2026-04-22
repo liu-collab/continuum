@@ -88,7 +88,7 @@ fetchGovernanceExecutionsMock.mockImplementation(async () => ({
       startedAt: "2026-04-22T00:00:00Z",
       finishedAt: "2026-04-22T00:01:00Z",
       sourceService: "retrieval-runtime",
-      plannerModel: "writeback_llm",
+      plannerModel: "memory_llm",
       plannerConfidence: 0.95,
       verifierRequired: true,
       verifierDecision: "approve",
@@ -393,3 +393,4 @@ describe("memory catalog service", () => {
     expect(response.sourceStatus.status).toBe("healthy");
   });
 });
+

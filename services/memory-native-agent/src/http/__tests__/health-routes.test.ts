@@ -14,7 +14,7 @@ const runtimeCalls = {
     read_model: { name: "read_model" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
     embeddings: { name: "embeddings" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
     storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
-    writeback_llm: { name: "writeback_llm" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
+    memory_llm: { name: "memory_llm" as const, status: "healthy" as const, detail: "", last_checked_at: "now" }
   })),
   checkEmbeddings: vi.fn(async () => ({
     name: "embeddings" as const,
@@ -22,10 +22,10 @@ const runtimeCalls = {
     detail: "embedding request completed",
     last_checked_at: "now",
   })),
-  checkWritebackLlm: vi.fn(async () => ({
-    name: "writeback_llm" as const,
+  checkMemoryLlm: vi.fn(async () => ({
+    name: "memory_llm" as const,
     status: "healthy" as const,
-    detail: "writeback llm request completed",
+    detail: "memory llm request completed",
     last_checked_at: "now",
   })),
   sessionStartContext: vi.fn(async () => null),
@@ -234,7 +234,7 @@ describe("health routes", () => {
         runtime: {
           status: "unavailable",
           base_url: "http://127.0.0.1:4100",
-          writeback_llm: {
+          memory_llm: {
             status: "unknown",
             detail: "runtime dependency status is unavailable",
           }
@@ -290,12 +290,12 @@ describe("health routes", () => {
           model: null,
           api_key: null
         },
-        writeback_llm: {
+        memory_llm: {
           base_url: null,
           model: "claude-haiku-4-5-20251001",
           api_key: null,
           protocol: "openai-compatible",
-          timeout_ms: 5000,
+          timeout_ms: 15000,
           effort: null,
           max_tokens: null,
         },
@@ -330,7 +330,7 @@ describe("health routes", () => {
           planning: {
             plan_mode: "confirm",
           },
-          writeback_llm: {
+          memory_llm: {
             base_url: "https://api.anthropic.com",
             model: "claude-haiku-4-5-20251001",
             api_key: "writeback-key",
@@ -389,8 +389,8 @@ describe("health routes", () => {
         model: "text-embedding-3-small",
         apiKey: "embed-key"
       });
-      const writebackLlmConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "writeback-llm-config.json");
-      expect(JSON.parse(fs.readFileSync(writebackLlmConfigPath, "utf8"))).toEqual({
+      const memoryLlmConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "memory-llm-config.json");
+      expect(JSON.parse(fs.readFileSync(memoryLlmConfigPath, "utf8"))).toEqual({
         version: 1,
         baseUrl: "https://api.anthropic.com",
         model: "claude-haiku-4-5-20251001",
@@ -430,7 +430,7 @@ describe("health routes", () => {
           model: "text-embedding-3-small",
           api_key: "embed-key"
         },
-        writeback_llm: {
+        memory_llm: {
           base_url: "https://api.anthropic.com",
           model: "claude-haiku-4-5-20251001",
           api_key: "writeback-key",
@@ -529,7 +529,7 @@ describe("health routes", () => {
     }
   });
 
-  it("proxies an active writeback llm health check", async () => {
+  it("proxies an active memory llm health check", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");
     fs.mkdirSync(workspaceRoot, { recursive: true });
@@ -539,18 +539,18 @@ describe("health routes", () => {
     try {
       const response = await app.inject({
         method: "POST",
-        url: "/v1/agent/dependency-status/writeback-llm/check",
+        url: "/v1/agent/dependency-status/memory-llm/check",
         headers: {
           authorization: `Bearer ${app.mnaToken}`
         }
       });
 
       expect(response.statusCode).toBe(200);
-      expect(runtimeCalls.checkWritebackLlm).toHaveBeenCalledTimes(1);
+      expect(runtimeCalls.checkMemoryLlm).toHaveBeenCalledTimes(1);
       expect(response.json()).toEqual({
-        name: "writeback_llm",
+        name: "memory_llm",
         status: "healthy",
-        detail: "writeback llm request completed",
+        detail: "memory llm request completed",
         last_checked_at: "now",
       });
     } finally {
@@ -837,3 +837,4 @@ describe("health routes", () => {
     }
   });
 });
+

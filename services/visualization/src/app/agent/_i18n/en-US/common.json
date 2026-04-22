@@ -27,7 +27,7 @@
     "runtimeLabel": "runtime",
     "providerLabel": "provider",
     "embeddingLabel": "embeddings",
-    "writebackLlmLabel": "writeback llm",
+    "memoryLlmLabel": "memory llm",
     "loading": "loading",
     "contextTitle": "Current session context",
     "currentTurnMemories": "Open current-turn memories",
@@ -106,13 +106,13 @@
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY (optional)",
-    "writebackLlmTitle": "Writeback LLM config",
-    "writebackLlmDescription": "Configure the writeback extraction model here. Once saved, runtime will prefer it for durable preference, task-state, and fact extraction.",
-    "writebackLlmBaseUrl": "WRITEBACK_LLM_BASE_URL",
-    "writebackLlmModel": "WRITEBACK_LLM_MODEL",
-    "writebackLlmApiKey": "WRITEBACK_LLM_API_KEY (optional)",
-    "writebackLlmProtocol": "WRITEBACK_LLM_PROTOCOL",
-    "writebackLlmTimeoutMs": "WRITEBACK_LLM_TIMEOUT_MS",
+    "memoryLlmTitle": "Memory LLM config",
+    "memoryLlmDescription": "Configure the shared memory model here. Once saved, runtime will prefer it for recall planning, writeback extraction, and governance decisions.",
+    "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
+    "memoryLlmModel": "MEMORY_LLM_MODEL",
+    "memoryLlmApiKey": "MEMORY_LLM_API_KEY (optional)",
+    "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
+    "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
     "providerTitle": "memory-native-agent model config",
     "providerDescription": "Use the familiar chat-product style setup: base URL, model, and API key. No environment-variable style field in the page.",
     "mcpTitle": "MCP server config",
@@ -127,7 +127,7 @@
     "mcpRemove": "Remove server",
     "providerStatus": "provider status",
     "embeddingStatus": "embedding status",
-    "writebackLlmStatus": "writeback llm status",
+    "memoryLlmStatus": "memory llm status",
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
@@ -135,16 +135,17 @@
     "providerMaxTokens": "Max output tokens",
     "checkEmbedding": "Check embedding config",
     "checkingEmbedding": "Checking...",
-    "checkWritebackLlm": "Check writeback llm config",
-    "checkingWritebackLlm": "Checking...",
-    "saveBeforeCheck": "Save the current embedding config before running the check.",
-    "writebackLlmProtocolHint": "The writeback extraction model supports two protocols: `OpenAI-compatible` over `/v1/chat/completions` and `Anthropic` over `/v1/messages`. Choose the one your service actually implements.",
-    "writebackLlmProtocolOptions": {
+    "checkMemoryLlm": "Check memory llm config",
+    "checkingMemoryLlm": "Checking...",
+    "saveEmbeddingBeforeCheck": "Save the current embedding config before running the check.",
+    "saveMemoryLlmBeforeCheck": "Save the current memory llm config before running the check.",
+    "memoryLlmProtocolHint": "The memory model supports two protocols: `OpenAI-compatible` over `/v1/chat/completions` and `Anthropic` over `/v1/messages`. Choose the one your service actually implements.",
+    "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
     },
-    "writebackLlmEffort": "Writeback reasoning effort",
-    "writebackLlmMaxTokens": "Writeback max output tokens",
+    "memoryLlmEffort": "Memory model reasoning effort",
+    "memoryLlmMaxTokens": "Memory model max output tokens",
     "effortDisabled": "Disabled",
     "effortOptions": {
       "low": "Low",
@@ -160,9 +161,9 @@
       "providerApiKeyRequired": "api_key is required for the selected provider.",
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
-      "writebackLlmModelRequired": "WRITEBACK_LLM_MODEL is required when WRITEBACK_LLM_BASE_URL is set.",
-      "writebackLlmTimeoutInvalid": "WRITEBACK_LLM_TIMEOUT_MS must be a positive integer.",
-      "writebackLlmMaxTokensInvalid": "writeback max output tokens must be a positive integer."
+      "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
+      "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS must be a positive integer.",
+      "memoryLlmMaxTokensInvalid": "memory llm max output tokens must be a positive integer."
     }
   },
   "costBar": {
@@ -346,3 +347,4 @@
     "mcp": "MCP: {name}"
   }
 }
+

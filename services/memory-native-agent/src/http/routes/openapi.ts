@@ -28,17 +28,17 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Run an active embedding dependency check",
         },
       },
-      "/v1/agent/dependency-status/writeback-llm/check": {
+      "/v1/agent/dependency-status/memory-llm/check": {
         post: {
-          summary: "Run an active writeback llm dependency check",
+          summary: "Run an active memory llm dependency check",
         },
       },
       "/v1/agent/config": {
         get: {
-          summary: "Read current agent, embedding, and writeback llm config",
+          summary: "Read current agent, embedding, and memory llm config",
         },
         post: {
-          summary: "Update current agent, embedding, and writeback llm config",
+          summary: "Update current agent, embedding, and memory llm config",
         },
       },
       "/v1/skills": {

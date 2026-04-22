@@ -66,7 +66,7 @@ function createClientMock() {
     updateProvider: vi.fn(),
     updateConfig: vi.fn(),
     checkEmbeddings: vi.fn(),
-    checkWritebackLlm: vi.fn(),
+    checkMemoryLlm: vi.fn(),
     getPromptInspector: vi.fn(),
     restartMcpServer: vi.fn(),
     disableMcpServer: vi.fn()
@@ -399,3 +399,4 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     expect(push).toHaveBeenCalledWith("/agent/session-2");
   });
 });
+

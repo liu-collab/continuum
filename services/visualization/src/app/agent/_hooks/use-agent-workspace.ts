@@ -659,7 +659,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     planning?: {
       plan_mode?: AgentPlanMode;
     };
-    writeback_llm?: {
+    memory_llm?: {
       base_url?: string;
       model?: string;
       api_key?: string;
@@ -695,8 +695,8 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return result;
   }
 
-  async function checkWritebackLlm() {
-    const result = await client.checkWritebackLlm();
+  async function checkMemoryLlm() {
+    const result = await client.checkMemoryLlm();
     await refreshDependencyStatus();
     return result;
   }
@@ -743,7 +743,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     updateProvider,
     updateRuntimeConfig,
     checkEmbeddings,
-    checkWritebackLlm,
+    checkMemoryLlm,
     refreshMetrics,
     refreshDependencyStatus,
     refreshAgentConfig,

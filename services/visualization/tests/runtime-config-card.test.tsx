@@ -23,12 +23,12 @@ const baseConfig = {
     model: null,
     api_key: null,
   },
-  writeback_llm: {
+  memory_llm: {
     base_url: null,
     model: "claude-haiku-4-5-20251001",
     api_key: null,
     protocol: "openai-compatible" as const,
-    timeout_ms: 5000,
+    timeout_ms: 15000,
     effort: null,
     max_tokens: null,
   },
@@ -229,3 +229,4 @@ describe("RuntimeConfigCard", () => {
     expect(options).toEqual(["openai", "anthropic", "ollama", "record-replay"]);
   });
 });
+

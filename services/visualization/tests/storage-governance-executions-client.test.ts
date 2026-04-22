@@ -34,7 +34,7 @@ describe("storage governance executions client", () => {
               evidence_json: {
                 delete_reason: "replaced by newer state",
               },
-              planner_model: "writeback_llm",
+              planner_model: "memory_llm",
               planner_confidence: 0.95,
               verifier_required: true,
               verifier_decision: "approve",
@@ -91,10 +91,10 @@ describe("storage governance executions client", () => {
             reason_text: "merge duplicate preference",
             suggested_changes_json: { summary: "merged summary" },
             evidence_json: { merged_from: ["memory-1", "memory-2"] },
-            planner_model: "writeback_llm",
+            planner_model: "memory_llm",
             planner_confidence: 0.93,
             verifier_required: true,
-            verifier_model: "writeback_llm",
+            verifier_model: "memory_llm",
             verifier_decision: "approve",
             verifier_confidence: 0.9,
             verifier_notes: "clear duplicate",
@@ -128,3 +128,4 @@ describe("storage governance executions client", () => {
     expect(result.detail?.verifierNotes).toBe("clear duplicate");
   });
 });
+

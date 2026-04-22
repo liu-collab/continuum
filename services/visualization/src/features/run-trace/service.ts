@@ -361,7 +361,7 @@ function toDependencyStatus(dependencies: RuntimeDependencyRecord[]) {
     read_model: "运行时读模型",
     embeddings: "运行时向量依赖",
     storage_writeback: "运行时存储写回",
-    writeback_llm: "写回提取模型"
+    memory_llm: "记忆模型"
   };
 
   return dependencies.map((dependency) => ({
@@ -541,3 +541,4 @@ export function describeRunTraceEmptyState(response: RunTraceResponse) {
 }
 
 export { summarizeScopes, buildPhaseNarratives, formatScopeList, scopeExplanation };
+

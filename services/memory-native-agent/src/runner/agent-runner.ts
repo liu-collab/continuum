@@ -835,8 +835,8 @@ export class AgentRunner {
             detail: error instanceof Error ? error.message : "memory unavailable",
             last_checked_at: new Date().toISOString(),
           },
-          writeback_llm: {
-            name: "writeback_llm",
+          memory_llm: {
+            name: "memory_llm",
             status: "unknown",
             detail: error instanceof Error ? error.message : "memory unavailable",
             last_checked_at: new Date().toISOString(),

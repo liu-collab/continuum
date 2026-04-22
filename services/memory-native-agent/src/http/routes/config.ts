@@ -75,7 +75,7 @@ const embeddingPayloadSchema = z.object({
   api_key: z.string().trim().optional(),
 });
 
-const writebackLlmPayloadSchema = z.object({
+const memoryLlmPayloadSchema = z.object({
   base_url: z.string().trim().url().optional(),
   model: z.string().trim().min(1).optional(),
   api_key: z.string().trim().optional(),
@@ -88,7 +88,7 @@ const writebackLlmPayloadSchema = z.object({
 const updateConfigSchema = z.object({
   provider: providerPayloadSchema.optional(),
   embedding: embeddingPayloadSchema.optional(),
-  writeback_llm: writebackLlmPayloadSchema.optional(),
+  memory_llm: memoryLlmPayloadSchema.optional(),
   tools: z.object({
     approval_mode: z.enum(["confirm", "yolo"]).optional(),
   }).optional(),
@@ -111,9 +111,9 @@ function resolveManagedEmbeddingConfigPath(app: RuntimeFastifyInstance) {
     || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
 }
 
-function resolveManagedWritebackLlmConfigPath(app: RuntimeFastifyInstance) {
-  return process.env.CONTINUUM_WRITEBACK_LLM_CONFIG_PATH?.trim()
-    || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "writeback-llm-config.json");
+function resolveManagedMemoryLlmConfigPath(app: RuntimeFastifyInstance) {
+  return process.env.CONTINUUM_MEMORY_LLM_CONFIG_PATH?.trim()
+    || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "memory-llm-config.json");
 }
 
 function resolveProviderConfigPath(app: RuntimeFastifyInstance) {
@@ -141,7 +141,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       model?: string;
       apiKey?: string;
     }>(resolveManagedEmbeddingConfigPath(app));
-    const writebackLlm = await readJson<{
+    const memoryLlm = await readJson<{
       baseUrl?: string;
       model?: string;
       apiKey?: string;
@@ -149,7 +149,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       timeoutMs?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       maxTokens?: number | null;
-    }>(resolveManagedWritebackLlmConfigPath(app));
+    }>(resolveManagedMemoryLlmConfigPath(app));
 
     return {
       provider: {
@@ -174,21 +174,21 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: embedding?.model ?? process.env.EMBEDDING_MODEL ?? null,
         api_key: embedding?.apiKey ?? process.env.EMBEDDING_API_KEY ?? null,
       },
-      writeback_llm: {
-        base_url: writebackLlm?.baseUrl ?? process.env.WRITEBACK_LLM_BASE_URL ?? null,
-        model: writebackLlm?.model ?? process.env.WRITEBACK_LLM_MODEL ?? "claude-haiku-4-5-20251001",
-        api_key: writebackLlm?.apiKey ?? process.env.WRITEBACK_LLM_API_KEY ?? null,
+      memory_llm: {
+        base_url: memoryLlm?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL ?? null,
+        model: memoryLlm?.model ?? process.env.MEMORY_LLM_MODEL ?? "claude-haiku-4-5-20251001",
+        api_key: memoryLlm?.apiKey ?? process.env.MEMORY_LLM_API_KEY ?? null,
         protocol:
-          writebackLlm?.protocol
-          ?? ((process.env.WRITEBACK_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined)
+          memoryLlm?.protocol
+          ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined)
             ?? "openai-compatible"),
-        timeout_ms: writebackLlm?.timeoutMs ?? (
-          process.env.WRITEBACK_LLM_TIMEOUT_MS?.trim()
-            ? Number(process.env.WRITEBACK_LLM_TIMEOUT_MS)
-            : 5000
+        timeout_ms: memoryLlm?.timeoutMs ?? (
+          process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
+            ? Number(process.env.MEMORY_LLM_TIMEOUT_MS)
+            : 15000
         ),
-        effort: writebackLlm?.effort ?? null,
-        max_tokens: writebackLlm?.maxTokens ?? null,
+        effort: memoryLlm?.effort ?? null,
+        max_tokens: memoryLlm?.maxTokens ?? null,
       },
       mcp: {
         servers: app.runtimeState.config.mcp.servers,
@@ -218,16 +218,16 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       });
     }
 
-    if (payload.writeback_llm) {
-      await writeJson(resolveManagedWritebackLlmConfigPath(app), {
+    if (payload.memory_llm) {
+      await writeJson(resolveManagedMemoryLlmConfigPath(app), {
         version: 1,
-        ...(payload.writeback_llm.base_url ? { baseUrl: payload.writeback_llm.base_url } : {}),
-        ...(payload.writeback_llm.model ? { model: payload.writeback_llm.model } : {}),
-        ...(payload.writeback_llm.api_key ? { apiKey: payload.writeback_llm.api_key } : {}),
-        ...(payload.writeback_llm.protocol ? { protocol: payload.writeback_llm.protocol } : {}),
-        ...(payload.writeback_llm.timeout_ms ? { timeoutMs: payload.writeback_llm.timeout_ms } : {}),
-        ...(payload.writeback_llm.effort !== undefined ? { effort: payload.writeback_llm.effort } : {}),
-        ...(payload.writeback_llm.max_tokens !== undefined ? { maxTokens: payload.writeback_llm.max_tokens } : {}),
+        ...(payload.memory_llm.base_url ? { baseUrl: payload.memory_llm.base_url } : {}),
+        ...(payload.memory_llm.model ? { model: payload.memory_llm.model } : {}),
+        ...(payload.memory_llm.api_key ? { apiKey: payload.memory_llm.api_key } : {}),
+        ...(payload.memory_llm.protocol ? { protocol: payload.memory_llm.protocol } : {}),
+        ...(payload.memory_llm.timeout_ms ? { timeoutMs: payload.memory_llm.timeout_ms } : {}),
+        ...(payload.memory_llm.effort !== undefined ? { effort: payload.memory_llm.effort } : {}),
+        ...(payload.memory_llm.max_tokens !== undefined ? { maxTokens: payload.memory_llm.max_tokens } : {}),
       });
     }
 
@@ -329,11 +329,12 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     return app.runtimeState.memoryClient.checkEmbeddings();
   });
 
-  app.post("/v1/agent/dependency-status/writeback-llm/check", async () => {
-    return app.runtimeState.memoryClient.checkWritebackLlm();
+  app.post("/v1/agent/dependency-status/memory-llm/check", async () => {
+    return app.runtimeState.memoryClient.checkMemoryLlm();
   });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
+

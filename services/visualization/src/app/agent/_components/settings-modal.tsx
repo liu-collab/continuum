@@ -27,7 +27,7 @@ type SettingsModalProps = {
         status?: string;
         detail?: string;
       };
-      writeback_llm?: {
+      memory_llm?: {
         status?: string;
         detail?: string;
       };
@@ -59,7 +59,7 @@ type SettingsModalProps = {
     planning: {
       plan_mode: "advisory" | "confirm";
     };
-    writeback_llm: {
+    memory_llm: {
       base_url?: string;
       model?: string;
       api_key?: string;
@@ -88,7 +88,7 @@ type SettingsModalProps = {
     status: string;
     detail: string;
   }>;
-  onCheckWritebackLlm(): Promise<{
+  onCheckMemoryLlm(): Promise<{
     status: string;
     detail: string;
   }>;
@@ -110,7 +110,7 @@ export function SettingsModal({
   onMemoryModeChange,
   onSaveRuntime,
   onCheckEmbeddings,
-  onCheckWritebackLlm
+  onCheckMemoryLlm
 }: SettingsModalProps) {
   const { formatMemoryModeLabel, locale, setLocale, t } = useAgentI18n();
 
@@ -128,19 +128,19 @@ export function SettingsModal({
   const [embeddingApiKey, setEmbeddingApiKey] = useState("");
   const [approvalMode, setApprovalMode] = useState<"confirm" | "yolo">("confirm");
   const [planMode, setPlanMode] = useState<"advisory" | "confirm">("advisory");
-  const [writebackLlmBaseUrl, setWritebackLlmBaseUrl] = useState("");
-  const [writebackLlmModel, setWritebackLlmModel] = useState("");
-  const [writebackLlmApiKey, setWritebackLlmApiKey] = useState("");
-  const [writebackLlmProtocol, setWritebackLlmProtocol] = useState<"anthropic" | "openai-compatible">("openai-compatible");
-  const [writebackLlmTimeoutMs, setWritebackLlmTimeoutMs] = useState("");
-  const [writebackLlmEffort, setWritebackLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
-  const [writebackLlmMaxTokens, setWritebackLlmMaxTokens] = useState("");
+  const [memoryLlmBaseUrl, setMemoryLlmBaseUrl] = useState("");
+  const [memoryLlmModel, setMemoryLlmModel] = useState("");
+  const [memoryLlmApiKey, setMemoryLlmApiKey] = useState("");
+  const [memoryLlmProtocol, setMemoryLlmProtocol] = useState<"anthropic" | "openai-compatible">("openai-compatible");
+  const [memoryLlmTimeoutMs, setMemoryLlmTimeoutMs] = useState("");
+  const [memoryLlmEffort, setMemoryLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
+  const [memoryLlmMaxTokens, setMemoryLlmMaxTokens] = useState("");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
-  const [checkingWritebackLlm, setCheckingWritebackLlm] = useState(false);
+  const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
 
   useEffect(() => {
     if (!config) {
@@ -160,19 +160,19 @@ export function SettingsModal({
     setEmbeddingBaseUrl(config.embedding.base_url ?? "");
     setEmbeddingModel(config.embedding.model ?? "");
     setEmbeddingApiKey(config.embedding.api_key ?? "");
-    setWritebackLlmBaseUrl(config.writeback_llm.base_url ?? "");
-    setWritebackLlmModel(config.writeback_llm.model ?? "");
-    setWritebackLlmApiKey(config.writeback_llm.api_key ?? "");
-    setWritebackLlmProtocol(config.writeback_llm.protocol ?? "openai-compatible");
-    setWritebackLlmTimeoutMs(config.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "");
-    setWritebackLlmEffort(config.writeback_llm.effort ?? "");
-    setWritebackLlmMaxTokens(config.writeback_llm.max_tokens ? String(config.writeback_llm.max_tokens) : "");
+    setMemoryLlmBaseUrl(config.memory_llm.base_url ?? "");
+    setMemoryLlmModel(config.memory_llm.model ?? "");
+    setMemoryLlmApiKey(config.memory_llm.api_key ?? "");
+    setMemoryLlmProtocol(config.memory_llm.protocol ?? "openai-compatible");
+    setMemoryLlmTimeoutMs(config.memory_llm.timeout_ms ? String(config.memory_llm.timeout_ms) : "");
+    setMemoryLlmEffort(config.memory_llm.effort ?? "");
+    setMemoryLlmMaxTokens(config.memory_llm.max_tokens ? String(config.memory_llm.max_tokens) : "");
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
     setCheckingEmbeddings(false);
-    setCheckingWritebackLlm(false);
+    setCheckingMemoryLlm(false);
   }, [config, open]);
 
   const providerRequiresBaseUrl = useMemo(
@@ -198,11 +198,11 @@ export function SettingsModal({
     const trimmedProviderMaxTokens = providerMaxTokens.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
-    const trimmedWritebackLlmBaseUrl = writebackLlmBaseUrl.trim();
-    const trimmedWritebackLlmModel = writebackLlmModel.trim();
-    const trimmedWritebackLlmApiKey = writebackLlmApiKey.trim();
-    const trimmedWritebackLlmTimeoutMs = writebackLlmTimeoutMs.trim();
-    const trimmedWritebackLlmMaxTokens = writebackLlmMaxTokens.trim();
+    const trimmedMemoryLlmBaseUrl = memoryLlmBaseUrl.trim();
+    const trimmedMemoryLlmModel = memoryLlmModel.trim();
+    const trimmedMemoryLlmApiKey = memoryLlmApiKey.trim();
+    const trimmedMemoryLlmTimeoutMs = memoryLlmTimeoutMs.trim();
+    const trimmedMemoryLlmMaxTokens = memoryLlmMaxTokens.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
@@ -224,13 +224,13 @@ export function SettingsModal({
       return;
     }
 
-    if (trimmedWritebackLlmBaseUrl && !trimmedWritebackLlmModel) {
-      setErrorMessage(t("runtimeConfig.errors.writebackLlmModelRequired"));
+    if (trimmedMemoryLlmBaseUrl && !trimmedMemoryLlmModel) {
+      setErrorMessage(t("runtimeConfig.errors.memoryLlmModelRequired"));
       return;
     }
 
-    if (trimmedWritebackLlmTimeoutMs && !/^\d+$/.test(trimmedWritebackLlmTimeoutMs)) {
-      setErrorMessage(t("runtimeConfig.errors.writebackLlmTimeoutInvalid"));
+    if (trimmedMemoryLlmTimeoutMs && !/^\d+$/.test(trimmedMemoryLlmTimeoutMs)) {
+      setErrorMessage(t("runtimeConfig.errors.memoryLlmTimeoutInvalid"));
       return;
     }
 
@@ -239,8 +239,8 @@ export function SettingsModal({
       return;
     }
 
-    if (trimmedWritebackLlmMaxTokens && !/^\d+$/.test(trimmedWritebackLlmMaxTokens)) {
-      setErrorMessage(t("runtimeConfig.errors.writebackLlmMaxTokensInvalid"));
+    if (trimmedMemoryLlmMaxTokens && !/^\d+$/.test(trimmedMemoryLlmMaxTokens)) {
+      setErrorMessage(t("runtimeConfig.errors.memoryLlmMaxTokensInvalid"));
       return;
     }
 
@@ -270,14 +270,14 @@ export function SettingsModal({
         planning: {
           plan_mode: planMode,
         },
-        writeback_llm: {
-          ...(trimmedWritebackLlmBaseUrl ? { base_url: trimmedWritebackLlmBaseUrl } : {}),
-          ...(trimmedWritebackLlmModel ? { model: trimmedWritebackLlmModel } : {}),
-          ...(trimmedWritebackLlmApiKey ? { api_key: trimmedWritebackLlmApiKey } : {}),
-          protocol: writebackLlmProtocol,
-          ...(trimmedWritebackLlmTimeoutMs ? { timeout_ms: Number(trimmedWritebackLlmTimeoutMs) } : {}),
-          effort: writebackLlmEffort || null,
-          ...(trimmedWritebackLlmMaxTokens ? { max_tokens: Number(trimmedWritebackLlmMaxTokens) } : {}),
+        memory_llm: {
+          ...(trimmedMemoryLlmBaseUrl ? { base_url: trimmedMemoryLlmBaseUrl } : {}),
+          ...(trimmedMemoryLlmModel ? { model: trimmedMemoryLlmModel } : {}),
+          ...(trimmedMemoryLlmApiKey ? { api_key: trimmedMemoryLlmApiKey } : {}),
+          protocol: memoryLlmProtocol,
+          ...(trimmedMemoryLlmTimeoutMs ? { timeout_ms: Number(trimmedMemoryLlmTimeoutMs) } : {}),
+          effort: memoryLlmEffort || null,
+          ...(trimmedMemoryLlmMaxTokens ? { max_tokens: Number(trimmedMemoryLlmMaxTokens) } : {}),
         },
         mcp: {
           servers: mcpServers.map((server) => ({
@@ -310,7 +310,7 @@ export function SettingsModal({
     ) {
       setFeedbackMessage({
         tone: "warning",
-        text: t("runtimeConfig.saveBeforeCheck"),
+        text: t("runtimeConfig.saveEmbeddingBeforeCheck"),
       });
       return;
     }
@@ -328,34 +328,34 @@ export function SettingsModal({
     }
   }
 
-  async function handleCheckWritebackLlm() {
+  async function handleCheckMemoryLlm() {
     setErrorMessage(null);
     setFeedbackMessage(null);
-    const currentBaseUrl = config?.writeback_llm.base_url?.trim() ?? "";
-    const currentModel = config?.writeback_llm.model?.trim() ?? "";
-    const currentApiKey = config?.writeback_llm.api_key?.trim() ?? "";
-    const currentProtocol = config?.writeback_llm.protocol ?? "openai-compatible";
-    const currentTimeout = config?.writeback_llm.timeout_ms ? String(config.writeback_llm.timeout_ms) : "";
-    const currentEffort = config?.writeback_llm.effort ?? "";
-    const currentMaxTokens = config?.writeback_llm.max_tokens ? String(config.writeback_llm.max_tokens) : "";
+    const currentBaseUrl = config?.memory_llm.base_url?.trim() ?? "";
+    const currentModel = config?.memory_llm.model?.trim() ?? "";
+    const currentApiKey = config?.memory_llm.api_key?.trim() ?? "";
+    const currentProtocol = config?.memory_llm.protocol ?? "openai-compatible";
+    const currentTimeout = config?.memory_llm.timeout_ms ? String(config.memory_llm.timeout_ms) : "";
+    const currentEffort = config?.memory_llm.effort ?? "";
+    const currentMaxTokens = config?.memory_llm.max_tokens ? String(config.memory_llm.max_tokens) : "";
     if (
-      writebackLlmBaseUrl.trim() !== currentBaseUrl ||
-      writebackLlmModel.trim() !== currentModel ||
-      writebackLlmApiKey.trim() !== currentApiKey ||
-      writebackLlmProtocol !== currentProtocol ||
-      writebackLlmTimeoutMs.trim() !== currentTimeout ||
-      writebackLlmEffort !== currentEffort ||
-      writebackLlmMaxTokens.trim() !== currentMaxTokens
+      memoryLlmBaseUrl.trim() !== currentBaseUrl ||
+      memoryLlmModel.trim() !== currentModel ||
+      memoryLlmApiKey.trim() !== currentApiKey ||
+      memoryLlmProtocol !== currentProtocol ||
+      memoryLlmTimeoutMs.trim() !== currentTimeout ||
+      memoryLlmEffort !== currentEffort ||
+      memoryLlmMaxTokens.trim() !== currentMaxTokens
     ) {
       setFeedbackMessage({
         tone: "warning",
-        text: t("runtimeConfig.saveBeforeCheck"),
+        text: t("runtimeConfig.saveMemoryLlmBeforeCheck"),
       });
       return;
     }
-    setCheckingWritebackLlm(true);
+    setCheckingMemoryLlm(true);
     try {
-      const result = await onCheckWritebackLlm();
+      const result = await onCheckMemoryLlm();
       setFeedbackMessage({
         tone: result.status === "healthy" ? "success" : "warning",
         text: `${result.status}: ${result.detail}`,
@@ -363,7 +363,7 @@ export function SettingsModal({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
-      setCheckingWritebackLlm(false);
+      setCheckingMemoryLlm(false);
     }
   }
 
@@ -444,27 +444,27 @@ export function SettingsModal({
           </div>
           <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmStatus")}</span>
-              <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.writeback_llm?.status)}>
-                {dependencyStatus?.runtime.writeback_llm?.status ?? "unknown"}
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmStatus")}</span>
+              <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.memory_llm?.status)}>
+                {dependencyStatus?.runtime.memory_llm?.status ?? "unknown"}
               </StatusBadge>
             </div>
-            {dependencyStatus?.runtime.writeback_llm?.detail ? (
+            {dependencyStatus?.runtime.memory_llm?.detail ? (
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {dependencyStatus.runtime.writeback_llm.detail}
+                {dependencyStatus.runtime.memory_llm.detail}
               </p>
             ) : null}
             <div className="mt-2">
               <button
                 type="button"
                 onClick={() => {
-                  void handleCheckWritebackLlm();
+                  void handleCheckMemoryLlm();
                 }}
-                disabled={checkingWritebackLlm}
+                disabled={checkingMemoryLlm}
                 className="btn-outline"
-                data-testid="runtime-config-check-writeback-llm"
+                data-testid="runtime-config-check-memory-llm"
               >
-                {checkingWritebackLlm ? t("runtimeConfig.checkingWritebackLlm") : t("runtimeConfig.checkWritebackLlm")}
+                {checkingMemoryLlm ? t("runtimeConfig.checkingMemoryLlm") : t("runtimeConfig.checkMemoryLlm")}
               </button>
             </div>
           </div>
@@ -689,68 +689,68 @@ export function SettingsModal({
 
           <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
             <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.writebackLlmTitle")}</div>
+              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
               <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.writebackLlmDescription")}
+                {t("runtimeConfig.memoryLlmDescription")}
               </div>
               <div className="mt-2 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.writebackLlmProtocolHint")}
+                {t("runtimeConfig.memoryLlmProtocolHint")}
               </div>
             </div>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmProtocol")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
               <select
-                value={writebackLlmProtocol}
-                onChange={(event) => setWritebackLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
+                value={memoryLlmProtocol}
+                onChange={(event) => setMemoryLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
                 className="field mt-1"
               >
-                <option value="openai-compatible">{t("runtimeConfig.writebackLlmProtocolOptions.openai-compatible")}</option>
-                <option value="anthropic">{t("runtimeConfig.writebackLlmProtocolOptions.anthropic")}</option>
+                <option value="openai-compatible">{t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible")}</option>
+                <option value="anthropic">{t("runtimeConfig.memoryLlmProtocolOptions.anthropic")}</option>
               </select>
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmBaseUrl")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
               <input
-                value={writebackLlmBaseUrl}
-                onChange={(event) => setWritebackLlmBaseUrl(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmBaseUrl")}
+                value={memoryLlmBaseUrl}
+                onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
+                placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
                 className="field mt-1"
               />
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmModel")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
               <input
-                value={writebackLlmModel}
-                onChange={(event) => setWritebackLlmModel(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmModel")}
+                value={memoryLlmModel}
+                onChange={(event) => setMemoryLlmModel(event.target.value)}
+                placeholder={t("runtimeConfig.memoryLlmModel")}
                 className="field mt-1"
               />
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmApiKey")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
               <input
                 type="password"
-                value={writebackLlmApiKey}
-                onChange={(event) => setWritebackLlmApiKey(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmApiKey")}
+                value={memoryLlmApiKey}
+                onChange={(event) => setMemoryLlmApiKey(event.target.value)}
+                placeholder={t("runtimeConfig.memoryLlmApiKey")}
                 className="field mt-1"
               />
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmTimeoutMs")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
               <input
-                value={writebackLlmTimeoutMs}
-                onChange={(event) => setWritebackLlmTimeoutMs(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmTimeoutMs")}
+                value={memoryLlmTimeoutMs}
+                onChange={(event) => setMemoryLlmTimeoutMs(event.target.value)}
+                placeholder={t("runtimeConfig.memoryLlmTimeoutMs")}
                 className="field mt-1"
                 inputMode="numeric"
               />
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmEffort")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
               <select
-                value={writebackLlmEffort}
-                onChange={(event) => setWritebackLlmEffort(event.target.value as typeof writebackLlmEffort)}
+                value={memoryLlmEffort}
+                onChange={(event) => setMemoryLlmEffort(event.target.value as typeof memoryLlmEffort)}
                 className="field mt-1"
               >
                 <option value="">{t("runtimeConfig.effortDisabled")}</option>
@@ -762,11 +762,11 @@ export function SettingsModal({
               </select>
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.writebackLlmMaxTokens")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
               <input
-                value={writebackLlmMaxTokens}
-                onChange={(event) => setWritebackLlmMaxTokens(event.target.value)}
-                placeholder={t("runtimeConfig.writebackLlmMaxTokens")}
+                value={memoryLlmMaxTokens}
+                onChange={(event) => setMemoryLlmMaxTokens(event.target.value)}
+                placeholder={t("runtimeConfig.memoryLlmMaxTokens")}
                 className="field mt-1"
                 inputMode="numeric"
               />
@@ -939,3 +939,4 @@ export function SettingsModal({
     </Modal>
   );
 }
+

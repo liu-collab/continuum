@@ -17,7 +17,7 @@
 | #4 | 已完成 | 已识别现有冲突点：命名仍是 `writeback_llm`，提示词分散，观测粒度不够，UI 口径偏窄 |
 | #5 | 部分完成 | 已新增 `src/memory-orchestrator/` 统一入口、类型与兜底策略，召回/写回/治理开始通过 orchestrator 接口接线，具体 planner 文件仍在继续迁移 |
 | #6 | 已完成 | `retrieval-runtime` 已切换到 `MEMORY_LLM_*`，不再兼容旧配置；依赖健康检查与状态桶已统一为 `memory_llm` |
-| #7 | 待开发 | 完成 `visualization` 配置、状态、观测面板的统一改口径 |
+| #7 | 已完成 | `visualization` 与 `memory-native-agent` 已统一切到 `memory llm` 配置、状态探针和依赖展示口径 |
 | #8 | 部分完成 | `maintenance-worker` 已改为依赖 orchestrator 治理接口类型，治理 planner / verifier 的具体实现文件仍待迁移到新目录 |
 
 ---
@@ -1301,8 +1301,8 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 |---|---|---|
 | C1 | 已完成 | `retrieval-runtime` 已引入 `MEMORY_LLM_*` 配置并替换 `WRITEBACK_LLM_*`（不兼容） |
 | C2 | 已完成 | `retrieval-runtime` 依赖状态桶已从 `writeback_llm` 更新为 `memory_llm` |
-| C3 | 待开发 | 页面配置项改口径为 `memory llm` |
-| C4 | 待开发 | 页面状态探针从 `writeback llm` 升级为统一记忆模型状态 |
+| C3 | 已完成 | 页面配置项已统一改口径为 `memory llm` |
+| C4 | 已完成 | 页面状态探针已从 `writeback llm` 升级为统一记忆模型状态 |
 | C5 | 待开发 | 补 plan 级观测面板和调试面板 |
 | C6 | 待开发 | 编写配置迁移文档和脚本 |
 
@@ -1314,7 +1314,7 @@ storage.archiveSourceRecords(...)                   # 归档源记录
 | T2 | 部分完成 | 已补 orchestrator 工厂与写回接线测试，plan schema 单测仍待补齐 |
 | T3 | 部分完成 | 现有 maintenance worker 联测已覆盖统一 governance 接口接线，planner / verifier 独立联测仍待补齐 |
 | T4 | 待开发 | 降级和恢复机制测试 |
-| T5 | 待开发 | 可视化配置和状态展示联动测试 |
+| T5 | 已完成 | 已补可视化配置、健康检查与状态展示联动测试 |
 | T6 | 待开发 | 并发和竞态条件测试 |
 
 ---

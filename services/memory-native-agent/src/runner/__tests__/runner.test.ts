@@ -41,7 +41,7 @@ function createMemoryClient() {
         read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
         embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
         storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
       degraded: false,
     })),
@@ -68,7 +68,7 @@ function createMemoryClient() {
         read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
         embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
         storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
       budget_used: 0,
       memory_packet_ids: [],
@@ -87,7 +87,7 @@ function createMemoryClient() {
         read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
         embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
         storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
     })),
   };
@@ -252,7 +252,7 @@ describe("AgentRunner", () => {
           read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
           embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
           storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-          writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
         },
         budget_used: 0,
         memory_packet_ids: [],
@@ -283,7 +283,7 @@ describe("AgentRunner", () => {
           read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
           embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
           storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-          writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
         },
         budget_used: 0,
         memory_packet_ids: [],
@@ -1025,7 +1025,7 @@ describe("AgentRunner", () => {
         read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
         embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
         storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        writeback_llm: { name: "writeback_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
       budget_used: 0,
       memory_packet_ids: [],
@@ -1210,3 +1210,4 @@ describe("AgentRunner", () => {
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-skill", "stop");
   });
 });
+
