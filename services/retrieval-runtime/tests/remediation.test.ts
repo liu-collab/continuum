@@ -940,6 +940,70 @@ describe("retrieval-runtime remediation", () => {
     expect(block?.memory_records[0]?.id).toBe("high-rerank");
   });
 
+  it("reserves space for task_state before filling remaining slots with fact_preference", () => {
+    const engine = new InjectionEngine({
+      ...config,
+      INJECTION_RECORD_LIMIT: 2,
+      INJECTION_TOKEN_BUDGET: 256,
+    });
+
+    const block = engine.build({
+      packet_id: "packet-bucketed",
+      trigger: "history_reference",
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task", "user"],
+      selected_scopes: ["workspace", "task", "user"],
+      scope_reason: "test",
+      query_scope: "scope=workspace,task,user",
+      packet_summary: "测试摘要",
+      injection_hint: "测试提示",
+      ttl_ms: 1000,
+      priority_breakdown: {
+        fact_preference: 3,
+        task_state: 1,
+        episodic: 0,
+      },
+      records: [
+        {
+          ...baseCandidateRecord,
+          id: "pref-1",
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "偏好一",
+          rerank_score: 0.98,
+        },
+        {
+          ...baseCandidateRecord,
+          id: "pref-2",
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "偏好二",
+          rerank_score: 0.97,
+        },
+        {
+          ...baseCandidateRecord,
+          id: "pref-3",
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "偏好三",
+          rerank_score: 0.96,
+        },
+        {
+          ...baseCandidateRecord,
+          id: "task-1",
+          memory_type: "task_state",
+          scope: "task",
+          summary: "任务状态一",
+          rerank_score: 0.7,
+        },
+      ],
+    });
+
+    expect(block?.memory_records).toHaveLength(2);
+    expect(block?.memory_records.some((record) => record.id === "task-1")).toBe(true);
+    expect(block?.memory_records.some((record) => record.id === "pref-1")).toBe(true);
+  });
+
   it("persists finalize idempotency responses at request scope", async () => {
     const repository = new InMemoryRuntimeRepository();
     const logger = pino({ enabled: false });
