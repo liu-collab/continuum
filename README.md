@@ -15,23 +15,31 @@ Persistent memory layer for AI coding agents. Gives Claude Code, Codex, and cust
 
 ## Architecture
 
+### Core data path
+
 ```mermaid
-flowchart TB
-    host["Host Adapters<br/>Claude Code · Codex · Custom Agent"]
+flowchart LR
+    cli["continuum CLI<br/>start · stop · status · ui"]
+    host["Host agents<br/>Claude Code · Codex · Custom Agent"]
     mna["memory-native-agent<br/>sessions · tools · skills · MCP"]
-    runtime["retrieval-runtime<br/>trigger → query → inject → writeback"]
-    storage["storage<br/>write model · governance · read model"]
+    runtime["retrieval-runtime<br/>trigger · recall · inject · writeback"]
+    storage["storage<br/>normalize · governance · read model"]
     db[("PostgreSQL + pgvector")]
     viz["visualization<br/>dashboard · docs · observability"]
 
-    host -->|"prepare-context / finalize-turn"| mna
+    cli --> mna
+    host --> mna
     mna --> runtime
-    runtime -->|"read model / write-back"| storage
+    runtime --> storage
     storage --> db
-    viz --> storage
-    viz --> runtime
-    viz --> mna
+    runtime --> viz
+    storage --> viz
 ```
+
+### Control and observability
+
+- `visualization` is the read-facing surface for memories, runs, health, docs, and configuration
+- `continuum CLI` is the local delivery surface for startup, shutdown, status checks, UI entry, and host integration
 
 | Service | Role |
 |---|---|
