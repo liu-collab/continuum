@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -13,13 +14,42 @@ function commandFor(name) {
   return process.platform === "win32" ? `${name}.cmd` : name;
 }
 
+function localNodeCli(name) {
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  const nodeRoot = path.dirname(process.execPath);
+  const scriptByClient = {
+    claude: path.join(nodeRoot, "node_modules", "@anthropic-ai", "claude-code", "cli.js"),
+    codex: path.join(nodeRoot, "node_modules", "@openai", "codex", "bin", "codex.js"),
+  };
+  const script = scriptByClient[name];
+  if (!script || !existsSync(script)) {
+    return null;
+  }
+  return {
+    command: process.execPath,
+    argsPrefix: [script],
+    shell: false,
+  };
+}
+
+function clientCommandFor(name) {
+  return localNodeCli(name) ?? {
+    command: commandFor(name),
+    argsPrefix: [],
+    shell: process.platform === "win32",
+  };
+}
+
 function runProcess(command, args, options = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: options.cwd ?? process.cwd(),
       env: options.env ?? process.env,
       stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32",
+      shell: options.shell ?? process.platform === "win32",
       timeout: options.timeoutMs,
     });
 
@@ -46,7 +76,9 @@ function runProcess(command, args, options = {}) {
 }
 
 async function checkCli(name) {
-  const result = await runProcess(commandFor(name), ["--version"], {
+  const cli = clientCommandFor(name);
+  const result = await runProcess(cli.command, [...cli.argsPrefix, "--version"], {
+    shell: cli.shell,
     timeoutMs: 15_000,
   });
   if (result.exitCode !== 0) {
@@ -181,6 +213,18 @@ function eventMatches(event, predicates) {
   return predicates.some((predicate) => serialized.includes(predicate));
 }
 
+function summarizeEvents(events) {
+  return events
+    .slice(0, 20)
+    .map((event) => {
+      const itemType = event?.item?.type ? ` item=${event.item.type}` : "";
+      const subtype = event?.subtype ? ` subtype=${event.subtype}` : "";
+      const taskType = event?.task_type ? ` task=${event.task_type}` : "";
+      return `${event?.type ?? "unknown"}${subtype}${itemType}${taskType}`;
+    })
+    .join(", ");
+}
+
 async function runClaudeEval() {
   const version = await checkCli("claude");
   const command = `node ${clientWorkerPath} --host claude_code --output-dir ${clientOutputDir} --timeout-ms 45000 --concurrency 2`;
@@ -193,8 +237,9 @@ async function runClaudeEval() {
   ].join("\n");
 
   const result = await runProcess(
-    commandFor("claude"),
+    clientCommandFor("claude").command,
     [
+      ...clientCommandFor("claude").argsPrefix,
       "-p",
       prompt,
       "--output-format",
@@ -206,6 +251,7 @@ async function runClaudeEval() {
       "Bash",
     ],
     {
+      shell: clientCommandFor("claude").shell,
       env: {
         ...process.env,
         HOST_REAL_EVAL_CLIENT: "claude_code",
@@ -213,6 +259,8 @@ async function runClaudeEval() {
       timeoutMs: 1_200_000,
     },
   );
+  await writeFile(path.join(outputDir, "claude_code-client-stdout.jsonl"), result.stdout, "utf8");
+  await writeFile(path.join(outputDir, "claude_code-client-stderr.log"), result.stderr, "utf8");
 
   if (result.exitCode !== 0) {
     throw new Error(`Claude Code eval failed: ${result.stderr || result.stdout}`);
@@ -227,7 +275,14 @@ async function runClaudeEval() {
     ) || eventMatches(event, ['"name":"Bash"', '"task_type":"local_bash"']);
   });
   if (!usedBash) {
-    throw new Error("Claude Code did not execute the eval through the Bash tool");
+    throw new Error(
+      [
+        "Claude Code did not execute the eval through the Bash tool",
+        `events: ${summarizeEvents(events)}`,
+        `stdout_tail: ${result.stdout.slice(-1000)}`,
+        `stderr_tail: ${result.stderr.slice(-1000)}`,
+      ].join("\n"),
+    );
   }
   const texts = [];
   for (const event of events) {
@@ -262,8 +317,9 @@ async function runCodexEval() {
   ].join("\n");
 
   const result = await runProcess(
-    commandFor("codex"),
+    clientCommandFor("codex").command,
     [
+      ...clientCommandFor("codex").argsPrefix,
       "exec",
       "--skip-git-repo-check",
       "--dangerously-bypass-approvals-and-sandbox",
@@ -271,6 +327,7 @@ async function runCodexEval() {
       "-",
     ],
     {
+      shell: clientCommandFor("codex").shell,
       stdin: prompt,
       env: {
         ...process.env,
@@ -279,6 +336,8 @@ async function runCodexEval() {
       timeoutMs: 1_200_000,
     },
   );
+  await writeFile(path.join(outputDir, "codex-client-stdout.jsonl"), result.stdout, "utf8");
+  await writeFile(path.join(outputDir, "codex-client-stderr.log"), result.stderr, "utf8");
 
   if (result.exitCode !== 0) {
     throw new Error(`Codex eval failed: ${result.stderr || result.stdout}`);
@@ -294,7 +353,14 @@ async function runCodexEval() {
     ]),
   );
   if (!usedCommand) {
-    throw new Error("Codex did not execute the eval through a real local command");
+    throw new Error(
+      [
+        "Codex did not execute the eval through a real local command",
+        `events: ${summarizeEvents(lines)}`,
+        `stdout_tail: ${result.stdout.slice(-1000)}`,
+        `stderr_tail: ${result.stderr.slice(-1000)}`,
+      ].join("\n"),
+    );
   }
   const messages = lines
     .map((event) => event?.item?.text ?? event?.message?.content ?? event?.text)
