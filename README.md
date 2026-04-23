@@ -3,6 +3,9 @@
 Persistent memory layer for AI coding agents. Gives Claude Code, Codex, and custom agents the ability to remember preferences, track task state, and carry context across sessions.
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/liu-collab/continuum?style=social)](https://github.com/liu-collab/continuum/stargazers)
+[![npm version](https://img.shields.io/npm/v/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
+[![npm downloads](https://img.shields.io/npm/dm/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 ## What it does
 
@@ -12,23 +15,22 @@ Persistent memory layer for AI coding agents. Gives Claude Code, Codex, and cust
 
 ## Architecture
 
-```
-┌────────────────────────────────────────────────────┐
-│                   Host Adapters                    │
-│          Claude Code · Codex · Custom Agent        │
-└──────────────┬────────────────────┬────────────────┘
-               │  prepare-context   │  finalize-turn
-               ▼                    ▼
-┌──────────────────────────────────────────────────┐
-│              retrieval-runtime                    │
-│   trigger → query → inject → writeback            │
-└──────────────┬────────────────────┬───────────────┘
-               │  read model        │  write-back
-               ▼                    ▼
-┌──────────────────────────────────────────────────┐
-│                   storage                         │
-│   PostgreSQL + pgvector · conflict · governance   │
-└──────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    host["Host Adapters<br/>Claude Code · Codex · Custom Agent"]
+    mna["memory-native-agent<br/>sessions · tools · skills · MCP"]
+    runtime["retrieval-runtime<br/>trigger → query → inject → writeback"]
+    storage["storage<br/>write model · governance · read model"]
+    db[("PostgreSQL + pgvector")]
+    viz["visualization<br/>dashboard · docs · observability"]
+
+    host -->|"prepare-context / finalize-turn"| mna
+    mna --> runtime
+    runtime -->|"read model / write-back"| storage
+    storage --> db
+    viz --> storage
+    viz --> runtime
+    viz --> mna
 ```
 
 | Service | Role |
@@ -36,6 +38,22 @@ Persistent memory layer for AI coding agents. Gives Claude Code, Codex, and cust
 | **storage** | Write model, conflict detection, governance, read model projection |
 | **retrieval-runtime** | Trigger decisions, semantic search, memory injection, writeback coordination |
 | **visualization** | Dashboard for memory records, recall traces, and system metrics |
+
+## Current Status & Roadmap
+
+### Current Status
+
+- Managed local stack via `continuum start`
+- Native agent integration for `Codex` and `Claude Code`
+- Built-in dashboard for memories, runs, health, and configuration
+- Structured memory writeback, retrieval, injection, and governance flows
+
+### Roadmap
+
+- Improve multi-turn memory injection quality and deduplication
+- Continue tightening hosted integration flows for `Codex` and `Claude Code`
+- Expand observability and configuration UX in the dashboard
+- Keep reducing setup friction so local-first managed startup becomes the default path
 
 ## Quick Start
 
