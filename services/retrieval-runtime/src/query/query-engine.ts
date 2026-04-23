@@ -84,8 +84,8 @@ export function buildRetrievalQuery(
     memory_type_filter: decision.requested_memory_types,
     status_filter: ["active"],
     importance_threshold: decision.importance_threshold,
-    semantic_query_text: buildSemanticQueryText(context),
-    candidate_limit: config.QUERY_CANDIDATE_LIMIT,
+    semantic_query_text: decision.query_hint?.trim() ? decision.query_hint : buildSemanticQueryText(context),
+    candidate_limit: decision.candidate_limit ?? config.QUERY_CANDIDATE_LIMIT,
   };
 }
 
