@@ -55,14 +55,130 @@ async function checkCli(name) {
   return result.stdout.trim();
 }
 
-function extractJsonObject(text) {
-  const trimmed = text.trim();
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
-  if (first < 0 || last < first) {
-    throw new Error(`no JSON object found in client output: ${trimmed.slice(0, 500)}`);
+function parseJsonLines(output) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function extractJsonObjects(text) {
+  const objects = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (start >= 0) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (char === "\"") {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        start = index;
+        inString = false;
+        escaped = false;
+      }
+      depth += 1;
+    } else if (char === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const candidate = text.slice(start, index + 1);
+        try {
+          objects.push(JSON.parse(candidate));
+        } catch {
+          /* keep scanning; client streams can include non-JSON braces */
+        }
+        start = -1;
+        inString = false;
+        escaped = false;
+      }
+    }
   }
-  return JSON.parse(trimmed.slice(first, last + 1));
+
+  return objects;
+}
+
+function extractJsonObject(text) {
+  const objects = extractJsonObjects(text);
+  if (objects.length === 0) {
+    throw new Error(`no JSON object found in client output: ${text.trim().slice(0, 500)}`);
+  }
+  return objects[objects.length - 1];
+}
+
+function contentItems(event) {
+  const content = event?.message?.content ?? event?.item?.content ?? event?.content;
+  if (Array.isArray(content)) {
+    return content;
+  }
+  if (typeof content === "string") {
+    return [{ type: "text", text: content }];
+  }
+  return [];
+}
+
+function textFromContentItem(item) {
+  if (typeof item === "string") {
+    return item;
+  }
+  if (typeof item?.content === "string") {
+    return item.content;
+  }
+  if (typeof item?.text === "string") {
+    return item.text;
+  }
+  return null;
+}
+
+function isHostEvalPayload(value, host) {
+  return (
+    value &&
+    typeof value === "object" &&
+    value.ok === true &&
+    value.host === host &&
+    typeof value.metrics_path === "string"
+  );
+}
+
+function extractHostEvalPayload(texts, host) {
+  const candidates = texts.flatMap((text) => extractJsonObjects(text));
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    if (isHostEvalPayload(candidates[index], host)) {
+      return candidates[index];
+    }
+  }
+  throw new Error(`no ${host} eval JSON payload found in real client output`);
+}
+
+function eventMatches(event, predicates) {
+  const serialized = JSON.stringify(event);
+  return predicates.some((predicate) => serialized.includes(predicate));
 }
 
 async function runClaudeEval() {
@@ -101,26 +217,31 @@ async function runClaudeEval() {
   if (result.exitCode !== 0) {
     throw new Error(`Claude Code eval failed: ${result.stderr || result.stdout}`);
   }
-  const events = result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-  const usedBash = events.some((event) =>
-    event?.message?.content?.some?.((item) => item?.type === "tool_use" && item?.name === "Bash"),
-  );
+  const events = parseJsonLines(result.stdout);
+  const usedBash = events.some((event) => {
+    if (event?.task_type === "local_bash") {
+      return true;
+    }
+    return contentItems(event).some(
+      (item) => item?.type === "tool_use" && item?.name === "Bash",
+    ) || eventMatches(event, ['"name":"Bash"', '"task_type":"local_bash"']);
+  });
   if (!usedBash) {
     throw new Error("Claude Code did not execute the eval through the Bash tool");
   }
-  const resultEvent = events.find((event) => event?.type === "result");
-  const payload = extractJsonObject(resultEvent?.result ?? result.stdout);
+  const texts = [];
+  for (const event of events) {
+    for (const item of contentItems(event)) {
+      const text = textFromContentItem(item);
+      if (text) {
+        texts.push(text);
+      }
+    }
+    if (typeof event?.result === "string") {
+      texts.push(event.result);
+    }
+  }
+  const payload = extractHostEvalPayload(texts.length > 0 ? texts : [result.stdout], "claude_code");
   return {
     host: "claude_code",
     version,
@@ -163,22 +284,22 @@ async function runCodexEval() {
     throw new Error(`Codex eval failed: ${result.stderr || result.stdout}`);
   }
 
-  const lines = result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  const lines = parseJsonLines(result.stdout);
+  const usedCommand = lines.some((event) =>
+    eventMatches(event, [
+      '"type":"command_execution"',
+      '"type":"exec_command"',
+      '"type":"tool_call"',
+      '"cmd"',
+    ]),
+  );
+  if (!usedCommand) {
+    throw new Error("Codex did not execute the eval through a real local command");
+  }
   const messages = lines
     .map((event) => event?.item?.text ?? event?.message?.content ?? event?.text)
     .filter((value) => typeof value === "string");
-  const payload = extractJsonObject(messages.join("\n") || result.stdout);
+  const payload = extractHostEvalPayload(messages.length > 0 ? messages : [result.stdout], "codex");
   return {
     host: "codex",
     version,
