@@ -491,6 +491,20 @@ export function SettingsModal({
       }
     >
       <div className="space-y-6" data-testid="runtime-config-card">
+        {errorMessage ? (
+          <p className="text-sm text-rose-600" data-testid="runtime-config-error">
+            {errorMessage}
+          </p>
+        ) : null}
+        {feedbackMessage ? (
+          <p
+            className={feedbackMessage.tone === "success" ? "text-sm text-emerald-600" : "text-sm text-amber-600"}
+            data-testid="runtime-config-feedback"
+          >
+            {feedbackMessage.text}
+          </p>
+        ) : null}
+
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
@@ -998,19 +1012,6 @@ export function SettingsModal({
           </div>
         </div>
 
-        {errorMessage ? (
-          <p className="text-sm text-rose-600" data-testid="runtime-config-error">
-            {errorMessage}
-          </p>
-        ) : null}
-        {feedbackMessage ? (
-          <p
-            className={feedbackMessage.tone === "success" ? "text-sm text-emerald-600" : "text-sm text-amber-600"}
-            data-testid="runtime-config-feedback"
-          >
-            {feedbackMessage.text}
-          </p>
-        ) : null}
       </div>
     </Modal>
   );

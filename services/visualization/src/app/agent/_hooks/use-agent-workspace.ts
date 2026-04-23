@@ -691,13 +691,47 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function checkEmbeddings() {
     const result = await client.checkEmbeddings();
-    await refreshDependencyStatus();
+    setDependencyStatus((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        runtime: {
+          ...current.runtime,
+          embeddings: {
+            ...(current.runtime.embeddings ?? {}),
+            status: result.status,
+            detail: result.detail,
+            last_checked_at: result.last_checked_at,
+          },
+        },
+      };
+    });
     return result;
   }
 
   async function checkMemoryLlm() {
     const result = await client.checkMemoryLlm();
-    await refreshDependencyStatus();
+    setDependencyStatus((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        runtime: {
+          ...current.runtime,
+          memory_llm: {
+            ...(current.runtime.memory_llm ?? {}),
+            status: result.status,
+            detail: result.detail,
+            last_checked_at: result.last_checked_at,
+          },
+        },
+      };
+    });
     return result;
   }
 

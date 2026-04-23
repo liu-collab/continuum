@@ -87,6 +87,8 @@ describe("SettingsModal", () => {
     expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
       "请先保存当前 embedding 配置，再执行检查。",
     );
+    const modal = screen.getByTestId("runtime-config-card");
+    expect(modal.firstElementChild).toHaveAttribute("data-testid", "runtime-config-feedback");
   });
 
   it("asks the user to save before running memory llm health check on unsaved changes", async () => {
@@ -137,6 +139,67 @@ describe("SettingsModal", () => {
     expect(onCheckMemoryLlm).not.toHaveBeenCalled();
     expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
       "请先保存当前 memory llm 配置，再执行检查。",
+    );
+  });
+
+  it("runs memory llm health check when memory model follows the primary model", async () => {
+    const user = userEvent.setup();
+    const onCheckMemoryLlm = vi.fn(async () => ({
+      status: "healthy",
+      detail: "memory llm request completed",
+    }));
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            memory_llm: {
+              base_url: baseConfig.provider.base_url,
+              model: baseConfig.provider.model,
+              api_key: baseConfig.provider.api_key,
+              protocol: "openai-compatible",
+              timeout_ms: 15000,
+              effort: baseConfig.provider.effort,
+              max_tokens: baseConfig.provider.max_tokens,
+            },
+          }}
+          dependencyStatus={{
+            runtime: {
+              status: "unavailable",
+              embeddings: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+              memory_llm: {
+                status: "unknown",
+                detail: "dependency has not been checked yet",
+              },
+            },
+            provider: {
+              status: "configured",
+            },
+          }}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={onCheckMemoryLlm}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveValue("same_as_primary");
+    await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
+
+    expect(onCheckMemoryLlm).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("runtime-config-feedback")).toHaveTextContent(
+      "healthy: memory llm request completed",
     );
   });
 

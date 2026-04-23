@@ -398,5 +398,94 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     });
     expect(push).toHaveBeenCalledWith("/agent/session-2");
   });
+
+  it("updates dependency status locally after checking memory llm", async () => {
+    const client = createClientMock();
+    client.bootstrap.mockResolvedValue({
+      status: "ok",
+      token: "token-1",
+      reason: null,
+      mnaBaseUrl: "http://127.0.0.1:4193",
+      baseUrl: "http://127.0.0.1:4193"
+    });
+    client.listSessions.mockResolvedValue({
+      items: [createSessionSummary("session-1", "workspace-1")],
+      next_cursor: null
+    });
+    client.listSkills.mockResolvedValue({ items: [] });
+    client.listWorkspaces.mockResolvedValue({
+      items: [
+        { workspace_id: "workspace-1", cwd: "C:/repo-1", label: "repo-1", is_current: true }
+      ]
+    });
+    client.getSession.mockResolvedValue({
+      session: {
+        id: "session-1",
+        workspace_id: "workspace-1",
+        user_id: "00000000-0000-4000-8000-000000000001",
+        title: null,
+        memory_mode: "workspace_plus_global",
+        locale: "zh-CN",
+        created_at: "2026-04-21T00:00:00Z",
+        last_active_at: "2026-04-21T00:00:00Z",
+        closed_at: null
+      },
+      messages: [],
+      latest_event_id: null
+    });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue({
+      runtime: {
+        status: "reachable",
+        memory_llm: {
+          status: "unknown",
+          detail: "dependency has not been checked yet"
+        },
+        embeddings: {
+          status: "healthy",
+          detail: "embedding request completed"
+        }
+      },
+      provider: {
+        id: "openai-compatible",
+        model: "deepseek-chat",
+        status: "configured"
+      },
+      mcp: [],
+      provider_key: "openai-compatible:deepseek-chat"
+    });
+    client.getConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
+    client.checkMemoryLlm.mockResolvedValue({
+      name: "memory_llm",
+      status: "healthy",
+      detail: "memory llm request completed",
+      last_checked_at: "now"
+    });
+    mockUseAgentClient.mockReturnValue(client);
+    mockUsePathname.mockReturnValue("/agent/session-1");
+
+    render(<HookProbe sessionId="session-1" />);
+
+    await waitFor(() => {
+      expect(client.getSession).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      await (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook.checkMemoryLlm();
+    });
+
+    const hook = (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook;
+    expect(hook.dependencyStatus?.runtime.memory_llm).toMatchObject({
+      status: "healthy",
+      detail: "memory llm request completed",
+      last_checked_at: "now"
+    });
+    expect(client.getDependencyStatus).toHaveBeenCalledTimes(1);
+  });
 });
 
