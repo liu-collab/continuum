@@ -52,6 +52,32 @@ async function removePathIfExists(targetPath: string) {
   });
 }
 
+async function terminateManagedProcess(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    await new Promise<void>((resolve) => {
+      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+        env: process.env,
+      });
+
+      child.on("exit", () => resolve());
+      child.on("error", () => resolve());
+    });
+    return;
+  }
+
+  try {
+    process.kill(pid, "SIGINT");
+  } catch {
+    return;
+  }
+}
+
 async function clearManagedRuntimeState() {
   const managedDir = continuumManagedDir();
   const targets = [
@@ -87,7 +113,16 @@ export async function runStopCommand() {
   await stopLegacyContinuumProcesses();
   const state = await readManagedState();
   const containerName = state.postgres?.containerName ?? DEFAULT_MANAGED_STACK_CONTAINER;
+  const visualizationDev = state.services.find((service) => service.name === "visualization-dev") ?? null;
   let containerCleanupError: Error | null = null;
+
+  if (visualizationDev) {
+    try {
+      await terminateManagedProcess(visualizationDev.pid);
+    } catch {
+      // ignore and still clear managed state below
+    }
+  }
 
   try {
     await runForegroundQuiet("docker", ["rm", "-f", containerName]);

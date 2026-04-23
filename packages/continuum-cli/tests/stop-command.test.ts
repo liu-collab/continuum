@@ -113,6 +113,36 @@ describe("runStopCommand", () => {
     expect(cleanedTargets).not.toContain("C:/Users/test/.continuum/managed/embedding-config.json");
   });
 
+  it("stops visualization dev when it is recorded in managed state", async () => {
+    mockSpawnExit(0);
+    rmMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      postgres: {
+        containerName: "continuum-stack",
+        port: 54329,
+        database: "continuum",
+        username: "continuum",
+      },
+      services: [
+        {
+          name: "visualization-dev",
+          pid: 5566,
+          logPath: "C:/Users/test/.continuum/logs/visualization-dev.log",
+          url: "http://127.0.0.1:3003",
+        },
+      ],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopManagedMnaMock.mockResolvedValue(true);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+
+    await runStopCommand();
+
+    const spawnCommands = spawnMock.mock.calls.map((call) => [call[0], ...(Array.isArray(call[1]) ? call[1] : [])].join(" "));
+    expect(spawnCommands.some((command) => command.includes("taskkill /PID 5566 /T /F"))).toBe(true);
+  });
+
   it("still clears local runtime residue before surfacing docker removal failures", async () => {
     mockSpawnExit(1);
     rmMock.mockResolvedValue(undefined);

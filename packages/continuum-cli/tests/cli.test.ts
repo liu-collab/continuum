@@ -61,6 +61,7 @@ describe("continuum cli", () => {
     const parsed = parseArgs([
       "start",
       "--open",
+      "--ui-dev",
       "--postgres-port",
       "54329",
       "--bind-host",
@@ -77,6 +78,7 @@ describe("continuum cli", () => {
 
     expect(parsed.command).toEqual(["start"]);
     expect(parsed.options.open).toBe(true);
+    expect(parsed.options["ui-dev"]).toBe(true);
     expect(parsed.options["postgres-port"]).toBe("54329");
     expect(parsed.options["bind-host"]).toBe("0.0.0.0");
     expect(parsed.options["embedding-base-url"]).toBe("https://api.openai.com/v1");
@@ -84,6 +86,7 @@ describe("continuum cli", () => {
     expect(parsed.options["provider-kind"]).toBe("openai-compatible");
     expect(parsed.options["provider-model"]).toBe("deepseek-chat");
     expect(renderHelp()).toContain("continuum start");
+    expect(renderHelp()).toContain("--ui-dev");
     expect(renderHelp()).toContain("--bind-host HOST");
     expect(renderHelp()).toContain("--embedding-base-url URL");
     expect(renderHelp()).toContain("--provider-kind KIND");

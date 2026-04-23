@@ -5,7 +5,9 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  CONTINUUM_MNA_PROVIDER_API_KEY_ENV,
   managedMnaProviderConfigPath,
+  managedMnaProviderSecretPath,
   readManagedMnaProviderConfig,
   writeManagedMnaProviderConfig,
 } from "../src/managed-config.js";
@@ -62,6 +64,83 @@ describe("managed mna provider config", () => {
       model: "deepseek-chat",
       baseUrl: "https://api.deepseek.com",
       apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
+  });
+
+  it("stores inline api key in secret file and keeps config schema-compatible", async () => {
+    await writeManagedMnaProviderConfig(mnaHome, {
+      kind: "openai-compatible",
+      model: "gpt-5.4",
+      baseUrl: "http://localhost:8090/v1",
+      apiKey: "secret-key",
+    });
+
+    const configContent = JSON.parse(
+      await readFile(managedMnaProviderConfigPath(mnaHome), "utf8"),
+    ) as {
+      provider: Record<string, string>;
+    };
+    const secretContent = JSON.parse(
+      await readFile(managedMnaProviderSecretPath(mnaHome), "utf8"),
+    ) as {
+      version: 1;
+      apiKey: string;
+    };
+
+    expect(configContent.provider.api_key).toBeUndefined();
+    expect(configContent.provider.apiKey).toBeUndefined();
+    expect(configContent.provider.api_key_env).toBe(CONTINUUM_MNA_PROVIDER_API_KEY_ENV);
+    expect(secretContent).toEqual({
+      version: 1,
+      apiKey: "secret-key",
+    });
+    await expect(readManagedMnaProviderConfig(mnaHome)).resolves.toEqual({
+      kind: "openai-compatible",
+      model: "gpt-5.4",
+      baseUrl: "http://localhost:8090/v1",
+      apiKey: "secret-key",
+    });
+  });
+
+  it("removes stale secret file when provider no longer has inline api key", async () => {
+    await writeFile(
+      managedMnaProviderSecretPath(mnaHome),
+      JSON.stringify({
+        version: 1,
+        apiKey: "stale-key",
+      }),
+      "utf8",
+    );
+
+    await writeManagedMnaProviderConfig(mnaHome, {
+      kind: "openai-compatible",
+      model: "deepseek-chat",
+      baseUrl: "https://api.deepseek.com",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    });
+
+    await expect(readFile(managedMnaProviderSecretPath(mnaHome), "utf8")).rejects.toThrow();
+  });
+
+  it("reads legacy snake_case inline api key for backward compatibility", async () => {
+    await writeFile(
+      managedMnaProviderConfigPath(mnaHome),
+      JSON.stringify({
+        provider: {
+          kind: "openai-compatible",
+          model: "gpt-5.4",
+          base_url: "http://localhost:8090/v1",
+          api_key: "legacy-inline-key",
+        },
+      }),
+      "utf8",
+    );
+
+    await expect(readManagedMnaProviderConfig(mnaHome)).resolves.toEqual({
+      kind: "openai-compatible",
+      model: "gpt-5.4",
+      baseUrl: "http://localhost:8090/v1",
+      apiKey: "legacy-inline-key",
     });
   });
 });

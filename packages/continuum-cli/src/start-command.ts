@@ -15,6 +15,7 @@ import {
   vendorPath,
 } from "./utils.js";
 import {
+  continuumLogsDir,
   continuumHomeDir,
   continuumManagedDir,
   DEFAULT_MANAGED_DATABASE_NAME,
@@ -24,6 +25,7 @@ import {
   DEFAULT_MANAGED_POSTGRES_PORT,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
+  type ManagedServiceRecord,
   readManagedState,
   writeManagedState,
 } from "./managed-state.js";
@@ -34,9 +36,12 @@ import {
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
   continuumManagedEmbeddingConfigPath,
+  continuumManagedMemoryLlmConfigPath,
   readManagedEmbeddingConfig,
+  readManagedMemoryLlmConfig,
   readManagedWritebackLlmConfig,
   writeManagedEmbeddingConfig,
+  writeManagedMemoryLlmConfig,
   writeManagedWritebackLlmConfig,
 } from "./managed-config.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
@@ -46,16 +51,19 @@ const STAGE_DIR_NAME = "stack-stage";
 const LOOPBACK_BIND_HOST = "127.0.0.1";
 const WILDCARD_BIND_HOST = "0.0.0.0";
 const POSTGRES_PORT_SCAN_LIMIT = 20;
+const UI_DEV_SERVICE_NAME = "visualization-dev";
 
-async function runForeground(command: string, args: string[]) {
+async function runForeground(command: string, args: string[], cwd?: string) {
   await new Promise<void>((resolve, reject) => {
     const child =
       process.platform === "win32"
         ? spawn("cmd", ["/c", command, ...args], {
+            cwd,
             stdio: "inherit",
             env: process.env,
           })
         : spawn(command, args, {
+            cwd,
             stdio: "inherit",
             env: process.env,
           });
@@ -95,6 +103,65 @@ async function runForegroundQuiet(command: string, args: string[]) {
   });
 }
 
+function npmCommand() {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+function getManagedVisualizationDevRecord(services: ManagedServiceRecord[]) {
+  return services.find((service) => service.name === UI_DEV_SERVICE_NAME) ?? null;
+}
+
+async function writeManagedVisualizationDevRecord(record: ManagedServiceRecord | null) {
+  const state = await readManagedState();
+  const services = state.services.filter((service) => service.name !== UI_DEV_SERVICE_NAME);
+  if (record) {
+    services.push(record);
+  }
+
+  await writeManagedState({
+    ...state,
+    services,
+  });
+}
+
+async function terminateManagedProcess(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    await new Promise<void>((resolve) => {
+      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+        env: process.env,
+      });
+
+      child.on("exit", () => resolve());
+      child.on("error", () => resolve());
+    });
+    return;
+  }
+
+  try {
+    process.kill(pid, "SIGINT");
+  } catch {
+    return;
+  }
+}
+
+async function stopManagedVisualizationDevServer() {
+  const state = await readManagedState();
+  const record = getManagedVisualizationDevRecord(state.services);
+  if (!record) {
+    return false;
+  }
+
+  await terminateManagedProcess(record.pid);
+  await writeManagedVisualizationDevRecord(null);
+  return true;
+}
+
 async function waitForHealthy(url: string, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs;
 
@@ -107,6 +174,21 @@ async function waitForHealthy(url: string, timeoutMs: number) {
   }
 
   throw new Error(`服务未在预期时间内就绪: ${url}`);
+}
+
+async function waitForTcpListening(host: string, port: number, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const available = await isTcpPortAvailable(host, port);
+    if (!available) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`端口未在预期时间内开始监听: ${host}:${port}`);
 }
 
 async function ensureDockerInstalled() {
@@ -282,12 +364,229 @@ async function buildStackImage(stageDir: string) {
   await runForeground("docker", ["build", "-t", DEFAULT_MANAGED_STACK_IMAGE, stageDir]);
 }
 
+async function copyVisualizationVendorBundle(packageRoot: string) {
+  const repoRoot = path.resolve(packageRoot, "..", "..");
+  const visualizationDir = path.join(repoRoot, "services", "visualization");
+  const standaloneSource = path.join(visualizationDir, ".next", "standalone");
+  const staticSource = path.join(visualizationDir, ".next", "static");
+  const publicSource = path.join(visualizationDir, "public");
+  const visualizationVendorDir = vendorPath(packageRoot, "visualization");
+  const targetDir = path.join(visualizationVendorDir, "standalone");
+
+  await rm(visualizationVendorDir, { recursive: true, force: true });
+  await mkdir(targetDir, { recursive: true });
+  await cp(standaloneSource, targetDir, { recursive: true });
+  await cp(staticSource, path.join(targetDir, ".next", "static"), { recursive: true });
+  if (await pathExists(publicSource)) {
+    await cp(publicSource, path.join(targetDir, "public"), { recursive: true });
+  }
+}
+
+async function refreshVisualizationVendor(
+  packageRoot: string,
+  buildState: Awaited<ReturnType<typeof loadBuildStateHelpers>>,
+) {
+  const vendorPlan = await buildState.planVendorBuild(packageRoot);
+  const visualizationChanged = vendorPlan.changedEntries.includes("visualization");
+  const visualizationNeedsBuild = vendorPlan.buildServices.includes("visualization");
+
+  if (!visualizationChanged) {
+    return {
+      refreshed: false,
+    };
+  }
+
+  process.stdout.write("检测到 visualization 变更，正在刷新前端产物...\n");
+  if (visualizationNeedsBuild) {
+    const repoRoot = path.resolve(packageRoot, "..", "..");
+    const visualizationDir = path.join(repoRoot, "services", "visualization");
+    await rm(path.join(visualizationDir, ".next"), { recursive: true, force: true }).catch(() => undefined);
+    await runForeground("npm", ["run", "build"], visualizationDir);
+  }
+  await copyVisualizationVendorBundle(packageRoot);
+  await buildState.writeBuildState({
+    ...vendorPlan.currentState,
+    vendor: {
+      entries: {
+        ...vendorPlan.currentState.vendor.entries,
+        visualization: vendorPlan.nextState.vendor.entries.visualization,
+      },
+      builds: {
+        ...vendorPlan.currentState.vendor.builds,
+        visualization: vendorPlan.nextState.vendor.builds.visualization,
+      },
+    },
+  });
+
+  return {
+    refreshed: true,
+    visualizationNeedsBuild,
+  };
+}
+
+async function copyMemoryNativeAgentVendorBundle(packageRoot: string) {
+  const repoRoot = path.resolve(packageRoot, "..", "..");
+  const sourceDir = path.join(repoRoot, "services", "memory-native-agent");
+  const targetDir = vendorPath(packageRoot, "memory-native-agent");
+
+  await rm(targetDir, { recursive: true, force: true });
+  await mkdir(targetDir, { recursive: true });
+  await cp(path.join(sourceDir, "bin"), path.join(targetDir, "bin"), { recursive: true });
+  await cp(path.join(sourceDir, "dist"), path.join(targetDir, "dist"), { recursive: true });
+  await cp(path.join(sourceDir, "node_modules"), path.join(targetDir, "node_modules"), { recursive: true });
+  await cp(path.join(sourceDir, "package.json"), path.join(targetDir, "package.json"));
+  if (await pathExists(path.join(sourceDir, "README.md"))) {
+    await cp(path.join(sourceDir, "README.md"), path.join(targetDir, "README.md"));
+  }
+}
+
+async function refreshMemoryNativeAgentVendor(
+  packageRoot: string,
+  buildState: Awaited<ReturnType<typeof loadBuildStateHelpers>>,
+) {
+  const vendorPlan = await buildState.planVendorBuild(packageRoot);
+  const changed = vendorPlan.changedEntries.includes("memory-native-agent");
+  const needsBuild = vendorPlan.buildServices.includes("memory-native-agent");
+
+  if (!changed) {
+    return {
+      refreshed: false,
+    };
+  }
+
+  process.stdout.write("检测到 memory-native-agent 变更，正在刷新 MNA 产物...\n");
+  if (needsBuild) {
+    const repoRoot = path.resolve(packageRoot, "..", "..");
+    const serviceDir = path.join(repoRoot, "services", "memory-native-agent");
+    await runForeground("npm", ["run", "build"], serviceDir);
+  }
+  await copyMemoryNativeAgentVendorBundle(packageRoot);
+  await buildState.writeBuildState({
+    ...vendorPlan.currentState,
+    vendor: {
+      entries: {
+        ...vendorPlan.currentState.vendor.entries,
+        "memory-native-agent": vendorPlan.nextState.vendor.entries["memory-native-agent"],
+      },
+      builds: {
+        ...vendorPlan.currentState.vendor.builds,
+        "memory-native-agent": vendorPlan.nextState.vendor.builds["memory-native-agent"],
+      },
+    },
+  });
+
+  return {
+    refreshed: true,
+    needsBuild,
+  };
+}
+
+async function startManagedVisualizationDevServer(options: {
+  packageRoot: string;
+  bindHost: string;
+  publicHost: string;
+  runtimeUrl: string;
+  storageUrl: string;
+  mnaUrl: string;
+  mnaTokenPath: string;
+}) {
+  const repoRoot = path.resolve(options.packageRoot, "..", "..");
+  const visualizationDir = path.join(repoRoot, "services", "visualization");
+  const packageJsonPath = path.join(visualizationDir, "package.json");
+  if (!(await pathExists(packageJsonPath))) {
+    throw new Error("--ui-dev 仅支持在 Continuum 仓库源码目录中使用。");
+  }
+
+  await stopManagedVisualizationDevServer().catch(() => undefined);
+  await mkdir(continuumLogsDir(), { recursive: true });
+
+  const logPath = path.join(continuumLogsDir(), "visualization-dev.log");
+  const port = "3003";
+  const uiUrl = `http://${options.publicHost}:${port}`;
+  const childEnv = {
+    ...process.env,
+    NODE_ENV: "development",
+    STORAGE_API_BASE_URL: options.storageUrl,
+    RUNTIME_API_BASE_URL: options.runtimeUrl,
+    NEXT_PUBLIC_MNA_BASE_URL: options.mnaUrl,
+    MNA_INTERNAL_BASE_URL: options.mnaUrl,
+    MNA_TOKEN_PATH: options.mnaTokenPath,
+  };
+  const child =
+    process.platform === "win32"
+      ? spawn(
+          "cmd.exe",
+          [
+            "/d",
+            "/s",
+            "/c",
+            npmCommand(),
+            "run",
+            "dev",
+            "--",
+            "--hostname",
+            options.bindHost,
+            "--port",
+            port,
+          ],
+          {
+            cwd: visualizationDir,
+            detached: true,
+            windowsHide: true,
+            stdio: "ignore",
+            env: childEnv,
+          },
+        )
+      : spawn(
+          npmCommand(),
+          ["run", "dev", "--", "--hostname", options.bindHost, "--port", port],
+          {
+            cwd: visualizationDir,
+            detached: true,
+            windowsHide: true,
+            stdio: "ignore",
+            env: childEnv,
+          },
+        );
+  child.unref();
+
+  const exitPromise = new Promise<number | null>((resolve) => {
+    child.once("exit", (code) => resolve(code));
+    child.once("error", () => resolve(1));
+  });
+
+  try {
+    await Promise.race([
+      waitForTcpListening(options.publicHost, Number(port), 30_000),
+      exitPromise.then((code) => {
+        throw new Error(`visualization dev 启动失败，退出码 ${code ?? 1}`);
+      }),
+    ]);
+  } catch (error) {
+    await writeManagedVisualizationDevRecord(null).catch(() => undefined);
+    throw error;
+  }
+
+  await writeManagedVisualizationDevRecord({
+    name: UI_DEV_SERVICE_NAME,
+    pid: child.pid ?? 0,
+    logPath,
+    url: uiUrl,
+  });
+
+  return {
+    url: uiUrl,
+    logPath,
+  };
+}
+
 async function startStackContainer(
   port: number,
   bindHost: string,
   publicHost: string,
   embeddingConfigPath: string,
-  writebackLlmConfigPath: string,
+  memoryLlmConfigPath: string,
+  publishVisualizationPort: boolean,
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const managedDir = continuumManagedDir();
@@ -307,8 +606,6 @@ async function startStackContainer(
     `${bindHost}:3001:3001`,
     "-p",
     `${bindHost}:3002:3002`,
-    "-p",
-    `${bindHost}:3003:3003`,
     "-v",
     `${managedDir}:/opt/continuum/managed`,
     "-e",
@@ -350,8 +647,12 @@ async function startStackContainer(
     "-e",
     `CONTINUUM_EMBEDDING_CONFIG_PATH=${embeddingConfigPath}`,
     "-e",
-    `CONTINUUM_WRITEBACK_LLM_CONFIG_PATH=${writebackLlmConfigPath}`,
+    `CONTINUUM_MEMORY_LLM_CONFIG_PATH=${memoryLlmConfigPath}`,
   ];
+
+  if (publishVisualizationPort) {
+    dockerArgs.push("-p", `${bindHost}:3003:3003`);
+  }
 
   dockerArgs.push(DEFAULT_MANAGED_STACK_IMAGE);
 
@@ -367,13 +668,17 @@ export async function runStartCommand(
   const bindHost = normalizeBindHost(options["bind-host"]);
   const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const accessibleHost = resolveAccessibleHost(bindHost);
+  const uiDev = options["ui-dev"] === true || options["ui-dev"] === "true";
   const open = options.open === true || options.open === "true";
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
+  const stackMemoryLlmConfigPath = "/opt/continuum/managed/memory-llm-config.json";
+  const localMemoryLlmConfigPath = continuumManagedMemoryLlmConfigPath();
   const writebackLlmConfigPath = "/opt/continuum/managed/writeback-llm-config.json";
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
+  const existingMemoryLlmConfig = await readManagedMemoryLlmConfig();
   const existingWritebackLlmConfig = await readManagedWritebackLlmConfig();
   const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options);
   const mergedEmbeddingConfig = {
@@ -383,16 +688,25 @@ export async function runStartCommand(
   };
 
   await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
-  await writeManagedWritebackLlmConfig({
-    version: 1,
+  const mergedMemoryLlmConfig = {
+    version: 1 as const,
     ...(existingWritebackLlmConfig ?? {}),
-  });
+    ...(existingMemoryLlmConfig ?? {}),
+  };
+  await writeManagedMemoryLlmConfig(mergedMemoryLlmConfig);
+  await writeManagedWritebackLlmConfig(mergedMemoryLlmConfig);
 
   await mkdir(continuumHomeDir(), { recursive: true });
   await ensureDockerInstalled();
   await ensureDockerDaemonReady();
   await stopLegacyContinuumProcesses();
   await stopLegacyPostgresContainer();
+  if (!uiDev) {
+    await stopManagedVisualizationDevServer().catch(() => undefined);
+  }
+
+  const vendorRefresh = await refreshVisualizationVendor(packageRoot, buildState);
+  const mnaVendorRefresh = await refreshMemoryNativeAgentVendor(packageRoot, buildState);
 
   const stackImagePlan = await buildState.planStackImageBuild(packageRoot);
   if (stackImagePlan.needsBuild) {
@@ -401,6 +715,12 @@ export async function runStartCommand(
     await buildState.writeBuildState(stackImagePlan.nextState);
   } else {
     process.stdout.write(`docker image 已是最新，跳过 build: ${DEFAULT_MANAGED_STACK_IMAGE}\n`);
+    if (vendorRefresh.refreshed) {
+      process.stdout.write("visualization 已刷新，沿用现有 stack image。\n");
+    }
+    if (mnaVendorRefresh.refreshed) {
+      process.stdout.write("memory-native-agent 已刷新，沿用现有 stack image。\n");
+    }
   }
 
   // Remove old container only after successful build
@@ -412,21 +732,37 @@ export async function runStartCommand(
       bindHost,
       accessibleHost,
       embeddingConfigPath,
-      writebackLlmConfigPath,
+      stackMemoryLlmConfigPath,
+      !uiDev,
     );
 
     await waitForHealthy(`${storageUrl}/health`, 120_000);
     await waitForHealthy(`${runtimeUrl}/healthz`, 120_000);
-    await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
     const mna = await startManagedMna(
       {
         ...options,
         "runtime-url": runtimeUrl,
+        "memory-llm-config-path": localMemoryLlmConfigPath,
       },
       importMetaUrl,
     );
+    if (uiDev) {
+      await startManagedVisualizationDevServer({
+        packageRoot,
+        bindHost,
+        publicHost: accessibleHost,
+        runtimeUrl,
+        storageUrl,
+        mnaUrl: mna.url,
+        mnaTokenPath: mna.tokenPath,
+      });
+    } else {
+      await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
+    }
 
+    const latestManagedState = await readManagedState();
     await writeManagedState({
+      ...latestManagedState,
       version: 1,
       postgres: {
         containerName: DEFAULT_MANAGED_STACK_CONTAINER,
@@ -434,7 +770,7 @@ export async function runStartCommand(
         database: DEFAULT_MANAGED_DATABASE_NAME,
         username: DEFAULT_MANAGED_DATABASE_USER,
       },
-      services: (await readManagedState()).services,
+      services: latestManagedState.services,
     });
 
     process.stdout.write("Continuum 已启动。\n");
@@ -443,7 +779,7 @@ export async function runStartCommand(
     process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
     process.stdout.write(`storage: ${storageUrl}\n`);
     process.stdout.write(`runtime: ${runtimeUrl}\n`);
-    process.stdout.write(`visualization: ${uiUrl}\n`);
+    process.stdout.write(`visualization: ${uiUrl}${uiDev ? " (dev)" : ""}\n`);
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
     if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
       process.stdout.write(

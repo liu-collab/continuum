@@ -274,6 +274,10 @@ export async function startManagedMna(
   const port = parseMnaPort(options);
   const homeDir = parseMnaHome(options);
   const runtimeUrl = typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
+  const memoryLlmConfigPath =
+    typeof options["memory-llm-config-path"] === "string"
+      ? options["memory-llm-config-path"]
+      : undefined;
   const hasProviderOverrides = hasManagedMnaProviderOptionOverrides(options);
   const persistedProviderConfig = await readManagedMnaProviderConfig(homeDir);
   const uiManagedProviderConfig = isUiManagedProviderConfig(persistedProviderConfig)
@@ -308,6 +312,7 @@ export async function startManagedMna(
       MNA_HOME: homeDir,
       MNA_WORKSPACE_CWD: process.cwd(),
       RUNTIME_BASE_URL: runtimeUrl,
+      ...(memoryLlmConfigPath ? { CONTINUUM_MEMORY_LLM_CONFIG_PATH: memoryLlmConfigPath } : {}),
       MNA_PROVIDER_KIND: providerConfig.kind,
       MNA_PROVIDER_MODEL: providerConfig.model,
       ...(providerConfig.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),
