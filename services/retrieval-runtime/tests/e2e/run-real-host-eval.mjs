@@ -69,8 +69,9 @@ async function runClaudeEval() {
   const prompt = [
     "你必须通过真实本地命令运行 memory orchestrator 真实模型评测。",
     "不要模拟结果，不要手写指标。",
-    "只执行下面这个命令，等待它完成，然后原样输出命令 stdout 中的 JSON：",
-    `node "${workerPath}" --host claude_code --output-dir "${outputDir}" --concurrency 2`,
+    "必须使用 Bash 工具执行下面这个命令，Bash timeout 设置为 1200000 毫秒。",
+    "等待命令完成，然后原样输出命令 stdout 中的 JSON：",
+    `node "${workerPath}" --host claude_code --output-dir "${outputDir}" --timeout-ms 45000 --concurrency 2`,
   ].join("\n");
 
   const result = await runProcess(
@@ -79,11 +80,12 @@ async function runClaudeEval() {
       "-p",
       prompt,
       "--output-format",
-      "text",
+      "stream-json",
+      "--verbose",
       "--permission-mode",
       "bypassPermissions",
       "--allowedTools",
-      "Bash(node *)",
+      "Bash",
     ],
     {
       env: {
@@ -97,7 +99,26 @@ async function runClaudeEval() {
   if (result.exitCode !== 0) {
     throw new Error(`Claude Code eval failed: ${result.stderr || result.stdout}`);
   }
-  const payload = extractJsonObject(result.stdout);
+  const events = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const usedBash = events.some((event) =>
+    event?.message?.content?.some?.((item) => item?.type === "tool_use" && item?.name === "Bash"),
+  );
+  if (!usedBash) {
+    throw new Error("Claude Code did not execute the eval through the Bash tool");
+  }
+  const resultEvent = events.find((event) => event?.type === "result");
+  const payload = extractJsonObject(resultEvent?.result ?? result.stdout);
   return {
     host: "claude_code",
     version,
@@ -113,7 +134,7 @@ async function runCodexEval() {
     "You must run a real local command for the memory orchestrator model eval.",
     "Do not simulate results. Do not write metrics by hand.",
     "Run exactly this command and return the JSON printed by stdout:",
-    `node "${workerPath}" --host codex --output-dir "${outputDir}" --concurrency 2`,
+    `node "${workerPath}" --host codex --output-dir "${outputDir}" --timeout-ms 45000 --concurrency 2`,
   ].join("\n");
 
   const result = await runProcess(
