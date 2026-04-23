@@ -27,7 +27,9 @@
     "migrate": "tsx src/db/migrate.ts",
     "start": "node dist/src/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:memory-orchestrator-eval": "vitest run -c vitest.memory-orchestrator-real-eval.config.ts",
+    "eval:memory-orchestrator-real": "tsx src/cli/memory-orchestrator-real-eval.ts"
   },
   "dependencies": {
     "fastify": "^5.2.1",
