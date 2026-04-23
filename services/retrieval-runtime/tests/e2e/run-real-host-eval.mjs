@@ -6,7 +6,8 @@ import path from "node:path";
 import process from "node:process";
 
 const outputDir = path.resolve("docs", "host-real-eval");
-const workerPath = path.resolve("tests", "e2e", "host-real-eval-worker.mjs");
+const clientOutputDir = "docs/host-real-eval";
+const clientWorkerPath = "tests/e2e/host-real-eval-worker.mjs";
 
 function commandFor(name) {
   return process.platform === "win32" ? `${name}.cmd` : name;
@@ -66,12 +67,13 @@ function extractJsonObject(text) {
 
 async function runClaudeEval() {
   const version = await checkCli("claude");
+  const command = `node ${clientWorkerPath} --host claude_code --output-dir ${clientOutputDir} --timeout-ms 45000 --concurrency 2`;
   const prompt = [
     "你必须通过真实本地命令运行 memory orchestrator 真实模型评测。",
     "不要模拟结果，不要手写指标。",
     "必须使用 Bash 工具执行下面这个命令，Bash timeout 设置为 1200000 毫秒。",
     "等待命令完成，然后原样输出命令 stdout 中的 JSON：",
-    `node "${workerPath}" --host claude_code --output-dir "${outputDir}" --timeout-ms 45000 --concurrency 2`,
+    command,
   ].join("\n");
 
   const result = await runProcess(
@@ -84,7 +86,7 @@ async function runClaudeEval() {
       "--verbose",
       "--permission-mode",
       "bypassPermissions",
-      "--allowedTools",
+      "--tools",
       "Bash",
     ],
     {
@@ -130,11 +132,12 @@ async function runClaudeEval() {
 
 async function runCodexEval() {
   const version = await checkCli("codex");
+  const command = `node ${clientWorkerPath} --host codex --output-dir ${clientOutputDir} --timeout-ms 45000 --concurrency 2`;
   const prompt = [
     "You must run a real local command for the memory orchestrator model eval.",
     "Do not simulate results. Do not write metrics by hand.",
     "Run exactly this command and return the JSON printed by stdout:",
-    `node "${workerPath}" --host codex --output-dir "${outputDir}" --timeout-ms 45000 --concurrency 2`,
+    command,
   ].join("\n");
 
   const result = await runProcess(
