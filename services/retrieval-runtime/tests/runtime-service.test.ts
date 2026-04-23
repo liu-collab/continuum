@@ -1307,6 +1307,58 @@ describe("retrieval-runtime service", () => {
     expect(runs.recall_runs[0]?.replay_escape_reason).toBe("history_reference_escape");
   });
 
+  it("supports broader history reference phrases for trigger and replay escape", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要恢复之前讨论过的上下文",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "restore earlier discussion",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入之前讨论过的任务上下文",
+      selected_record_ids: ["mem-task"],
+      memory_summary: "恢复之前讨论过的任务上下文。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 99,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-history-expanded-1",
+      phase: "before_response",
+      current_input: "继续当前任务。",
+    });
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-history-expanded-2",
+      phase: "before_response",
+      current_input: "Earlier 我们讨论过这个任务做到哪一步了？",
+    });
+
+    expect(second.trigger).toBe(true);
+    expect(second.injection_block).not.toBeNull();
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.trigger_runs[0]?.trigger_type).toBe("history_reference");
+    expect(runs.recall_runs[0]?.replay_escape_reason).toBe("history_reference_escape");
+  });
+
   it("allows task switch to break recent injection dedup on the following before_response", async () => {
     const planner = new StubLlmRecallPlanner({
       should_search: true,

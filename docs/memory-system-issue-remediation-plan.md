@@ -44,7 +44,7 @@
 | 9 | `session` 级 `episodic` 缺少生命周期管理 | 未提交 | 无 | 第 12 批 | 待补 | 待补 |
 | 10 | 注入预算贪心导致类型饥饿 | 未提交 | 无 | 第 4 批 | 待补 | 待补 |
 | 11 | `episodic` 半衰期比 `task_state` 长 | 已完成 | 无 | 第 2 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): rebalance memory recency decay` |
-| 12 | 历史引用关键词太窄 | 未提交 | 无 | 第 3 批 | 待补 | 待补 |
+| 12 | 历史引用关键词太窄 | 已完成 | 无 | 第 3 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): widen history reference matching` |
 | 13 | 维护 worker 轮询导致冲突处理延迟不可控 | 未提交 | 8 | 第 13 批 | 待补 | 待补 |
 | 14 | 治理 `verifier` 阻塞缺少升级和告警 | 未提交 | 8 | 第 14 批 | 待补 | 待补 |
 | 15 | 记忆溯源信息不足 | 未提交 | 4 | 第 15 批 | 待补 | 待补 |

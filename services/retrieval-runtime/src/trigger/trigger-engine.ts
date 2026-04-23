@@ -6,9 +6,8 @@ import type { ReadModelRepository } from "../query/read-model-repository.js";
 import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/messages.js";
 import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
 import type { Logger } from "pino";
-import { normalizeText } from "../shared/utils.js";
+import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
 
-const HISTORY_PATTERNS = ["上次", "之前", "你还记得", "我一般", "偏好", "上回", "last time", "previously"];
 const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
 const SEMANTIC_TRIGGER_MEDIAN_DELTA = 0.15;
 
@@ -74,7 +73,7 @@ function scopePlanByPhase(
 
 function shouldSkipForShortInput(text: string): boolean {
   const normalized = normalizeText(text);
-  return normalized.length < 8 && !HISTORY_PATTERNS.some((pattern) => normalized.toLowerCase().includes(pattern.toLowerCase()));
+  return normalized.length < 8 && !matchesHistoryReference(normalized);
 }
 
 export class TriggerEngine {
@@ -195,7 +194,7 @@ export class TriggerEngine {
       };
     }
 
-    if (HISTORY_PATTERNS.some((pattern) => normalizedInput.includes(pattern.toLowerCase()))) {
+    if (matchesHistoryReference(normalizedInput)) {
       return withIntent({
         hit: true,
         trigger_type: "history_reference",

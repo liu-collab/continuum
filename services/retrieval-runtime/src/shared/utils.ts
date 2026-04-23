@@ -133,3 +133,29 @@ export function jaccardOverlap(left: string, right: string): number {
   const union = new Set([...leftTokens, ...rightTokens]).size;
   return union === 0 ? 0 : intersection / union;
 }
+
+const HISTORY_REFERENCE_PATTERNS = [
+  "上次",
+  "上回",
+  "之前",
+  "前几天",
+  "上周",
+  "你还记得",
+  "还记得吗",
+  "我们讨论过",
+  "之前提过",
+  "沿用之前",
+  "偏好",
+  "我一般",
+  "last time",
+  "previously",
+  "earlier",
+  "we discussed",
+  "as before",
+  "remember when",
+];
+
+export function matchesHistoryReference(text: string): boolean {
+  const normalized = normalizeText(text).toLowerCase();
+  return HISTORY_REFERENCE_PATTERNS.some((pattern) => normalized.includes(pattern.toLowerCase()));
+}

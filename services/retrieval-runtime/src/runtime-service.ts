@@ -12,6 +12,7 @@ import type {
 } from "./memory-orchestrator/index.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import { nowIso } from "./shared/utils.js";
+import { matchesHistoryReference } from "./shared/utils.js";
 import type {
   CandidateMemory,
   DependencyStatus,
@@ -1688,8 +1689,7 @@ export class RetrievalRuntimeService {
     if (context.phase === "task_switch") {
       return "task_switch_escape";
     }
-    const normalized = context.current_input.toLowerCase();
-    if (["上次", "之前", "你还记得", "偏好", "last time", "previously"].some((token) => normalized.includes(token.toLowerCase()))) {
+    if (matchesHistoryReference(context.current_input)) {
       return "history_reference_escape";
     }
     return undefined;
