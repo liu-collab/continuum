@@ -23,6 +23,7 @@ interface MemoryReadModelRow {
   updated_at: Date | string;
   last_confirmed_at: Date | string | null;
   summary_embedding: string | number[] | null;
+  embedding_status: "ok" | "pending" | "failed" | null;
 }
 
 function parseEmbedding(value: unknown): number[] | undefined {
@@ -75,7 +76,8 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         status,
         updated_at,
         last_confirmed_at,
-        summary_embedding
+        summary_embedding,
+        embedding_status
       FROM ${tableName}
       WHERE status = ANY($1::text[])
         AND scope = ANY($2::text[])
@@ -144,6 +146,7 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         updated_at: new Date(row.updated_at).toISOString(),
         last_confirmed_at: row.last_confirmed_at ? new Date(row.last_confirmed_at).toISOString() : null,
         summary_embedding: parseEmbedding(row.summary_embedding),
+        embedding_status: row.embedding_status ?? undefined,
       }));
     } catch (error) {
       try {

@@ -1499,6 +1499,65 @@ describe("retrieval-runtime service", () => {
     expect(response.dependency_status.embeddings.status).not.toBe("healthy");
   });
 
+  it("uses lexical fallback scoring when embedding is pending on a relevant record", async () => {
+    const { service } = createRuntime({
+      records: [
+        {
+          id: "pending-embedding-pref",
+          workspace_id: ids.workspace,
+          user_id: ids.user,
+          session_id: ids.session,
+          task_id: ids.task,
+          memory_type: "task_state",
+          scope: "task",
+          summary: "当前任务状态：继续补回归测试并检查迁移进度。",
+          details: null,
+          source: { turn_id: "pending-1" },
+          importance: 4,
+          confidence: 0.85,
+          status: "active",
+          updated_at: "2026-04-20T12:00:00.000Z",
+          last_confirmed_at: null,
+          summary_embedding: undefined,
+          embedding_status: "pending",
+        },
+        {
+          id: "unrelated-with-embedding",
+          workspace_id: ids.workspace,
+          user_id: ids.user,
+          session_id: ids.session,
+          task_id: ids.task,
+          memory_type: "task_state",
+          scope: "task",
+          summary: "当前任务状态：整理发布说明。",
+          details: null,
+          source: { turn_id: "ok-1" },
+          importance: 4,
+          confidence: 0.85,
+          status: "active",
+          updated_at: "2026-04-20T12:00:00.000Z",
+          last_confirmed_at: null,
+          summary_embedding: [0, 1, 0],
+          embedding_status: "ok",
+        },
+      ],
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-lexical-fallback",
+      phase: "task_start",
+      current_input: "开始当前任务，继续补回归测试。",
+    });
+
+    expect(response.memory_packet?.records[0]?.id).toBe("pending-embedding-pref");
+    expect(response.memory_packet?.records[0]?.fallback_semantic_score).toBeGreaterThan(0);
+  });
+
   it("actively checks embeddings health and records a healthy status", async () => {
     const { service } = createRuntime();
 

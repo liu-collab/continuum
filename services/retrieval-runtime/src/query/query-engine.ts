@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { CandidateMemory, PhaseScoringWeights, RetrievalQuery, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
-import { clamp, cosineSimilarity, normalizeText, truncateFromTail } from "../shared/utils.js";
+import { clamp, cosineSimilarity, normalizeText, tokenizeForOverlap, truncateFromTail } from "../shared/utils.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
 
@@ -41,6 +41,24 @@ function scopeBoost(scope: ScopeType, context: TriggerContext): number {
     return 0.8;
   }
   return 0.6;
+}
+
+function fallbackSemanticScore(queryText: string, candidateSummary: string): number {
+  const queryTokens = new Set(tokenizeForOverlap(queryText));
+  const candidateTokens = new Set(tokenizeForOverlap(candidateSummary));
+
+  if (queryTokens.size === 0 || candidateTokens.size === 0) {
+    return 0;
+  }
+
+  let overlap = 0;
+  for (const token of queryTokens) {
+    if (candidateTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+
+  return clamp(overlap / queryTokens.size, 0, 1);
 }
 
 function weightsByPhase(phase: TriggerContext["phase"]): PhaseScoringWeights {
@@ -144,10 +162,15 @@ export class QueryEngine {
 
     const ranked = baseCandidates
       .map((candidate) => {
-        const semanticScore =
+        const vectorSemanticScore =
           queryEmbedding && candidate.summary_embedding
             ? clamp(cosineSimilarity(queryEmbedding, candidate.summary_embedding), 0, 1)
             : 0;
+        const lexicalFallbackScore =
+          !candidate.summary_embedding || candidate.embedding_status === "pending" || candidate.embedding_status === "failed"
+            ? fallbackSemanticScore(query.semantic_query_text, candidate.summary)
+            : 0;
+        const semanticScore = vectorSemanticScore > 0 ? vectorSemanticScore : lexicalFallbackScore;
         const weights = weightsByPhase(context.phase);
         const score =
           semanticScore * weights.semantic +
@@ -159,6 +182,7 @@ export class QueryEngine {
         return {
           ...candidate,
           semantic_score: semanticScore,
+          fallback_semantic_score: lexicalFallbackScore > 0 ? lexicalFallbackScore : undefined,
           rerank_score: score,
         };
       })

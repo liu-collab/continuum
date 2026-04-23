@@ -69,7 +69,9 @@ export interface CandidateMemory {
   updated_at: string;
   last_confirmed_at?: string | null;
   summary_embedding?: number[];
+  embedding_status?: "ok" | "pending" | "failed";
   semantic_score?: number;
+  fallback_semantic_score?: number;
   rerank_score?: number;
   recent_injection_hint?: {
     recently_injected: boolean;
