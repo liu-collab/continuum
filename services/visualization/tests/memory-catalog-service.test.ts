@@ -37,7 +37,12 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
     summary: "User prefers concise answers",
     details: {
       subject: "user",
-      predicate: "prefers concise answers"
+      predicate: "prefers concise answers",
+      origin_trace: {
+        source_turn_id: "turn-1",
+        source_excerpt: "Please keep answers concise by default.",
+        extraction_basis: "user stated a stable preference explicitly",
+      }
     },
     importance: 4,
     confidence: 0.9,
@@ -186,6 +191,9 @@ describe("memory catalog service", () => {
     expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
+    expect(detail?.sourceTurnId).toBe("turn-1");
+    expect(detail?.sourceExcerpt).toContain("concise");
+    expect(detail?.extractionBasis).toContain("stable preference");
     expect(detail?.governanceHistory).toHaveLength(1);
     expect(detail?.governanceSummary).toContain("自动治理");
   });

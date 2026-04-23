@@ -358,12 +358,19 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
   const governanceHistory = governanceResult.items.filter((item: (typeof governanceResult.items)[number]) =>
     item.targetSummary.includes(id),
   );
+  const originTrace =
+    record.details && typeof record.details === "object" && record.details !== null && "origin_trace" in record.details
+      ? (record.details.origin_trace as Record<string, unknown>)
+      : null;
 
   return {
     ...base,
     details: record.details,
     detailsFormatted: JSON.stringify(record.details ?? {}, null, 2),
     sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : "未知",
+    sourceExcerpt: typeof originTrace?.source_excerpt === "string" ? originTrace.source_excerpt : null,
+    extractionBasis: typeof originTrace?.extraction_basis === "string" ? originTrace.extraction_basis : null,
+    sourceTurnId: typeof originTrace?.source_turn_id === "string" ? originTrace.source_turn_id : null,
     createdAt: record.created_at,
     governanceHistory,
     governanceSummary:

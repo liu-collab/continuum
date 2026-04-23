@@ -91,6 +91,9 @@ export const MemoryCatalogDetailSchema = MemoryCatalogItemSchema.extend({
   details: z.record(z.string(), z.unknown()).nullable(),
   detailsFormatted: z.string(),
   sourceFormatted: z.string(),
+  sourceExcerpt: z.string().nullable().default(null),
+  extractionBasis: z.string().nullable().default(null),
+  sourceTurnId: z.string().nullable().default(null),
   createdAt: z.string().nullable(),
   governanceHistory: z.array(z.object({
     executionId: z.string(),
@@ -112,6 +115,8 @@ export const MemoryCatalogDetailSchema = MemoryCatalogItemSchema.extend({
     verifierDecision: z.string().nullable(),
     verifierConfidence: z.number().nullable(),
     verifierNotes: z.string().nullable(),
+    verificationBlocked: z.boolean().default(false),
+    verificationBlockedReason: z.string().nullable().default(null),
     targetSummary: z.string(),
   })),
   governanceSummary: z.string()

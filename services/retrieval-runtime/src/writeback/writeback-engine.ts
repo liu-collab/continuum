@@ -97,6 +97,17 @@ function summarizeObservationText(value: string, maxLength = 220) {
   return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
+function buildSourceExcerpt(text: string | undefined, maxLength = 160) {
+  const normalized = normalizeText(text ?? "");
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
 function extractPreferenceDetails(text: string): Record<string, unknown> {
   const normalized = normalizeText(text);
   const canonical = inferPreferenceCanonical(normalized);
@@ -307,6 +318,33 @@ function uniqueCandidates(candidates: WriteBackCandidate[]): WriteBackCandidate[
   });
 }
 
+function withOriginTrace(
+  draft: CandidateDraft,
+  input: FinalizeTurnInput,
+  evidenceText: string | undefined,
+): CandidateDraft {
+  const source_excerpt = buildSourceExcerpt(evidenceText);
+  return {
+    ...draft,
+    details: {
+      ...draft.details,
+      origin_trace: {
+        source_turn_id: input.turn_id ?? input.session_id,
+        source_message_role:
+          draft.source_type === "host_user_input"
+            ? "user"
+            : draft.source_type === "assistant_final"
+              ? "assistant"
+              : "tool",
+        source_excerpt,
+        extraction_basis: draft.write_reason,
+        extractor_version: MEMORY_WRITEBACK_PROMPT_VERSION,
+        extraction_method: draft.extraction_method,
+      },
+    },
+  };
+}
+
 export class WritebackEngine {
   constructor(
     private readonly config: AppConfig,
@@ -421,7 +459,7 @@ export class WritebackEngine {
     const stablePreferenceSummary = extractStablePreferenceFromUserInput(normalizedUser);
     if (stablePreferenceSummary) {
       preferenceFromUserInput = true;
-      rawCandidates.push({
+      rawCandidates.push(withOriginTrace({
         candidate_type: "fact_preference",
         scope: "user",
         summary: stablePreferenceSummary,
@@ -437,14 +475,14 @@ export class WritebackEngine {
         source_ref: input.turn_id ?? input.session_id,
         confirmed_by_user: true,
         extraction_method: "rules",
-      });
+      }, input, normalizedUser));
     } else if (normalizedUser.length > 0) {
       filteredReasons.push("no_stable_preference_detected");
     }
 
     const confirmedPreferenceSummary = extractConfirmedPreferenceFromAssistantOutput(normalizedAssistant);
     if (confirmedPreferenceSummary && !preferenceFromUserInput) {
-      rawCandidates.push({
+      rawCandidates.push(withOriginTrace({
         candidate_type: "fact_preference",
         scope: "user",
         summary: confirmedPreferenceSummary,
@@ -460,14 +498,14 @@ export class WritebackEngine {
         source_ref: input.turn_id ?? input.session_id,
         confirmed_by_user: true,
         extraction_method: "rules",
-      });
+      }, input, normalizedAssistant));
     } else {
       filteredReasons.push("no_confirmed_fact_detected");
     }
 
     const taskMatch = normalizedAssistant.match(/(?:下一步|todo|plan|任务状态)\s*[:：]?\s*(.+)$/i);
     if (taskMatch?.[1] && input.task_id) {
-      rawCandidates.push({
+      rawCandidates.push(withOriginTrace({
         candidate_type: "task_state",
         scope: "task",
         summary: taskMatch[1],
@@ -478,14 +516,14 @@ export class WritebackEngine {
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
         extraction_method: "rules",
-      });
+      }, input, normalizedAssistant));
     } else if (input.task_id) {
       filteredReasons.push("no_task_state_update_detected");
     }
 
     const hasConcreteCommitment = COMMITMENT_PATTERNS.some((pattern) => pattern.test(normalizedAssistant));
     if (hasConcreteCommitment) {
-      rawCandidates.push({
+      rawCandidates.push(withOriginTrace({
         candidate_type: "episodic",
         scope: input.task_id ? "task" : "session",
         summary: normalizedAssistant.slice(0, 180),
@@ -500,13 +538,13 @@ export class WritebackEngine {
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
         extraction_method: "rules",
-      });
+      }, input, normalizedAssistant));
     } else {
       filteredReasons.push("no_commitment_detected");
     }
 
     if (normalizedTools && normalizedTools.length > 24 && !TRIVIAL_TOOL_PATTERNS.test(normalizedTools)) {
-      rawCandidates.push({
+      rawCandidates.push(withOriginTrace({
         candidate_type: "episodic",
         scope: input.task_id ? "task" : "session",
         summary: normalizedTools.slice(0, 180),
@@ -521,7 +559,7 @@ export class WritebackEngine {
         source_type: "tool_trace_summary",
         source_ref: input.turn_id ?? input.session_id,
         extraction_method: "rules",
-      });
+      }, input, normalizedTools));
     } else if (normalizedTools.length > 0) {
       filteredReasons.push("tool_summary_below_threshold");
     }
@@ -673,7 +711,7 @@ export class WritebackEngine {
     const scope = item.scope ?? anchor.scope;
     const normalizedScope = scope === "task" && !input.task_id ? "workspace" : scope;
     const summary = normalizeText(item.summary ?? anchor.summary);
-    return {
+    return withOriginTrace({
       candidate_type: item.candidate_type ?? anchor.candidate_type,
       scope: normalizedScope,
       summary,
@@ -690,7 +728,7 @@ export class WritebackEngine {
       source_ref: anchor.source_ref,
       confirmed_by_user: anchor.confirmed_by_user,
       extraction_method: "llm",
-    };
+    }, input, item.summary ?? anchor.summary);
   }
 
   private buildDraftFromLlmNew(
@@ -702,7 +740,7 @@ export class WritebackEngine {
     }
     const normalizedSummary = normalizeText(item.summary);
     const scope = item.scope === "task" && !input.task_id ? "workspace" : item.scope;
-    return {
+    return withOriginTrace({
       candidate_type: item.candidate_type,
       scope,
       summary: normalizedSummary,
@@ -721,7 +759,7 @@ export class WritebackEngine {
       source_ref: input.turn_id ?? input.session_id,
       confirmed_by_user: item.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
       extraction_method: "llm",
-    };
+    }, input, item.summary);
   }
 
   private toDraftFromLlm(input: FinalizeTurnInput, candidate: LlmExtractionCandidate): CandidateDraft {
@@ -737,7 +775,7 @@ export class WritebackEngine {
       details.task_id = input.task_id;
     }
 
-    return {
+    return withOriginTrace({
       candidate_type: candidate.candidate_type,
       scope,
       summary: normalizedSummary,
@@ -749,7 +787,7 @@ export class WritebackEngine {
       source_ref: input.turn_id ?? input.session_id,
       confirmed_by_user: candidate.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
       extraction_method: "llm",
-    };
+    }, input, candidate.summary);
   }
 
   private classifyScope(input: FinalizeTurnInput, draft: CandidateDraft): ClassifiedDraft {

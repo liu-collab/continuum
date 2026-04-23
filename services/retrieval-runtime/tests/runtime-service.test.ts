@@ -2264,6 +2264,31 @@ describe("retrieval-runtime service", () => {
     });
   });
 
+  it("attaches lightweight origin trace to extracted writeback candidates", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-origin-trace",
+      current_input: "以后默认用中文输出",
+      assistant_output: "收到，后续默认中文输出。",
+    });
+
+    const factPreference = response.write_back_candidates.find(
+      (candidate) => candidate.candidate_type === "fact_preference",
+    );
+
+    expect(factPreference?.details.origin_trace).toMatchObject({
+      source_turn_id: "turn-origin-trace",
+      source_message_role: "user",
+      extraction_basis: "user stated a stable preference explicitly",
+      extraction_method: "rules",
+    });
+  });
+
   it("applies writeback max candidates to llm extraction output", async () => {
     const { service } = createRuntime({
       config: { WRITEBACK_MAX_CANDIDATES: 2 },

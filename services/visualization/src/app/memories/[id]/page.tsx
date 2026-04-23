@@ -95,7 +95,14 @@ export default async function MemoryDetailPage({
                 <Row label="类型" value={detail.sourceType ?? "—"} />
                 <Row label="引用" value={detail.sourceRef ?? "—"} />
                 <Row label="服务" value={detail.sourceServiceName ?? "—"} />
+                <Row label="来源轮次" value={detail.sourceTurnId ?? "—"} />
+                <Row label="提取依据" value={detail.extractionBasis ?? "—"} />
               </dl>
+              {detail.sourceExcerpt ? (
+                <div className="mt-3 rounded-md border bg-surface-muted/40 p-3 text-sm leading-6 text-muted-foreground">
+                  {detail.sourceExcerpt}
+                </div>
+              ) : null}
             </div>
           </div>
 

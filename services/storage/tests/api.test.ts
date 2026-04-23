@@ -228,6 +228,59 @@ describe("storage api", () => {
     expect(response.json().submitted_jobs[0].status).toBe("accepted_async");
   });
 
+  it("accepts lightweight origin trace details without treating them as transcript payload", async () => {
+    const service = createStorageService({
+      repositories: createMemoryRepositories(),
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: "redis://localhost:6379",
+      },
+    });
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/storage/write-back-candidates",
+      payload: {
+        candidates: [
+          {
+            ...buildCandidate(),
+            details: {
+              subject: "user",
+              predicate: "prefers concise answers",
+              origin_trace: {
+                source_turn_id: "turn-1",
+                source_message_role: "user",
+                source_excerpt: "Please keep answers concise by default.",
+                extraction_basis: "user stated a stable preference explicitly",
+                extractor_version: "memory-writeback-refine-v1",
+                extraction_method: "rules",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json().submitted_jobs[0].status).toBe("accepted_async");
+  });
+
   it("accepts runtime compatible batch contract and keeps compatibility mapping", async () => {
     const service = createStorageService({
       repositories: createMemoryRepositories(),

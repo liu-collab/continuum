@@ -47,7 +47,7 @@
 | 12 | 历史引用关键词太窄 | 已完成 | 无 | 第 3 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): widen history reference matching` |
 | 13 | 维护 worker 轮询导致冲突处理延迟不可控 | 已完成 | 8 | 第 13 批 | `services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): prioritize urgent maintenance workspaces` |
 | 14 | 治理 `verifier` 阻塞缺少升级和告警 | 已完成 | 8 | 第 14 批 | `services/storage/tests/governance-execution.test.ts`；`services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/visualization/tests/storage-governance-executions-client.test.ts` | `fix(governance): surface blocked verifier executions` |
-| 15 | 记忆溯源信息不足 | 未提交 | 4 | 第 15 批 | 待补 | 待补 |
+| 15 | 记忆溯源信息不足 | 已完成 | 4 | 第 15 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/storage/tests/api.test.ts`；`services/visualization/tests/memory-catalog-service.test.ts` | `fix(memory): add lightweight memory origin trace` |
 
 ## 1.3 修复顺序说明
 
@@ -660,6 +660,29 @@
 
 - 首版先做“最小 excerpt + turn_id + extractor 元信息”
 - 不建议直接存完整原始对话
+
+这次实际落地先做了“轻量溯源”版本，不新增审计表：
+
+- `retrieval-runtime` 在写回候选的 `details.origin_trace` 里写入：
+  - `source_turn_id`
+  - `source_message_role`
+  - `source_excerpt`
+  - `extraction_basis`
+  - `extractor_version`
+  - `extraction_method`
+- `source_excerpt` 做严格截断，只保留最小必要片段，不落整段 transcript
+- `storage` 继续沿用结构化 `details` 校验，这组字段不会触发 transcript 拦截
+- `visualization` 记忆详情页补充显示来源轮次、提取依据和来源摘录
+
+**当前结果**
+
+- 已完成
+- 现在可以在记忆详情里回答“这条记忆大概是从哪一轮、哪段内容提出来的”
+- 单测已补：
+  - `services/retrieval-runtime/tests/runtime-service.test.ts`
+  - `services/storage/tests/api.test.ts`
+  - `services/visualization/tests/memory-catalog-service.test.ts`
+- 提交记录：`fix(memory): add lightweight memory origin trace`
 
 ## 4. 建议优先级
 
