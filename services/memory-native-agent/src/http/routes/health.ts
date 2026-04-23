@@ -1,5 +1,6 @@
 import type { RuntimeFastifyInstance } from "../types.js";
 import { MNA_VERSION } from "../../shared/types.js";
+import { mergeManagedDependencyStatus, readManagedDependencyStatus } from "./dependency-status-cache.js";
 
 export function registerHealthRoutes(app: RuntimeFastifyInstance) {
   app.get("/healthz", async () => {
@@ -43,20 +44,28 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
 
   app.get("/v1/agent/dependency-status", async () => {
     const runtime = await app.runtimeState.memoryClient.dependencyStatus().catch(() => null);
+    const cached = await readManagedDependencyStatus(app);
     const providerKey = `${app.runtimeState.provider.id()}:${app.runtimeState.provider.model()}`;
     const providerStatus = app.runtimeState.provider.status?.() ?? {
       status: "configured" as const,
       detail: undefined,
     };
     return {
-      runtime: runtime ?? {
-        status: "unavailable",
-        base_url: app.runtimeState.config.runtime.baseUrl,
-        memory_llm: {
-          status: "unknown",
-          detail: "runtime dependency status is unavailable",
+      runtime: mergeManagedDependencyStatus(
+        runtime ?? {
+          status: "unavailable",
+          base_url: app.runtimeState.config.runtime.baseUrl,
+          embeddings: {
+            status: "unknown",
+            detail: "runtime dependency status is unavailable",
+          },
+          memory_llm: {
+            status: "unknown",
+            detail: "runtime dependency status is unavailable",
+          },
         },
-      },
+        cached,
+      ),
       provider: {
         id: app.runtimeState.provider.id(),
         model: app.runtimeState.provider.model(),

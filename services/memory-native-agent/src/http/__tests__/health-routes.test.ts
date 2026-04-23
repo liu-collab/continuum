@@ -234,6 +234,10 @@ describe("health routes", () => {
         runtime: {
           status: "unavailable",
           base_url: "http://127.0.0.1:4100",
+          embeddings: {
+            status: "unknown",
+            detail: "runtime dependency status is unavailable",
+          },
           memory_llm: {
             status: "unknown",
             detail: "runtime dependency status is unavailable",
@@ -249,6 +253,87 @@ describe("health routes", () => {
         provider_key: "ollama:qwen2.5-coder"
       });
     } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the checked memory llm status after refreshing dependency status", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    const memoryServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+
+    await memoryServer.post("/v1/chat/completions", async () => ({
+      id: "chatcmpl-test",
+      object: "chat.completion",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "{\"ok\":true}"
+          },
+          finish_reason: "stop"
+        }
+      ]
+    }));
+
+    try {
+      await memoryServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = memoryServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const configResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          memory_llm: {
+            base_url: `http://127.0.0.1:${port}`,
+            model: "gpt-4.1-mini",
+            api_key: "memory-key",
+            protocol: "openai-compatible",
+            timeout_ms: 3000
+          }
+        }
+      });
+
+      expect(configResponse.statusCode).toBe(200);
+
+      const checkResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/memory-llm/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(checkResponse.statusCode).toBe(200);
+
+      const statusResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/dependency-status",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(statusResponse.statusCode).toBe(200);
+      expect(statusResponse.json()).toMatchObject({
+        runtime: {
+          memory_llm: {
+            status: "healthy",
+            detail: "memory llm request completed",
+          }
+        }
+      });
+    } finally {
+      await memoryServer.close();
       await app.close();
       fs.rmSync(home, { recursive: true, force: true });
     }
@@ -554,6 +639,78 @@ describe("health routes", () => {
         last_checked_at: "now",
       });
     } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("checks memory llm with the managed config file instead of runtime cached state", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    const memoryServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+    await memoryServer.post("/v1/chat/completions", async () => {
+      return {
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: "{\"ok\":true}"
+            },
+            finish_reason: "stop"
+          }
+        ]
+      };
+    });
+
+    try {
+      await memoryServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = memoryServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const configResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          memory_llm: {
+            base_url: `http://127.0.0.1:${port}`,
+            model: "gpt-4.1-mini",
+            api_key: "memory-key",
+            protocol: "openai-compatible",
+            timeout_ms: 3000,
+            effort: "high"
+          }
+        }
+      });
+
+      expect(configResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/memory-llm/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(runtimeCalls.checkMemoryLlm).not.toHaveBeenCalled();
+      expect(response.json()).toEqual({
+        name: "memory_llm",
+        status: "healthy",
+        detail: "memory llm request completed",
+        last_checked_at: expect.any(String),
+      });
+    } finally {
+      await memoryServer.close();
       await app.close();
       fs.rmSync(home, { recursive: true, force: true });
     }

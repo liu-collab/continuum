@@ -3,8 +3,11 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import type { ProviderConfig } from "../../config/index.js";
+import { createProvider } from "../../providers/index.js";
 import type { RuntimeFastifyInstance } from "../types.js";
 import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolApprovalMode } from "../state.js";
+import { clearManagedDependencyProbe, writeManagedDependencyProbe } from "./dependency-status-cache.js";
 
 const providerKindSchema = z.enum(["demo", "openai-compatible", "anthropic", "ollama", "record-replay"]);
 const mcpServerPayloadSchema = z.object({
@@ -134,6 +137,123 @@ async function readJson<T>(filePath: string): Promise<T | null> {
   }
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeTimeout(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+
+  return Math.trunc(value);
+}
+
+function mapMemoryLlmEffort(
+  value: "low" | "medium" | "high" | "xhigh" | "max" | null | undefined,
+): "low" | "medium" | "high" | undefined {
+  if (value === "low" || value === "medium" || value === "high") {
+    return value;
+  }
+
+  if (value === "xhigh" || value === "max") {
+    return "high";
+  }
+
+  return undefined;
+}
+
+async function probeMemoryLlm(env: NodeJS.ProcessEnv, config: {
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
+  protocol?: "anthropic" | "openai-compatible";
+  timeoutMs?: number;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+}) {
+  const baseUrl = normalizeOptionalText(config.baseUrl);
+  const model = normalizeOptionalText(config.model);
+  const protocol = config.protocol ?? "openai-compatible";
+  const timeoutMs = normalizeTimeout(config.timeoutMs) ?? 15_000;
+
+  if (!baseUrl || !model) {
+    return {
+      name: "memory_llm" as const,
+      status: "unavailable" as const,
+      detail: "memory llm is not configured",
+      last_checked_at: nowIso(),
+    };
+  }
+
+  const providerConfig: ProviderConfig = {
+    kind: protocol === "anthropic" ? "anthropic" : "openai-compatible",
+    model,
+    baseUrl,
+    apiKey: config.apiKey,
+    apiKeyEnv: undefined,
+    temperature: 0,
+    effort: config.effort ?? null,
+    maxTokens: 16,
+  };
+  const provider = createProvider(providerConfig, env);
+  const providerStatus = provider.status?.();
+  if (providerStatus?.status === "misconfigured") {
+    return {
+      name: "memory_llm" as const,
+      status: "unavailable" as const,
+      detail: providerStatus.detail ?? "memory llm is misconfigured",
+      last_checked_at: nowIso(),
+    };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort("memory_llm_timeout"), timeoutMs);
+    try {
+      for await (const chunk of provider.chat({
+        messages: [
+          {
+            role: "user",
+            content: "ping",
+          },
+        ],
+        max_tokens: 16,
+        effort: config.effort ?? undefined,
+        signal: controller.signal,
+      })) {
+        if (chunk.type === "end") {
+          break;
+        }
+      }
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+
+    return {
+      name: "memory_llm" as const,
+      status: "healthy" as const,
+      detail: "memory llm request completed",
+      last_checked_at: nowIso(),
+    };
+  } catch (error) {
+    const detail =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "memory llm unavailable";
+    return {
+      name: "memory_llm" as const,
+      status: detail.includes("timeout") ? "degraded" as const : "unavailable" as const,
+      detail,
+      last_checked_at: nowIso(),
+    };
+  }
+}
+
 export function registerConfigRoutes(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/config", async () => {
     const embedding = await readJson<{
@@ -216,6 +336,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         ...(payload.embedding.model ? { model: payload.embedding.model } : {}),
         ...(payload.embedding.api_key ? { apiKey: payload.embedding.api_key } : {}),
       });
+      await clearManagedDependencyProbe(app, ["embeddings"]);
     }
 
     if (payload.memory_llm) {
@@ -229,6 +350,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         ...(payload.memory_llm.effort !== undefined ? { effort: payload.memory_llm.effort } : {}),
         ...(payload.memory_llm.max_tokens !== undefined ? { maxTokens: payload.memory_llm.max_tokens } : {}),
       });
+      await clearManagedDependencyProbe(app, ["memory_llm"]);
     }
 
     if (payload.provider) {
@@ -326,11 +448,57 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
   });
 
   app.post("/v1/agent/dependency-status/embeddings/check", async () => {
-    return app.runtimeState.memoryClient.checkEmbeddings();
+    const result = await app.runtimeState.memoryClient.checkEmbeddings();
+    await writeManagedDependencyProbe(app, "embeddings", {
+      status: result.status,
+      detail: result.detail,
+      last_checked_at: result.last_checked_at,
+    });
+    return result;
   });
 
   app.post("/v1/agent/dependency-status/memory-llm/check", async () => {
-    return app.runtimeState.memoryClient.checkMemoryLlm();
+    const managedConfig = await readJson<{
+      baseUrl?: string;
+      model?: string;
+      apiKey?: string;
+      protocol?: "anthropic" | "openai-compatible";
+      timeoutMs?: number;
+      effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+    }>(resolveManagedMemoryLlmConfigPath(app));
+
+    const probeConfig = {
+      baseUrl: managedConfig?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL,
+      model: managedConfig?.model ?? process.env.MEMORY_LLM_MODEL,
+      apiKey: managedConfig?.apiKey ?? process.env.MEMORY_LLM_API_KEY,
+      protocol:
+        managedConfig?.protocol
+        ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined) ?? "openai-compatible"),
+      timeoutMs: managedConfig?.timeoutMs ?? (
+        process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
+          ? Number(process.env.MEMORY_LLM_TIMEOUT_MS)
+          : undefined
+      ),
+      effort: managedConfig?.effort ?? null,
+    };
+
+    if (!normalizeOptionalText(probeConfig.baseUrl) || !normalizeOptionalText(probeConfig.model)) {
+      const result = await app.runtimeState.memoryClient.checkMemoryLlm();
+      await writeManagedDependencyProbe(app, "memory_llm", {
+        status: result.status,
+        detail: result.detail,
+        last_checked_at: result.last_checked_at,
+      });
+      return result;
+    }
+
+    const result = await probeMemoryLlm(app.runtimeState.env, probeConfig);
+    await writeManagedDependencyProbe(app, "memory_llm", {
+      status: result.status,
+      detail: result.detail,
+      last_checked_at: result.last_checked_at,
+    });
+    return result;
   });
 }
 

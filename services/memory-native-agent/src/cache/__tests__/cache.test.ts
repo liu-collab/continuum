@@ -55,7 +55,8 @@ describe("cache helpers", () => {
       const cache = new ToolResultCache();
       const result = {
         ok: true,
-        content: [{ type: "text" as const, text: "done" }],
+        output: "done",
+        trust_level: "builtin_read" as const,
       };
 
       cache.set("tool-key", result, 50);

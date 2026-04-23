@@ -17,6 +17,8 @@ describe("evaluation helpers", () => {
     expect(
       evaluateRetryAllowance(state, "fs_read:README", {
         ok: false,
+        output: "boom",
+        trust_level: "builtin_read",
         error: { code: "tool_execution_failed", message: "boom" },
       }),
     ).toEqual({
@@ -33,6 +35,8 @@ describe("evaluation helpers", () => {
         repeatedFailure: false,
         toolResult: {
           ok: false,
+          output: "blocked",
+          trust_level: "shell",
           error: { code: "tool_denied", message: "blocked" },
         },
       }),
@@ -47,7 +51,8 @@ describe("evaluation helpers", () => {
       evaluateAssistantOutput("", [
         {
           ok: true,
-          content: [{ type: "text", text: "ok" }],
+          output: "ok",
+          trust_level: "builtin_read",
         },
       ]),
     ).toEqual({
