@@ -179,6 +179,20 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
     )
   ];
 
+  views.push(
+    createQuickView(
+      filters,
+      "pending-confirmation",
+      "待确认队列",
+      "集中查看还没确认的新偏好和冲突记录，便于尽快确认或失效。",
+      {
+        workspaceId: filters.workspaceId,
+        memoryViewMode: "workspace_plus_global",
+        status: "pending_confirmation"
+      }
+    )
+  );
+
   if (filters.workspaceId) {
     views.push(
       createQuickView(
@@ -258,7 +272,15 @@ export function describeCatalogFilterHints(filters: MemoryCatalogFilters) {
 }
 
 export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<MemoryCatalogResponse> {
-  const result = await queryCatalogView(filters);
+  const [result, pendingResult] = await Promise.all([
+    queryCatalogView(filters),
+    queryCatalogView({
+      ...filters,
+      status: "pending_confirmation",
+      page: 1,
+      pageSize: 1
+    })
+  ]);
 
   return {
     items: result.rows.map((row) => toCatalogItem(row, filters)),
@@ -266,8 +288,12 @@ export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<M
     page: filters.page,
     pageSize: filters.pageSize,
     appliedFilters: filters,
-    viewSummary: buildViewSummary(filters),
+    viewSummary:
+      pendingResult.total > 0
+        ? `${buildViewSummary(filters)} 当前共有 ${pendingResult.total} 条待确认记忆。`
+        : buildViewSummary(filters),
     viewWarnings: result.warnings,
+    pendingConfirmationCount: pendingResult.total,
     sourceStatus: result.status
   };
 }

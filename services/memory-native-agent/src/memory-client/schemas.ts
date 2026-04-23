@@ -150,6 +150,7 @@ export const writeBackCandidateSchema = z.object({
   importance: z.number(),
   confidence: z.number(),
   write_reason: z.string(),
+  suggested_status: z.enum(["active", "pending_confirmation"]).optional(),
   source: z.object({
     source_type: z.string(),
     source_ref: z.string(),

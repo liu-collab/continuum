@@ -30,7 +30,7 @@ import { tierMemoryInjection } from "./memory-tiering.js";
 import { toPromptSegmentView, type PromptSegmentView } from "./prompt-segments.js";
 import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
-import type { MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
+import type { FinalizeTurnResult, MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
 import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
 import type { SessionStore } from "../session-store/index.js";
 import type { MaterializedSkillContext } from "../skills/index.js";
@@ -600,6 +600,9 @@ export class AgentRunner {
           code: (error as Error & { code?: string }).code ?? "memory_unavailable",
         }));
       }).then((response) => {
+        if (!response) {
+          return;
+        }
         const residentJobs = response?.submitted_jobs
           ?.filter((job, index) => {
             const candidate = response.write_back_candidates[index];
@@ -615,6 +618,30 @@ export class AgentRunner {
         if (residentJobs.length > 0) {
           this.residentMemoryDirty = true;
           this.pendingResidentRefresh = { jobIds: residentJobs };
+        }
+        const pendingConfirmationSummary = buildPendingConfirmationSummary(response);
+        if (pendingConfirmationSummary) {
+          this.deps.io.emitPhaseResult(turnId, "after_response", {
+            trace_id: response.trace_id,
+            trigger: false,
+            trigger_reason: "pending_confirmation_notice",
+            memory_packet: null,
+            injection_block: {
+              injection_reason: "pending_confirmation_notice",
+              memory_summary: pendingConfirmationSummary,
+              memory_records: [],
+              token_estimate: 0,
+              memory_mode: response.memory_mode,
+              requested_scopes: [],
+              selected_scopes: [],
+              trimmed_record_ids: [],
+              trim_reasons: [],
+            },
+            degraded: response.degraded,
+            dependency_status: response.dependency_status,
+            budget_used: 0,
+            memory_packet_ids: [],
+          });
         }
         finalizeSpan.finish("ok");
       });
@@ -1093,6 +1120,26 @@ function toPromptPhaseResult(
         : undefined,
     injection_summary: response?.injection_block?.memory_summary,
   };
+}
+
+function buildPendingConfirmationSummary(
+  response: FinalizeTurnResult | null | undefined,
+): string | undefined {
+  const pendingCandidates = response?.write_back_candidates.filter(
+    (candidate: FinalizeTurnResult["write_back_candidates"][number]) =>
+      candidate.suggested_status === "pending_confirmation",
+  ) ?? [];
+
+  if (pendingCandidates.length === 0) {
+    return undefined;
+  }
+
+  const firstSummary = pendingCandidates[0]?.summary?.trim();
+  if (pendingCandidates.length === 1 && firstSummary) {
+    return `检测到 1 条待确认记忆，已暂存：${firstSummary}`;
+  }
+
+  return `检测到 ${pendingCandidates.length} 条待确认记忆，已暂存，等待确认后再生效。`;
 }
 
 function toInjectionBlock(

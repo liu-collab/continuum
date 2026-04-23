@@ -40,7 +40,7 @@
 | 5 | 会话级状态全在内存，进程重启归零 | 已完成 | 无 | 第 7 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): persist recent injection dedup state` |
 | 6 | `LLM + Embedding` 同时挂时宿主降级感知不足 | 已完成 | 2 | 第 6 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/http/__tests__/sessions.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/agent-event-reducer.test.ts`；`services/visualization/tests/chat-panel.test.tsx` | `fix(memory-clients): surface degraded skip state across host chain` |
 | 7 | `Quality assessor` 失败后全量放行 | 已完成 | 无 | 第 1 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/retrieval-runtime/tests/writeback-quality-assessor.test.ts` | `fix(retrieval-runtime): tighten quality assessor fallback` |
-| 8 | `pending_confirmation` 缺少用户与运营闭环 | 未提交 | 3 | 第 11 批 | 待补 | 待补 |
+| 8 | `pending_confirmation` 缺少用户与运营闭环 | 已完成 | 3 | 第 11 批 | `services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/memory-catalog-service.test.ts` | `fix(memory-clients): surface pending confirmation follow-up` |
 | 9 | `session` 级 `episodic` 缺少生命周期管理 | 未提交 | 无 | 第 12 批 | 待补 | 待补 |
 | 10 | 注入预算贪心导致类型饥饿 | 已完成 | 无 | 第 4 批 | `services/retrieval-runtime/tests/remediation.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): reserve injection slots for task state` |
 | 11 | `episodic` 半衰期比 `task_state` 长 | 已完成 | 无 | 第 2 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): rebalance memory recency decay` |

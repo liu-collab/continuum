@@ -154,6 +154,7 @@ describe("memory catalog service", () => {
       },
       viewSummary: "summary",
       viewWarnings: [],
+      pendingConfirmationCount: 0,
       sourceStatus: {
         name: "storage_read_model",
         label: "Storage read model",
@@ -187,6 +188,64 @@ describe("memory catalog service", () => {
     expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
     expect(detail?.governanceHistory).toHaveLength(1);
     expect(detail?.governanceSummary).toContain("自动治理");
+  });
+
+  it("exposes pending confirmation quick view and count in catalog response", async () => {
+    queryCatalogViewMock
+      .mockResolvedValueOnce({
+        rows: [],
+        total: 0,
+        warnings: [],
+        status: {
+          name: "storage_read_model",
+          label: "Storage read model",
+          kind: "dependency",
+          status: "healthy",
+          checkedAt: new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString(),
+          lastOkAt: new Date().toISOString(),
+          lastError: null,
+          responseTimeMs: 20,
+          detail: null
+        }
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        total: 2,
+        warnings: [],
+        status: {
+          name: "storage_read_model",
+          label: "Storage read model",
+          kind: "dependency",
+          status: "healthy",
+          checkedAt: new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString(),
+          lastOkAt: new Date().toISOString(),
+          lastError: null,
+          responseTimeMs: 20,
+          detail: null
+        }
+      });
+
+    const response = await getMemoryCatalog({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+    const views = buildMemoryCatalogQuickViews(response.appliedFilters);
+
+    expect(response.pendingConfirmationCount).toBe(2);
+    expect(response.viewSummary).toContain("待确认记忆");
+    expect(views.some((view) => view.label === "待确认队列" && view.href.includes("status=pending_confirmation"))).toBe(true);
   });
 
   it("returns workspace-only catalog view summary", async () => {

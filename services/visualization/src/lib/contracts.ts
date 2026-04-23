@@ -185,6 +185,7 @@ export const MemoryCatalogResponseSchema = z.object({
   appliedFilters: MemoryCatalogFiltersSchema,
   viewSummary: z.string(),
   viewWarnings: z.array(z.string()),
+  pendingConfirmationCount: z.number().int().nonnegative(),
   sourceStatus: SourceStatusSchema
 });
 export type MemoryCatalogResponse = z.infer<typeof MemoryCatalogResponseSchema>;

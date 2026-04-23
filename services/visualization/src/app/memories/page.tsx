@@ -38,6 +38,9 @@ export default async function MemoriesPage({
           <p className="mt-1 text-sm text-muted-foreground">
             共 {response.total} 条
             <span className="ml-2 text-xs">· {memoryViewModeLabel(filters.memoryViewMode)}</span>
+            {response.pendingConfirmationCount > 0 ? (
+              <span className="ml-2 text-xs text-amber-700">· 待确认 {response.pendingConfirmationCount} 条</span>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -151,6 +154,12 @@ export default async function MemoriesPage({
       {response.viewWarnings.length > 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {response.viewWarnings.join(" ")}
+        </div>
+      ) : null}
+
+      {response.pendingConfirmationCount > 0 && filters.status !== "pending_confirmation" ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          当前有 {response.pendingConfirmationCount} 条待确认记忆。可以直接切到“待确认队列”集中处理。
         </div>
       ) : null}
 

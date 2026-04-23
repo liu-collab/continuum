@@ -1584,6 +1584,102 @@ describe("AgentRunner", () => {
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-skill", "stop");
   });
 
+  it("emits after_response phase summary when finalize turn returns pending confirmation candidates", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-pending",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "550e8400-e29b-41d4-a716-446655440002",
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认改成 tab 缩进",
+          details: {},
+          importance: 5,
+          confidence: 0.94,
+          write_reason: "updated preference",
+          suggested_status: "pending_confirmation",
+          source: {
+            source_type: "memory_llm",
+            source_ref: "turn-pending",
+            service_name: "retrieval-runtime",
+          },
+          idempotency_key: "pending-pref",
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: "默认改成 tab 缩进",
+          job_id: "550e8400-e29b-41d4-a716-446655440071",
+          status: "accepted_async",
+        },
+      ],
+      memory_mode: "workspace_plus_global" as const,
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: true,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages: vi.fn(),
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("还是用 tab 吧", "turn-pending-confirmation");
+    await Promise.resolve();
+
+    expect(io.emitPhaseResult).toHaveBeenCalledWith(
+      "turn-pending-confirmation",
+      "after_response",
+      expect.objectContaining({
+        trigger_reason: "pending_confirmation_notice",
+        injection_block: expect.objectContaining({
+          memory_summary: expect.stringContaining("待确认记忆"),
+        }),
+      }),
+    );
+  });
+
   it("keeps resident memory when write projection is not ready yet", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();
