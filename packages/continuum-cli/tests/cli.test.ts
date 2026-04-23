@@ -25,6 +25,7 @@ vi.mock("../src/managed-state.js", async (importOriginal) => {
 });
 
 import { parseArgs } from "../src/args.js";
+import { runCli } from "../src/continuum-cli.js";
 import {
   buildEmbeddingsEndpoint,
   resolveOptionalThirdPartyEmbeddingConfig,
@@ -93,6 +94,34 @@ describe("continuum cli", () => {
 
     expect(parsed.command).toEqual(["stop"]);
     expect(renderHelp()).toContain("continuum stop");
+  });
+
+  it("prints the package version for --version", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const exitCode = await runCli(["--version"], import.meta.url);
+
+    expect(exitCode).toBe(0);
+    expect(stdoutSpy).toHaveBeenCalledWith("0.2.3\n");
+    expect(renderHelp()).toContain("continuum --version");
+  });
+
+  it("prints the package version for the version command alias", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const exitCode = await runCli(["version"], import.meta.url);
+
+    expect(exitCode).toBe(0);
+    expect(stdoutSpy).toHaveBeenCalledWith("0.2.3\n");
+  });
+
+  it("prints the package version for the short -v alias", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    const exitCode = await runCli(["-v"], import.meta.url);
+
+    expect(exitCode).toBe(0);
+    expect(stdoutSpy).toHaveBeenCalledWith("0.2.3\n");
   });
 
   it("exposes Claude uninstall in help", () => {

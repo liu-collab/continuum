@@ -15,10 +15,24 @@ import { runStartCommand } from "./start-command.js";
 import { runStopCommand } from "./stop-command.js";
 import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
+import { readCliVersion } from "./version.js";
 
 export async function runCli(argv: string[], importMetaUrl: string) {
+  if (
+    argv.length === 1
+    && (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version")
+  ) {
+    process.stdout.write(`${await readCliVersion()}\n`);
+    return 0;
+  }
+
   const parsed = parseArgs(argv);
   const [primary, secondary] = parsed.command;
+
+  if (primary === "--version" || primary === "-v" || primary === "version") {
+    process.stdout.write(`${await readCliVersion()}\n`);
+    return 0;
+  }
 
   if (!primary || primary === "help" || primary === "--help") {
     process.stdout.write(renderHelp());

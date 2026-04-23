@@ -2,6 +2,7 @@ export function renderHelp() {
   return `Continuum CLI
 
 Commands:
+  continuum --version
   continuum start [--open] [--postgres-port PORT] [--bind-host HOST] [--embedding-base-url URL] [--embedding-model MODEL] [--embedding-api-key KEY] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV]
   continuum stop
   continuum status [--json] [--strict] [--runtime-url URL] [--storage-url URL] [--ui-url URL] [--database-url URL] [--timeout MS]
