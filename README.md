@@ -62,6 +62,12 @@ This launches a single Docker container running PostgreSQL + pgvector, storage, 
 | retrieval-runtime | 3002 |
 | visualization | 3003 |
 
+## Docs & Demo
+
+- Documentation: [`docs/configuration-guide.md`](./docs/configuration-guide.md)
+- Local demo: run `continuum start` and then `continuum ui`
+- Dashboard: after startup, open `http://127.0.0.1:3003`
+
 ### Connect to Claude Code
 
 ```bash
