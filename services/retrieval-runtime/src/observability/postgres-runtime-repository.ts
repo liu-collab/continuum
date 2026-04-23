@@ -70,6 +70,9 @@ interface RecallRunRow extends RuntimeRowBase {
   requested_memory_types: unknown;
   candidate_count: number;
   selected_count: number;
+  recently_filtered_record_ids: unknown;
+  recently_soft_marked_record_ids: unknown;
+  replay_escape_reason: string | null;
   result_state: RecallRunRecord["result_state"];
   degraded: boolean;
   degradation_reason: string | null;
@@ -1025,8 +1028,8 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
   async getMetrics(): Promise<ObserveMetricsResponse> {
     const [triggerRows, recallRows, injectionRows, writebackRows] = await Promise.all([
       this.pool.query<Pick<TriggerRunRow, "trigger_hit">>(`SELECT trigger_hit FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_trigger_runs`),
-      this.pool.query<Pick<RecallRunRow, "trigger_hit" | "selected_count" | "duration_ms">>(
-        `SELECT trigger_hit, selected_count, duration_ms FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs`,
+      this.pool.query<Pick<RecallRunRow, "trigger_hit" | "selected_count" | "duration_ms" | "recently_filtered_record_ids" | "recently_soft_marked_record_ids" | "replay_escape_reason">>(
+        `SELECT trigger_hit, selected_count, duration_ms, recently_filtered_record_ids, recently_soft_marked_record_ids, replay_escape_reason FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs`,
       ),
       this.pool.query<Pick<InjectionRunRow, "injected" | "trimmed_record_ids" | "duration_ms">>(
         `SELECT injected, trimmed_record_ids, duration_ms FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs`,
@@ -1041,6 +1044,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     const recallCount = recallRows.rows.length;
     const injectionCount = injectionRows.rows.length;
     const writebackCount = writebackRows.rows.length;
+    const dedupFilteredCount = recallRows.rows.filter((row) => asStringArray((row as RecallRunRow).recently_filtered_record_ids).length > 0).length;
+    const softMarkedCount = recallRows.rows.filter((row) => asStringArray((row as RecallRunRow).recently_soft_marked_record_ids).length > 0).length;
+    const replayEscapedCount = recallRows.rows.filter((row) => Boolean((row as RecallRunRow).replay_escape_reason)).length;
 
     return {
       trigger_rate:
@@ -1057,6 +1063,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         injectionCount === 0
           ? 0
           : injectionRows.rows.filter((row) => asStringArray(row.trimmed_record_ids).length > 0).length / injectionCount,
+      dedup_filtered_rate: recallCount === 0 ? 0 : dedupFilteredCount / recallCount,
+      soft_mark_rate: recallCount === 0 ? 0 : softMarkedCount / recallCount,
+      replay_escape_rate: recallCount === 0 ? 0 : replayEscapedCount / recallCount,
       writeback_submission_rate:
         writebackCount === 0 ? 0 : writebackRows.rows.filter((row) => Number(row.submitted_count) > 0).length / writebackCount,
       query_p95_ms: percentile(recallRows.rows.map((row) => Number(row.duration_ms)), 0.95),

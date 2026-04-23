@@ -2203,6 +2203,71 @@ describe("retrieval-runtime service", () => {
     expect(metrics.outbox_submit_latency_ms).toBeGreaterThanOrEqual(0);
   });
 
+  it("reports dedup and replay metrics from runtime traces", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续恢复记忆",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续当前记忆上下文",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入记忆",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "继续之前的偏好和任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 0,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 0,
+        INJECTION_SOFT_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-metrics-1",
+      phase: "before_response",
+      current_input: "继续当前任务。",
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-metrics-2",
+      phase: "before_response",
+      current_input: "继续。",
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-metrics-3",
+      phase: "before_response",
+      current_input: "你还记得上次定过的偏好吗？",
+    });
+
+    const metrics = await repository.getMetrics();
+    expect(metrics.dedup_filtered_rate).toBeGreaterThan(0);
+    expect(metrics.soft_mark_rate).toBeGreaterThan(0);
+    expect(metrics.replay_escape_rate).toBeGreaterThan(0);
+  });
+
   it("reuses finalize response from short-lived idempotency cache", async () => {
     const storageClient = new StubStorageClient();
     const { service } = createRuntime({

@@ -431,6 +431,9 @@ export interface ObserveMetricsResponse {
   empty_recall_rate: number;
   injection_rate: number;
   injection_trim_rate: number;
+  dedup_filtered_rate: number;
+  soft_mark_rate: number;
+  replay_escape_rate: number;
   writeback_submission_rate: number;
   query_p95_ms: number;
   injection_p95_ms: number;

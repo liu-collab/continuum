@@ -291,6 +291,9 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
     const emptyRecalls = this.recallRuns.filter((run) => run.trigger_hit && run.selected_count === 0).length;
     const injected = this.injectionRuns.filter((run) => run.injected).length;
     const trimmed = this.injectionRuns.filter((run) => run.trimmed_record_ids.length > 0).length;
+    const dedupFiltered = this.recallRuns.filter((run) => (run.recently_filtered_record_ids?.length ?? 0) > 0).length;
+    const softMarked = this.recallRuns.filter((run) => (run.recently_soft_marked_record_ids?.length ?? 0) > 0).length;
+    const replayEscaped = this.recallRuns.filter((run) => Boolean(run.replay_escape_reason)).length;
     const submitted = this.writebackSubmissions.filter((run) => run.submitted_count > 0).length;
 
     return {
@@ -299,6 +302,9 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       empty_recall_rate: recallCount === 0 ? 0 : emptyRecalls / recallCount,
       injection_rate: injectionCount === 0 ? 0 : injected / injectionCount,
       injection_trim_rate: injectionCount === 0 ? 0 : trimmed / injectionCount,
+      dedup_filtered_rate: recallCount === 0 ? 0 : dedupFiltered / recallCount,
+      soft_mark_rate: recallCount === 0 ? 0 : softMarked / recallCount,
+      replay_escape_rate: recallCount === 0 ? 0 : replayEscaped / recallCount,
       writeback_submission_rate: writebackCount === 0 ? 0 : submitted / writebackCount,
       query_p95_ms: percentile(this.recallRuns.map((run) => run.duration_ms), 0.95),
       injection_p95_ms: percentile(this.injectionRuns.map((run) => run.duration_ms), 0.95),
