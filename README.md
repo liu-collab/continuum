@@ -2,6 +2,8 @@
 
 Persistent memory layer for AI coding agents. Gives Claude Code, Codex, and custom agents the ability to remember preferences, track task state, and carry context across sessions.
 
+[![GitHub Repo stars](https://img.shields.io/github/stars/liu-collab/continuum?style=social)](https://github.com/liu-collab/continuum/stargazers)
+
 ## What it does
 
 - **Structured memory** — extracts durable facts, preferences, and task state from conversations instead of storing raw chat logs
@@ -114,6 +116,10 @@ cd services/storage && npx vitest run
 ## Platform Support
 
 `continuum start` currently supports **Windows** only (requires Docker Desktop). Other platforms can run services manually or via Docker Compose.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=liu-collab/continuum&type=Date)](https://star-history.com/#liu-collab/continuum&Date)
 
 ## License
 
