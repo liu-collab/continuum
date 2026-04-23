@@ -1,30 +1,30 @@
 # Memory Orchestrator 真实模型离线评测
 
-- 评测时间：2026-04-23T04:30:05.135Z
+- 评测时间：2026-04-23T14:04:02.056Z
 - 模型：`gpt-5.4`
 - 协议：`openai-compatible`
 - 端点：`http://localhost:8090/v1`
-- 超时：`45000`（毫秒）
+- 超时：`15000`（毫秒）
 - 通过阈值：`score >= 0.6`
 - 总用例数：`100`
 
-- 错误分布：网络 `1`，结构 `4`，逻辑 `6`
+- 错误分布：网络 `28`，结构 `3`，逻辑 `1`
 
 ## 指标汇总
 
 | 指标 | 通过数 | 总数 | 通过率 | 平均分 | 基线对比 | 网络错误 | 结构错误 | 逻辑错误 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| intent_accuracy | 10 | 10 | 100.0% | 1.000 | NEW | 0 | 0 | 0 |
-| recall_accuracy_proxy | 14 | 15 | 93.3% | 0.933 | NEW | 0 | 1 | 0 |
-| writeback_extraction_accuracy | 8 | 8 | 100.0% | 1.000 | NEW | 0 | 0 | 0 |
-| writeback_refine_accuracy | 7 | 8 | 87.5% | 0.825 | NEW | 0 | 1 | 0 |
-| governance_plan_accuracy | 6 | 8 | 75.0% | 0.787 | NEW | 0 | 0 | 2 |
-| low_quality_intercept_rate | 8 | 8 | 100.0% | 1.000 | NEW | 0 | 0 | 0 |
-| relation_discovery_accuracy | 10 | 10 | 100.0% | 1.000 | NEW | 0 | 0 | 0 |
-| recommendation_acceptance_proxy | 8 | 10 | 80.0% | 0.830 | NEW | 1 | 0 | 1 |
-| knowledge_extraction_accuracy | 6 | 8 | 75.0% | 0.813 | NEW | 0 | 0 | 2 |
-| governance_correctness_proxy | 7 | 8 | 87.5% | 0.875 | NEW | 0 | 0 | 1 |
-| effectiveness_adjustment_direction_proxy | 5 | 7 | 71.4% | 0.714 | NEW | 0 | 2 | 0 |
+| intent_accuracy | 7 | 10 | 70.0% | 0.680 | NEW | 3 | 0 | 0 |
+| recall_accuracy_proxy | 11 | 15 | 73.3% | 0.733 | NEW | 2 | 2 | 0 |
+| writeback_extraction_accuracy | 6 | 8 | 75.0% | 0.750 | NEW | 2 | 0 | 0 |
+| writeback_refine_accuracy | 6 | 8 | 75.0% | 0.700 | NEW | 2 | 0 | 0 |
+| governance_plan_accuracy | 4 | 8 | 50.0% | 0.463 | NEW | 4 | 0 | 0 |
+| low_quality_intercept_rate | 5 | 8 | 62.5% | 0.625 | NEW | 3 | 0 | 0 |
+| relation_discovery_accuracy | 7 | 10 | 70.0% | 0.700 | NEW | 3 | 0 | 0 |
+| recommendation_acceptance_proxy | 9 | 10 | 90.0% | 0.930 | NEW | 0 | 0 | 1 |
+| knowledge_extraction_accuracy | 4 | 8 | 50.0% | 0.500 | NEW | 4 | 0 | 0 |
+| governance_correctness_proxy | 4 | 8 | 50.0% | 0.500 | NEW | 4 | 0 | 0 |
+| effectiveness_adjustment_direction_proxy | 5 | 7 | 71.4% | 0.714 | NEW | 1 | 1 | 0 |
 
 ## 样本明细
 
@@ -34,10 +34,12 @@
 - 指标：`intent_accuracy`
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：应判断需要记忆，并识别 task_state 或 fact_preference
-- 实际：{"needs_memory":true,"urgency":"immediate","memory_types":["task_state","episodic","fact_preference"],"suggested_scopes":["task","session","user"]}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：12268ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15008ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -74,33 +76,6 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"needs_memory":true,"memory_types":["task_state","episodic","fact_preference"],"urgency":"immediate","confidence":0.95,"reason":"用户在继续昨天的验收任务，并依赖之前的文档格式与默认中文偏好。","suggested_scopes":["task","session","user"]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "needs_memory": true,
-  "memory_types": [
-    "task_state",
-    "episodic",
-    "fact_preference"
-  ],
-  "urgency": "immediate",
-  "confidence": 0.95,
-  "reason": "用户在继续昨天的验收任务，并依赖之前的文档格式与默认中文偏好。",
-  "suggested_scopes": [
-    "task",
-    "session",
-    "user"
-  ]
-}
-```
-
 ### intent-fresh-question
 
 - 模块：`intent-analyzer`
@@ -110,7 +85,7 @@ Rules:
 - 实际：{"needs_memory":false,"reason":"这是独立的知识问答，不依赖先前对话或长期偏好。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：11772ms
+- 耗时：14519ms
 
 #### 测试提示词
 
@@ -145,7 +120,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"这是独立的知识问答，不依赖先前对话或长期偏好。","suggested_scopes":["session"]}
+{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"这是独立的知识问答，不依赖先前对话或长期偏好。","suggested_scopes":[]}
 ```
 
 #### 结构化结果
@@ -157,9 +132,7 @@ Rules:
   "urgency": "optional",
   "confidence": 0.98,
   "reason": "这是独立的知识问答，不依赖先前对话或长期偏好。",
-  "suggested_scopes": [
-    "session"
-  ]
+  "suggested_scopes": []
 }
 ```
 
@@ -169,10 +142,12 @@ Rules:
 - 指标：`intent_accuracy`
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：半相关引用，应倾向需要记忆（保守策略）
-- 实际：{"needs_memory":true,"urgency":"optional","confidence":0.89}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：11522ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15001ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -204,42 +179,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"needs_memory":true,"memory_types":["episodic","task_state"],"urgency":"optional","confidence":0.89,"reason":"提到“上次那个方案”，存在对先前讨论与任务进展的延续引用。","suggested_scopes":["task","session","workspace"]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "needs_memory": true,
-  "memory_types": [
-    "episodic",
-    "task_state"
-  ],
-  "urgency": "optional",
-  "confidence": 0.89,
-  "reason": "提到“上次那个方案”，存在对先前讨论与任务进展的延续引用。",
-  "suggested_scopes": [
-    "task",
-    "session",
-    "workspace"
-  ]
-}
-```
-
 ### intent-multi-type-trigger
 
 - 模块：`intent-analyzer`
 - 指标：`intent_accuracy`
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：应同时识别 task_state 和 episodic
-- 实际：{"needs_memory":true,"memory_types":["task_state","episodic"]}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：14396ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15011ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -276,31 +227,6 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.97,"reason":"用户在追问昨天迁移进度，并引用之前的权限问题，依赖先前任务上下文。","suggested_scopes":["task","session"]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "needs_memory": true,
-  "memory_types": [
-    "task_state",
-    "episodic"
-  ],
-  "urgency": "immediate",
-  "confidence": 0.97,
-  "reason": "用户在追问昨天迁移进度，并引用之前的权限问题，依赖先前任务上下文。",
-  "suggested_scopes": [
-    "task",
-    "session"
-  ]
-}
-```
-
 ### intent-english-input
 
 - 模块：`intent-analyzer`
@@ -310,7 +236,7 @@ Rules:
 - 实际：{"needs_memory":false}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9340ms
+- 耗时：13081ms
 
 #### 测试提示词
 
@@ -345,7 +271,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"这是独立的通用知识问题，不依赖先前对话或持久偏好。","suggested_scopes":["session"]}
+{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"这是独立的通用知识问题，不依赖先前对话或用户偏好。","suggested_scopes":[]}
 ```
 
 #### 结构化结果
@@ -356,10 +282,8 @@ Rules:
   "memory_types": [],
   "urgency": "optional",
   "confidence": 0.98,
-  "reason": "这是独立的通用知识问题，不依赖先前对话或持久偏好。",
-  "suggested_scopes": [
-    "session"
-  ]
+  "reason": "这是独立的通用知识问题，不依赖先前对话或用户偏好。",
+  "suggested_scopes": []
 }
 ```
 
@@ -372,7 +296,7 @@ Rules:
 - 实际：{"needs_memory":true,"memory_types":["fact_preference"],"suggested_scopes":["user","session"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：11572ms
+- 耗时：14365ms
 
 #### 测试提示词
 
@@ -407,7 +331,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":true,"memory_types":["fact_preference"],"urgency":"immediate","confidence":0.94,"reason":"用户提到“我习惯的格式”，明显依赖已记录的写作偏好。","suggested_scopes":["user","session"]}
+{"needs_memory":true,"memory_types":["fact_preference"],"urgency":"immediate","confidence":0.95,"reason":"用户要求按其习惯格式，依赖已保存的偏好。","suggested_scopes":["user","session"]}
 ```
 
 #### 结构化结果
@@ -419,8 +343,8 @@ Rules:
     "fact_preference"
   ],
   "urgency": "immediate",
-  "confidence": 0.94,
-  "reason": "用户提到“我习惯的格式”，明显依赖已记录的写作偏好。",
+  "confidence": 0.95,
+  "reason": "用户要求按其习惯格式，依赖已保存的偏好。",
   "suggested_scopes": [
     "user",
     "session"
@@ -437,7 +361,7 @@ Rules:
 - 实际：{"needs_memory":false}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：11144ms
+- 耗时：14103ms
 
 #### 测试提示词
 
@@ -472,7 +396,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.96,"reason":"这是独立代码审查问题，不依赖先前对话或长期偏好。","suggested_scopes":["session"]}
+{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.97,"reason":"当前问题自包含，只需分析给出的代码，无需依赖先前上下文或长期记忆。","suggested_scopes":[]}
 ```
 
 #### 结构化结果
@@ -482,11 +406,9 @@ Rules:
   "needs_memory": false,
   "memory_types": [],
   "urgency": "optional",
-  "confidence": 0.96,
-  "reason": "这是独立代码审查问题，不依赖先前对话或长期偏好。",
-  "suggested_scopes": [
-    "session"
-  ]
+  "confidence": 0.97,
+  "reason": "当前问题自包含，只需分析给出的代码，无需依赖先前上下文或长期记忆。",
+  "suggested_scopes": []
 }
 ```
 
@@ -497,9 +419,9 @@ Rules:
 - Prompt：`MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT`
 - 预期：引用工作区约定，应识别 workspace scope
 - 实际：{"needs_memory":true,"suggested_scopes":["task","workspace","session"]}
-- 评分：`1.000`
+- 评分：`0.800`
 - 结果：通过
-- 耗时：11260ms
+- 耗时：14623ms
 
 #### 测试提示词
 
@@ -539,7 +461,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.92,"reason":"用户要求沿用现有项目目录结构，依赖当前任务与先前上下文。","suggested_scopes":["task","workspace","session"]}
+{"needs_memory":true,"memory_types":["task_state"],"urgency":"immediate","confidence":0.93,"reason":"用户要求按项目既有目录结构放置文件，依赖当前任务中的路径约定。","suggested_scopes":["task","workspace","session"]}
 ```
 
 #### 结构化结果
@@ -548,12 +470,11 @@ Rules:
 {
   "needs_memory": true,
   "memory_types": [
-    "task_state",
-    "episodic"
+    "task_state"
   ],
   "urgency": "immediate",
-  "confidence": 0.92,
-  "reason": "用户要求沿用现有项目目录结构，依赖当前任务与先前上下文。",
+  "confidence": 0.93,
+  "reason": "用户要求按项目既有目录结构放置文件，依赖当前任务中的路径约定。",
   "suggested_scopes": [
     "task",
     "workspace",
@@ -571,7 +492,7 @@ Rules:
 - 实际：{"needs_memory":true,"urgency":"immediate","memory_types":["task_state","episodic"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10109ms
+- 耗时：13458ms
 
 #### 测试提示词
 
@@ -611,7 +532,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.97,"reason":"用户明确要求延续刚才的多步任务，需要前文进度与当前步骤信息。","suggested_scopes":["session","task"]}
+{"needs_memory":true,"memory_types":["task_state","episodic"],"urgency":"immediate","confidence":0.97,"reason":"用户明确续接刚才任务，并引用第二步，需依赖先前进度。","suggested_scopes":["task","session"]}
 ```
 
 #### 结构化结果
@@ -625,10 +546,10 @@ Rules:
   ],
   "urgency": "immediate",
   "confidence": 0.97,
-  "reason": "用户明确要求延续刚才的多步任务，需要前文进度与当前步骤信息。",
+  "reason": "用户明确续接刚才任务，并引用第二步，需依赖先前进度。",
   "suggested_scopes": [
-    "session",
-    "task"
+    "task",
+    "session"
   ]
 }
 ```
@@ -642,7 +563,7 @@ Rules:
 - 实际：{"needs_memory":false}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9105ms
+- 耗时：14343ms
 
 #### 测试提示词
 
@@ -677,7 +598,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.98,"reason":"这是独立的计算问题，不依赖先前对话或长期偏好。","suggested_scopes":["session"]}
+{"needs_memory":false,"memory_types":[],"urgency":"optional","confidence":0.99,"reason":"这是独立的即时计算问题，不依赖先前对话或长期信息。","suggested_scopes":[]}
 ```
 
 #### 结构化结果
@@ -687,11 +608,9 @@ Rules:
   "needs_memory": false,
   "memory_types": [],
   "urgency": "optional",
-  "confidence": 0.98,
-  "reason": "这是独立的计算问题，不依赖先前对话或长期偏好。",
-  "suggested_scopes": [
-    "session"
-  ]
+  "confidence": 0.99,
+  "reason": "这是独立的即时计算问题，不依赖先前对话或长期信息。",
+  "suggested_scopes": []
 }
 ```
 
@@ -701,10 +620,10 @@ Rules:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：应触发检索并给出查询提示
-- 实际：{"should_search":true,"query_hint":"刚才的 memory orchestrator 测试报告、测试样本、待补充的真实模型实际指标"}
+- 实际：{"should_search":true,"query_hint":"刚才的 memory orchestrator 测试报告、测试样本、真实模型实际指标、待补充内容"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8778ms
+- 耗时：14035ms
 
 #### 测试提示词
 
@@ -768,7 +687,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_search":true,"reason":"用户要求继续刚才的报告，明显依赖先前任务状态。","requested_scopes":["workspace","task","session"],"requested_memory_types":["task_state","episodic"],"importance_threshold":4,"query_hint":"刚才的 memory orchestrator 测试报告、测试样本、待补充的真实模型实际指标","candidate_limit":8}
+{"should_search":true,"reason":"用户要求延续刚才的测试报告并补充先前任务状态。","requested_scopes":["workspace","task","session"],"requested_memory_types":["task_state","episodic"],"importance_threshold":4,"query_hint":"刚才的 memory orchestrator 测试报告、测试样本、真实模型实际指标、待补充内容","candidate_limit":8}
 ```
 
 #### 结构化结果
@@ -776,7 +695,7 @@ Examples:
 ```json
 {
   "should_search": true,
-  "reason": "用户要求继续刚才的报告，明显依赖先前任务状态。",
+  "reason": "用户要求延续刚才的测试报告并补充先前任务状态。",
   "requested_scopes": [
     "workspace",
     "task",
@@ -787,7 +706,7 @@ Examples:
     "episodic"
   ],
   "importance_threshold": 4,
-  "query_hint": "刚才的 memory orchestrator 测试报告、测试样本、待补充的真实模型实际指标",
+  "query_hint": "刚才的 memory orchestrator 测试报告、测试样本、真实模型实际指标、待补充内容",
   "candidate_limit": 8
 }
 ```
@@ -801,7 +720,7 @@ Examples:
 - 实际：执行失败
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：12066ms
+- 耗时：14025ms
 - 错误类型：`schema`
 - 错误：`[
   {
@@ -878,10 +797,10 @@ Examples:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：引用偏好时应触发检索
-- 实际：{"should_search":true,"query_hint":"用户代码缩进风格偏好 习惯的缩进风格"}
+- 实际：{"should_search":true,"query_hint":"用户代码缩进风格偏好 缩进 空格 tab 习惯"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9051ms
+- 耗时：10369ms
 
 #### 测试提示词
 
@@ -940,7 +859,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_search":true,"reason":"用户明确要求按其既有习惯，需检索代码风格偏好。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4,"query_hint":"用户代码缩进风格偏好 习惯的缩进风格","candidate_limit":5}
+{"should_search":true,"reason":"用户明确要求按其习惯，需检索既有代码风格偏好。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4,"query_hint":"用户代码缩进风格偏好 缩进 空格 tab 习惯","candidate_limit":5}
 ```
 
 #### 结构化结果
@@ -948,7 +867,7 @@ Examples:
 ```json
 {
   "should_search": true,
-  "reason": "用户明确要求按其既有习惯，需检索代码风格偏好。",
+  "reason": "用户明确要求按其习惯，需检索既有代码风格偏好。",
   "requested_scopes": [
     "user"
   ],
@@ -956,7 +875,7 @@ Examples:
     "fact_preference"
   ],
   "importance_threshold": 4,
-  "query_hint": "用户代码缩进风格偏好 习惯的缩进风格",
+  "query_hint": "用户代码缩进风格偏好 缩进 空格 tab 习惯",
   "candidate_limit": 5
 }
 ```
@@ -967,10 +886,10 @@ Examples:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：隐式上下文延续应触发检索
-- 实际：{"should_search":true,"query_hint":"检索当前任务中之前讨论的架构方案、最近版本与优化意见"}
+- 实际：{"should_search":true,"query_hint":"之前讨论的那个架构方案及其当前优化方向"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：12781ms
+- 耗时：14281ms
 
 #### 测试提示词
 
@@ -1032,7 +951,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_search":true,"reason":"用户明确指向之前的方案并要求延续优化。","requested_scopes":["workspace","task","session"],"requested_memory_types":["task_state","episodic"],"importance_threshold":4,"query_hint":"检索当前任务中之前讨论的架构方案、最近版本与优化意见","candidate_limit":8}
+{"should_search":true,"reason":"用户明确指向之前讨论的方案，需要延续上下文。","requested_scopes":["workspace","task","session"],"requested_memory_types":["task_state","episodic"],"importance_threshold":4,"query_hint":"之前讨论的那个架构方案及其当前优化方向","candidate_limit":8}
 ```
 
 #### 结构化结果
@@ -1040,7 +959,7 @@ Examples:
 ```json
 {
   "should_search": true,
-  "reason": "用户明确指向之前的方案并要求延续优化。",
+  "reason": "用户明确指向之前讨论的方案，需要延续上下文。",
   "requested_scopes": [
     "workspace",
     "task",
@@ -1051,7 +970,7 @@ Examples:
     "episodic"
   ],
   "importance_threshold": 4,
-  "query_hint": "检索当前任务中之前讨论的架构方案、最近版本与优化意见",
+  "query_hint": "之前讨论的那个架构方案及其当前优化方向",
   "candidate_limit": 8
 }
 ```
@@ -1062,10 +981,24 @@ Examples:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：英文独立问题不应触发检索
-- 实际：{"should_search":false}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：8536ms
+- 实际：执行失败
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：10124ms
+- 错误类型：`schema`
+- 错误：`[
+  {
+    "code": "too_small",
+    "minimum": 1,
+    "type": "string",
+    "inclusive": true,
+    "exact": false,
+    "message": "String must contain at least 1 character(s)",
+    "path": [
+      "query_hint"
+    ]
+  }
+]`
 
 #### 测试提示词
 
@@ -1121,40 +1054,16 @@ Examples:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"should_search":false,"reason":"问题自包含，不依赖过往上下文","requested_scopes":["workspace"],"requested_memory_types":["fact_preference"],"importance_threshold":1,"query_hint":"CAP 定理 分布式系统 解释","candidate_limit":5}
-```
-
-#### 结构化结果
-
-```json
-{
-  "should_search": false,
-  "reason": "问题自包含，不依赖过往上下文",
-  "requested_scopes": [
-    "workspace"
-  ],
-  "requested_memory_types": [
-    "fact_preference"
-  ],
-  "importance_threshold": 1,
-  "query_hint": "CAP 定理 分布式系统 解释",
-  "candidate_limit": 5
-}
-```
-
 ### search-borderline-semantic
 
 - 模块：`recall-search-planner`
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：语义分接近阈值且有隐式引用，应触发检索
-- 实际：{"should_search":true,"query_hint":"上次使用的模板格式 模板讨论 之前约定的模板样式"}
+- 实际：{"should_search":true,"query_hint":"上次讨论的模板 格式 示例 偏好"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：26797ms
+- 耗时：11782ms
 
 #### 测试提示词
 
@@ -1215,7 +1124,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_search":true,"reason":"用户明确引用上次模板，需找先前格式约定。","requested_scopes":["user","workspace"],"requested_memory_types":["fact_preference","episodic"],"importance_threshold":4,"query_hint":"上次使用的模板格式 模板讨论 之前约定的模板样式","candidate_limit":8}
+{"should_search":true,"reason":"用户明确引用上次模板格式，需要延续先前上下文。","requested_scopes":["user","workspace"],"requested_memory_types":["fact_preference","episodic"],"importance_threshold":4,"query_hint":"上次讨论的模板 格式 示例 偏好","candidate_limit":8}
 ```
 
 #### 结构化结果
@@ -1223,7 +1132,7 @@ Examples:
 ```json
 {
   "should_search": true,
-  "reason": "用户明确引用上次模板，需找先前格式约定。",
+  "reason": "用户明确引用上次模板格式，需要延续先前上下文。",
   "requested_scopes": [
     "user",
     "workspace"
@@ -1233,7 +1142,7 @@ Examples:
     "episodic"
   ],
   "importance_threshold": 4,
-  "query_hint": "上次使用的模板格式 模板讨论 之前约定的模板样式",
+  "query_hint": "上次讨论的模板 格式 示例 偏好",
   "candidate_limit": 8
 }
 ```
@@ -1244,10 +1153,10 @@ Examples:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_SEARCH_SYSTEM_PROMPT`
 - 预期：跨任务引用应触发检索并限定范围
-- 实际：{"should_search":true,"query_hint":"上个任务中使用的重试策略 配置 决策 原因","requested_scopes":["workspace","task"]}
+- 实际：{"should_search":true,"query_hint":"检索上个相关任务中使用的重试策略与配置参数","requested_scopes":["workspace","task","user"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：20190ms
+- 耗时：11069ms
 
 #### 测试提示词
 
@@ -1309,7 +1218,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_search":true,"reason":"用户明确引用上个任务中的重试策略，需要延续先前任务决策。","requested_scopes":["workspace","task"],"requested_memory_types":["task_state","fact_preference"],"importance_threshold":4,"query_hint":"上个任务中使用的重试策略 配置 决策 原因","candidate_limit":8}
+{"should_search":true,"reason":"用户明确引用上个任务的重试策略，需延续先前任务上下文。","requested_scopes":["workspace","task","user"],"requested_memory_types":["task_state","fact_preference"],"importance_threshold":4,"query_hint":"检索上个相关任务中使用的重试策略与配置参数","candidate_limit":8}
 ```
 
 #### 结构化结果
@@ -1317,17 +1226,18 @@ Examples:
 ```json
 {
   "should_search": true,
-  "reason": "用户明确引用上个任务中的重试策略，需要延续先前任务决策。",
+  "reason": "用户明确引用上个任务的重试策略，需延续先前任务上下文。",
   "requested_scopes": [
     "workspace",
-    "task"
+    "task",
+    "user"
   ],
   "requested_memory_types": [
     "task_state",
     "fact_preference"
   ],
   "importance_threshold": 4,
-  "query_hint": "上个任务中使用的重试策略 配置 决策 原因",
+  "query_hint": "检索上个相关任务中使用的重试策略与配置参数",
   "candidate_limit": 8
 }
 ```
@@ -1341,7 +1251,7 @@ Examples:
 - 实际：{"should_inject":true,"selected_record_ids":["mem-style-1","mem-task-1"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9532ms
+- 耗时：14852ms
 
 #### 测试提示词
 
@@ -1436,7 +1346,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_inject":true,"reason":"用户要求延续之前风格与当前任务状态","selected_record_ids":["mem-style-1","mem-task-1"],"memory_summary":"延续用户的短句中文偏好：先给一句结论，再补最多3个短点；当前任务是在完善 memory orchestrator 的测试样本文档与实际指标。","requested_scopes":["workspace","user","task"],"requested_memory_types":["fact_preference","task_state"],"importance_threshold":4}
+{"should_inject":true,"reason":"用户明确要求延续之前的风格与任务进度","selected_record_ids":["mem-style-1","mem-task-1"],"memory_summary":"延续用户偏好的短句中文风格：先给一句结论，再补最多3个短点；当前任务是在继续完善 memory orchestrator 的测试样本文档与相关指标内容。","requested_scopes":["workspace","user","task"],"requested_memory_types":["fact_preference","task_state"],"importance_threshold":4}
 ```
 
 #### 结构化结果
@@ -1444,12 +1354,12 @@ Examples:
 ```json
 {
   "should_inject": true,
-  "reason": "用户要求延续之前风格与当前任务状态",
+  "reason": "用户明确要求延续之前的风格与任务进度",
   "selected_record_ids": [
     "mem-style-1",
     "mem-task-1"
   ],
-  "memory_summary": "延续用户的短句中文偏好：先给一句结论，再补最多3个短点；当前任务是在完善 memory orchestrator 的测试样本文档与实际指标。",
+  "memory_summary": "延续用户偏好的短句中文风格：先给一句结论，再补最多3个短点；当前任务是在继续完善 memory orchestrator 的测试样本文档与相关指标内容。",
   "requested_scopes": [
     "workspace",
     "user",
@@ -1472,7 +1382,7 @@ Examples:
 - 实际：{"should_inject":false,"selected_record_ids":[]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8939ms
+- 耗时：14990ms
 
 #### 测试提示词
 
@@ -1557,7 +1467,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_inject":false,"reason":"当前问题自包含，候选记忆仅弱相关偏好，无需注入","selected_record_ids":[],"memory_summary":"","requested_scopes":["workspace","user","task"],"requested_memory_types":["fact_preference","task_state","episodic"],"importance_threshold":4}
+{"should_inject":false,"reason":"当前问题自包含，候选记忆仅弱相关偏好，不必注入","selected_record_ids":[],"memory_summary":"","requested_scopes":["workspace","user","task"],"requested_memory_types":["fact_preference","task_state","episodic"],"importance_threshold":4}
 ```
 
 #### 结构化结果
@@ -1565,7 +1475,7 @@ Examples:
 ```json
 {
   "should_inject": false,
-  "reason": "当前问题自包含，候选记忆仅弱相关偏好，无需注入",
+  "reason": "当前问题自包含，候选记忆仅弱相关偏好，不必注入",
   "selected_record_ids": [],
   "memory_summary": "",
   "requested_scopes": [
@@ -1591,7 +1501,7 @@ Examples:
 - 实际：{"should_inject":true,"selected_record_ids":["mem-indent"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7879ms
+- 耗时：12406ms
 
 #### 测试提示词
 
@@ -1672,7 +1582,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_inject":true,"reason":"用户明确引用先前偏好，候选记忆高度相关","selected_record_ids":["mem-indent"],"memory_summary":"用户之前说明代码格式偏好为使用 4 空格缩进。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4}
+{"should_inject":true,"reason":"用户明确引用之前的格式偏好，需延续上下文","selected_record_ids":["mem-indent"],"memory_summary":"用户之前明确偏好代码使用 4 空格缩进。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4}
 ```
 
 #### 结构化结果
@@ -1680,11 +1590,11 @@ Examples:
 ```json
 {
   "should_inject": true,
-  "reason": "用户明确引用先前偏好，候选记忆高度相关",
+  "reason": "用户明确引用之前的格式偏好，需延续上下文",
   "selected_record_ids": [
     "mem-indent"
   ],
-  "memory_summary": "用户之前说明代码格式偏好为使用 4 空格缩进。",
+  "memory_summary": "用户之前明确偏好代码使用 4 空格缩进。",
   "requested_scopes": [
     "user"
   ],
@@ -1704,7 +1614,7 @@ Examples:
 - 实际：{"should_inject":true,"selected_record_ids":["mem-new-space"]}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8427ms
+- 耗时：13278ms
 
 #### 测试提示词
 
@@ -1785,7 +1695,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_inject":true,"reason":"用户明确引用“我的偏好”，需要注入已知编辑器缩进偏好","selected_record_ids":["mem-new-space"],"memory_summary":"用户当前偏好是使用 4 个空格缩进，不使用 tab；该记录比旧的 tab 偏好更新且置信度更高。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4}
+{"should_inject":true,"reason":"用户明确引用先前编辑器缩进偏好，需要连续性","selected_record_ids":["mem-new-space"],"memory_summary":"用户当前偏好是使用 4 个空格缩进，不使用 tab。","requested_scopes":["user"],"requested_memory_types":["fact_preference"],"importance_threshold":4}
 ```
 
 #### 结构化结果
@@ -1793,11 +1703,11 @@ Examples:
 ```json
 {
   "should_inject": true,
-  "reason": "用户明确引用“我的偏好”，需要注入已知编辑器缩进偏好",
+  "reason": "用户明确引用先前编辑器缩进偏好，需要连续性",
   "selected_record_ids": [
     "mem-new-space"
   ],
-  "memory_summary": "用户当前偏好是使用 4 个空格缩进，不使用 tab；该记录比旧的 tab 偏好更新且置信度更高。",
+  "memory_summary": "用户当前偏好是使用 4 个空格缩进，不使用 tab。",
   "requested_scopes": [
     "user"
   ],
@@ -1817,7 +1727,7 @@ Examples:
 - 实际：{"should_inject":false}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7671ms
+- 耗时：11321ms
 
 #### 测试提示词
 
@@ -1927,10 +1837,12 @@ Examples:
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_INJECTION_SYSTEM_PROMPT`
 - 预期：单条高匹配候选应注入
-- 实际：{"should_inject":true,"selected_record_ids":["mem-arch"]}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9541ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15003ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -1998,43 +1910,18 @@ Examples:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"should_inject":true,"reason":"用户明确要求延续上次方案，需承接任务状态","selected_record_ids":["mem-arch"],"memory_summary":"延续此前系统设计任务：当前架构方案为微服务 + API Gateway + Redis 缓存层，接下来在此基础上继续设计 API 层。","requested_scopes":["task","workspace"],"requested_memory_types":["task_state"],"importance_threshold":5}
-```
-
-#### 结构化结果
-
-```json
-{
-  "should_inject": true,
-  "reason": "用户明确要求延续上次方案，需承接任务状态",
-  "selected_record_ids": [
-    "mem-arch"
-  ],
-  "memory_summary": "延续此前系统设计任务：当前架构方案为微服务 + API Gateway + Redis 缓存层，接下来在此基础上继续设计 API 层。",
-  "requested_scopes": [
-    "task",
-    "workspace"
-  ],
-  "requested_memory_types": [
-    "task_state"
-  ],
-  "importance_threshold": 5
-}
-```
-
 ### inject-mixed-relevance
 
 - 模块：`recall-injection-planner`
 - 指标：`recall_accuracy_proxy`
 - Prompt：`MEMORY_RECALL_INJECTION_SYSTEM_PROMPT`
 - 预期：混合相关度时只选高相关候选
-- 实际：{"should_inject":true,"selected_record_ids":["mem-form"]}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：10331ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15008ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -2126,35 +2013,6 @@ Examples:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"should_inject":true,"reason":"用户明确要求继续之前的登录页任务，需要任务状态延续","selected_record_ids":["mem-form"],"memory_summary":"当前任务是实现登录页表单验证，邮箱字段已完成，可在此基础上继续处理其余校验逻辑。","requested_scopes":["task","workspace","user"],"requested_memory_types":["task_state","fact_preference"],"importance_threshold":4}
-```
-
-#### 结构化结果
-
-```json
-{
-  "should_inject": true,
-  "reason": "用户明确要求继续之前的登录页任务，需要任务状态延续",
-  "selected_record_ids": [
-    "mem-form"
-  ],
-  "memory_summary": "当前任务是实现登录页表单验证，邮箱字段已完成，可在此基础上继续处理其余校验逻辑。",
-  "requested_scopes": [
-    "task",
-    "workspace",
-    "user"
-  ],
-  "requested_memory_types": [
-    "task_state",
-    "fact_preference"
-  ],
-  "importance_threshold": 4
-}
-```
-
 ### inject-empty-candidates
 
 - 模块：`recall-injection-planner`
@@ -2164,7 +2022,7 @@ Examples:
 - 实际：{"should_inject":false}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：18415ms
+- 耗时：11321ms
 
 #### 测试提示词
 
@@ -2222,7 +2080,7 @@ Examples:
 #### 模型原始输出
 
 ```json
-{"should_inject":false,"reason":"当前输入缺少具体上下文且无可用候选记忆","selected_record_ids":[],"memory_summary":"","requested_scopes":["workspace"],"requested_memory_types":["fact_preference"],"importance_threshold":3}
+{"should_inject":false,"reason":"当前请求过于泛化且无可用候选记忆","selected_record_ids":[],"memory_summary":"","requested_scopes":["workspace"],"requested_memory_types":["fact_preference"],"importance_threshold":3}
 ```
 
 #### 结构化结果
@@ -2230,7 +2088,7 @@ Examples:
 ```json
 {
   "should_inject": false,
-  "reason": "当前输入缺少具体上下文且无可用候选记忆",
+  "reason": "当前请求过于泛化且无可用候选记忆",
   "selected_record_ids": [],
   "memory_summary": "",
   "requested_scopes": [
@@ -2249,10 +2107,10 @@ Examples:
 - 指标：`writeback_extraction_accuracy`
 - Prompt：`MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT`
 - 预期：应提取用户偏好为 fact_preference
-- 实际：[{"type":"fact_preference","scope":"user","summary":"偏好代码使用 4 空格缩进，不使用 Tab"}]
+- 实际：[{"type":"fact_preference","scope":"user","summary":"偏好代码使用 4 空格缩进，不使用 tab"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7769ms
+- 耗时：11751ms
 
 #### 测试提示词
 
@@ -2305,7 +2163,7 @@ Examples of bad extractions:
 #### 模型原始输出
 
 ```json
-{"candidates":[{"candidate_type":"fact_preference","scope":"user","summary":"偏好代码使用 4 空格缩进，不使用 Tab","importance":4,"confidence":0.99,"write_reason":"这是稳定且可复用的代码风格偏好，适合后续所有编程任务遵循"}]}
+{"candidates":[{"candidate_type":"fact_preference","scope":"user","summary":"偏好代码使用 4 空格缩进，不使用 tab","importance":5,"confidence":0.99,"write_reason":"用户明确表达了稳定的代码格式偏好，后续生成代码时应持续遵循"}]}
 ```
 
 #### 结构化结果
@@ -2316,10 +2174,10 @@ Examples of bad extractions:
     {
       "candidate_type": "fact_preference",
       "scope": "user",
-      "summary": "偏好代码使用 4 空格缩进，不使用 Tab",
-      "importance": 4,
+      "summary": "偏好代码使用 4 空格缩进，不使用 tab",
+      "importance": 5,
       "confidence": 0.99,
-      "write_reason": "这是稳定且可复用的代码风格偏好，适合后续所有编程任务遵循"
+      "write_reason": "用户明确表达了稳定的代码格式偏好，后续生成代码时应持续遵循"
     }
   ]
 }
@@ -2334,7 +2192,7 @@ Examples of bad extractions:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9094ms
+- 耗时：7753ms
 
 #### 测试提示词
 
@@ -2404,10 +2262,10 @@ Examples of bad extractions:
 - 指标：`writeback_extraction_accuracy`
 - Prompt：`MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT`
 - 预期：应提取任务进度为 task_state
-- 实际：[{"type":"task_state","scope":"task","summary":"数据库迁移已完成第 3 步（共 5 步），下一步是第 4 步创建索引"}]
+- 实际：[{"type":"task_state","scope":"task","summary":"数据库迁移已完成第 3/5 步，下一步是创建索引（第 4 步）。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9531ms
+- 耗时：13972ms
 
 #### 测试提示词
 
@@ -2460,7 +2318,7 @@ Examples of bad extractions:
 #### 模型原始输出
 
 ```json
-{"candidates":[{"candidate_type":"task_state","scope":"task","summary":"数据库迁移已完成第 3 步（共 5 步），下一步是第 4 步创建索引","importance":4,"confidence":0.95,"write_reason":"包含明确的任务进度与下一步，可用于后续继续跟踪任务"}]}
+{"candidates":[{"candidate_type":"task_state","scope":"task","summary":"数据库迁移已完成第 3/5 步，下一步是创建索引（第 4 步）。","importance":4,"confidence":0.95,"write_reason":"包含明确的任务进度和下一步状态，后续跟进该任务时有用。"}]}
 ```
 
 #### 结构化结果
@@ -2471,10 +2329,10 @@ Examples of bad extractions:
     {
       "candidate_type": "task_state",
       "scope": "task",
-      "summary": "数据库迁移已完成第 3 步（共 5 步），下一步是第 4 步创建索引",
+      "summary": "数据库迁移已完成第 3/5 步，下一步是创建索引（第 4 步）。",
       "importance": 4,
       "confidence": 0.95,
-      "write_reason": "包含明确的任务进度与下一步，可用于后续继续跟踪任务"
+      "write_reason": "包含明确的任务进度和下一步状态，后续跟进该任务时有用。"
     }
   ]
 }
@@ -2489,7 +2347,7 @@ Examples of bad extractions:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8339ms
+- 耗时：14002ms
 
 #### 测试提示词
 
@@ -2562,7 +2420,7 @@ Examples of bad extractions:
 - 实际：[{"type":"fact_preference","scope":"workspace","summary":"项目中的所有 API 都需要使用 /api/v2 前缀"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9053ms
+- 耗时：13144ms
 
 #### 测试提示词
 
@@ -2615,7 +2473,7 @@ Examples of bad extractions:
 #### 模型原始输出
 
 ```json
-{"candidates":[{"candidate_type":"fact_preference","scope":"workspace","summary":"项目中的所有 API 都需要使用 /api/v2 前缀","importance":5,"confidence":0.96,"write_reason":"这是项目级的接口约束，会影响后续所有相关开发。"}]}
+{"candidates":[{"candidate_type":"fact_preference","scope":"workspace","summary":"项目中的所有 API 都需要使用 /api/v2 前缀","importance":5,"confidence":0.98,"write_reason":"这是项目级的持久接口规范，会影响后续所有 API 路由设计"}]}
 ```
 
 #### 结构化结果
@@ -2628,8 +2486,8 @@ Examples of bad extractions:
       "scope": "workspace",
       "summary": "项目中的所有 API 都需要使用 /api/v2 前缀",
       "importance": 5,
-      "confidence": 0.96,
-      "write_reason": "这是项目级的接口约束，会影响后续所有相关开发。"
+      "confidence": 0.98,
+      "write_reason": "这是项目级的持久接口规范，会影响后续所有 API 路由设计"
     }
   ]
 }
@@ -2641,10 +2499,12 @@ Examples of bad extractions:
 - 指标：`writeback_extraction_accuracy`
 - Prompt：`MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT`
 - 预期：具体的外部事件应提取为 episodic
-- 实际：[{"type":"episodic","scope":"workspace","summary":"生产数据库已升级到 PostgreSQL 16。"}]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：8896ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15015ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -2694,29 +2554,6 @@ Examples of bad extractions:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"candidates":[{"candidate_type":"episodic","scope":"workspace","summary":"生产数据库已升级到 PostgreSQL 16。","importance":4,"confidence":0.95,"write_reason":"这是与项目环境相关的已确认外部变更，后续开发和 SQL 兼容性会受影响。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "candidates": [
-    {
-      "candidate_type": "episodic",
-      "scope": "workspace",
-      "summary": "生产数据库已升级到 PostgreSQL 16。",
-      "importance": 4,
-      "confidence": 0.95,
-      "write_reason": "这是与项目环境相关的已确认外部变更，后续开发和 SQL 兼容性会受影响。"
-    }
-  ]
-}
-```
-
 ### extract-skip-question-echo
 
 - 模块：`writeback-extractor`
@@ -2726,7 +2563,7 @@ Examples of bad extractions:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9525ms
+- 耗时：10456ms
 
 #### 测试提示词
 
@@ -2796,10 +2633,12 @@ Examples of bad extractions:
 - 指标：`writeback_extraction_accuracy`
 - Prompt：`MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT`
 - 预期：一轮包含多个持久事实时应提取多个候选
-- 实际：{"count":3,"types":["fact_preference","fact_preference","fact_preference"]}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：11283ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15002ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -2849,45 +2688,6 @@ Examples of bad extractions:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"candidates":[{"candidate_type":"fact_preference","scope":"user","summary":"偏好使用 Vim 键位","importance":4,"confidence":0.98,"write_reason":"这是用户明确说明的稳定开发习惯，后续交互中可持续使用。"},{"candidate_type":"fact_preference","scope":"user","summary":"终端环境使用 zsh","importance":4,"confidence":0.97,"write_reason":"这是用户明确提供的稳定开发环境信息，影响命令与配置建议。"},{"candidate_type":"fact_preference","scope":"user","summary":"测试框架使用 vitest","importance":5,"confidence":0.98,"write_reason":"这是用户明确说明的项目测试偏好，后续测试相关建议应据此适配。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "candidates": [
-    {
-      "candidate_type": "fact_preference",
-      "scope": "user",
-      "summary": "偏好使用 Vim 键位",
-      "importance": 4,
-      "confidence": 0.98,
-      "write_reason": "这是用户明确说明的稳定开发习惯，后续交互中可持续使用。"
-    },
-    {
-      "candidate_type": "fact_preference",
-      "scope": "user",
-      "summary": "终端环境使用 zsh",
-      "importance": 4,
-      "confidence": 0.97,
-      "write_reason": "这是用户明确提供的稳定开发环境信息，影响命令与配置建议。"
-    },
-    {
-      "candidate_type": "fact_preference",
-      "scope": "user",
-      "summary": "测试框架使用 vitest",
-      "importance": 5,
-      "confidence": 0.98,
-      "write_reason": "这是用户明确说明的项目测试偏好，后续测试相关建议应据此适配。"
-    }
-  ]
-}
-```
-
 ### refine-drop-low-signal
 
 - 模块：`writeback-refiner`
@@ -2897,7 +2697,7 @@ Examples of bad extractions:
 - 实际：[{"source":"rule_index:0","action":"drop"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7900ms
+- 耗时：9856ms
 
 #### 测试提示词
 
@@ -2954,7 +2754,7 @@ Behavioural rules:
 #### 模型原始输出
 
 ```json
-{"refined_candidates":[{"source":"rule_index:0","action":"drop","reason":"只是礼貌性确认会处理请求，不属于持久有用记忆。"}]}
+{"refined_candidates":[{"source":"rule_index:0","action":"drop","reason":"仅为礼貌性确认，不构成可持久化的耐久信息。"}]}
 ```
 
 #### 结构化结果
@@ -2965,7 +2765,7 @@ Behavioural rules:
     {
       "source": "rule_index:0",
       "action": "drop",
-      "reason": "只是礼貌性确认会处理请求，不属于持久有用记忆。"
+      "reason": "仅为礼貌性确认，不构成可持久化的耐久信息。"
     }
   ]
 }
@@ -2980,7 +2780,7 @@ Behavioural rules:
 - 实际：[{"source":"rule_index:0","action":"keep"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8163ms
+- 耗时：12592ms
 
 #### 测试提示词
 
@@ -3037,7 +2837,7 @@ Behavioural rules:
 #### 模型原始输出
 
 ```json
-{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"这是明确且稳定的用户语言偏好，适合写入长期记忆。","summary":"用户偏好：默认使用中文回答，不使用英文。","importance":5,"confidence":0.98,"scope":"user","candidate_type":"fact_preference"}]}
+{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"这是明确且稳定的用户语言偏好，适合持久记忆。","summary":"用户偏好：默认使用中文回答，不使用英文。","importance":5,"confidence":0.98,"scope":"user","candidate_type":"fact_preference"}]}
 ```
 
 #### 结构化结果
@@ -3053,7 +2853,7 @@ Behavioural rules:
       "confidence": 0.98,
       "scope": "user",
       "candidate_type": "fact_preference",
-      "reason": "这是明确且稳定的用户语言偏好，适合写入长期记忆。"
+      "reason": "这是明确且稳定的用户语言偏好，适合持久记忆。"
     }
   ]
 }
@@ -3068,7 +2868,7 @@ Behavioural rules:
 - 实际：[{"source":"rule_index:0","action":"keep"},{"source":"rule_index:1","action":"keep"}]
 - 评分：`0.600`
 - 结果：通过
-- 耗时：13254ms
+- 耗时：13786ms
 
 #### 测试提示词
 
@@ -3134,7 +2934,7 @@ Behavioural rules:
 #### 模型原始输出
 
 ```json
-{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"明确且持久的语言偏好。"},{"source":"rule_index:1","action":"keep","reason":"明确且持久的输出风格偏好。"}]}
+{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"稳定的语言偏好，可复用。"},{"source":"rule_index:1","action":"keep","reason":"稳定的回答风格偏好，可复用。"}]}
 ```
 
 #### 结构化结果
@@ -3145,12 +2945,12 @@ Behavioural rules:
     {
       "source": "rule_index:0",
       "action": "keep",
-      "reason": "明确且持久的语言偏好。"
+      "reason": "稳定的语言偏好，可复用。"
     },
     {
       "source": "rule_index:1",
       "action": "keep",
-      "reason": "明确且持久的输出风格偏好。"
+      "reason": "稳定的回答风格偏好，可复用。"
     }
   ]
 }
@@ -3162,28 +2962,12 @@ Behavioural rules:
 - 指标：`writeback_refine_accuracy`
 - Prompt：`MEMORY_WRITEBACK_REFINE_SYSTEM_PROMPT`
 - 预期：规则遗漏的重要事实应作为 new 补充
-- 实际：执行失败
+- 实际：网络/上游错误
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：10667ms
-- 错误类型：`schema`
-- 错误：`[
-  {
-    "received": "constraint",
-    "code": "invalid_enum_value",
-    "options": [
-      "fact_preference",
-      "task_state",
-      "episodic"
-    ],
-    "path": [
-      "refined_candidates",
-      1,
-      "candidate_type"
-    ],
-    "message": "Invalid enum value. Expected 'fact_preference' | 'task_state' | 'episodic', received 'constraint'"
-  }
-]`
+- 耗时：15001ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -3246,7 +3030,7 @@ Behavioural rules:
 - 实际：[{"source":"rule_index:0","action":"keep"},{"source":"rule_index:1","action":"keep"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10043ms
+- 耗时：12603ms
 
 #### 测试提示词
 
@@ -3343,7 +3127,7 @@ Behavioural rules:
 - 实际：[{"source":"rule_index:0","action":"drop"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9301ms
+- 耗时：13760ms
 
 #### 测试提示词
 
@@ -3400,7 +3184,7 @@ Behavioural rules:
 #### 模型原始输出
 
 ```json
-{"refined_candidates":[{"source":"rule_index:0","action":"drop","reason":"File path restatement from a one-off Q&A; not durable enough for memory."}]}
+{"refined_candidates":[{"source":"rule_index:0","action":"drop","reason":"File path restatement from the turn; not durable enough to store as memory."}]}
 ```
 
 #### 结构化结果
@@ -3411,7 +3195,7 @@ Behavioural rules:
     {
       "source": "rule_index:0",
       "action": "drop",
-      "reason": "File path restatement from a one-off Q&A; not durable enough for memory."
+      "reason": "File path restatement from the turn; not durable enough to store as memory."
     }
   ]
 }
@@ -3423,10 +3207,10 @@ Behavioural rules:
 - 指标：`writeback_refine_accuracy`
 - Prompt：`MEMORY_WRITEBACK_REFINE_SYSTEM_PROMPT`
 - 预期：关键约束的重要度被低估时应 keep 并提升 importance
-- 实际：{"source":"rule_index:0","action":"keep","summary":"项目安全规则：禁止使用 eval。","importance":4,"confidence":0.96,"scope":"workspace","candidate_type":"fact_preference","reason":"明确的项目级安全规则，具有持续约束性。"}
+- 实际：{"source":"rule_index:0","action":"keep","summary":"项目安全规则：绝对禁止使用 eval。","importance":4,"confidence":0.95,"scope":"workspace","candidate_type":"fact_preference","reason":"明确的项目安全规则，适合作为持久工作区约束保存。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9181ms
+- 耗时：13140ms
 
 #### 测试提示词
 
@@ -3483,7 +3267,7 @@ Behavioural rules:
 #### 模型原始输出
 
 ```json
-{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"明确的项目级安全规则，具有持续约束性。","summary":"项目安全规则：禁止使用 eval。","importance":4,"confidence":0.96,"scope":"workspace","candidate_type":"fact_preference"}]}
+{"refined_candidates":[{"source":"rule_index:0","action":"keep","reason":"明确的项目安全规则，适合作为持久工作区约束保存。","summary":"项目安全规则：绝对禁止使用 eval。","importance":4,"confidence":0.95,"scope":"workspace","candidate_type":"fact_preference"}]}
 ```
 
 #### 结构化结果
@@ -3494,12 +3278,12 @@ Behavioural rules:
     {
       "source": "rule_index:0",
       "action": "keep",
-      "summary": "项目安全规则：禁止使用 eval。",
+      "summary": "项目安全规则：绝对禁止使用 eval。",
       "importance": 4,
-      "confidence": 0.96,
+      "confidence": 0.95,
       "scope": "workspace",
       "candidate_type": "fact_preference",
-      "reason": "明确的项目级安全规则，具有持续约束性。"
+      "reason": "明确的项目安全规则，适合作为持久工作区约束保存。"
     }
   ]
 }
@@ -3511,10 +3295,12 @@ Behavioural rules:
 - 指标：`writeback_refine_accuracy`
 - Prompt：`MEMORY_WRITEBACK_REFINE_SYSTEM_PROMPT`
 - 预期：无候选输入时应返回空列表
-- 实际：{"count":0}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：7176ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15013ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -3558,20 +3344,6 @@ Behavioural rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"refined_candidates":[]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "refined_candidates": []
-}
-```
-
 ### govplan-merge-duplicates
 
 - 模块：`governance-planner`
@@ -3581,7 +3353,7 @@ Behavioural rules:
 - 实际：[{"type":"merge"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8830ms
+- 耗时：13411ms
 
 #### 测试提示词
 
@@ -3663,7 +3435,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"actions":[{"type":"merge","target_record_ids":["gp-1","gp-2"],"merged_summary":"用户偏好：默认用中文回答。","merged_importance":5,"reason":"两条记录表达同一稳定偏好，合并可去重并保留更清晰表述。"}],"notes":"发现 2 条同义用户语言偏好记录，适合合并为单一稳定偏好。"}
+{"actions":[{"type":"merge","target_record_ids":["gp-1","gp-2"],"merged_summary":"用户偏好：默认用中文回答。","merged_importance":5,"reason":"两条记录表达同一稳定偏好，内容重复，仅措辞略有差异，应合并保留更清晰表述。"}],"notes":"检测到同一用户偏好重复记录，适合合并；无冲突需处理。"}
 ```
 
 #### 结构化结果
@@ -3679,10 +3451,10 @@ Rules:
       ],
       "merged_summary": "用户偏好：默认用中文回答。",
       "merged_importance": 5,
-      "reason": "两条记录表达同一稳定偏好，合并可去重并保留更清晰表述。"
+      "reason": "两条记录表达同一稳定偏好，内容重复，仅措辞略有差异，应合并保留更清晰表述。"
     }
   ],
-  "notes": "发现 2 条同义用户语言偏好记录，适合合并为单一稳定偏好。"
+  "notes": "检测到同一用户偏好重复记录，适合合并；无冲突需处理。"
 }
 ```
 
@@ -3692,11 +3464,10 @@ Rules:
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：记录互不重复且健康时不应输出 action
-- 实际：{"action_count":1}
-- 评分：`0.200`
-- 结果：未通过
-- 耗时：11575ms
-- 错误类型：`logic`
+- 实际：{"action_count":0}
+- 评分：`1.000`
+- 结果：通过
+- 耗时：11619ms
 
 #### 测试提示词
 
@@ -3778,22 +3549,15 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"actions":[{"type":"downgrade","record_id":"gp-3","new_importance":3,"reason":"这是稳定偏好，但对多数任务的全局影响有限，当前重要性略高。"}],"notes":"未发现可合并、归档或冲突处理的记录；gp-4 作为工作区规则可保留当前重要性。"}
+{"actions":[],"notes":"未发现可合并、归档、降级或冲突处理的明显对象；现有记录清晰且无重复。"}
 ```
 
 #### 结构化结果
 
 ```json
 {
-  "actions": [
-    {
-      "type": "downgrade",
-      "record_id": "gp-3",
-      "new_importance": 3,
-      "reason": "这是稳定偏好，但对多数任务的全局影响有限，当前重要性略高。"
-    }
-  ],
-  "notes": "未发现可合并、归档或冲突处理的记录；gp-4 作为工作区规则可保留当前重要性。"
+  "actions": [],
+  "notes": "未发现可合并、归档、降级或冲突处理的明显对象；现有记录清晰且无重复。"
 }
 ```
 
@@ -3803,10 +3567,12 @@ Rules:
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：旧记录被新记录替代时应归档旧记录
-- 实际：[{"type":"merge"}]
-- 评分：`0.600`
-- 结果：通过
-- 耗时：10415ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15012ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -3886,42 +3652,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"actions":[{"type":"merge","target_record_ids":["gp-new","gp-old"],"merged_summary":"用户偏好：默认中文，简短输出，先给结论。","merged_importance":5,"reason":"两条记录描述同一用户偏好；新记录更完整，旧记录可并入以避免重复。"}],"notes":"新旧记录内容一致且新记录更具体，适合合并为一条稳定偏好。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "actions": [
-    {
-      "type": "merge",
-      "target_record_ids": [
-        "gp-new",
-        "gp-old"
-      ],
-      "merged_summary": "用户偏好：默认中文，简短输出，先给结论。",
-      "merged_importance": 5,
-      "reason": "两条记录描述同一用户偏好；新记录更完整，旧记录可并入以避免重复。"
-    }
-  ],
-  "notes": "新旧记录内容一致且新记录更具体，适合合并为一条稳定偏好。"
-}
-```
-
 ### govplan-downgrade-inflated
 
 - 模块：`governance-planner`
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：重要度明显虚高的低价值记录应被降级
-- 实际：[{"type":"downgrade"}]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9865ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15004ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -3983,38 +3725,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"actions":[{"type":"downgrade","record_id":"gp-inflated","new_importance":1,"reason":"会话级短暂事件，且内容不具持续性，当前重要性明显偏高。"}],"notes":"该记录是低稳定性的临时性观察，不适合作为高重要度持久记忆。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "actions": [
-    {
-      "type": "downgrade",
-      "record_id": "gp-inflated",
-      "new_importance": 1,
-      "reason": "会话级短暂事件，且内容不具持续性，当前重要性明显偏高。"
-    }
-  ],
-  "notes": "该记录是低稳定性的临时性观察，不适合作为高重要度持久记忆。"
-}
-```
-
 ### govplan-summarize-episodics
 
 - 模块：`governance-planner`
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：三条以上短 episodic 记录应合并为摘要
-- 实际：[{"type":"summarize"}]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：10121ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15012ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -4110,46 +3832,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"actions":[{"type":"summarize","source_record_ids":["gp-ep-1","gp-ep-2","gp-ep-3"],"new_summary":"4/20–4/22 连续进行了集成、回归和端到端测试。","new_importance":3,"scope":"workspace","candidate_type":"episodic","reason":"3条相近的短期测试事件可合并为一条更紧凑的阶段性记录。"}],"notes":"这些记录描述同一时间段内连续发生的测试活动，适合压缩总结；当前无冲突需处理。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "actions": [
-    {
-      "type": "summarize",
-      "source_record_ids": [
-        "gp-ep-1",
-        "gp-ep-2",
-        "gp-ep-3"
-      ],
-      "new_summary": "4/20–4/22 连续进行了集成、回归和端到端测试。",
-      "new_importance": 3,
-      "scope": "workspace",
-      "candidate_type": "episodic",
-      "reason": "3条相近的短期测试事件可合并为一条更紧凑的阶段性记录。"
-    }
-  ],
-  "notes": "这些记录描述同一时间段内连续发生的测试活动，适合压缩总结；当前无冲突需处理。"
-}
-```
-
 ### govplan-resolve-conflict
 
 - 模块：`governance-planner`
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：有明确证据的冲突应被解决
-- 实际：[{"type":"archive"}]
-- 评分：`0.500`
+- 实际：网络/上游错误
+- 评分：`0.000`
 - 结果：未通过
-- 耗时：10844ms
-- 错误类型：`logic`
+- 耗时：15006ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -4237,27 +3931,6 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"actions":[{"type":"archive","record_id":"gp-c1","reason":"被更新且更高置信度的 gp-c2 覆盖；两者描述同一用户缩进偏好且内容矛盾。"}],"notes":"gp-c1 与 gp-c2 存在直接矛盾。基于时间与置信度，gp-c2 更可信，适合保留，gp-c1 归档。open_conflicts 未自动解决：缺少 related_records 作为额外佐证，按规则留给人工或后续记录处理。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "actions": [
-    {
-      "type": "archive",
-      "record_id": "gp-c1",
-      "reason": "被更新且更高置信度的 gp-c2 覆盖；两者描述同一用户缩进偏好且内容矛盾。"
-    }
-  ],
-  "notes": "gp-c1 与 gp-c2 存在直接矛盾。基于时间与置信度，gp-c2 更可信，适合保留，gp-c1 归档。open_conflicts 未自动解决：缺少 related_records 作为额外佐证，按规则留给人工或后续记录处理。"
-}
-```
-
 ### govplan-skip-ambiguous-conflict
 
 - 模块：`governance-planner`
@@ -4267,7 +3940,7 @@ Rules:
 - 实际：[]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：14451ms
+- 耗时：11465ms
 
 #### 测试提示词
 
@@ -4358,7 +4031,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"actions":[],"notes":"发现 1 个未决冲突：gp-a1 与 gp-a2 对测试框架的描述相互矛盾。由于缺少可判定真值的相关历史记录，当前无法安全自动合并、归档或解决冲突，建议保留给人工处理。"}
+{"actions":[],"notes":"存在 1 个未决冲突：gp-a1 与 gp-a2 对测试框架的描述互相矛盾。由于缺少可判定真值的相关历史记录，当前不自动合并、归档或解决冲突，建议人工核实后处理。"}
 ```
 
 #### 结构化结果
@@ -4366,7 +4039,7 @@ Rules:
 ```json
 {
   "actions": [],
-  "notes": "发现 1 个未决冲突：gp-a1 与 gp-a2 对测试框架的描述相互矛盾。由于缺少可判定真值的相关历史记录，当前无法安全自动合并、归档或解决冲突，建议保留给人工处理。"
+  "notes": "存在 1 个未决冲突：gp-a1 与 gp-a2 对测试框架的描述互相矛盾。由于缺少可判定真值的相关历史记录，当前不自动合并、归档或解决冲突，建议人工核实后处理。"
 }
 ```
 
@@ -4376,10 +4049,10 @@ Rules:
 - 指标：`governance_plan_accuracy`
 - Prompt：`MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT`
 - 预期：明确废弃的记录应被删除
-- 实际：[{"type":"delete"}]
-- 评分：`1.000`
+- 实际：[{"type":"archive"}]
+- 评分：`0.700`
 - 结果：通过
-- 耗时：8811ms
+- 耗时：13062ms
 
 #### 测试提示词
 
@@ -4462,7 +4135,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"actions":[{"type":"delete","record_id":"gp-obsolete","reason":"该记录描述的 monkey patch 已被正式修复替代且已移除，已无持续检索价值。","delete_reason":"obsolete_superseded"}],"notes":"相关记录明确表明正式修复已完成并合入主分支，因此临时补丁记录可从检索面移除。"}
+{"actions":[{"type":"archive","record_id":"gp-obsolete","reason":"已被“bug 已正式修复并合入主分支”这一较新的稳定记录取代，且该 monkey patch 已移除，保留检索价值低。"}],"notes":"seed 记录描述的是已撤销的临时措施；相关记录明确给出正式修复已完成，归档即可。"}
 ```
 
 #### 结构化结果
@@ -4471,13 +4144,12 @@ Rules:
 {
   "actions": [
     {
-      "type": "delete",
+      "type": "archive",
       "record_id": "gp-obsolete",
-      "reason": "该记录描述的 monkey patch 已被正式修复替代且已移除，已无持续检索价值。",
-      "delete_reason": "obsolete_superseded"
+      "reason": "已被“bug 已正式修复并合入主分支”这一较新的稳定记录取代，且该 monkey patch 已移除，保留检索价值低。"
     }
   ],
-  "notes": "相关记录明确表明正式修复已完成并合入主分支，因此临时补丁记录可从检索面移除。"
+  "notes": "seed 记录描述的是已撤销的临时措施；相关记录明确给出正式修复已完成，归档即可。"
 }
 ```
 
@@ -4487,10 +4159,12 @@ Rules:
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：低信号候选应被标记低质量
-- 实际：{"candidate_id":"cand-low-1","quality_score":0.08,"confidence":0.94,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是助手应答语，缺少可复用信息"},{"type":"vague","severity":"medium","description":"内容过于笼统，无法形成稳定记忆"}],"reason":"这是一句临时性回应，不适合写入长期记忆。"}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：11035ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15016ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -4555,62 +4229,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"assessments":[{"candidate_id":"cand-low-1","quality_score":0.08,"confidence":0.94,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是助手应答语，缺少可复用信息"},{"type":"vague","severity":"medium","description":"内容过于笼统，无法形成稳定记忆"}],"reason":"这是一句临时性回应，不适合写入长期记忆。"},{"candidate_id":"cand-good-1","quality_score":0.95,"confidence":0.97,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"直接来自用户明确表述，属于稳定写作格式偏好，信号强。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "assessments": [
-    {
-      "candidate_id": "cand-low-1",
-      "quality_score": 0.08,
-      "confidence": 0.94,
-      "potential_conflicts": [],
-      "suggested_importance": 1,
-      "suggested_status": "pending_confirmation",
-      "issues": [
-        {
-          "type": "low_quality",
-          "severity": "high",
-          "description": "仅是助手应答语，缺少可复用信息"
-        },
-        {
-          "type": "vague",
-          "severity": "medium",
-          "description": "内容过于笼统，无法形成稳定记忆"
-        }
-      ],
-      "reason": "这是一句临时性回应，不适合写入长期记忆。"
-    },
-    {
-      "candidate_id": "cand-good-1",
-      "quality_score": 0.95,
-      "confidence": 0.97,
-      "potential_conflicts": [],
-      "suggested_importance": 5,
-      "suggested_status": "active",
-      "issues": [],
-      "reason": "直接来自用户明确表述，属于稳定写作格式偏好，信号强。"
-    }
-  ]
-}
-```
-
 ### quality-duplicate-detection
 
 - 模块：`writeback-quality-assessor`
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：与已有记录高度重复的候选应标记 duplicate
-- 实际：{"candidate_id":"cand-dup","quality_score":0.2,"confidence":0.97,"potential_conflicts":["rec-existing"],"suggested_importance":5,"suggested_status":"pending_confirmation","issues":[{"type":"duplicate","severity":"high","description":"与现有记忆内容基本完全重复。"}],"reason":"候选内容与现有偏好记录一致，新增价值很低，建议视为重复项。"}
+- 实际：{"candidate_id":"cand-dup","quality_score":0.28,"confidence":0.96,"potential_conflicts":["rec-existing"],"suggested_importance":4,"suggested_status":"pending_confirmation","issues":[{"type":"duplicate","severity":"high","description":"与现有记忆内容基本一致。"},{"type":"low_quality","severity":"medium","description":"新增信息量低，写回价值有限。"}],"reason":"该候选与现有活跃偏好记录重复，建议不直接新增，至少待确认后处理。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9013ms
+- 耗时：13061ms
 
 #### 测试提示词
 
@@ -4669,7 +4297,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-dup","quality_score":0.2,"confidence":0.97,"potential_conflicts":["rec-existing"],"suggested_importance":5,"suggested_status":"pending_confirmation","issues":[{"type":"duplicate","severity":"high","description":"与现有记忆内容基本完全重复。"}],"reason":"候选内容与现有偏好记录一致，新增价值很低，建议视为重复项。"}]}
+{"assessments":[{"candidate_id":"cand-dup","quality_score":0.28,"confidence":0.96,"potential_conflicts":["rec-existing"],"suggested_importance":4,"suggested_status":"pending_confirmation","issues":[{"type":"duplicate","severity":"high","description":"与现有记忆内容基本一致。"},{"type":"low_quality","severity":"medium","description":"新增信息量低，写回价值有限。"}],"reason":"该候选与现有活跃偏好记录重复，建议不直接新增，至少待确认后处理。"}]}
 ```
 
 #### 结构化结果
@@ -4679,21 +4307,26 @@ Rules:
   "assessments": [
     {
       "candidate_id": "cand-dup",
-      "quality_score": 0.2,
-      "confidence": 0.97,
+      "quality_score": 0.28,
+      "confidence": 0.96,
       "potential_conflicts": [
         "rec-existing"
       ],
-      "suggested_importance": 5,
+      "suggested_importance": 4,
       "suggested_status": "pending_confirmation",
       "issues": [
         {
           "type": "duplicate",
           "severity": "high",
-          "description": "与现有记忆内容基本完全重复。"
+          "description": "与现有记忆内容基本一致。"
+        },
+        {
+          "type": "low_quality",
+          "severity": "medium",
+          "description": "新增信息量低，写回价值有限。"
         }
       ],
-      "reason": "候选内容与现有偏好记录一致，新增价值很低，建议视为重复项。"
+      "reason": "该候选与现有活跃偏好记录重复，建议不直接新增，至少待确认后处理。"
     }
   ]
 }
@@ -4705,10 +4338,10 @@ Rules:
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：高质量候选应通过，无 issue
-- 实际：{"candidate_id":"cand-high","quality_score":0.97,"confidence":0.96,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"信息明确、稳定，属项目级规则，适合写入。"}
+- 实际：{"candidate_id":"cand-high","quality_score":0.97,"confidence":0.95,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"内容明确、稳定且对工作区规则有高价值。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7513ms
+- 耗时：11462ms
 
 #### 测试提示词
 
@@ -4757,7 +4390,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-high","quality_score":0.97,"confidence":0.96,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"信息明确、稳定，属项目级规则，适合写入。"}]}
+{"assessments":[{"candidate_id":"cand-high","quality_score":0.97,"confidence":0.95,"potential_conflicts":[],"suggested_importance":5,"suggested_status":"active","issues":[],"reason":"内容明确、稳定且对工作区规则有高价值。"}]}
 ```
 
 #### 结构化结果
@@ -4768,12 +4401,12 @@ Rules:
     {
       "candidate_id": "cand-high",
       "quality_score": 0.97,
-      "confidence": 0.96,
+      "confidence": 0.95,
       "potential_conflicts": [],
       "suggested_importance": 5,
       "suggested_status": "active",
       "issues": [],
-      "reason": "信息明确、稳定，属项目级规则，适合写入。"
+      "reason": "内容明确、稳定且对工作区规则有高价值。"
     }
   ]
 }
@@ -4785,10 +4418,10 @@ Rules:
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：模糊摘要应标记 vague
-- 实际：{"candidate_id":"cand-vague","quality_score":0.12,"confidence":0.95,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"high","description":"摘要过于笼统，缺少可检索的具体事实。"},{"type":"low_quality","severity":"medium","description":"信息量低，难以形成有价值的持久记忆。"}],"reason":"内容模糊且缺乏细节，不建议直接写入为高价值记忆。"}
+- 实际：{"candidate_id":"cand-vague","quality_score":0.12,"confidence":0.9,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"high","description":"摘要过于空泛，缺少可检索的具体事实。"},{"type":"low_quality","severity":"medium","description":"信号弱，无法判断长期价值。"}],"reason":"内容模糊，缺乏明确事件与结果，不建议直接写入。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10626ms
+- 耗时：14656ms
 
 #### 测试提示词
 
@@ -4837,7 +4470,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-vague","quality_score":0.12,"confidence":0.95,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"high","description":"摘要过于笼统，缺少可检索的具体事实。"},{"type":"low_quality","severity":"medium","description":"信息量低，难以形成有价值的持久记忆。"}],"reason":"内容模糊且缺乏细节，不建议直接写入为高价值记忆。"}]}
+{"assessments":[{"candidate_id":"cand-vague","quality_score":0.12,"confidence":0.9,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"high","description":"摘要过于空泛，缺少可检索的具体事实。"},{"type":"low_quality","severity":"medium","description":"信号弱，无法判断长期价值。"}],"reason":"内容模糊，缺乏明确事件与结果，不建议直接写入。"}]}
 ```
 
 #### 结构化结果
@@ -4848,7 +4481,7 @@ Rules:
     {
       "candidate_id": "cand-vague",
       "quality_score": 0.12,
-      "confidence": 0.95,
+      "confidence": 0.9,
       "potential_conflicts": [],
       "suggested_importance": 1,
       "suggested_status": "pending_confirmation",
@@ -4856,15 +4489,15 @@ Rules:
         {
           "type": "vague",
           "severity": "high",
-          "description": "摘要过于笼统，缺少可检索的具体事实。"
+          "description": "摘要过于空泛，缺少可检索的具体事实。"
         },
         {
           "type": "low_quality",
           "severity": "medium",
-          "description": "信息量低，难以形成有价值的持久记忆。"
+          "description": "信号弱，无法判断长期价值。"
         }
       ],
-      "reason": "内容模糊且缺乏细节，不建议直接写入为高价值记忆。"
+      "reason": "内容模糊，缺乏明确事件与结果，不建议直接写入。"
     }
   ]
 }
@@ -4876,10 +4509,12 @@ Rules:
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：与已有记录冲突的候选应标记 conflict
-- 实际：{"candidate_id":"cand-conflict","quality_score":0.83,"confidence":0.9,"potential_conflicts":["rec-space"],"suggested_importance":4,"suggested_status":"pending_confirmation","issues":[{"type":"conflict","severity":"high","description":"与现有“使用 4 空格缩进”偏好直接冲突。"}],"reason":"当前表述清晰且有上下文支持，但与已有偏好相反，建议待确认后再固化。"}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9086ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15015ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -4935,49 +4570,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"assessments":[{"candidate_id":"cand-conflict","quality_score":0.83,"confidence":0.9,"potential_conflicts":["rec-space"],"suggested_importance":4,"suggested_status":"pending_confirmation","issues":[{"type":"conflict","severity":"high","description":"与现有“使用 4 空格缩进”偏好直接冲突。"}],"reason":"当前表述清晰且有上下文支持，但与已有偏好相反，建议待确认后再固化。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "assessments": [
-    {
-      "candidate_id": "cand-conflict",
-      "quality_score": 0.83,
-      "confidence": 0.9,
-      "potential_conflicts": [
-        "rec-space"
-      ],
-      "suggested_importance": 4,
-      "suggested_status": "pending_confirmation",
-      "issues": [
-        {
-          "type": "conflict",
-          "severity": "high",
-          "description": "与现有“使用 4 空格缩进”偏好直接冲突。"
-        }
-      ],
-      "reason": "当前表述清晰且有上下文支持，但与已有偏好相反，建议待确认后再固化。"
-    }
-  ]
-}
-```
-
 ### quality-multi-candidate-mixed
 
 - 模块：`writeback-quality-assessor`
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：多候选中应分别评估好坏
-- 实际：{"ok_score":0.89,"bad_score":0.08}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9777ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15016ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -5032,62 +4636,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"assessments":[{"candidate_id":"cand-ok","quality_score":0.89,"confidence":0.91,"potential_conflicts":[],"suggested_importance":4,"suggested_status":"active","issues":[],"reason":"任务进展明确，可直接写入。"},{"candidate_id":"cand-bad","quality_score":0.08,"confidence":0.95,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"内容仅为语气词，缺乏可复用信息。"},{"type":"vague","severity":"high","description":"摘要过于空泛，无法形成稳定记忆。"}],"reason":"信息量极低，不建议作为有效记忆写入。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "assessments": [
-    {
-      "candidate_id": "cand-ok",
-      "quality_score": 0.89,
-      "confidence": 0.91,
-      "potential_conflicts": [],
-      "suggested_importance": 4,
-      "suggested_status": "active",
-      "issues": [],
-      "reason": "任务进展明确，可直接写入。"
-    },
-    {
-      "candidate_id": "cand-bad",
-      "quality_score": 0.08,
-      "confidence": 0.95,
-      "potential_conflicts": [],
-      "suggested_importance": 1,
-      "suggested_status": "pending_confirmation",
-      "issues": [
-        {
-          "type": "low_quality",
-          "severity": "high",
-          "description": "内容仅为语气词，缺乏可复用信息。"
-        },
-        {
-          "type": "vague",
-          "severity": "high",
-          "description": "摘要过于空泛，无法形成稳定记忆。"
-        }
-      ],
-      "reason": "信息量极低，不建议作为有效记忆写入。"
-    }
-  ]
-}
-```
-
 ### quality-pending-confirmation
 
 - 模块：`writeback-quality-assessor`
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：存疑候选应标记 pending_confirmation
-- 实际：{"candidate_id":"cand-maybe","quality_score":0.56,"confidence":0.74,"potential_conflicts":[],"suggested_importance":2,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"medium","description":"表述为“还行”，偏好信号较弱。"},{"type":"low_quality","severity":"low","description":"基于单轮推断，稳定性不足。"}],"reason":"用户仅表示暗色“还行”，可作为弱偏好线索，但需后续确认。"}
+- 实际：{"candidate_id":"cand-maybe","quality_score":0.53,"confidence":0.75,"potential_conflicts":[],"suggested_importance":2,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"medium","description":"仅表达“还行”，偏好信号较弱，未明确长期选择。 "}],"reason":"有一定偏好迹象，但表述偏弱，建议待确认后再固化。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8582ms
+- 耗时：13875ms
 
 #### 测试提示词
 
@@ -5136,7 +4694,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-maybe","quality_score":0.56,"confidence":0.74,"potential_conflicts":[],"suggested_importance":2,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"medium","description":"表述为“还行”，偏好信号较弱。"},{"type":"low_quality","severity":"low","description":"基于单轮推断，稳定性不足。"}],"reason":"用户仅表示暗色“还行”，可作为弱偏好线索，但需后续确认。"}]}
+{"assessments":[{"candidate_id":"cand-maybe","quality_score":0.53,"confidence":0.75,"potential_conflicts":[],"suggested_importance":2,"suggested_status":"pending_confirmation","issues":[{"type":"vague","severity":"medium","description":"仅表达“还行”，偏好信号较弱，未明确长期选择。 "}],"reason":"有一定偏好迹象，但表述偏弱，建议待确认后再固化。"}]}
 ```
 
 #### 结构化结果
@@ -5146,8 +4704,8 @@ Rules:
   "assessments": [
     {
       "candidate_id": "cand-maybe",
-      "quality_score": 0.56,
-      "confidence": 0.74,
+      "quality_score": 0.53,
+      "confidence": 0.75,
       "potential_conflicts": [],
       "suggested_importance": 2,
       "suggested_status": "pending_confirmation",
@@ -5155,15 +4713,10 @@ Rules:
         {
           "type": "vague",
           "severity": "medium",
-          "description": "表述为“还行”，偏好信号较弱。"
-        },
-        {
-          "type": "low_quality",
-          "severity": "low",
-          "description": "基于单轮推断，稳定性不足。"
+          "description": "仅表达“还行”，偏好信号较弱，未明确长期选择。 "
         }
       ],
-      "reason": "用户仅表示暗色“还行”，可作为弱偏好线索，但需后续确认。"
+      "reason": "有一定偏好迹象，但表述偏弱，建议待确认后再固化。"
     }
   ]
 }
@@ -5175,10 +4728,10 @@ Rules:
 - 指标：`low_quality_intercept_rate`
 - Prompt：`MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT`
 - 预期：重要度虚高的低质量候选应建议降低 importance
-- 实际：{"candidate_id":"cand-inflated","quality_score":0.12,"confidence":0.92,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是寒暄，长期价值很低"},{"type":"vague","severity":"medium","description":"信息过于泛化，缺少可复用细节"}],"reason":"打招呼属临时性互动，不建议高重要度写回。"}
+- 实际：{"candidate_id":"cand-inflated","quality_score":0.12,"confidence":0.93,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅为寒暄，长期价值很低。"},{"type":"vague","severity":"medium","description":"信息量极少，缺少可复用细节。"}],"reason":"这是一次普通问候，偏临时且低信号，不建议高重要度写回。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9317ms
+- 耗时：13777ms
 
 #### 测试提示词
 
@@ -5227,7 +4780,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"assessments":[{"candidate_id":"cand-inflated","quality_score":0.12,"confidence":0.92,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅是寒暄，长期价值很低"},{"type":"vague","severity":"medium","description":"信息过于泛化，缺少可复用细节"}],"reason":"打招呼属临时性互动，不建议高重要度写回。"}]}
+{"assessments":[{"candidate_id":"cand-inflated","quality_score":0.12,"confidence":0.93,"potential_conflicts":[],"suggested_importance":1,"suggested_status":"pending_confirmation","issues":[{"type":"low_quality","severity":"high","description":"仅为寒暄，长期价值很低。"},{"type":"vague","severity":"medium","description":"信息量极少，缺少可复用细节。"}],"reason":"这是一次普通问候，偏临时且低信号，不建议高重要度写回。"}]}
 ```
 
 #### 结构化结果
@@ -5238,7 +4791,7 @@ Rules:
     {
       "candidate_id": "cand-inflated",
       "quality_score": 0.12,
-      "confidence": 0.92,
+      "confidence": 0.93,
       "potential_conflicts": [],
       "suggested_importance": 1,
       "suggested_status": "pending_confirmation",
@@ -5246,15 +4799,15 @@ Rules:
         {
           "type": "low_quality",
           "severity": "high",
-          "description": "仅是寒暄，长期价值很低"
+          "description": "仅为寒暄，长期价值很低。"
         },
         {
           "type": "vague",
           "severity": "medium",
-          "description": "信息过于泛化，缺少可复用细节"
+          "description": "信息量极少，缺少可复用细节。"
         }
       ],
-      "reason": "打招呼属临时性互动，不建议高重要度写回。"
+      "reason": "这是一次普通问候，偏临时且低信号，不建议高重要度写回。"
     }
   ]
 }
@@ -5266,10 +4819,10 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：同一任务上下文里的扩展关系应被发现
-- 实际：[{"target_record_id":"rel-rel-1","relation_type":"depends_on","strength":0.84,"bidirectional":false,"reason":"补齐真实指标需要先补充评测提示词和输出结果作为依据。"}]
+- 实际：[{"target_record_id":"rel-rel-1","relation_type":"depends_on","strength":0.87,"bidirectional":false,"reason":"补齐真实指标需要先补充评测提示词和输出结果。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9800ms
+- 耗时：13745ms
 
 #### 测试提示词
 
@@ -5333,7 +4886,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"source_record_id":"rel-src-1","relations":[{"target_record_id":"rel-rel-1","relation_type":"depends_on","strength":0.84,"bidirectional":false,"reason":"补齐真实指标需要先补充评测提示词和输出结果作为依据。"}]}
+{"source_record_id":"rel-src-1","relations":[{"target_record_id":"rel-rel-1","relation_type":"depends_on","strength":0.87,"bidirectional":false,"reason":"补齐真实指标需要先补充评测提示词和输出结果。"}]}
 ```
 
 #### 结构化结果
@@ -5345,9 +4898,9 @@ Rules:
     {
       "target_record_id": "rel-rel-1",
       "relation_type": "depends_on",
-      "strength": 0.84,
+      "strength": 0.87,
       "bidirectional": false,
-      "reason": "补齐真实指标需要先补充评测提示词和输出结果作为依据。"
+      "reason": "补齐真实指标需要先补充评测提示词和输出结果。"
     }
   ]
 }
@@ -5362,7 +4915,7 @@ Rules:
 - 实际：[]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：13103ms
+- 耗时：7780ms
 
 #### 测试提示词
 
@@ -5444,10 +4997,10 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：新记录替代旧记录应识别为 supersedes
-- 实际：[{"target_record_id":"rel-old-pref","relation_type":"conflicts_with","strength":0.97,"bidirectional":true,"reason":"缩进偏好相反：4 空格与 tab 互相冲突。"}]
+- 实际：[{"target_record_id":"rel-old-pref","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"缩进偏好相互矛盾：4 空格与 tab 不能同时成立。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9271ms
+- 耗时：14316ms
 
 #### 测试提示词
 
@@ -5503,7 +5056,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"source_record_id":"rel-new-pref","relations":[{"target_record_id":"rel-old-pref","relation_type":"conflicts_with","strength":0.97,"bidirectional":true,"reason":"缩进偏好相反：4 空格与 tab 互相冲突。"}]}
+{"source_record_id":"rel-new-pref","relations":[{"target_record_id":"rel-old-pref","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"缩进偏好相互矛盾：4 空格与 tab 不能同时成立。"}]}
 ```
 
 #### 结构化结果
@@ -5515,9 +5068,9 @@ Rules:
     {
       "target_record_id": "rel-old-pref",
       "relation_type": "conflicts_with",
-      "strength": 0.97,
+      "strength": 0.96,
       "bidirectional": true,
-      "reason": "缩进偏好相反：4 空格与 tab 互相冲突。"
+      "reason": "缩进偏好相互矛盾：4 空格与 tab 不能同时成立。"
     }
   ]
 }
@@ -5529,10 +5082,10 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：明确矛盾的记录应标记 conflicts_with
-- 实际：[{"target_record_id":"rel-vitest","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"同一工作区对测试框架给出不同选择，语义上直接冲突。"}]
+- 实际：[{"target_record_id":"rel-vitest","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"同一工作区对测试框架的选择相互矛盾。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8470ms
+- 耗时：11046ms
 
 #### 测试提示词
 
@@ -5588,7 +5141,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"source_record_id":"rel-jest","relations":[{"target_record_id":"rel-vitest","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"同一工作区对测试框架给出不同选择，语义上直接冲突。"}]}
+{"source_record_id":"rel-jest","relations":[{"target_record_id":"rel-vitest","relation_type":"conflicts_with","strength":0.96,"bidirectional":true,"reason":"同一工作区对测试框架的选择相互矛盾。"}]}
 ```
 
 #### 结构化结果
@@ -5602,7 +5155,7 @@ Rules:
       "relation_type": "conflicts_with",
       "strength": 0.96,
       "bidirectional": true,
-      "reason": "同一工作区对测试框架给出不同选择，语义上直接冲突。"
+      "reason": "同一工作区对测试框架的选择相互矛盾。"
     }
   ]
 }
@@ -5614,10 +5167,10 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：依赖关系应被识别为 depends_on
-- 实际：[{"target_record_id":"rel-build","relation_type":"depends_on","strength":0.92,"bidirectional":false,"reason":"部署通常以前置构建产物完成为依赖，且该记录明确说明等待部署。"}]
+- 实际：[{"target_record_id":"rel-build","relation_type":"depends_on","strength":0.94,"bidirectional":false,"reason":"部署到 staging 依赖已生成的构建产物。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：12983ms
+- 耗时：11051ms
 
 #### 测试提示词
 
@@ -5673,7 +5226,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"source_record_id":"rel-deploy","relations":[{"target_record_id":"rel-build","relation_type":"depends_on","strength":0.92,"bidirectional":false,"reason":"部署通常以前置构建产物完成为依赖，且该记录明确说明等待部署。"}]}
+{"source_record_id":"rel-deploy","relations":[{"target_record_id":"rel-build","relation_type":"depends_on","strength":0.94,"bidirectional":false,"reason":"部署到 staging 依赖已生成的构建产物。"}]}
 ```
 
 #### 结构化结果
@@ -5685,9 +5238,9 @@ Rules:
     {
       "target_record_id": "rel-build",
       "relation_type": "depends_on",
-      "strength": 0.92,
+      "strength": 0.94,
       "bidirectional": false,
-      "reason": "部署通常以前置构建产物完成为依赖，且该记录明确说明等待部署。"
+      "reason": "部署到 staging 依赖已生成的构建产物。"
     }
   ]
 }
@@ -5699,10 +5252,12 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：弱相关记录应使用 related_to 而非更强的类型
-- 实际：[{"target_record_id":"rel-perm","relation_type":"related_to","strength":0.54,"bidirectional":true,"reason":"均属于认证与访问控制相关模块，主题相关。"}]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：10271ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15009ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -5755,39 +5310,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"source_record_id":"rel-auth","relations":[{"target_record_id":"rel-perm","relation_type":"related_to","strength":0.54,"bidirectional":true,"reason":"均属于认证与访问控制相关模块，主题相关。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "source_record_id": "rel-auth",
-  "relations": [
-    {
-      "target_record_id": "rel-perm",
-      "relation_type": "related_to",
-      "strength": 0.54,
-      "bidirectional": true,
-      "reason": "均属于认证与访问控制相关模块，主题相关。"
-    }
-  ]
-}
-```
-
 ### relation-bidirectional
 
 - 模块：`relation-discoverer`
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：互相关联的记录应标记为双向
-- 实际：[{"target_record_id":"rel-be","relation_type":"related_to","strength":0.58,"bidirectional":true,"reason":"同属项目技术栈描述，前后端方案相关。"}]
+- 实际：[{"target_record_id":"rel-be","relation_type":"related_to","strength":0.72,"bidirectional":true,"reason":"同属项目技术栈，前后端都使用 TypeScript。"}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8111ms
+- 耗时：12539ms
 
 #### 测试提示词
 
@@ -5843,7 +5375,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"source_record_id":"rel-fe","relations":[{"target_record_id":"rel-be","relation_type":"related_to","strength":0.58,"bidirectional":true,"reason":"同属项目技术栈描述，前后端方案相关。"}]}
+{"source_record_id":"rel-fe","relations":[{"target_record_id":"rel-be","relation_type":"related_to","strength":0.72,"bidirectional":true,"reason":"同属项目技术栈，前后端都使用 TypeScript。"}]}
 ```
 
 #### 结构化结果
@@ -5855,9 +5387,9 @@ Rules:
     {
       "target_record_id": "rel-be",
       "relation_type": "related_to",
-      "strength": 0.58,
+      "strength": 0.72,
       "bidirectional": true,
-      "reason": "同属项目技术栈描述，前后端方案相关。"
+      "reason": "同属项目技术栈，前后端都使用 TypeScript。"
     }
   ]
 }
@@ -5869,10 +5401,12 @@ Rules:
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：单条高相关候选应输出关系
-- 实际：[{"target_record_id":"rel-v2","relation_type":"conflicts_with","strength":0.98,"bidirectional":true,"reason":"一个称当前为v1，另一个称已升级到v2，当前状态相互矛盾。"}]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：11880ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15013ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -5925,39 +5459,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"source_record_id":"rel-v1","relations":[{"target_record_id":"rel-v2","relation_type":"conflicts_with","strength":0.98,"bidirectional":true,"reason":"一个称当前为v1，另一个称已升级到v2，当前状态相互矛盾。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "source_record_id": "rel-v1",
-  "relations": [
-    {
-      "target_record_id": "rel-v2",
-      "relation_type": "conflicts_with",
-      "strength": 0.98,
-      "bidirectional": true,
-      "reason": "一个称当前为v1，另一个称已升级到v2，当前状态相互矛盾。"
-    }
-  ]
-}
-```
-
 ### relation-multiple-candidates-selective
 
 - 模块：`relation-discoverer`
 - 指标：`relation_discovery_accuracy`
 - Prompt：`MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT`
 - 预期：多候选中只选有语义关联的
-- 实际：["rel-redis-config","rel-perf"]
-- 评分：`1.000`
-- 结果：通过
-- 耗时：10859ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15009ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -6026,36 +5539,6 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"source_record_id":"rel-cache","relations":[{"target_record_id":"rel-redis-config","relation_type":"depends_on","strength":0.9,"bidirectional":false,"reason":"实现 Redis 缓存层需要使用该连接配置。"},{"target_record_id":"rel-perf","relation_type":"related_to","strength":0.62,"bidirectional":true,"reason":"缓存实现与接口性能优化目标相关。"}]}
-```
-
-#### 结构化结果
-
-```json
-{
-  "source_record_id": "rel-cache",
-  "relations": [
-    {
-      "target_record_id": "rel-redis-config",
-      "relation_type": "depends_on",
-      "strength": 0.9,
-      "bidirectional": false,
-      "reason": "实现 Redis 缓存层需要使用该连接配置。"
-    },
-    {
-      "target_record_id": "rel-perf",
-      "relation_type": "related_to",
-      "strength": 0.62,
-      "bidirectional": true,
-      "reason": "缓存实现与接口性能优化目标相关。"
-    }
-  ]
-}
-```
-
 ### relation-empty-candidates
 
 - 模块：`relation-discoverer`
@@ -6065,7 +5548,7 @@ Rules:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7752ms
+- 耗时：9241ms
 
 #### 测试提示词
 
@@ -6130,10 +5613,10 @@ Rules:
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：应推荐与当前任务相关的高价值记忆
-- 实际：[{"record_id":"mem-rec-1","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.8,"trigger_reason":"forgotten_context","suggestion":"可保持中文、短句的写法风格。","auto_inject":false}]
+- 实际：[{"record_id":"mem-rec-1","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可继续沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.92,"trigger_reason":"forgotten_context","suggestion":"可保持中文、短句的既有写法。","auto_inject":true}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：12643ms
+- 耗时：13712ms
 
 #### 测试提示词
 
@@ -6204,7 +5687,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-rec-1","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.8,"trigger_reason":"forgotten_context","suggestion":"可保持中文、短句的写法风格。","auto_inject":false}]}
+{"recommendations":[{"record_id":"mem-rec-1","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可继续沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。","auto_inject":true},{"record_id":"mem-rec-2","relevance_score":0.92,"trigger_reason":"forgotten_context","suggestion":"可保持中文、短句的既有写法。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6216,15 +5699,15 @@ Rules:
       "record_id": "mem-rec-1",
       "relevance_score": 0.97,
       "trigger_reason": "task_similarity",
-      "suggestion": "可沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。",
+      "suggestion": "可继续沿用当前任务背景：正在完善 memory orchestrator 测试样本文档。",
       "auto_inject": true
     },
     {
       "record_id": "mem-rec-2",
-      "relevance_score": 0.8,
+      "relevance_score": 0.92,
       "trigger_reason": "forgotten_context",
-      "suggestion": "可保持中文、短句的写法风格。",
-      "auto_inject": false
+      "suggestion": "可保持中文、短句的既有写法。",
+      "auto_inject": true
     }
   ]
 }
@@ -6239,7 +5722,7 @@ Rules:
 - 实际：[]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7161ms
+- 耗时：10685ms
 
 #### 测试提示词
 
@@ -6318,12 +5801,10 @@ Rules:
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：边界相关度的记忆应谨慎推荐或不推荐
-- 实际：网络/上游错误
-- 评分：`0.000`
-- 结果：未通过
-- 耗时：45009ms
-- 错误类型：`network`
-- 错误：`memory_llm_timeout`
+- 实际：["mem-ts-strict"]
+- 评分：`1.000`
+- 结果：通过
+- 耗时：10297ms
 
 #### 测试提示词
 
@@ -6382,16 +5863,38 @@ Rules:
 }
 ```
 
+#### 模型原始输出
+
+```json
+{"recommendations":[{"record_id":"mem-ts-strict","relevance_score":0.92,"trigger_reason":"task_similarity","suggestion":"可结合“项目启用 TypeScript strict 模式”来重写，避免生成不兼容的类型写法。","auto_inject":true}]}
+```
+
+#### 结构化结果
+
+```json
+{
+  "recommendations": [
+    {
+      "record_id": "mem-ts-strict",
+      "relevance_score": 0.92,
+      "trigger_reason": "task_similarity",
+      "suggestion": "可结合“项目启用 TypeScript strict 模式”来重写，避免生成不兼容的类型写法。",
+      "auto_inject": true
+    }
+  ]
+}
+```
+
 ### recommend-conflict-warning
 
 - 模块：`proactive-recommender`
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：应推荐带冲突预警的记忆
-- 实际：[{"record_id":"mem-space-pref","relevance_score":0.98,"trigger_reason":"conflict_warning","suggestion":"检测到你之前偏好使用 4 空格缩进而不是 tab；当前要求是用 tab，可能与既有偏好冲突，请先确认本文件是否需要例外。","auto_inject":true}]
+- 实际：[{"record_id":"mem-space-pref","relevance_score":0.98,"trigger_reason":"conflict_warning","suggestion":"注意：你之前偏好使用 4 个空格缩进、不使用 tab；这次要求是用 tab 缩进，可能与既有偏好冲突。","auto_inject":true}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9817ms
+- 耗时：11787ms
 
 #### 测试提示词
 
@@ -6444,7 +5947,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-space-pref","relevance_score":0.98,"trigger_reason":"conflict_warning","suggestion":"检测到你之前偏好使用 4 空格缩进而不是 tab；当前要求是用 tab，可能与既有偏好冲突，请先确认本文件是否需要例外。","auto_inject":true}]}
+{"recommendations":[{"record_id":"mem-space-pref","relevance_score":0.98,"trigger_reason":"conflict_warning","suggestion":"注意：你之前偏好使用 4 个空格缩进、不使用 tab；这次要求是用 tab 缩进，可能与既有偏好冲突。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6456,7 +5959,7 @@ Rules:
       "record_id": "mem-space-pref",
       "relevance_score": 0.98,
       "trigger_reason": "conflict_warning",
-      "suggestion": "检测到你之前偏好使用 4 空格缩进而不是 tab；当前要求是用 tab，可能与既有偏好冲突，请先确认本文件是否需要例外。",
+      "suggestion": "注意：你之前偏好使用 4 个空格缩进、不使用 tab；这次要求是用 tab 缩进，可能与既有偏好冲突。",
       "auto_inject": true
     }
   ]
@@ -6469,10 +5972,10 @@ Rules:
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：高度相关时 auto_inject 应为 true
-- 实际：[{"record_id":"mem-migrate","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"可接着上次迁移进度继续：第 3 步已完成，下一步是创建索引。","auto_inject":true}]
+- 实际：[{"record_id":"mem-migrate","relevance_score":0.99,"trigger_reason":"task_similarity","suggestion":"可继续沿用当前迁移进度：已完成第 3 步，下一步是创建索引。","auto_inject":true}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7715ms
+- 耗时：11167ms
 
 #### 测试提示词
 
@@ -6525,7 +6028,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-migrate","relevance_score":0.98,"trigger_reason":"task_similarity","suggestion":"可接着上次迁移进度继续：第 3 步已完成，下一步是创建索引。","auto_inject":true}]}
+{"recommendations":[{"record_id":"mem-migrate","relevance_score":0.99,"trigger_reason":"task_similarity","suggestion":"可继续沿用当前迁移进度：已完成第 3 步，下一步是创建索引。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6535,9 +6038,9 @@ Rules:
   "recommendations": [
     {
       "record_id": "mem-migrate",
-      "relevance_score": 0.98,
+      "relevance_score": 0.99,
       "trigger_reason": "task_similarity",
-      "suggestion": "可接着上次迁移进度继续：第 3 步已完成，下一步是创建索引。",
+      "suggestion": "可继续沿用当前迁移进度：已完成第 3 步，下一步是创建索引。",
       "auto_inject": true
     }
   ]
@@ -6550,10 +6053,10 @@ Rules:
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：弱相关时 auto_inject 应为 false
-- 实际：[{"record_id":"mem-lang-pref","relevance_score":0.93,"trigger_reason":"forgotten_context","suggestion":"按你的偏好，默认用中文给出排序算法实现。","auto_inject":true}]
+- 实际：[{"record_id":"mem-lang-pref","relevance_score":0.92,"trigger_reason":"forgotten_context","suggestion":"可按你的偏好默认使用中文说明和代码注释。","auto_inject":true}]
 - 评分：`0.300`
 - 结果：未通过
-- 耗时：8281ms
+- 耗时：11962ms
 - 错误类型：`logic`
 
 #### 测试提示词
@@ -6607,7 +6110,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-lang-pref","relevance_score":0.93,"trigger_reason":"forgotten_context","suggestion":"按你的偏好，默认用中文给出排序算法实现。","auto_inject":true}]}
+{"recommendations":[{"record_id":"mem-lang-pref","relevance_score":0.92,"trigger_reason":"forgotten_context","suggestion":"可按你的偏好默认使用中文说明和代码注释。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6617,9 +6120,9 @@ Rules:
   "recommendations": [
     {
       "record_id": "mem-lang-pref",
-      "relevance_score": 0.93,
+      "relevance_score": 0.92,
       "trigger_reason": "forgotten_context",
-      "suggestion": "按你的偏好，默认用中文给出排序算法实现。",
+      "suggestion": "可按你的偏好默认使用中文说明和代码注释。",
       "auto_inject": true
     }
   ]
@@ -6635,7 +6138,7 @@ Rules:
 - 实际：["mem-api-prefix","mem-api-task"]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9333ms
+- 耗时：13320ms
 
 #### 测试提示词
 
@@ -6706,7 +6209,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-api-prefix","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可自动带入项目规范：API 前缀使用 /api/v2。","auto_inject":true},{"record_id":"mem-api-task","relevance_score":0.94,"trigger_reason":"forgotten_context","suggestion":"可参考当前任务上下文：正在实现用户列表 API。","auto_inject":true}]}
+{"recommendations":[{"record_id":"mem-api-prefix","relevance_score":0.97,"trigger_reason":"task_similarity","suggestion":"可沿用项目规范：API 前缀使用 /api/v2。","auto_inject":true},{"record_id":"mem-api-task","relevance_score":0.93,"trigger_reason":"forgotten_context","suggestion":"当前任务似乎是继续实现“用户列表 API”，可按该目标继续。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6718,14 +6221,14 @@ Rules:
       "record_id": "mem-api-prefix",
       "relevance_score": 0.97,
       "trigger_reason": "task_similarity",
-      "suggestion": "可自动带入项目规范：API 前缀使用 /api/v2。",
+      "suggestion": "可沿用项目规范：API 前缀使用 /api/v2。",
       "auto_inject": true
     },
     {
       "record_id": "mem-api-task",
-      "relevance_score": 0.94,
+      "relevance_score": 0.93,
       "trigger_reason": "forgotten_context",
-      "suggestion": "可参考当前任务上下文：正在实现用户列表 API。",
+      "suggestion": "当前任务似乎是继续实现“用户列表 API”，可按该目标继续。",
       "auto_inject": true
     }
   ]
@@ -6741,7 +6244,7 @@ Rules:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7558ms
+- 耗时：10553ms
 
 #### 测试提示词
 
@@ -6804,7 +6307,7 @@ Rules:
 - 实际：[]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8545ms
+- 耗时：8786ms
 
 #### 测试提示词
 
@@ -6874,10 +6377,10 @@ Rules:
 - 指标：`recommendation_acceptance_proxy`
 - Prompt：`MEMORY_PROACTIVE_RECOMMENDER_SYSTEM_PROMPT`
 - 预期：用户可能遗忘的关键上下文应被推荐
-- 实际：[{"record_id":"mem-freeze","relevance_score":0.92,"trigger_reason":"conflict_warning","suggestion":"当前在做新功能，注意工作区有“4/25 后主分支冻结合并，仅允许关键修复”的限制，建议先确认是否需要走例外流程或改在功能分支推进。","auto_inject":true}]
+- 实际：[{"record_id":"mem-freeze","relevance_score":0.93,"trigger_reason":"conflict_warning","suggestion":"当前有主分支冻结规则：4/25 后仅允许关键修复。开始新功能前请先确认是否需要改走功能分支、延期发布或申请例外。","auto_inject":true}]
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9256ms
+- 耗时：12698ms
 
 #### 测试提示词
 
@@ -6930,7 +6433,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"recommendations":[{"record_id":"mem-freeze","relevance_score":0.92,"trigger_reason":"conflict_warning","suggestion":"当前在做新功能，注意工作区有“4/25 后主分支冻结合并，仅允许关键修复”的限制，建议先确认是否需要走例外流程或改在功能分支推进。","auto_inject":true}]}
+{"recommendations":[{"record_id":"mem-freeze","relevance_score":0.93,"trigger_reason":"conflict_warning","suggestion":"当前有主分支冻结规则：4/25 后仅允许关键修复。开始新功能前请先确认是否需要改走功能分支、延期发布或申请例外。","auto_inject":true}]}
 ```
 
 #### 结构化结果
@@ -6940,9 +6443,9 @@ Rules:
   "recommendations": [
     {
       "record_id": "mem-freeze",
-      "relevance_score": 0.92,
+      "relevance_score": 0.93,
       "trigger_reason": "conflict_warning",
-      "suggestion": "当前在做新功能，注意工作区有“4/25 后主分支冻结合并，仅允许关键修复”的限制，建议先确认是否需要走例外流程或改在功能分支推进。",
+      "suggestion": "当前有主分支冻结规则：4/25 后仅允许关键修复。开始新功能前请先确认是否需要改走功能分支、延期发布或申请例外。",
       "auto_inject": true
     }
   ]
@@ -6955,10 +6458,10 @@ Rules:
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：应从多条偏好中提炼稳定模式
-- 实际：{"evolution_type":"knowledge_extraction","extracted_knowledge":{"pattern":"用户稳定偏好中文且简洁的回答风格：默认中文，先给结论，再补充短要点，避免冗长。","confidence":0.95,"evidence_count":3,"suggested_scope":"user","suggested_importance":5}}
+- 实际：{"evolution_type":"knowledge_extraction","extracted_knowledge":{"pattern":"用户偏好中文、先给结论、表达简短自然。","confidence":0.96,"evidence_count":3,"suggested_scope":"user","suggested_importance":5}}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9848ms
+- 耗时：13977ms
 
 #### 测试提示词
 
@@ -7030,7 +6533,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-1","evo-2","evo-3"],"extracted_knowledge":{"pattern":"用户稳定偏好中文且简洁的回答风格：默认中文，先给结论，再补充短要点，避免冗长。","confidence":0.95,"evidence_count":3,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"用户偏好：默认使用自然中文回答；先给结论，再补充简短要点；整体保持简洁，不要写太长。","records_to_archive":["evo-1","evo-2","evo-3"]}}
+{"evolution_type":"knowledge_extraction","source_records":["evo-1","evo-2","evo-3"],"extracted_knowledge":{"pattern":"用户偏好中文、先给结论、表达简短自然。","confidence":0.96,"evidence_count":3,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"整合偏好：默认使用自然中文回答；说明或文档类内容先给结论，再补充简短要点；整体保持简洁不过长。","records_to_archive":["evo-1","evo-2","evo-3"]}}
 ```
 
 #### 结构化结果
@@ -7044,14 +6547,14 @@ Rules:
     "evo-3"
   ],
   "extracted_knowledge": {
-    "pattern": "用户稳定偏好中文且简洁的回答风格：默认中文，先给结论，再补充短要点，避免冗长。",
-    "confidence": 0.95,
+    "pattern": "用户偏好中文、先给结论、表达简短自然。",
+    "confidence": 0.96,
     "evidence_count": 3,
     "suggested_scope": "user",
     "suggested_importance": 5
   },
   "consolidation_plan": {
-    "new_summary": "用户偏好：默认使用自然中文回答；先给结论，再补充简短要点；整体保持简洁，不要写太长。",
+    "new_summary": "整合偏好：默认使用自然中文回答；说明或文档类内容先给结论，再补充简短要点；整体保持简洁不过长。",
     "records_to_archive": [
       "evo-1",
       "evo-2",
@@ -7067,10 +6570,12 @@ Rules:
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：应从任务状态记录中提炼工作模式
-- 实际：{"evolution_type":"knowledge_extraction","pattern":"团队近期验收/评测流程稳定表现为先完成链路或样本验证，再补充实际指标、统计数或指标文档。"}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9025ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15015ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -7139,50 +6644,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-t1","evo-t2","evo-t3"],"extracted_knowledge":{"pattern":"团队近期验收/评测流程稳定表现为先完成链路或样本验证，再补充实际指标、统计数或指标文档。","confidence":0.91,"evidence_count":3,"suggested_scope":"workspace","suggested_importance":4},"consolidation_plan":{"new_summary":"可沉淀为工作区流程偏好：验收与评测通常先验证链路/样本完整性，再回填统计指标与文档。","records_to_archive":["evo-t1","evo-t2","evo-t3"]}}
-```
-
-#### 结构化结果
-
-```json
-{
-  "evolution_type": "knowledge_extraction",
-  "source_records": [
-    "evo-t1",
-    "evo-t2",
-    "evo-t3"
-  ],
-  "extracted_knowledge": {
-    "pattern": "团队近期验收/评测流程稳定表现为先完成链路或样本验证，再补充实际指标、统计数或指标文档。",
-    "confidence": 0.91,
-    "evidence_count": 3,
-    "suggested_scope": "workspace",
-    "suggested_importance": 4
-  },
-  "consolidation_plan": {
-    "new_summary": "可沉淀为工作区流程偏好：验收与评测通常先验证链路/样本完整性，再回填统计指标与文档。",
-    "records_to_archive": [
-      "evo-t1",
-      "evo-t2",
-      "evo-t3"
-    ]
-  }
-}
-```
-
 ### evolution-summarization
 
 - 模块：`evolution-planner`
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：summarization 类型应输出 consolidation_plan
-- 实际：{"evolution_type":"summarization","consolidation_plan":{"new_summary":"2026-04-20 至 2026-04-22，连续三天完成了不同层级的测试：4/20 集成测试，4/21 回归测试，4/22 端到端测试。","records_to_archive":["evo-s1","evo-s2","evo-s3"]}}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9846ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15001ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -7251,51 +6724,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"evolution_type":"summarization","source_records":["evo-s1","evo-s2","evo-s3"],"extracted_knowledge":{"pattern":"4/20-4/22 连续三天分别执行了集成、回归和端到端测试，测试活动覆盖多种类型。","confidence":0.88,"evidence_count":3,"suggested_scope":"workspace","suggested_importance":3},"consolidation_plan":{"new_summary":"2026-04-20 至 2026-04-22，连续三天完成了不同层级的测试：4/20 集成测试，4/21 回归测试，4/22 端到端测试。","records_to_archive":["evo-s1","evo-s2","evo-s3"]}}
-```
-
-#### 结构化结果
-
-```json
-{
-  "evolution_type": "summarization",
-  "source_records": [
-    "evo-s1",
-    "evo-s2",
-    "evo-s3"
-  ],
-  "extracted_knowledge": {
-    "pattern": "4/20-4/22 连续三天分别执行了集成、回归和端到端测试，测试活动覆盖多种类型。",
-    "confidence": 0.88,
-    "evidence_count": 3,
-    "suggested_scope": "workspace",
-    "suggested_importance": 3
-  },
-  "consolidation_plan": {
-    "new_summary": "2026-04-20 至 2026-04-22，连续三天完成了不同层级的测试：4/20 集成测试，4/21 回归测试，4/22 端到端测试。",
-    "records_to_archive": [
-      "evo-s1",
-      "evo-s2",
-      "evo-s3"
-    ]
-  }
-}
-```
-
 ### evolution-too-few-records
 
 - 模块：`evolution-planner`
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：单条记录不足以提炼模式时应标记低置信度
-- 实际：{"extracted_knowledge":{"pattern":"用户偏好使用中文交流。","confidence":0.85,"evidence_count":1,"suggested_scope":"user","suggested_importance":4}}
-- 评分：`0.500`
+- 实际：网络/上游错误
+- 评分：`0.000`
 - 结果：未通过
-- 耗时：7806ms
-- 错误类型：`logic`
+- 耗时：15001ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -7344,40 +6784,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-single"],"extracted_knowledge":{"pattern":"用户偏好使用中文交流。","confidence":0.85,"evidence_count":1,"suggested_scope":"user","suggested_importance":4}}
-```
-
-#### 结构化结果
-
-```json
-{
-  "evolution_type": "knowledge_extraction",
-  "source_records": [
-    "evo-single"
-  ],
-  "extracted_knowledge": {
-    "pattern": "用户偏好使用中文交流。",
-    "confidence": 0.85,
-    "evidence_count": 1,
-    "suggested_scope": "user",
-    "suggested_importance": 4
-  }
-}
-```
-
 ### evolution-cross-scope-pattern
 
 - 模块：`evolution-planner`
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：跨 scope 的记录应正确建议提炼后的 scope
-- 实际：{"extracted_knowledge":{"pattern":"用户存在稳定的中英分工偏好：面向代码仓库的产物（代码注释、commit message）用英文，面向沟通与文档的内容（文档、回复）用中文。","confidence":0.93,"evidence_count":3,"suggested_scope":"user","suggested_importance":5}}
+- 实际：{"extracted_knowledge":{"pattern":"用户存在稳定的语言使用偏好：面向开发产物（代码注释、commit message）偏好英文，面向沟通与文档偏好中文。","confidence":0.93,"evidence_count":3,"suggested_scope":"user","suggested_importance":5}}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10036ms
+- 耗时：14747ms
 
 #### 测试提示词
 
@@ -7449,7 +6865,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-u1","evo-u2","evo-u3"],"extracted_knowledge":{"pattern":"用户存在稳定的中英分工偏好：面向代码仓库的产物（代码注释、commit message）用英文，面向沟通与文档的内容（文档、回复）用中文。","confidence":0.93,"evidence_count":3,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"用户语言偏好已形成稳定模式：代码注释和 commit message 使用英文；文档与对话回复使用中文。","records_to_archive":["evo-u1","evo-u2","evo-u3"]}}
+{"evolution_type":"knowledge_extraction","source_records":["evo-u1","evo-u2","evo-u3"],"extracted_knowledge":{"pattern":"用户存在稳定的语言使用偏好：面向开发产物（代码注释、commit message）偏好英文，面向沟通与文档偏好中文。","confidence":0.93,"evidence_count":3,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"用户语言偏好已明确分层：代码注释与 commit message 使用英文；文档与对用户回复使用中文。","records_to_archive":["evo-u1","evo-u2","evo-u3"]}}
 ```
 
 #### 结构化结果
@@ -7463,14 +6879,14 @@ Rules:
     "evo-u3"
   ],
   "extracted_knowledge": {
-    "pattern": "用户存在稳定的中英分工偏好：面向代码仓库的产物（代码注释、commit message）用英文，面向沟通与文档的内容（文档、回复）用中文。",
+    "pattern": "用户存在稳定的语言使用偏好：面向开发产物（代码注释、commit message）偏好英文，面向沟通与文档偏好中文。",
     "confidence": 0.93,
     "evidence_count": 3,
     "suggested_scope": "user",
     "suggested_importance": 5
   },
   "consolidation_plan": {
-    "new_summary": "用户语言偏好已形成稳定模式：代码注释和 commit message 使用英文；文档与对话回复使用中文。",
+    "new_summary": "用户语言偏好已明确分层：代码注释与 commit message 使用英文；文档与对用户回复使用中文。",
     "records_to_archive": [
       "evo-u1",
       "evo-u2",
@@ -7486,10 +6902,10 @@ Rules:
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：pattern_discovery 类型应识别行为模式
-- 实际：{"evolution_type":"pattern_discovery","pattern":"在提交 PR 前，通常会先运行 lint，再运行单元测试。"}
+- 实际：{"evolution_type":"pattern_discovery","pattern":"在该工作区内，提交 PR 前通常会先运行 lint，再运行单元测试。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8557ms
+- 耗时：13519ms
 
 #### 测试提示词
 
@@ -7551,7 +6967,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evolution_type":"pattern_discovery","source_records":["evo-p1","evo-p2"],"extracted_knowledge":{"pattern":"在提交 PR 前，通常会先运行 lint，再运行单元测试。","confidence":0.91,"evidence_count":2,"suggested_scope":"workspace","suggested_importance":4},"consolidation_plan":{"new_summary":"观察到稳定流程：提交 PR 前先执行 lint，再执行单元测试。","records_to_archive":["evo-p1","evo-p2"]}}
+{"evolution_type":"pattern_discovery","source_records":["evo-p1","evo-p2"],"extracted_knowledge":{"pattern":"在该工作区内，提交 PR 前通常会先运行 lint，再运行单元测试。","confidence":0.9,"evidence_count":2,"suggested_scope":"workspace","suggested_importance":4},"consolidation_plan":{"new_summary":"已观察到稳定流程：提交 PR 前通常先执行 lint，再执行单元测试。","records_to_archive":["evo-p1","evo-p2"]}}
 ```
 
 #### 结构化结果
@@ -7564,14 +6980,14 @@ Rules:
     "evo-p2"
   ],
   "extracted_knowledge": {
-    "pattern": "在提交 PR 前，通常会先运行 lint，再运行单元测试。",
-    "confidence": 0.91,
+    "pattern": "在该工作区内，提交 PR 前通常会先运行 lint，再运行单元测试。",
+    "confidence": 0.9,
     "evidence_count": 2,
     "suggested_scope": "workspace",
     "suggested_importance": 4
   },
   "consolidation_plan": {
-    "new_summary": "观察到稳定流程：提交 PR 前先执行 lint，再执行单元测试。",
+    "new_summary": "已观察到稳定流程：提交 PR 前通常先执行 lint，再执行单元测试。",
     "records_to_archive": [
       "evo-p1",
       "evo-p2"
@@ -7586,11 +7002,12 @@ Rules:
 - 指标：`knowledge_extraction_accuracy`
 - Prompt：`MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT`
 - 预期：不相关的记录不应被强行提炼
-- 实际：{"extracted_knowledge":{"pattern":"用户偏好使用 Vim。","confidence":0.9,"evidence_count":1,"suggested_scope":"user","suggested_importance":4}}
+- 实际：网络/上游错误
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：9963ms
-- 错误类型：`logic`
+- 耗时：15005ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -7649,30 +7066,6 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-x2"],"extracted_knowledge":{"pattern":"用户偏好使用 Vim。","confidence":0.9,"evidence_count":1,"suggested_scope":"user","suggested_importance":4}}
-```
-
-#### 结构化结果
-
-```json
-{
-  "evolution_type": "knowledge_extraction",
-  "source_records": [
-    "evo-x2"
-  ],
-  "extracted_knowledge": {
-    "pattern": "用户偏好使用 Vim。",
-    "confidence": 0.9,
-    "evidence_count": 1,
-    "suggested_scope": "user",
-    "suggested_importance": 4
-  }
-}
-```
-
 ### evolution-high-evidence-count
 
 - 模块：`evolution-planner`
@@ -7682,7 +7075,7 @@ Rules:
 - 实际：{"evidence_count":4,"confidence":0.96}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10531ms
+- 耗时：14652ms
 
 #### 测试提示词
 
@@ -7764,7 +7157,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evolution_type":"knowledge_extraction","source_records":["evo-h1","evo-h2","evo-h3","evo-h4"],"extracted_knowledge":{"pattern":"用户稳定偏好严格 TypeScript 类型安全：启用 strict 检查、遵守 no-any，并避免使用 as any。","confidence":0.96,"evidence_count":4,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"用户偏好严格 TypeScript 类型安全规范：启用 strict 模式与相关检查，遵守 no-any，避免使用 as any。","records_to_archive":["evo-h1","evo-h2","evo-h3","evo-h4"]}}
+{"evolution_type":"knowledge_extraction","source_records":["evo-h1","evo-h2","evo-h3","evo-h4"],"extracted_knowledge":{"pattern":"用户持续偏好严格的 TypeScript 类型安全：启用 strict 检查、遵守 no-any，并避免使用 as any。","confidence":0.96,"evidence_count":4,"suggested_scope":"user","suggested_importance":5},"consolidation_plan":{"new_summary":"用户偏好严格的 TypeScript 类型安全规范：开启 strict 检查，遵守 no-any，避免使用 as any。","records_to_archive":["evo-h1","evo-h2","evo-h3","evo-h4"]}}
 ```
 
 #### 结构化结果
@@ -7779,14 +7172,14 @@ Rules:
     "evo-h4"
   ],
   "extracted_knowledge": {
-    "pattern": "用户稳定偏好严格 TypeScript 类型安全：启用 strict 检查、遵守 no-any，并避免使用 as any。",
+    "pattern": "用户持续偏好严格的 TypeScript 类型安全：启用 strict 检查、遵守 no-any，并避免使用 as any。",
     "confidence": 0.96,
     "evidence_count": 4,
     "suggested_scope": "user",
     "suggested_importance": 5
   },
   "consolidation_plan": {
-    "new_summary": "用户偏好严格 TypeScript 类型安全规范：启用 strict 模式与相关检查，遵守 no-any，避免使用 as any。",
+    "new_summary": "用户偏好严格的 TypeScript 类型安全规范：开启 strict 检查，遵守 no-any，避免使用 as any。",
     "records_to_archive": [
       "evo-h1",
       "evo-h2",
@@ -7803,10 +7196,10 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：缺少删除依据的删除提案应拒绝
-- 实际：{"decision":"reject","confidence":0.98,"notes":"删除提案证据不足。该提案仅以“看起来没用了，删掉”作为理由，未提供明确的 delete_reason、失效依据、重复/替代记录上下文，或说明为何该 session 范围的 episodic 记录应被删除。根据规则，删除操作若无清晰删除原因或替代关系应拒绝。"}
+- 实际：{"decision":"reject","confidence":0.98,"notes":"删除提案缺乏充分依据。reason_text“看起来没用了，删掉。”过于模糊，未提供明确的 delete_reason、失效依据、保留风险评估，亦无被新记录替代的上下文。目标记录仍为 active，且没有相关记录或冲突证据支持清理操作。根据规则，删除在缺少清晰删除原因或替代关系时应拒绝。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10411ms
+- 耗时：13612ms
 
 #### 测试提示词
 
@@ -7885,7 +7278,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"decision":"reject","confidence":0.98,"notes":"删除提案证据不足。该提案仅以“看起来没用了，删掉”作为理由，未提供明确的 delete_reason、失效依据、重复/替代记录上下文，或说明为何该 session 范围的 episodic 记录应被删除。根据规则，删除操作若无清晰删除原因或替代关系应拒绝。"}
+{"decision":"reject","confidence":0.98,"notes":"删除提案缺乏充分依据。reason_text“看起来没用了，删掉。”过于模糊，未提供明确的 delete_reason、失效依据、保留风险评估，亦无被新记录替代的上下文。目标记录仍为 active，且没有相关记录或冲突证据支持清理操作。根据规则，删除在缺少清晰删除原因或替代关系时应拒绝。"}
 ```
 
 #### 结构化结果
@@ -7894,7 +7287,7 @@ Rules:
 {
   "decision": "reject",
   "confidence": 0.98,
-  "notes": "删除提案证据不足。该提案仅以“看起来没用了，删掉”作为理由，未提供明确的 delete_reason、失效依据、重复/替代记录上下文，或说明为何该 session 范围的 episodic 记录应被删除。根据规则，删除操作若无清晰删除原因或替代关系应拒绝。"
+  "notes": "删除提案缺乏充分依据。reason_text“看起来没用了，删掉。”过于模糊，未提供明确的 delete_reason、失效依据、保留风险评估，亦无被新记录替代的上下文。目标记录仍为 active，且没有相关记录或冲突证据支持清理操作。根据规则，删除在缺少清晰删除原因或替代关系时应拒绝。"
 }
 ```
 
@@ -7904,10 +7297,12 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：证据充分的归档提案应批准
-- 实际：{"decision":"approve","confidence":0.97,"notes":"目标记录 gv-2 与替代记录 gv-3 属于同一 workspace、同一 user、同一 scope，且都是 fact_preference。gv-3 内容明确包含并细化了 gv-2 的偏好（“尽量简短”被更新为“默认中文，回答自然且尽量简短”），时间上也更晚，符合被新记录替代后的归档条件。无跨作用域问题，也无未解决冲突，证据充分且歧义低。"}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9153ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15007ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -8003,32 +7398,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"decision":"approve","confidence":0.97,"notes":"目标记录 gv-2 与替代记录 gv-3 属于同一 workspace、同一 user、同一 scope，且都是 fact_preference。gv-3 内容明确包含并细化了 gv-2 的偏好（“尽量简短”被更新为“默认中文，回答自然且尽量简短”），时间上也更晚，符合被新记录替代后的归档条件。无跨作用域问题，也无未解决冲突，证据充分且歧义低。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "decision": "approve",
-  "confidence": 0.97,
-  "notes": "目标记录 gv-2 与替代记录 gv-3 属于同一 workspace、同一 user、同一 scope，且都是 fact_preference。gv-3 内容明确包含并细化了 gv-2 的偏好（“尽量简短”被更新为“默认中文，回答自然且尽量简短”），时间上也更晚，符合被新记录替代后的归档条件。无跨作用域问题，也无未解决冲突，证据充分且歧义低。"
-}
-```
-
 ### govverify-reject-scope-mismatch
 
 - 模块：`governance-verifier`
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：跨 scope 错误的合并提案应拒绝
-- 实际：{"decision":"reject","confidence":0.96,"notes":"提议将一条 user 作用域记录与一条 workspace 作用域记录合并，存在明显跨 scope 问题。两条记录内容也不是同一持久事实：一条是用户偏好“默认中文”，另一条是项目规则“文档用中文写”，语义相近但主体与约束来源不同，不能视为明确重复。evidence 仅显示 matched_records=2，缺少足够证据支持合并。"}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：8518ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15002ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -8121,33 +7502,18 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"decision":"reject","confidence":0.96,"notes":"提议将一条 user 作用域记录与一条 workspace 作用域记录合并，存在明显跨 scope 问题。两条记录内容也不是同一持久事实：一条是用户偏好“默认中文”，另一条是项目规则“文档用中文写”，语义相近但主体与约束来源不同，不能视为明确重复。evidence 仅显示 matched_records=2，缺少足够证据支持合并。"}
-```
-
-#### 结构化结果
-
-```json
-{
-  "decision": "reject",
-  "confidence": 0.96,
-  "notes": "提议将一条 user 作用域记录与一条 workspace 作用域记录合并，存在明显跨 scope 问题。两条记录内容也不是同一持久事实：一条是用户偏好“默认中文”，另一条是项目规则“文档用中文写”，语义相近但主体与约束来源不同，不能视为明确重复。evidence 仅显示 matched_records=2，缺少足够证据支持合并。"
-}
-```
-
 ### govverify-approve-merge-same-fact
 
 - 模块：`governance-verifier`
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：同 scope 同事实的合并提案应批准
-- 实际：{"decision":"reject","confidence":0.97,"notes":"The two target records are not clear duplicates of the same durable fact. One records language preference ('默认中文回答'), while the other records response-length preference ('回答简短'). These are distinct user preferences that can coexist and should generally remain as separate facts rather than be merged as duplicates. The proposed merged summary combines both preferences, but that is consolidation of different facts, not duplicate resolution."}
+- 实际：网络/上游错误
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：9785ms
-- 错误类型：`logic`
+- 耗时：15014ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -8240,32 +7606,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"decision":"reject","confidence":0.97,"notes":"The two target records are not clear duplicates of the same durable fact. One records language preference ('默认中文回答'), while the other records response-length preference ('回答简短'). These are distinct user preferences that can coexist and should generally remain as separate facts rather than be merged as duplicates. The proposed merged summary combines both preferences, but that is consolidation of different facts, not duplicate resolution."}
-```
-
-#### 结构化结果
-
-```json
-{
-  "decision": "reject",
-  "confidence": 0.97,
-  "notes": "The two target records are not clear duplicates of the same durable fact. One records language preference ('默认中文回答'), while the other records response-length preference ('回答简短'). These are distinct user preferences that can coexist and should generally remain as separate facts rather than be merged as duplicates. The proposed merged summary combines both preferences, but that is consolidation of different facts, not duplicate resolution."
-}
-```
-
 ### govverify-reject-insufficient-conflict
 
 - 模块：`governance-verifier`
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：证据不足的冲突解决提案应拒绝
-- 实际：{"decision":"reject","confidence":0.96,"notes":"Proposal attempts to resolve a contradiction conflict via auto_merge, but there is insufficient evidence. The target references only record gv-c1, while the open conflict is between gv-c1 and gv-c2, and no related_records are provided to support that both records represent the same durable fact or how the contradiction should be resolved. This does not meet the requirement for resolving a conflict with enough evidence."}
+- 实际：{"decision":"reject","confidence":0.97,"notes":"提案试图自动解决冲突并执行 auto_merge，但证据不足。open_conflicts 显示 gv-c1 与 gv-c2 存在 contradiction，但 related_records 中没有 gv-c2 或其他支持性记录，无法确认两条记录是否是同一持久事实、哪一条应保留，或是否可以安全合并。根据规则，缺少足够证据时应拒绝，且不能在未明确同一事实的情况下自动合并。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8406ms
+- 耗时：14510ms
 
 #### 测试提示词
 
@@ -8352,7 +7702,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"decision":"reject","confidence":0.96,"notes":"Proposal attempts to resolve a contradiction conflict via auto_merge, but there is insufficient evidence. The target references only record gv-c1, while the open conflict is between gv-c1 and gv-c2, and no related_records are provided to support that both records represent the same durable fact or how the contradiction should be resolved. This does not meet the requirement for resolving a conflict with enough evidence."}
+{"decision":"reject","confidence":0.97,"notes":"提案试图自动解决冲突并执行 auto_merge，但证据不足。open_conflicts 显示 gv-c1 与 gv-c2 存在 contradiction，但 related_records 中没有 gv-c2 或其他支持性记录，无法确认两条记录是否是同一持久事实、哪一条应保留，或是否可以安全合并。根据规则，缺少足够证据时应拒绝，且不能在未明确同一事实的情况下自动合并。"}
 ```
 
 #### 结构化结果
@@ -8360,8 +7710,8 @@ Rules:
 ```json
 {
   "decision": "reject",
-  "confidence": 0.96,
-  "notes": "Proposal attempts to resolve a contradiction conflict via auto_merge, but there is insufficient evidence. The target references only record gv-c1, while the open conflict is between gv-c1 and gv-c2, and no related_records are provided to support that both records represent the same durable fact or how the contradiction should be resolved. This does not meet the requirement for resolving a conflict with enough evidence."
+  "confidence": 0.97,
+  "notes": "提案试图自动解决冲突并执行 auto_merge，但证据不足。open_conflicts 显示 gv-c1 与 gv-c2 存在 contradiction，但 related_records 中没有 gv-c2 或其他支持性记录，无法确认两条记录是否是同一持久事实、哪一条应保留，或是否可以安全合并。根据规则，缺少足够证据时应拒绝，且不能在未明确同一事实的情况下自动合并。"
 }
 ```
 
@@ -8371,10 +7721,10 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：合理的降级提案应批准
-- 实际：{"decision":"approve","confidence":0.97,"notes":"Target is specific and the seed record itself provides sufficient evidence: it is a session-scoped episodic memory with summary '用户打了个招呼。', which is low-value and does not justify importance=5. Proposed change is limited to lowering importance to 1, with no deletion, merge, or conflict resolution risk. The action is well-supported and low-ambiguity."}
+- 实际：{"decision":"approve","confidence":0.97,"notes":"Record gv-d1 is a low-value episodic session memory ('用户打了个招呼。') with no durable preference, profile, or task relevance. Downgrading importance from 5 to 1 is specific, well-supported by the record content, and does not require additional related evidence or conflict resolution."}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：12511ms
+- 耗时：12795ms
 
 #### 测试提示词
 
@@ -8452,7 +7802,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"decision":"approve","confidence":0.97,"notes":"Target is specific and the seed record itself provides sufficient evidence: it is a session-scoped episodic memory with summary '用户打了个招呼。', which is low-value and does not justify importance=5. Proposed change is limited to lowering importance to 1, with no deletion, merge, or conflict resolution risk. The action is well-supported and low-ambiguity."}
+{"decision":"approve","confidence":0.97,"notes":"Record gv-d1 is a low-value episodic session memory ('用户打了个招呼。') with no durable preference, profile, or task relevance. Downgrading importance from 5 to 1 is specific, well-supported by the record content, and does not require additional related evidence or conflict resolution."}
 ```
 
 #### 结构化结果
@@ -8461,7 +7811,7 @@ Rules:
 {
   "decision": "approve",
   "confidence": 0.97,
-  "notes": "Target is specific and the seed record itself provides sufficient evidence: it is a session-scoped episodic memory with summary '用户打了个招呼。', which is low-value and does not justify importance=5. Proposed change is limited to lowering importance to 1, with no deletion, merge, or conflict resolution risk. The action is well-supported and low-ambiguity."
+  "notes": "Record gv-d1 is a low-value episodic session memory ('用户打了个招呼。') with no durable preference, profile, or task relevance. Downgrading importance from 5 to 1 is specific, well-supported by the record content, and does not require additional related evidence or conflict resolution."
 }
 ```
 
@@ -8471,10 +7821,10 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：无替代记录的归档提案应拒绝
-- 实际：{"decision":"reject","confidence":0.91,"notes":"The archive proposal is not well-supported. The target record is an active user-scope preference with high confidence (0.95) and nontrivial importance (5), and there is no newer superseding record, replacement context, or related evidence showing it is obsolete or incorrect. The stated reason_text ('价值不高') is too vague to justify archiving this durable preference."}
+- 实际：{"decision":"reject","confidence":0.93,"notes":"The proposal is not well-supported. It archives an active user-scope preference record solely for being 'low value' without replacement context, superseding evidence, or related records showing the fact is obsolete. The target is a durable user preference ('4 空格缩进') with high confidence, so archiving it is high-ambiguity and insufficiently justified."}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10825ms
+- 耗时：12907ms
 
 #### 测试提示词
 
@@ -8552,7 +7902,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"decision":"reject","confidence":0.91,"notes":"The archive proposal is not well-supported. The target record is an active user-scope preference with high confidence (0.95) and nontrivial importance (5), and there is no newer superseding record, replacement context, or related evidence showing it is obsolete or incorrect. The stated reason_text ('价值不高') is too vague to justify archiving this durable preference."}
+{"decision":"reject","confidence":0.93,"notes":"The proposal is not well-supported. It archives an active user-scope preference record solely for being 'low value' without replacement context, superseding evidence, or related records showing the fact is obsolete. The target is a durable user preference ('4 空格缩进') with high confidence, so archiving it is high-ambiguity and insufficiently justified."}
 ```
 
 #### 结构化结果
@@ -8560,8 +7910,8 @@ Rules:
 ```json
 {
   "decision": "reject",
-  "confidence": 0.91,
-  "notes": "The archive proposal is not well-supported. The target record is an active user-scope preference with high confidence (0.95) and nontrivial importance (5), and there is no newer superseding record, replacement context, or related evidence showing it is obsolete or incorrect. The stated reason_text ('价值不高') is too vague to justify archiving this durable preference."
+  "confidence": 0.93,
+  "notes": "The proposal is not well-supported. It archives an active user-scope preference record solely for being 'low value' without replacement context, superseding evidence, or related records showing the fact is obsolete. The target is a durable user preference ('4 空格缩进') with high confidence, so archiving it is high-ambiguity and insufficiently justified."
 }
 ```
 
@@ -8571,10 +7921,12 @@ Rules:
 - 指标：`governance_correctness_proxy`
 - Prompt：`MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT`
 - 预期：高置信度且证据充分的提案应批准
-- 实际：{"decision":"approve","confidence":0.93,"notes":"Soft-delete is specific and well-supported. The target is a low-confidence, low-importance workspace episodic record describing a temporary monkey patch, and the related workspace record clearly states the formal bug fix has been completed and merged. Scope alignment is correct, there are no open conflicts, and replacement context is explicitly provided via gv-fix. This fits an obsolete temporary record being superseded by a newer authoritative record."}
-- 评分：`1.000`
-- 结果：通过
-- 耗时：9844ms
+- 实际：网络/上游错误
+- 评分：`0.000`
+- 结果：未通过
+- 耗时：15013ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -8671,32 +8023,16 @@ Rules:
 }
 ```
 
-#### 模型原始输出
-
-```json
-{"decision":"approve","confidence":0.93,"notes":"Soft-delete is specific and well-supported. The target is a low-confidence, low-importance workspace episodic record describing a temporary monkey patch, and the related workspace record clearly states the formal bug fix has been completed and merged. Scope alignment is correct, there are no open conflicts, and replacement context is explicitly provided via gv-fix. This fits an obsolete temporary record being superseded by a newer authoritative record."}
-```
-
-#### 结构化结果
-
-```json
-{
-  "decision": "approve",
-  "confidence": 0.93,
-  "notes": "Soft-delete is specific and well-supported. The target is a low-confidence, low-importance workspace episodic record describing a temporary monkey patch, and the related workspace record clearly states the formal bug fix has been completed and merged. Scope alignment is correct, there are no open conflicts, and replacement context is explicitly provided via gv-fix. This fits an obsolete temporary record being superseded by a newer authoritative record."
-}
-```
-
 ### effectiveness-memory-used
 
 - 模块：`effectiveness-evaluator`
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：回复明显使用了注入记忆时应正向评估
-- 实际：{"record_id":"eff-1","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.95,"suggested_importance_adjustment":1,"usage_evidence":"输出以“结论：”开头，且全文为中文短句，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”","reason":"明显遵循中文、先结论、简短表达。"}
+- 实际：{"record_id":"eff-1","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.95,"suggested_importance_adjustment":1,"usage_evidence":"输出以“结论：”开头，且整体为中文、短句表达，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”","reason":"明显遵循中文且先给结论，用户反馈也确认格式符合预期。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8637ms
+- 耗时：12065ms
 
 #### 测试提示词
 
@@ -8741,7 +8077,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evaluations":[{"record_id":"eff-1","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.95,"suggested_importance_adjustment":1,"usage_evidence":"输出以“结论：”开头，且全文为中文短句，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”","reason":"明显遵循中文、先结论、简短表达。"}]}
+{"evaluations":[{"record_id":"eff-1","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.95,"suggested_importance_adjustment":1,"usage_evidence":"输出以“结论：”开头，且整体为中文、短句表达，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”","reason":"明显遵循中文且先给结论，用户反馈也确认格式符合预期。"}]}
 ```
 
 #### 结构化结果
@@ -8755,8 +8091,8 @@ Rules:
       "usage_confidence": 0.98,
       "effectiveness_score": 0.95,
       "suggested_importance_adjustment": 1,
-      "usage_evidence": "输出以“结论：”开头，且全文为中文短句，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”",
-      "reason": "明显遵循中文、先结论、简短表达。"
+      "usage_evidence": "输出以“结论：”开头，且整体为中文、短句表达，如“结论：这些指标可以用真实模型测。后面按中文短句格式补到文档里。”",
+      "reason": "明显遵循中文且先给结论，用户反馈也确认格式符合预期。"
     }
   ]
 }
@@ -8771,7 +8107,7 @@ Rules:
 - 实际：执行失败
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：8637ms
+- 耗时：13001ms
 - 错误类型：`schema`
 - 错误：`[
   {
@@ -8832,26 +8168,12 @@ Rules:
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：部分使用时应中性评估
-- 实际：执行失败
+- 实际：网络/上游错误
 - 评分：`0.000`
 - 结果：未通过
-- 耗时：9514ms
-- 错误类型：`schema`
-- 错误：`[
-  {
-    "code": "too_small",
-    "minimum": 1,
-    "type": "string",
-    "inclusive": true,
-    "exact": false,
-    "message": "String must contain at least 1 character(s)",
-    "path": [
-      "evaluations",
-      1,
-      "usage_evidence"
-    ]
-  }
-]`
+- 耗时：15008ms
+- 错误类型：`network`
+- 错误：`memory_llm_timeout`
 
 #### 测试提示词
 
@@ -8901,10 +8223,10 @@ Rules:
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：用户正向反馈时 effectiveness_score 应更高
-- 实际：{"record_id":"eff-4","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.98,"suggested_importance_adjustment":1,"usage_evidence":"“`/api/v2/users`”以及“按项目规范添加了前缀”","reason":"明确使用了前缀规则，且直接帮助结果正确。"}
+- 实际：{"record_id":"eff-4","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.98,"suggested_importance_adjustment":1,"usage_evidence":"输出中明确写到“`/api/v2/users`”以及“按项目规范添加了前缀”","reason":"明确使用了前缀规则，且对结果正确性有直接帮助。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：7804ms
+- 耗时：11685ms
 
 #### 测试提示词
 
@@ -8949,7 +8271,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evaluations":[{"record_id":"eff-4","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.98,"suggested_importance_adjustment":1,"usage_evidence":"“`/api/v2/users`”以及“按项目规范添加了前缀”","reason":"明确使用了前缀规则，且直接帮助结果正确。"}]}
+{"evaluations":[{"record_id":"eff-4","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.98,"suggested_importance_adjustment":1,"usage_evidence":"输出中明确写到“`/api/v2/users`”以及“按项目规范添加了前缀”","reason":"明确使用了前缀规则，且对结果正确性有直接帮助。"}]}
 ```
 
 #### 结构化结果
@@ -8963,8 +8285,8 @@ Rules:
       "usage_confidence": 0.99,
       "effectiveness_score": 0.98,
       "suggested_importance_adjustment": 1,
-      "usage_evidence": "“`/api/v2/users`”以及“按项目规范添加了前缀”",
-      "reason": "明确使用了前缀规则，且直接帮助结果正确。"
+      "usage_evidence": "输出中明确写到“`/api/v2/users`”以及“按项目规范添加了前缀”",
+      "reason": "明确使用了前缀规则，且对结果正确性有直接帮助。"
     }
   ]
 }
@@ -8976,10 +8298,10 @@ Rules:
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：用户负向反馈应降低 effectiveness_score
-- 实际：{"record_id":"eff-5","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.05,"suggested_importance_adjustment":-2,"usage_evidence":"“已使用 tab 缩进编写代码。”","reason":"明确按该偏好执行，但用户反馈记忆已过期且造成负面效果。"}
+- 实际：{"record_id":"eff-5","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.05,"suggested_importance_adjustment":-2,"usage_evidence":"“已使用 tab 缩进编写代码。”直接体现了按该偏好执行。","reason":"明确使用了该记忆，但记忆已过期且造成负面体验。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：8317ms
+- 耗时：12062ms
 
 #### 测试提示词
 
@@ -9024,7 +8346,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evaluations":[{"record_id":"eff-5","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.05,"suggested_importance_adjustment":-2,"usage_evidence":"“已使用 tab 缩进编写代码。”","reason":"明确按该偏好执行，但用户反馈记忆已过期且造成负面效果。"}]}
+{"evaluations":[{"record_id":"eff-5","was_used":true,"usage_confidence":0.99,"effectiveness_score":0.05,"suggested_importance_adjustment":-2,"usage_evidence":"“已使用 tab 缩进编写代码。”直接体现了按该偏好执行。","reason":"明确使用了该记忆，但记忆已过期且造成负面体验。"}]}
 ```
 
 #### 结构化结果
@@ -9038,8 +8360,8 @@ Rules:
       "usage_confidence": 0.99,
       "effectiveness_score": 0.05,
       "suggested_importance_adjustment": -2,
-      "usage_evidence": "“已使用 tab 缩进编写代码。”",
-      "reason": "明确按该偏好执行，但用户反馈记忆已过期且造成负面效果。"
+      "usage_evidence": "“已使用 tab 缩进编写代码。”直接体现了按该偏好执行。",
+      "reason": "明确使用了该记忆，但记忆已过期且造成负面体验。"
     }
   ]
 }
@@ -9054,7 +8376,7 @@ Rules:
 - 实际：{"count":0}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：9943ms
+- 耗时：8548ms
 
 #### 测试提示词
 
@@ -9107,10 +8429,10 @@ Rules:
 - 指标：`effectiveness_adjustment_direction_proxy`
 - Prompt：`MEMORY_RECALL_EFFECTIVENESS_SYSTEM_PROMPT`
 - 预期：明确使用时应提供 usage_evidence
-- 实际：{"record_id":"eff-7","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.93,"suggested_importance_adjustment":1,"usage_evidence":"“继续执行第 4 步：创建索引。根据之前的进度，第 3 步已完成。”与记忆中的“迁移到第 3 步，下一步创建索引”直接对应。","reason":"明确沿用进度记忆，且帮助判断下一步。"}
+- 实际：{"record_id":"eff-7","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.93,"suggested_importance_adjustment":1,"usage_evidence":"“继续执行第 4 步：创建索引。根据之前的进度，第 3 步已完成。”与记忆中的“迁移到第 3 步，下一步创建索引”直接对应。","reason":"明确沿用了进度信息，并正确推进到创建索引。"}
 - 评分：`1.000`
 - 结果：通过
-- 耗时：10962ms
+- 耗时：12388ms
 
 #### 测试提示词
 
@@ -9155,7 +8477,7 @@ Rules:
 #### 模型原始输出
 
 ```json
-{"evaluations":[{"record_id":"eff-7","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.93,"suggested_importance_adjustment":1,"usage_evidence":"“继续执行第 4 步：创建索引。根据之前的进度，第 3 步已完成。”与记忆中的“迁移到第 3 步，下一步创建索引”直接对应。","reason":"明确沿用进度记忆，且帮助判断下一步。"}]}
+{"evaluations":[{"record_id":"eff-7","was_used":true,"usage_confidence":0.98,"effectiveness_score":0.93,"suggested_importance_adjustment":1,"usage_evidence":"“继续执行第 4 步：创建索引。根据之前的进度，第 3 步已完成。”与记忆中的“迁移到第 3 步，下一步创建索引”直接对应。","reason":"明确沿用了进度信息，并正确推进到创建索引。"}]}
 ```
 
 #### 结构化结果
@@ -9170,7 +8492,7 @@ Rules:
       "effectiveness_score": 0.93,
       "suggested_importance_adjustment": 1,
       "usage_evidence": "“继续执行第 4 步：创建索引。根据之前的进度，第 3 步已完成。”与记忆中的“迁移到第 3 步，下一步创建索引”直接对应。",
-      "reason": "明确沿用进度记忆，且帮助判断下一步。"
+      "reason": "明确沿用了进度信息，并正确推进到创建索引。"
     }
   ]
 }
