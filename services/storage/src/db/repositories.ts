@@ -164,6 +164,7 @@ export interface ReadModelRepository {
   upsert(entry: ReadModelEntry): Promise<void>;
   delete(recordId: string): Promise<void>;
   findById(recordId: string): Promise<ReadModelEntry | null>;
+  findLatestRefreshBySourceRecordId(recordId: string): Promise<ReadModelRefreshJob | null>;
   listPendingEmbeddings(limit: number): Promise<ReadModelEntry[]>;
   enqueueRefresh(input: {
     source_record_id: string;
@@ -1112,6 +1113,21 @@ function createReadModelRepository(session: DbSession): ReadModelRepository {
     async findById(recordId) {
       const result = await session.query(`select * from ${table} where id = $1`, [recordId]);
       return result.rows[0] ? mapReadModel(result.rows[0]) : null;
+    },
+
+    async findLatestRefreshBySourceRecordId(recordId) {
+      const result = await session.query(
+        `
+          select *
+          from ${refreshTable}
+          where source_record_id = $1
+          order by created_at desc
+          limit 1
+        `,
+        [recordId],
+      );
+
+      return result.rows[0] ? mapRefreshJob(result.rows[0]) : null;
     },
 
     async listPendingEmbeddings(limit) {

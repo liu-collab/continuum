@@ -660,6 +660,23 @@ export interface ReadModelRefreshJob {
   finished_at: string | null;
 }
 
+export interface WriteProjectionStatus {
+  job_id: string;
+  write_job_status: WriteJobStatus;
+  result_record_id: string | null;
+  result_status: string | null;
+  latest_refresh_job: {
+    job_id: string;
+    source_record_id: string;
+    refresh_type: ReadModelRefreshJob["refresh_type"];
+    job_status: RefreshJobStatus;
+    created_at: string;
+    finished_at: string | null;
+    error_message: string | null;
+  } | null;
+  projection_ready: boolean;
+}
+
 export interface SubmittedWriteBackJob {
   candidate_summary: string;
   job_id: string;

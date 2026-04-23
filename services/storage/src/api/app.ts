@@ -135,6 +135,16 @@ export function createApp(service: StorageService): FastifyInstance {
     });
   });
 
+  app.post("/v1/storage/write-back-candidates/projection-status", async (request) => {
+    const payload = z.object({
+      job_ids: z.array(z.uuid()).min(1).max(100),
+    }).parse(request.body);
+
+    return ok({
+      items: await service.getWriteProjectionStatuses(payload.job_ids),
+    });
+  });
+
   app.get("/v1/storage/write-back-candidates/:jobId", async (request) => {
     const params = z.object({ jobId: z.uuid() }).parse(request.params);
     const job = await service.getWriteJob(params.jobId);

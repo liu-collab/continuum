@@ -15,6 +15,8 @@ export type {
   PrepareContextResult,
   SessionStartRequest,
   SessionStartResult,
+  WriteProjectionStatusRequest,
+  WriteProjectionStatusResult,
 } from "./schemas.js";
 export {
   dependencyProbeResultSchema,
@@ -26,4 +28,6 @@ export {
   prepareContextResultSchema,
   sessionStartRequestSchema,
   sessionStartResultSchema,
+  writeProjectionStatusRequestSchema,
+  writeProjectionStatusResultSchema,
 } from "./schemas.js";

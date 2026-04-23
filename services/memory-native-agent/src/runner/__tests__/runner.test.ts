@@ -5,6 +5,7 @@ import type {
   FinalizeTurnResult,
   PrepareContextResult,
   SessionStartResult,
+  WriteProjectionStatusResult,
 } from "../../memory-client/index.js";
 import type { MaterializedSkillContext } from "../../skills/index.js";
 import { AgentRunner } from "../agent-runner.js";
@@ -94,11 +95,15 @@ function createMemoryClient() {
       memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
     },
   }));
+  const getWriteProjectionStatuses = vi.fn(async (): Promise<WriteProjectionStatusResult> => ({
+    items: [],
+  }));
 
   return {
     sessionStartContext,
     prepareContext,
     finalizeTurn,
+    getWriteProjectionStatuses,
   };
 }
 
@@ -1370,12 +1375,18 @@ describe("AgentRunner", () => {
           idempotency_key: "resident-update",
         },
       ],
-      submitted_jobs: [],
+      submitted_jobs: [
+        {
+          candidate_summary: "默认用英文回答",
+          job_id: "550e8400-e29b-41d4-a716-446655440060",
+          status: "accepted_async",
+        },
+      ],
       memory_mode: "workspace_plus_global" as const,
       candidate_count: 1,
       filtered_count: 0,
       filtered_reasons: [],
-      writeback_submitted: false,
+      writeback_submitted: true,
       degraded: false,
       dependency_status: {
         read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
@@ -1383,6 +1394,26 @@ describe("AgentRunner", () => {
         storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
         memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
+    });
+    memoryClient.getWriteProjectionStatuses.mockResolvedValueOnce({
+      items: [
+        {
+          job_id: "550e8400-e29b-41d4-a716-446655440060",
+          write_job_status: "succeeded",
+          result_record_id: "550e8400-e29b-41d4-a716-446655440061",
+          result_status: "insert_new",
+          latest_refresh_job: {
+            job_id: "550e8400-e29b-41d4-a716-446655440062",
+            source_record_id: "550e8400-e29b-41d4-a716-446655440061",
+            refresh_type: "insert",
+            job_status: "succeeded",
+            created_at: "2026-04-23T00:00:00.000Z",
+            finished_at: "2026-04-23T00:00:01.000Z",
+            error_message: null,
+          },
+          projection_ready: true,
+        },
+      ],
     });
     const saveDispatchedMessages = vi.fn();
 
@@ -1551,6 +1582,313 @@ describe("AgentRunner", () => {
       }),
     );
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-skill", "stop");
+  });
+
+  it("keeps resident memory when write projection is not ready yet", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.sessionStartContext
+      .mockResolvedValueOnce({
+        trace_id: "trace-session-1",
+        additional_context: "",
+        active_task_summary: null,
+        injection_block: {
+          injection_reason: "会话启动恢复",
+          memory_summary: "默认用中文回答",
+          memory_records: [
+            {
+              id: "resident-pref-1",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用中文回答",
+              importance: 5,
+              confidence: 0.98,
+            },
+          ],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["user"],
+          selected_scopes: ["user"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        },
+        memory_mode: "workspace_plus_global" as const,
+        dependency_status: {
+          read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+          embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+          storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        },
+        degraded: false,
+      });
+    memoryClient.finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-1",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "550e8400-e29b-41d4-a716-446655440002",
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用英文回答",
+          details: {},
+          importance: 5,
+          confidence: 0.95,
+          write_reason: "updated preference",
+          source: {
+            source_type: "memory_llm",
+            source_ref: "turn-1",
+            service_name: "retrieval-runtime",
+          },
+          idempotency_key: "resident-update",
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: "默认用英文回答",
+          job_id: "550e8400-e29b-41d4-a716-446655440010",
+          status: "accepted_async",
+        },
+      ],
+      memory_mode: "workspace_plus_global" as const,
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: true,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+    memoryClient.getWriteProjectionStatuses.mockResolvedValueOnce({
+      items: [
+        {
+          job_id: "550e8400-e29b-41d4-a716-446655440010",
+          write_job_status: "succeeded",
+          result_record_id: "550e8400-e29b-41d4-a716-446655440011",
+          result_status: "insert_new",
+          latest_refresh_job: {
+            job_id: "550e8400-e29b-41d4-a716-446655440012",
+            source_record_id: "550e8400-e29b-41d4-a716-446655440011",
+            refresh_type: "insert",
+            job_status: "processing",
+            created_at: "2026-04-23T00:00:00.000Z",
+            finished_at: null,
+            error_message: null,
+          },
+          projection_ready: false,
+        },
+      ],
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("继续当前任务", "turn-projection-pending-1");
+    await Promise.resolve();
+    await runner.submit("继续当前任务", "turn-projection-pending-2");
+
+    expect(memoryClient.getWriteProjectionStatuses).toHaveBeenCalledWith({
+      job_ids: ["550e8400-e29b-41d4-a716-446655440010"],
+    });
+    expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes resident memory after write projection becomes ready", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.sessionStartContext
+      .mockResolvedValueOnce({
+        trace_id: "trace-session-1",
+        additional_context: "",
+        active_task_summary: null,
+        injection_block: {
+          injection_reason: "会话启动恢复",
+          memory_summary: "默认用中文回答",
+          memory_records: [
+            {
+              id: "resident-pref-1",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用中文回答",
+              importance: 5,
+              confidence: 0.98,
+            },
+          ],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["user"],
+          selected_scopes: ["user"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        },
+        memory_mode: "workspace_plus_global" as const,
+        dependency_status: {
+          read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+          embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+          storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        },
+        degraded: false,
+      })
+      .mockResolvedValueOnce({
+        trace_id: "trace-session-2",
+        additional_context: "",
+        active_task_summary: null,
+        injection_block: {
+          injection_reason: "会话启动恢复",
+          memory_summary: "默认用英文回答",
+          memory_records: [
+            {
+              id: "resident-pref-2",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用英文回答",
+              importance: 5,
+              confidence: 0.98,
+            },
+          ],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["user"],
+          selected_scopes: ["user"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        },
+        memory_mode: "workspace_plus_global" as const,
+        dependency_status: {
+          read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+          embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+          storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        },
+        degraded: false,
+      });
+    memoryClient.finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-1",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "550e8400-e29b-41d4-a716-446655440002",
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用英文回答",
+          details: {},
+          importance: 5,
+          confidence: 0.95,
+          write_reason: "updated preference",
+          source: {
+            source_type: "memory_llm",
+            source_ref: "turn-1",
+            service_name: "retrieval-runtime",
+          },
+          idempotency_key: "resident-update",
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: "默认用英文回答",
+          job_id: "550e8400-e29b-41d4-a716-446655440020",
+          status: "accepted_async",
+        },
+      ],
+      memory_mode: "workspace_plus_global" as const,
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: true,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+    memoryClient.getWriteProjectionStatuses.mockResolvedValueOnce({
+      items: [
+        {
+          job_id: "550e8400-e29b-41d4-a716-446655440020",
+          write_job_status: "succeeded",
+          result_record_id: "550e8400-e29b-41d4-a716-446655440021",
+          result_status: "insert_new",
+          latest_refresh_job: {
+            job_id: "550e8400-e29b-41d4-a716-446655440022",
+            source_record_id: "550e8400-e29b-41d4-a716-446655440021",
+            refresh_type: "insert",
+            job_status: "succeeded",
+            created_at: "2026-04-23T00:00:00.000Z",
+            finished_at: "2026-04-23T00:00:01.000Z",
+            error_message: null,
+          },
+          projection_ready: true,
+        },
+      ],
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("继续当前任务", "turn-projection-ready-1");
+    await Promise.resolve();
+    await runner.submit("继续当前任务", "turn-projection-ready-2");
+
+    expect(memoryClient.getWriteProjectionStatuses).toHaveBeenCalledWith({
+      job_ids: ["550e8400-e29b-41d4-a716-446655440020"],
+    });
+    expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(2);
   });
 });
 

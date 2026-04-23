@@ -209,6 +209,23 @@ export interface SubmittedWriteBackJob {
   reason?: string;
 }
 
+export interface WriteProjectionStatusSnapshot {
+  job_id: string;
+  write_job_status: "queued" | "processing" | "succeeded" | "failed" | "dead_letter";
+  result_record_id: string | null;
+  result_status: string | null;
+  latest_refresh_job: {
+    job_id: string;
+    source_record_id: string;
+    refresh_type: "insert" | "update" | "delete";
+    job_status: "queued" | "processing" | "succeeded" | "failed" | "dead_letter";
+    created_at: string;
+    finished_at: string | null;
+    error_message: string | null;
+  } | null;
+  projection_ready: boolean;
+}
+
 export type DependencyState = "healthy" | "degraded" | "unavailable" | "unknown";
 
 export interface DependencyStatus {

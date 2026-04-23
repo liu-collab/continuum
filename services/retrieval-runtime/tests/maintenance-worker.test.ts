@@ -28,6 +28,7 @@ import type {
   ConflictStatus,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
+  WriteProjectionStatusSnapshot,
 } from "../src/shared/types.js";
 import type { EvolutionPlanner, RelationDiscoverer } from "../src/memory-orchestrator/types.js";
 
@@ -87,6 +88,10 @@ class RecordingStorageClient implements StorageWritebackClient {
       candidate_summary: candidate.summary,
       status: "accepted_async" as const,
     }));
+  }
+
+  async getWriteProjectionStatuses(): Promise<WriteProjectionStatusSnapshot[]> {
+    return [];
   }
 
   async listRecords(filters: RecordListFilters): Promise<RecordListPage> {

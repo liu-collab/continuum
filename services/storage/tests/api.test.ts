@@ -289,6 +289,101 @@ describe("storage api", () => {
     expect(response.json().submitted_jobs).toHaveLength(1);
   });
 
+  it("returns write projection status for succeeded write jobs with refresh progress", async () => {
+    const recordId = "55555555-5555-4555-8555-555555555555";
+    const refreshJobId = "66666666-6666-4666-8666-666666666666";
+    const service = createStorageService({
+      repositories: createMemoryRepositories({
+        jobs: [
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            idempotency_key: "projection-ready-job",
+            workspace_id: "11111111-1111-4111-8111-111111111111",
+            user_id: "22222222-2222-4222-8222-222222222222",
+            candidate_json: buildCandidate(),
+            candidate_hash: "candidate-hash",
+            source_service: "retrieval-runtime",
+            job_status: "succeeded",
+            result_record_id: recordId,
+            result_status: "insert_new",
+            error_code: null,
+            error_message: null,
+            retry_count: 0,
+            received_at: "2026-04-23T00:00:00.000Z",
+            started_at: "2026-04-23T00:00:01.000Z",
+            finished_at: "2026-04-23T00:00:02.000Z",
+          },
+        ],
+        refreshJobs: [
+          {
+            id: refreshJobId,
+            source_record_id: recordId,
+            refresh_type: "insert",
+            job_status: "processing",
+            retry_count: 0,
+            error_message: null,
+            created_at: "2026-04-23T00:00:03.000Z",
+            started_at: "2026-04-23T00:00:04.000Z",
+            finished_at: null,
+          },
+        ],
+      }),
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+
+    const app = createApp(service);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/storage/write-back-candidates/projection-status",
+      payload: {
+        job_ids: ["44444444-4444-4444-8444-444444444444"],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      status: "ok",
+      data: {
+        items: [
+          {
+            job_id: "44444444-4444-4444-8444-444444444444",
+            write_job_status: "succeeded",
+            result_record_id: recordId,
+            result_status: "insert_new",
+            latest_refresh_job: {
+              job_id: refreshJobId,
+              source_record_id: recordId,
+              refresh_type: "insert",
+              job_status: "processing",
+              created_at: "2026-04-23T00:00:03.000Z",
+              finished_at: null,
+              error_message: null,
+            },
+            projection_ready: false,
+          },
+        ],
+      },
+    });
+  });
+
   it("serves split health endpoints and keeps readiness ready when optional dependencies are unavailable", async () => {
     const service = createStorageService({
       repositories: createMemoryRepositories(),

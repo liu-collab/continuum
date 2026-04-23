@@ -91,6 +91,20 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
     return runtimeService.finalizeTurn(adapter.toFinalizeInput(parsed.data));
   });
 
+  app.post("/v1/runtime/write-projection-status", async (request) => {
+    const payloadSchema = z.object({
+      job_ids: z.array(z.string().uuid()).min(1).max(100),
+    });
+    const parsed = payloadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError("Invalid write projection status payload", parsed.error.flatten());
+    }
+
+    return {
+      items: await runtimeService.getWriteProjectionStatuses(parsed.data.job_ids),
+    };
+  });
+
   app.get("/v1/runtime/observe/runs", async (request) => {
     const parsed = observeRunsQuerySchema.safeParse(request.query);
     if (!parsed.success) {

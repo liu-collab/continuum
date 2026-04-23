@@ -491,6 +491,11 @@ export function createMemoryRepositories(
     async findById(recordId) {
       return state.readModel.find((item) => item.id === recordId) ?? null;
     },
+    async findLatestRefreshBySourceRecordId(recordId) {
+      return state.refreshJobs
+        .filter((job) => job.source_record_id === recordId)
+        .sort((left, right) => right.created_at.localeCompare(left.created_at))[0] ?? null;
+    },
     async listPendingEmbeddings(limit) {
       return state.readModel
         .filter((item) => item.embedding_status === "pending")

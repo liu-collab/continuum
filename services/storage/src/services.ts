@@ -18,6 +18,7 @@ import type {
   RuntimeCompatibleWriteBackBatchRequest,
   RuntimeWriteBackBatchRequest,
   SubmittedWriteBackJob,
+  WriteProjectionStatus,
   WriteBackCandidate,
 } from "./contracts.js";
 import type { StorageConfig } from "./config.js";
@@ -175,6 +176,46 @@ export class StorageService {
 
   async getWriteJob(jobId: string) {
     return this.repositories.jobs.findById(jobId);
+  }
+
+  async getWriteProjectionStatus(jobId: string): Promise<WriteProjectionStatus | null> {
+    const job = await this.repositories.jobs.findById(jobId);
+    if (!job) {
+      return null;
+    }
+
+    const recordId = job.result_record_id;
+    const latestRefreshJob =
+      recordId && job.result_status !== "ignore_duplicate"
+        ? await this.repositories.readModel.findLatestRefreshBySourceRecordId(recordId)
+        : null;
+
+    return {
+      job_id: job.id,
+      write_job_status: job.job_status,
+      result_record_id: recordId,
+      result_status: job.result_status,
+      latest_refresh_job: latestRefreshJob
+        ? {
+            job_id: latestRefreshJob.id,
+            source_record_id: latestRefreshJob.source_record_id,
+            refresh_type: latestRefreshJob.refresh_type,
+            job_status: latestRefreshJob.job_status,
+            created_at: latestRefreshJob.created_at,
+            finished_at: latestRefreshJob.finished_at,
+            error_message: latestRefreshJob.error_message,
+          }
+        : null,
+      projection_ready:
+        job.job_status === "succeeded" &&
+        Boolean(recordId) &&
+        (job.result_status === "ignore_duplicate" || latestRefreshJob?.job_status === "succeeded"),
+    };
+  }
+
+  async getWriteProjectionStatuses(jobIds: string[]): Promise<WriteProjectionStatus[]> {
+    const statuses = await Promise.all(jobIds.map((jobId) => this.getWriteProjectionStatus(jobId)));
+    return statuses.filter((status): status is WriteProjectionStatus => status !== null);
   }
 
   async listWriteJobs(limit = 50) {

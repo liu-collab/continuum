@@ -10,6 +10,7 @@ import type {
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
   SubmittedWriteBackJob,
+  WriteProjectionStatusSnapshot,
   WriteBackCandidate,
 } from "../src/shared/types.js";
 import type {
@@ -100,6 +101,10 @@ class StubStorageClient implements StorageWritebackClient {
       candidate_summary: candidate.summary,
       status: "accepted_async",
     }));
+  }
+
+  async getWriteProjectionStatuses(): Promise<WriteProjectionStatusSnapshot[]> {
+    return [];
   }
 
   async listRecords(): Promise<RecordListPage> {

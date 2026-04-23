@@ -19,6 +19,7 @@ import type {
   MemoryRelationSnapshot,
   MemoryRecordSnapshot,
   SubmittedWriteBackJob,
+  WriteProjectionStatusSnapshot,
   WriteBackCandidate,
 } from "../src/shared/types.js";
 import type {
@@ -283,6 +284,7 @@ async function waitForCondition(check: () => boolean, timeoutMs = 1000) {
 
 class StubStorageClient implements StorageWritebackClient {
   public callCount = 0;
+  public projectionStatuses: WriteProjectionStatusSnapshot[] = [];
 
   constructor(
     private readonly jobs: SubmittedWriteBackJob[] = [],
@@ -305,6 +307,11 @@ class StubStorageClient implements StorageWritebackClient {
             status: "accepted_async",
           }))
     ) as SubmittedWriteBackJob[];
+  }
+
+  async getWriteProjectionStatuses(jobIds: string[]): Promise<WriteProjectionStatusSnapshot[]> {
+    const idSet = new Set(jobIds);
+    return this.projectionStatuses.filter((item) => idSet.has(item.job_id));
   }
 
   async listRecords(): Promise<RecordListPage> {
@@ -3032,5 +3039,25 @@ describe("retrieval-runtime service", () => {
       liveness: "alive",
       readiness: "ready",
     });
+  });
+
+  it("serves write projection statuses through the runtime HTTP layer", async () => {
+    const { service } = createRuntime();
+    const app = createApp(service);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/write-projection-status",
+      payload: {
+        job_ids: ["550e8400-e29b-41d4-a716-446655440030"],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      items: [],
+    });
+
+    await app.close();
   });
 });

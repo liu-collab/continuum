@@ -17,6 +17,8 @@ import {
   runtimeErrorResponseSchema,
   sessionStartRequestSchema,
   sessionStartResultSchema,
+  writeProjectionStatusRequestSchema,
+  writeProjectionStatusResultSchema,
   type DependencyStatusSnapshot,
   type DependencyProbeResult,
   type FinalizeTurnRequest,
@@ -26,6 +28,8 @@ import {
   type PrepareContextResult,
   type SessionStartRequest,
   type SessionStartResult,
+  type WriteProjectionStatusRequest,
+  type WriteProjectionStatusResult,
 } from "./schemas.js";
 
 const MEMORY_NATIVE_AGENT_HOST = "memory_native_agent";
@@ -43,7 +47,13 @@ type RequestOptions<TResponse> = {
   timeoutMs: number;
   responseSchema: z.ZodType<TResponse>;
   body?: Record<string, unknown>;
-  operation: "session_start_context" | "prepare_context" | "finalize_turn" | "dependency_status" | "healthz";
+  operation:
+    | "session_start_context"
+    | "prepare_context"
+    | "finalize_turn"
+    | "dependency_status"
+    | "healthz"
+    | "write_projection_status";
   phase?: string;
   onDependencyUnavailable?: (message: string) => TResponse;
 };
@@ -173,6 +183,23 @@ export class MemoryClient {
         writeback_submitted: false,
         degraded: true,
         dependency_status: buildUnknownDependencySnapshot(message),
+      }),
+    });
+  }
+
+  async getWriteProjectionStatuses(
+    request: WriteProjectionStatusRequest,
+  ): Promise<WriteProjectionStatusResult> {
+    const parsed = writeProjectionStatusRequestSchema.parse(request);
+    return this.requestJson({
+      method: "POST",
+      path: "/v1/runtime/write-projection-status",
+      timeoutMs: this.requestTimeoutMs,
+      responseSchema: writeProjectionStatusResultSchema,
+      body: parsed,
+      operation: "write_projection_status",
+      onDependencyUnavailable: () => ({
+        items: [],
       }),
     });
   }

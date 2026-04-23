@@ -289,5 +289,57 @@ describe("memory client", () => {
       last_checked_at: "2026-04-21T12:00:00.000Z",
     });
   });
+
+  it("reads write projection status with schema validation", async () => {
+    const runtime = await startMockRuntime((app) => {
+      app.post("/v1/runtime/write-projection-status", async () => ({
+        items: [
+          {
+            job_id: "550e8400-e29b-41d4-a716-446655440050",
+            write_job_status: "succeeded",
+            result_record_id: "550e8400-e29b-41d4-a716-446655440051",
+            result_status: "insert_new",
+            latest_refresh_job: {
+              job_id: "550e8400-e29b-41d4-a716-446655440052",
+              source_record_id: "550e8400-e29b-41d4-a716-446655440051",
+              refresh_type: "insert",
+              job_status: "succeeded",
+              created_at: "2026-04-23T12:00:00.000Z",
+              finished_at: "2026-04-23T12:00:01.000Z",
+              error_message: null,
+            },
+            projection_ready: true,
+          },
+        ],
+      }));
+    });
+    startedApps.push(runtime.app);
+
+    const client = new MemoryClient({ baseUrl: runtime.baseUrl });
+    const response = await client.getWriteProjectionStatuses({
+      job_ids: ["550e8400-e29b-41d4-a716-446655440050"],
+    });
+
+    expect(response).toEqual({
+      items: [
+        {
+          job_id: "550e8400-e29b-41d4-a716-446655440050",
+          write_job_status: "succeeded",
+          result_record_id: "550e8400-e29b-41d4-a716-446655440051",
+          result_status: "insert_new",
+          latest_refresh_job: {
+            job_id: "550e8400-e29b-41d4-a716-446655440052",
+            source_record_id: "550e8400-e29b-41d4-a716-446655440051",
+            refresh_type: "insert",
+            job_status: "succeeded",
+            created_at: "2026-04-23T12:00:00.000Z",
+            finished_at: "2026-04-23T12:00:01.000Z",
+            error_message: null,
+          },
+          projection_ready: true,
+        },
+      ],
+    });
+  });
 });
 

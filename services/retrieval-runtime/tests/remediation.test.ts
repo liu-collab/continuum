@@ -223,6 +223,10 @@ class StubStorageClient {
     }));
   }
 
+  async getWriteProjectionStatuses() {
+    return [];
+  }
+
   async listRecords() {
     return { items: [], total: 0, page: 1, page_size: 20 };
   }
@@ -596,6 +600,7 @@ describe("retrieval-runtime remediation", () => {
       config,
       {
         submitCandidates: async () => [],
+        getWriteProjectionStatuses: async () => [],
         listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
         getRecordsByIds: async () => [],
         patchRecord: async () => { throw new Error("not implemented"); },
@@ -867,6 +872,7 @@ describe("retrieval-runtime remediation", () => {
       config,
       {
         submitCandidates: async () => [],
+        getWriteProjectionStatuses: async () => [],
         listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
         getRecordsByIds: async () => [],
         patchRecord: async () => { throw new Error("not implemented"); },

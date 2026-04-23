@@ -136,6 +136,10 @@ interface PlanConfirmDecision {
   feedback?: string;
 }
 
+interface PendingResidentRefreshState {
+  jobIds: string[];
+}
+
 export class AgentRunner {
   private readonly conversation = new Conversation();
   private readonly sessionId: string;
@@ -143,6 +147,7 @@ export class AgentRunner {
   private recentTasks: TaskState[] = [];
   private residentMemory: InjectionBlock | null = null;
   private residentMemoryDirty = false;
+  private pendingResidentRefresh: PendingResidentRefreshState | null = null;
   private readonly activeAbortControllers = new Map<string, AbortController>();
   private readonly tracer = new RuntimeTracer();
   private storeWarningEmitted = false;
@@ -595,10 +600,21 @@ export class AgentRunner {
           code: (error as Error & { code?: string }).code ?? "memory_unavailable",
         }));
       }).then((response) => {
-        if (response?.write_back_candidates?.some((candidate) =>
-          candidate.candidate_type === "fact_preference" || candidate.candidate_type === "task_state"
-        )) {
+        const residentJobs = response?.submitted_jobs
+          ?.filter((job, index) => {
+            const candidate = response.write_back_candidates[index];
+            return Boolean(
+              job.job_id &&
+              candidate &&
+              (candidate.candidate_type === "fact_preference" || candidate.candidate_type === "task_state"),
+            );
+          })
+          .map((job) => job.job_id!)
+          ?? [];
+
+        if (residentJobs.length > 0) {
           this.residentMemoryDirty = true;
+          this.pendingResidentRefresh = { jobIds: residentJobs };
         }
         finalizeSpan.finish("ok");
       });
@@ -800,10 +816,43 @@ export class AgentRunner {
   }
 
   private async refreshResidentMemory(): Promise<void> {
+    const projectionReady = await this.isResidentMemoryProjectionReady();
+    if (!projectionReady) {
+      return;
+    }
+
     const result = await this.safeSessionStart();
+    if (!result) {
+      this.residentMemoryDirty = true;
+      return;
+    }
     const injection = result?.injection_block ? toInjectionBlock("session_start", result.injection_block) : null;
     this.residentMemory = injection ? toResidentInjectionBlock(injection) : null;
     this.residentMemoryDirty = false;
+    this.pendingResidentRefresh = null;
+  }
+
+  private async isResidentMemoryProjectionReady(): Promise<boolean> {
+    if (!this.pendingResidentRefresh || this.pendingResidentRefresh.jobIds.length === 0) {
+      return true;
+    }
+
+    try {
+      const response = await this.deps.memoryClient.getWriteProjectionStatuses({
+        job_ids: this.pendingResidentRefresh.jobIds,
+      });
+
+      if (response.items.length < this.pendingResidentRefresh.jobIds.length) {
+        return false;
+      }
+
+      return response.items.every((item) => item.projection_ready);
+    } catch (error) {
+      this.deps.io.emitError("session", Object.assign(error instanceof Error ? error : new Error(String(error)), {
+        code: (error as Error & { code?: string }).code ?? "memory_unavailable",
+      }));
+      return false;
+    }
   }
 
   private async safePrepareContext(phase: Phase, turnId: string, userInput: string): Promise<PrepareContextResult | null> {

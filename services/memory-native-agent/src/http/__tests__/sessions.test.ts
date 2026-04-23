@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createServer } from "../../server.js";
 import type { AgentConfig } from "../../config/index.js";
+import type { PrepareContextResult } from "../../memory-client/index.js";
 
 const { pickWorkspaceDirectoryMock } = vi.hoisted(() => ({
   pickWorkspaceDirectoryMock: vi.fn<() => Promise<string | null>>(),
@@ -47,7 +48,7 @@ const runtimeCalls = {
     },
     degraded: false,
   })),
-  prepareContext: vi.fn(async ({ phase }: { phase: string }) => ({
+  prepareContext: vi.fn(async ({ phase }: { phase: string }): Promise<PrepareContextResult> => ({
     trace_id: `trace-${phase}`,
     trigger: phase === "before_response",
     trigger_reason: phase,

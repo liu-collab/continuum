@@ -33,7 +33,7 @@
 
 | 编号 | 标题 | 状态 | 依赖前置 | 计划顺序 | 对应单测 | 提交记录 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | 读模型投影延迟，写后读不到 | 未提交 | 5 | 第 8 批 | 待补 | 待补 |
+| 1 | 读模型投影延迟，写后读不到 | 已完成 | 5 | 第 8 批 | `services/storage/tests/api.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/memory-client/__tests__/client.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts` | `fix(memory-runtime): gate resident refresh on projection readiness` |
 | 2 | `Embedding` 缺失，语义检索静默失败 | 已完成 | 无 | 第 5 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): add lexical fallback for pending embeddings` |
 | 3 | 冲突感知召回缺失 | 未提交 | 4 | 第 10 批 | 待补 | 待补 |
 | 4 | 写回幂等键太脆弱，语义重复 | 未提交 | 无 | 第 9 批 | 待补 | 待补 |

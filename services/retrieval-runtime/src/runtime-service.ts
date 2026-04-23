@@ -34,6 +34,7 @@ import type {
   ScopeType,
   TriggerDecision,
   TriggerContext,
+  WriteProjectionStatusSnapshot,
 } from "./shared/types.js";
 import type { EmbeddingsClient } from "./query/embeddings-client.js";
 import type { QueryEngine } from "./query/query-engine.js";
@@ -929,6 +930,32 @@ export class RetrievalRuntimeService {
     );
     await this.evaluateRecallEffectivenessIfNeeded(normalizedInput, traceId);
     return response;
+  }
+
+  async getWriteProjectionStatuses(jobIds: string[]): Promise<WriteProjectionStatusSnapshot[]> {
+    if (!this.storageClient || jobIds.length === 0) {
+      return [];
+    }
+
+    const result = await this.dependencyGuard.run(
+      "storage_writeback",
+      this.embeddingTimeoutMs,
+      (signal) => this.storageClient?.getWriteProjectionStatuses(jobIds, signal) ?? Promise.resolve([]),
+    );
+
+    if (!result.ok) {
+      this.logger.warn(
+        {
+          code: result.error?.code,
+          detail: result.error?.message,
+          job_count: jobIds.length,
+        },
+        "write projection status lookup degraded",
+      );
+      return [];
+    }
+
+    return result.value ?? [];
   }
 
   async getLiveness(): Promise<{ status: "alive" }> {

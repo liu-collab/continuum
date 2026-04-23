@@ -75,6 +75,10 @@ export const finalizeTurnRequestSchema = z.object({
   memory_mode: memoryModeSchema.optional(),
 });
 
+export const writeProjectionStatusRequestSchema = z.object({
+  job_ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export const candidateMemorySchema = z.object({
   id: z.string(),
   workspace_id: z.string().uuid(),
@@ -163,6 +167,27 @@ export const submittedWriteBackJobSchema = z.object({
   reason: z.string().optional(),
 });
 
+export const writeProjectionStatusSchema = z.object({
+  job_id: z.string().uuid(),
+  write_job_status: z.enum(["queued", "processing", "succeeded", "failed", "dead_letter"]),
+  result_record_id: z.string().uuid().nullable(),
+  result_status: z.string().nullable(),
+  latest_refresh_job: z.object({
+    job_id: z.string().uuid(),
+    source_record_id: z.string().uuid(),
+    refresh_type: z.enum(["insert", "update", "delete"]),
+    job_status: z.enum(["queued", "processing", "succeeded", "failed", "dead_letter"]),
+    created_at: z.string(),
+    finished_at: z.string().nullable(),
+    error_message: z.string().nullable(),
+  }).nullable(),
+  projection_ready: z.boolean(),
+});
+
+export const writeProjectionStatusResultSchema = z.object({
+  items: z.array(writeProjectionStatusSchema),
+});
+
 export const prepareContextResultSchema = z.object({
   trace_id: z.string(),
   trigger: z.boolean(),
@@ -221,9 +246,11 @@ export const runtimeErrorResponseSchema = z.object({
 export type SessionStartRequest = z.infer<typeof sessionStartRequestSchema>;
 export type PrepareContextRequest = z.infer<typeof prepareContextRequestSchema>;
 export type FinalizeTurnRequest = z.infer<typeof finalizeTurnRequestSchema>;
+export type WriteProjectionStatusRequest = z.infer<typeof writeProjectionStatusRequestSchema>;
 export type SessionStartResult = z.infer<typeof sessionStartResultSchema>;
 export type PrepareContextResult = z.infer<typeof prepareContextResultSchema>;
 export type FinalizeTurnResult = z.infer<typeof finalizeTurnResultSchema>;
+export type WriteProjectionStatusResult = z.infer<typeof writeProjectionStatusResultSchema>;
 export type DependencyStatusSnapshot = z.infer<typeof dependencyStatusSnapshotSchema>;
 export type DependencyProbeResult = z.infer<typeof dependencyProbeResultSchema>;
 export type HealthEndpointResult = z.infer<typeof healthEndpointSchema>;

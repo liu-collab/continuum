@@ -11,6 +11,7 @@ import type {
   RecordStatus,
   ScopeType,
   SubmittedWriteBackJob,
+  WriteProjectionStatusSnapshot,
   WriteBackCandidate,
 } from "../shared/types.js";
 
@@ -75,6 +76,10 @@ export interface StorageWritebackClient {
     candidates: WriteBackCandidate[],
     signal?: AbortSignal,
   ): Promise<SubmittedWriteBackJob[]>;
+  getWriteProjectionStatuses(
+    jobIds: string[],
+    signal?: AbortSignal,
+  ): Promise<WriteProjectionStatusSnapshot[]>;
   listRecords(filters: RecordListFilters, signal?: AbortSignal): Promise<RecordListPage>;
   getRecordsByIds(recordIds: string[], signal?: AbortSignal): Promise<MemoryRecordSnapshot[]>;
   patchRecord(
@@ -128,6 +133,18 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
       signal,
     );
     return payload.submitted_jobs ?? [];
+  }
+
+  async getWriteProjectionStatuses(
+    jobIds: string[],
+    signal?: AbortSignal,
+  ): Promise<WriteProjectionStatusSnapshot[]> {
+    const payload = await this.postJson<{ data?: { items?: unknown[] } }>(
+      "/v1/storage/write-back-candidates/projection-status",
+      { job_ids: jobIds },
+      signal,
+    );
+    return (payload.data?.items ?? []).map(mapWriteProjectionStatusRow);
   }
 
   async listRecords(filters: RecordListFilters, signal?: AbortSignal): Promise<RecordListPage> {
@@ -364,4 +381,34 @@ function nullableString(value: unknown): string | null {
     return null;
   }
   return String(value);
+}
+
+function mapWriteProjectionStatusRow(row: unknown): WriteProjectionStatusSnapshot {
+  if (!row || typeof row !== "object") {
+    throw new Error("storage write projection status row is not an object");
+  }
+
+  const r = row as Record<string, unknown>;
+  const latestRefresh = r.latest_refresh_job;
+  type RefreshJobSnapshot = NonNullable<WriteProjectionStatusSnapshot["latest_refresh_job"]>;
+
+  return {
+    job_id: String(r.job_id),
+    write_job_status: String(r.write_job_status) as WriteProjectionStatusSnapshot["write_job_status"],
+    result_record_id: nullableString(r.result_record_id),
+    result_status: nullableString(r.result_status),
+    latest_refresh_job:
+      latestRefresh && typeof latestRefresh === "object"
+        ? ({
+            job_id: String((latestRefresh as Record<string, unknown>).job_id),
+            source_record_id: String((latestRefresh as Record<string, unknown>).source_record_id),
+            refresh_type: String((latestRefresh as Record<string, unknown>).refresh_type) as RefreshJobSnapshot["refresh_type"],
+            job_status: String((latestRefresh as Record<string, unknown>).job_status) as RefreshJobSnapshot["job_status"],
+            created_at: String((latestRefresh as Record<string, unknown>).created_at ?? ""),
+            finished_at: nullableString((latestRefresh as Record<string, unknown>).finished_at),
+            error_message: nullableString((latestRefresh as Record<string, unknown>).error_message),
+          } satisfies RefreshJobSnapshot)
+        : null,
+    projection_ready: Boolean(r.projection_ready),
+  };
 }
