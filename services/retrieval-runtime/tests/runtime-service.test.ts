@@ -257,6 +257,20 @@ class BlockingReadModelRepository extends InMemoryReadModelRepository {
   }
 }
 
+class MutableReadModelRepository extends InMemoryReadModelRepository {
+  constructor(private items: CandidateMemory[]) {
+    super(items);
+  }
+
+  setRecords(items: CandidateMemory[]) {
+    this.items = items;
+  }
+
+  override async searchCandidates(query: Parameters<InMemoryReadModelRepository["searchCandidates"]>[0], signal?: AbortSignal) {
+    return new InMemoryReadModelRepository(this.items).searchCandidates(query, signal);
+  }
+}
+
 async function waitForCondition(check: () => boolean, timeoutMs = 1000) {
   const startedAt = Date.now();
   while (!check()) {
@@ -1291,6 +1305,126 @@ describe("retrieval-runtime service", () => {
     expect(second.injection_block).not.toBeNull();
     const runs = await repository.getRuns({ trace_id: second.trace_id });
     expect(runs.recall_runs[0]?.replay_escape_reason).toBe("history_reference_escape");
+  });
+
+  it("allows task switch to break recent injection dedup on the following before_response", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要切换后恢复任务上下文",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "切换任务后恢复上下文",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入切换后的任务状态",
+      selected_record_ids: ["mem-task"],
+      memory_summary: "切换任务后恢复当前任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 99,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-task-switch-1",
+      phase: "before_response",
+      current_input: "继续当前任务。",
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-task-switch-2",
+      phase: "task_switch",
+      current_input: "换个任务，改成另一个方向。",
+    });
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-task-switch-3",
+      phase: "before_response",
+      current_input: "现在继续新任务。",
+    });
+
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-task")).toBe(true);
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.recall_runs[0]?.replay_escape_reason).toBe("task_switch_escape");
+  });
+
+  it("allows updated records to break recent injection dedup", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续恢复偏好",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "恢复最新偏好",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入最新偏好",
+      selected_record_ids: ["mem-preference"],
+      memory_summary: "恢复最新偏好。",
+    });
+    const updatedPreference: CandidateMemory = {
+      ...sampleRecords[1]!,
+      updated_at: "2026-04-16T10:00:00.000Z",
+      summary: "用户偏好：默认用中文，回答尽量简短直接，优先 TypeScript。",
+    };
+    const readModelRepository = new MutableReadModelRepository([sampleRecords[1]!]);
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      readModelRepository,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-version-1",
+      phase: "before_response",
+      current_input: "继续按之前偏好来。",
+    });
+
+    readModelRepository.setRecords([updatedPreference]);
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-version-2",
+      phase: "before_response",
+      current_input: "继续按当前最新偏好来。",
+    });
+
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-preference")).toBe(true);
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.recall_runs[0]?.replay_escape_reason).toBe("record_version_changed_escape");
   });
 
   it("degrades query when embeddings dependency fails", async () => {

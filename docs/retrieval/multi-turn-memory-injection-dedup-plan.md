@@ -750,7 +750,7 @@ type ResidentMemoryState = {
 
 - [x] 软窗口提示字段
 - [x] `history_reference` 破窗逻辑
-- [ ] 任务切换和版本变化破窗
+- [x] 任务切换和版本变化破窗
 - [x] 为软窗口和 `history_reference` 破窗补测试
 
 目标：

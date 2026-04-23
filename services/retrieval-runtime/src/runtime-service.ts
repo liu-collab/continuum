@@ -84,6 +84,7 @@ const DEFAULT_RECENT_INJECTION_CONFIG: RecentInjectionRuntimeConfig = {
 type RecentInjectionRecord = {
   record_id: string;
   memory_type: MemoryType;
+  record_updated_at?: string;
   injected_at: number;
   turn_index: number;
   trace_id?: string;
@@ -745,7 +746,9 @@ export class RetrievalRuntimeService {
         traceId,
         turnIndex,
         normalizedContext.phase,
-        injectionBlock.memory_records,
+        selectedCandidates.filter((candidate) =>
+          injectionBlock.memory_records.some((record) => record.id === candidate.id),
+        ),
       );
     }
 
@@ -1153,7 +1156,9 @@ export class RetrievalRuntimeService {
         input.traceId,
         input.turnIndex ?? this.peekTurnIndex(input.sessionId),
         "before_response",
-        injectionBlock.memory_records,
+        input.packet.records.filter((candidate) =>
+          injectionBlock.memory_records.some((record) => record.id === candidate.id),
+        ),
       );
     }
 
@@ -1600,7 +1605,7 @@ export class RetrievalRuntimeService {
       };
     }
 
-    const replayEscapeReason = this.resolveReplayEscapeReason(input.context);
+    const replayEscapeReason = this.resolveReplayEscapeReason(input.context, input.candidates);
     if (replayEscapeReason) {
       return {
         hardFiltered: [],
@@ -1669,7 +1674,17 @@ export class RetrievalRuntimeService {
     };
   }
 
-  private resolveReplayEscapeReason(context: TriggerContext): string | undefined {
+  private resolveReplayEscapeReason(context: TriggerContext, candidates: CandidateMemory[]): string | undefined {
+    if (this.hasRecentTaskSwitch(context.session_id)) {
+      return "task_switch_escape";
+    }
+    const sessionState = this.recentInjections.get(context.session_id);
+    if (sessionState && candidates.some((candidate) => {
+      const recent = sessionState.get(candidate.id);
+      return Boolean(recent?.record_updated_at && recent.record_updated_at !== candidate.updated_at);
+    })) {
+      return "record_version_changed_escape";
+    }
     if (context.phase === "task_switch") {
       return "task_switch_escape";
     }
@@ -1719,7 +1734,7 @@ export class RetrievalRuntimeService {
     traceId: string,
     turnIndex: number,
     sourcePhase: TriggerContext["phase"],
-    records: Array<{ id: string; memory_type: MemoryType }>,
+    records: Array<{ id: string; memory_type: MemoryType; updated_at?: string }>,
   ) {
     if (records.length === 0) {
       return;
@@ -1738,6 +1753,7 @@ export class RetrievalRuntimeService {
       sessionState.set(record.id, {
         record_id: record.id,
         memory_type: record.memory_type,
+        record_updated_at: record.updated_at,
         injected_at: now,
         turn_index: turnIndex,
         trace_id: traceId,
@@ -1775,6 +1791,19 @@ export class RetrievalRuntimeService {
 
   private peekTurnIndex(sessionId: string) {
     return this.sessionTurnCounters.get(sessionId) ?? 0;
+  }
+
+  private hasRecentTaskSwitch(sessionId: string) {
+    const sessionState = this.recentInjections.get(sessionId);
+    if (!sessionState) {
+      return false;
+    }
+    for (const record of sessionState.values()) {
+      if (record.source_phase === "task_switch" && record.turn_index >= this.peekTurnIndex(sessionId) - 1) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
