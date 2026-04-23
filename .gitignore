@@ -17,3 +17,6 @@ services/visualization/tmp-agent-page.png
 *.log
 .tmp-visualization-start.*
 .tmp-assistant-ui/
+output/imagegen/
+.tmp-*
+.mna
