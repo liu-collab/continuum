@@ -1588,7 +1588,11 @@ export class RetrievalRuntimeService {
     turnIndex: number;
     candidates: CandidateMemory[];
   }): RecentInjectionDecision {
-    if (!this.config.INJECTION_DEDUP_ENABLED || input.candidates.length === 0) {
+    if (
+      !this.config.INJECTION_DEDUP_ENABLED
+      || input.candidates.length === 0
+      || input.context.phase !== "before_response"
+    ) {
       return {
         hardFiltered: [],
         softMarked: [],

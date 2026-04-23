@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AgentConfig } from "../../config/index.js";
+import type {
+  FinalizeTurnResult,
+  PrepareContextResult,
+  SessionStartResult,
+} from "../../memory-client/index.js";
 import type { MaterializedSkillContext } from "../../skills/index.js";
 import { AgentRunner } from "../agent-runner.js";
 
@@ -30,66 +35,70 @@ function createIo() {
 }
 
 function createMemoryClient() {
+  const sessionStartContext = vi.fn(async (): Promise<SessionStartResult> => ({
+    trace_id: "trace-session",
+    additional_context: "",
+    active_task_summary: null,
+    injection_block: null,
+    memory_mode: "workspace_plus_global" as const,
+    dependency_status: {
+      read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+      memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+    },
+    degraded: false,
+  }));
+  const prepareContext = vi.fn(async ({ phase }: { phase: string }): Promise<PrepareContextResult> => ({
+    trace_id: `trace-${phase}`,
+    trigger: phase === "before_response",
+    trigger_reason: phase,
+    memory_packet: null,
+    injection_block: phase === "before_response"
+      ? {
+          injection_reason: "history reference",
+          memory_summary: "remembered",
+          memory_records: [],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["workspace"],
+          selected_scopes: ["workspace"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        }
+      : null,
+    degraded: false,
+    dependency_status: {
+      read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+      memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+    },
+    budget_used: 0,
+    memory_packet_ids: [],
+  }));
+  const finalizeTurn = vi.fn(async (): Promise<FinalizeTurnResult> => ({
+    trace_id: "trace-finalize",
+    write_back_candidates: [],
+    submitted_jobs: [],
+    memory_mode: "workspace_plus_global" as const,
+    candidate_count: 0,
+    filtered_count: 0,
+    filtered_reasons: [],
+    writeback_submitted: false,
+    degraded: false,
+    dependency_status: {
+      read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+      embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+      storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+      memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+    },
+  }));
+
   return {
-    sessionStartContext: vi.fn(async () => ({
-      trace_id: "trace-session",
-      additional_context: "",
-      active_task_summary: null,
-      injection_block: null,
-      memory_mode: "workspace_plus_global" as const,
-      dependency_status: {
-        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
-        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
-        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
-      },
-      degraded: false,
-    })),
-    prepareContext: vi.fn(async ({ phase }: { phase: string }) => ({
-      trace_id: `trace-${phase}`,
-      trigger: phase === "before_response",
-      trigger_reason: phase,
-      memory_packet: null,
-      injection_block: phase === "before_response"
-        ? {
-            injection_reason: "history reference",
-            memory_summary: "remembered",
-            memory_records: [],
-            token_estimate: 0,
-            memory_mode: "workspace_plus_global" as const,
-            requested_scopes: ["workspace"],
-            selected_scopes: ["workspace"],
-            trimmed_record_ids: [],
-            trim_reasons: [],
-          }
-        : null,
-      degraded: false,
-      dependency_status: {
-        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
-        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
-        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
-      },
-      budget_used: 0,
-      memory_packet_ids: [],
-    })),
-    finalizeTurn: vi.fn(async () => ({
-      trace_id: "trace-finalize",
-      write_back_candidates: [],
-      submitted_jobs: [],
-      memory_mode: "workspace_plus_global" as const,
-      candidate_count: 0,
-      filtered_count: 0,
-      filtered_reasons: [],
-      writeback_submitted: false,
-      degraded: false,
-      dependency_status: {
-        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
-        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
-        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
-        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
-      },
-    })),
+    sessionStartContext,
+    prepareContext,
+    finalizeTurn,
   };
 }
 
@@ -1081,6 +1090,259 @@ describe("AgentRunner", () => {
     expect(messages.filter((message) => message.role === "system")).toHaveLength(2);
     expect(phaseResults.map((result) => result.phase)).toEqual(["task_start", "before_plan", "before_response"]);
     expect(phaseResults.every((result) => result.injection_summary === "用户长期偏好与当前任务上下文")).toBe(true);
+  });
+
+  it("keeps session_start stable memories as resident prompt content across turns", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.sessionStartContext.mockResolvedValue({
+      trace_id: "trace-session",
+      additional_context: "恢复基础偏好与任务状态",
+      active_task_summary: "当前任务：补齐测试",
+      injection_block: {
+        injection_reason: "会话启动恢复",
+        memory_summary: "稳定偏好与当前任务",
+        memory_records: [
+          {
+            id: "resident-pref",
+            memory_type: "fact_preference",
+            scope: "user",
+            summary: "默认用中文回答",
+            importance: 5,
+            confidence: 0.98,
+          },
+          {
+            id: "resident-task",
+            memory_type: "task_state",
+            scope: "task",
+            summary: "当前任务：补齐测试",
+            importance: 5,
+            confidence: 0.95,
+          },
+        ],
+        token_estimate: 0,
+        memory_mode: "workspace_plus_global" as const,
+        requested_scopes: ["workspace", "user", "task"],
+        selected_scopes: ["user", "task"],
+        trimmed_record_ids: [],
+        trim_reasons: [],
+      },
+      memory_mode: "workspace_plus_global" as const,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+      degraded: false,
+    });
+    memoryClient.prepareContext.mockResolvedValue({
+      trace_id: "trace-before-response",
+      trigger: false,
+      trigger_reason: "no incremental memory",
+      memory_packet: null,
+      injection_block: null,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+      budget_used: 0,
+      memory_packet_ids: [],
+    });
+    const saveDispatchedMessages = vi.fn();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages,
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("继续当前任务", "turn-resident");
+
+    const payload = saveDispatchedMessages.mock.calls[0]?.[1] as {
+      prompt_segments_json: string;
+    };
+    const promptSegments = JSON.parse(payload.prompt_segments_json) as Array<{ kind: string; preview: string }>;
+    expect(promptSegments.some((segment) => segment.kind === "memory_high" && segment.preview.includes("稳定偏好与当前任务"))).toBe(true);
+  });
+
+  it("refreshes resident memory on the next turn after resident writeback candidates appear", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.sessionStartContext
+      .mockResolvedValueOnce({
+        trace_id: "trace-session-1",
+        additional_context: "第一次恢复",
+        active_task_summary: null,
+        injection_block: {
+          injection_reason: "会话启动恢复",
+          memory_summary: "默认中文输出",
+          memory_records: [
+            {
+              id: "resident-pref-1",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用中文回答",
+              importance: 5,
+              confidence: 0.98,
+            },
+          ],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["user"],
+          selected_scopes: ["user"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        },
+        memory_mode: "workspace_plus_global" as const,
+        dependency_status: {
+          read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+          embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+          storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        },
+        degraded: false,
+      })
+      .mockResolvedValueOnce({
+        trace_id: "trace-session-2",
+        additional_context: "第二次恢复",
+        active_task_summary: null,
+        injection_block: {
+          injection_reason: "会话启动恢复",
+          memory_summary: "默认改成英文输出",
+          memory_records: [
+            {
+              id: "resident-pref-2",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "默认用英文回答",
+              importance: 5,
+              confidence: 0.98,
+            },
+          ],
+          token_estimate: 0,
+          memory_mode: "workspace_plus_global" as const,
+          requested_scopes: ["user"],
+          selected_scopes: ["user"],
+          trimmed_record_ids: [],
+          trim_reasons: [],
+        },
+        memory_mode: "workspace_plus_global" as const,
+        dependency_status: {
+          read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+          embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+          storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+          memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+        },
+        degraded: false,
+      });
+    const finalizeTurn = memoryClient.finalizeTurn;
+    finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-1",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "550e8400-e29b-41d4-a716-446655440002",
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用英文回答",
+          details: {},
+          importance: 5,
+          confidence: 0.95,
+          write_reason: "updated preference",
+          source: {
+            source_type: "memory_llm",
+            source_ref: "turn-1",
+            service_name: "retrieval-runtime",
+          },
+          idempotency_key: "resident-update",
+        },
+      ],
+      submitted_jobs: [],
+      memory_mode: "workspace_plus_global" as const,
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: false,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+    const saveDispatchedMessages = vi.fn();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages,
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("继续当前任务", "turn-refresh-1");
+    await Promise.resolve();
+    await runner.submit("继续当前任务", "turn-refresh-2");
+
+    expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(2);
   });
 
   it("injects skill context and forwards model override plus preapproved tools", async () => {

@@ -41,6 +41,7 @@ export interface InjectionBlock {
   phase: string;
   injection_reason: string;
   memory_summary: string;
+  resident?: boolean;
   tier?: "high" | "medium" | "summary";
   kind?: "stable_preference" | "task_state" | "summary";
   tier_counts?: {
@@ -139,6 +140,8 @@ export class AgentRunner {
   private readonly sessionId: string;
   private currentTask: TaskState | null = null;
   private recentTasks: TaskState[] = [];
+  private residentMemory: InjectionBlock | null = null;
+  private residentMemoryDirty = false;
   private readonly activeAbortControllers = new Map<string, AbortController>();
   private readonly tracer = new RuntimeTracer();
   private storeWarningEmitted = false;
@@ -155,13 +158,23 @@ export class AgentRunner {
   async start(): Promise<void> {
     const result = await this.safeSessionStart();
     const injection = result?.injection_block ? toInjectionBlock("session_start", result.injection_block) : null;
+    this.residentMemory = injection ? toResidentInjectionBlock(injection) : null;
+    this.residentMemoryDirty = false;
     this.deps.io.emitPhaseResult(this.sessionId, "session_start", result);
-    this.deps.io.emitInjectionBanner(this.sessionId, injection, Boolean(result?.degraded));
+    this.deps.io.emitInjectionBanner(
+      this.sessionId,
+      this.residentMemory ?? injection,
+      Boolean(result?.degraded),
+    );
   }
 
   async submit(userInput: string, turnId = createTurnId(), options: SubmitOptions = {}): Promise<void> {
     const abortController = new AbortController();
     this.activeAbortControllers.set(turnId, abortController);
+
+    if (this.residentMemoryDirty) {
+      await this.refreshResidentMemory();
+    }
 
     const triggers = detectTriggers(userInput, this.conversation, this.currentTask);
     const orderedPhases = this.applyTaskStateChanges(turnId, triggers);
@@ -192,7 +205,10 @@ export class AgentRunner {
       this.deps.io.emitPhaseResult(turnId, phase, response);
     }
 
-    const injections = buildPromptInjections(rawInjections);
+    const injections = buildPromptInjections([
+      ...(this.residentMemory ? [this.residentMemory] : []),
+      ...rawInjections,
+    ]);
     const shouldPlan = shouldGeneratePlan(userInput) || orderedPhases.includes("before_plan");
     let evaluationEvents: EvaluationEvent[] = [];
     let retryState = createRetryPolicyState();
@@ -577,7 +593,12 @@ export class AgentRunner {
         this.deps.io.emitError("session", Object.assign(error instanceof Error ? error : new Error(String(error)), {
           code: (error as Error & { code?: string }).code ?? "memory_unavailable",
         }));
-      }).then(() => {
+      }).then((response) => {
+        if (response?.write_back_candidates?.some((candidate) =>
+          candidate.candidate_type === "fact_preference" || candidate.candidate_type === "task_state"
+        )) {
+          this.residentMemoryDirty = true;
+        }
         finalizeSpan.finish("ok");
       });
     }
@@ -775,6 +796,13 @@ export class AgentRunner {
       }));
       return null;
     }
+  }
+
+  private async refreshResidentMemory(): Promise<void> {
+    const result = await this.safeSessionStart();
+    const injection = result?.injection_block ? toInjectionBlock("session_start", result.injection_block) : null;
+    this.residentMemory = injection ? toResidentInjectionBlock(injection) : null;
+    this.residentMemoryDirty = false;
   }
 
   private async safePrepareContext(phase: Phase, turnId: string, userInput: string): Promise<PrepareContextResult | null> {
@@ -1029,6 +1057,19 @@ function toInjectionBlock(
       importance: record.importance,
       confidence: record.confidence,
     })),
+  };
+}
+
+function toResidentInjectionBlock(block: InjectionBlock): InjectionBlock {
+  const residentRecords = block.memory_records.filter((record) => {
+    return record.memory_type === "fact_preference" || record.memory_type === "task_state";
+  });
+
+  return {
+    ...block,
+    phase: "session_start",
+    resident: true,
+    memory_records: residentRecords,
   };
 }
 

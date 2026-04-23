@@ -637,6 +637,46 @@ describe("retrieval-runtime service", () => {
     expect(response.memory_packet).toBeNull();
   });
 
+  it("keeps ranked candidates available when recall candidate limit is absent in ad-hoc config", async () => {
+    const { service } = createRuntime({
+      records: [
+        {
+          id: "mem-typescript-pref",
+          workspace_id: ids.workspace,
+          user_id: ids.user,
+          session_id: null,
+          task_id: null,
+          memory_type: "fact_preference",
+          scope: "user",
+          summary: "用户偏好：使用 TypeScript。",
+          details: null,
+          source: { turn_id: "seed-typescript" },
+          importance: 5,
+          confidence: 0.95,
+          status: "active",
+          updated_at: "2026-04-20T10:00:00.000Z",
+          last_confirmed_at: "2026-04-20T10:00:00.000Z",
+          summary_embedding: [1, 0, 0],
+        },
+      ],
+      config: {
+        RECALL_LLM_CANDIDATE_LIMIT: undefined as unknown as number,
+      },
+    });
+
+    const response = await service.sessionStartContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "session start",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.injection_block?.memory_records.map((record) => record.id)).toContain("mem-typescript-pref");
+  });
+
   it("uses llm recall planner to select injected memory", async () => {
     const { service } = createRuntime({
       llmRecallPlanner: new StubLlmRecallPlanner({

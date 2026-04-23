@@ -735,10 +735,10 @@ type ResidentMemoryState = {
 
 范围：
 
-- [ ] 宿主保存 `session_start` 稳定记忆
-- [ ] prompt 组装时把常驻段和增量段分开
-- [ ] 补 `dirty + refresh`
-- [ ] 为常驻层与刷新链路补测试
+- [x] 宿主保存 `session_start` 稳定记忆
+- [x] prompt 组装时把常驻段和增量段分开
+- [x] 补 `dirty + refresh`
+- [x] 为常驻层与刷新链路补测试
 
 目标：
 

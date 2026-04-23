@@ -137,6 +137,11 @@ export class QueryEngine {
       degradationReason = embeddingsResult.error?.code ?? "embedding_unavailable";
     }
 
+    const maxRankedCandidates = Math.max(
+      this.config.PACKET_RECORD_LIMIT,
+      this.config.RECALL_LLM_CANDIDATE_LIMIT ?? this.config.QUERY_CANDIDATE_LIMIT,
+    );
+
     const ranked = baseCandidates
       .map((candidate) => {
         const semanticScore =
@@ -158,7 +163,7 @@ export class QueryEngine {
         };
       })
       .sort((left, right) => (right.rerank_score ?? 0) - (left.rerank_score ?? 0))
-      .slice(0, Math.max(this.config.PACKET_RECORD_LIMIT, this.config.RECALL_LLM_CANDIDATE_LIMIT));
+      .slice(0, maxRankedCandidates);
 
     this.logger.debug(
       {
