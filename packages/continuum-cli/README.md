@@ -34,18 +34,36 @@
 - `continuum mna` 用来单独安装、启动、停止、查看日志和读取 token
 - `continuum ui` 会优先连接已经通过 `continuum start` 启动好的页面；如果本地没有运行中的页面，才回退到包内自带的可视化产物
 
+## 安装
+
+推荐直接全局安装：
+
+```bash
+npm install -g @jiankarlin/continuum
+```
+
+安装后可以先确认命令可用：
+
+```bash
+continuum --help
+```
+
 ## 第三方向量配置
 
-`continuum start` 启动前，需要先提供下面两个必填项：
+`continuum start` 可以先把托管栈启动起来，不要求你在启动前一定先写好 `embedding` 配置。
+
+如果还没有提供下面这些配置：
 
 - `EMBEDDING_BASE_URL`
 - `EMBEDDING_MODEL`
+
+页面仍然可以打开，但向量召回、相关依赖状态和健康检查会显示未配置或未就绪。
 
 如果服务端需要鉴权，再补：
 
 - `EMBEDDING_API_KEY`
 
-示例：
+建议在需要完整召回链路时补上。示例：
 
 ```bash
 $env:EMBEDDING_BASE_URL="https://api.openai.com/v1"

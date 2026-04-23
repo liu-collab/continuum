@@ -22,6 +22,7 @@ async function createVendorFixture(rootDir: string) {
   const packageDir = await createCliFixture(rootDir);
   const templatesDir = path.join(packageDir, "templates", "stack");
   const servicesRoot = path.join(rootDir, "services");
+  const docsRoot = path.join(rootDir, "docs");
   const vendorRoot = path.join(packageDir, "vendor");
 
   await writeFixtureFile(path.join(templatesDir, "Dockerfile"), "FROM node:22\n");
@@ -55,6 +56,7 @@ async function createVendorFixture(rootDir: string) {
   await writeFixtureFile(path.join(servicesRoot, "visualization", "tailwind.config.ts"), "export default {};\n");
   await writeFixtureFile(path.join(servicesRoot, "visualization", "components.json"), "{}\n");
   await writeFixtureFile(path.join(servicesRoot, "visualization", ".next", "standalone", "server.js"), "export {};\n");
+  await writeFixtureFile(path.join(docsRoot, "configuration-guide.md"), "# guide\n");
 
   await writeFixtureFile(path.join(servicesRoot, "memory-native-agent", "bin", "mna-server.mjs"), "console.log('mna');\n");
   await writeFixtureFile(path.join(servicesRoot, "memory-native-agent", "src", "index.ts"), "export const mna = 1;\n");
@@ -162,6 +164,22 @@ describe("build state planning", () => {
     const publicOnlyPlan = await planVendorBuild(packageDir);
     expect(publicOnlyPlan.changedEntries).toContain("visualization");
     expect(publicOnlyPlan.buildServices).not.toContain("visualization");
+  });
+
+  it("rebuilds visualization when the repository doc changes", async () => {
+    const rootDir = path.join(tempHome, "repo");
+    const packageDir = await createVendorFixture(rootDir);
+    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
+    const { planVendorBuild, writeBuildState } = await import("../scripts/build-state.mjs");
+
+    const initialPlan = await planVendorBuild(packageDir);
+    await writeBuildState(initialPlan.nextState);
+
+    await writeFixtureFile(path.join(rootDir, "docs", "configuration-guide.md"), "# updated guide\n");
+    const docsPlan = await planVendorBuild(packageDir);
+
+    expect(docsPlan.changedEntries).toContain("visualization");
+    expect(docsPlan.buildServices).toContain("visualization");
   });
 
   it("rebuilds stack image when required vendor runtime files are incomplete", async () => {

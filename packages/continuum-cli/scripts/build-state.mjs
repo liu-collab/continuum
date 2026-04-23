@@ -138,6 +138,13 @@ function serviceDefinitions(packageDir) {
         "tailwind.config.ts",
         "components.json",
       ],
+      sharedBuildInputs: [
+        {
+          baseDir: repoRoot,
+          entries: ["docs/configuration-guide.md"],
+          label: "repo",
+        },
+      ],
       entryInputs: [
         "src",
         "public",
@@ -150,6 +157,13 @@ function serviceDefinitions(packageDir) {
         "postcss.config.js",
         "tailwind.config.ts",
         "components.json",
+      ],
+      sharedEntryInputs: [
+        {
+          baseDir: repoRoot,
+          entries: ["docs/configuration-guide.md"],
+          label: "repo",
+        },
       ],
       buildOutputs: [".next/standalone/server.js"],
       vendorOutputs: [path.join(packageDir, "vendor", "visualization", "standalone", "server.js")],
@@ -251,8 +265,28 @@ export async function planVendorBuild(packageDir) {
 
   for (const serviceName of serviceNames) {
     const definition = definitions[serviceName];
-    const entryHash = await hashInputs(definition.serviceDir, definition.entryInputs);
-    const buildHash = await hashInputs(definition.serviceDir, definition.buildInputs);
+    const entryHash = await hashInputGroups([
+      {
+        label: serviceName,
+        baseDir: definition.serviceDir,
+        entries: definition.entryInputs,
+      },
+      ...((definition.sharedEntryInputs ?? []).map((group) => ({
+        ...group,
+        label: `${serviceName}:${group.label}`,
+      }))),
+    ]);
+    const buildHash = await hashInputGroups([
+      {
+        label: serviceName,
+        baseDir: definition.serviceDir,
+        entries: definition.buildInputs,
+      },
+      ...((definition.sharedBuildInputs ?? []).map((group) => ({
+        ...group,
+        label: `${serviceName}:${group.label}`,
+      }))),
+    ]);
     const vendorReady = await outputsExist(definition.serviceDir, definition.vendorOutputs);
     const entryChanged = state.vendor.entries?.[serviceName] !== entryHash || !vendorReady;
 

@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowUpRight, BookText, Bot, ChartSpline, HeartPulse, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, BookText, Bot, ChartSpline, FileText, HeartPulse, ShieldCheck } from "lucide-react";
 
 const cards = [
   {
@@ -32,6 +32,12 @@ const cards = [
     title: "看板",
     description: "运行时与存储指标",
     icon: ChartSpline,
+  },
+  {
+    href: "/docs/configuration" as Route,
+    title: "配置与使用",
+    description: "环境变量、命令、skills、MCP 与页面设置",
+    icon: FileText,
   }
 ];
 
