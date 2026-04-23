@@ -1727,6 +1727,56 @@ describe("retrieval-runtime service", () => {
     expect(response.filtered_reasons).toContain("quality_blocked:fact_preference");
   });
 
+  it("blocks llm-only new candidates when quality assessor is unavailable", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "默认用中文输出",
+            importance: 5,
+            confidence: 0.92,
+            write_reason: "stable preference confirmed in this turn",
+          },
+        ],
+      }),
+      qualityAssessor: new StubQualityAssessor([], true),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "后续都用中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    });
+
+    expect(response.write_back_candidates).toHaveLength(0);
+    expect(response.filtered_reasons).toContain("quality_assessor_fallback_blocked:fact_preference");
+  });
+
+  it("keeps rule candidates when quality assessor is unavailable", async () => {
+    const { service } = createRuntime({
+      qualityAssessor: new StubQualityAssessor([], true),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。下一步: 继续补测试。",
+    });
+
+    expect(response.write_back_candidates.length).toBeGreaterThan(0);
+    expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
+    expect(response.filtered_reasons).not.toContain("quality_assessor_fallback_blocked:fact_preference");
+  });
+
   it("keeps writeback candidates compatible when quality assessor suggests manual review", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({

@@ -877,8 +877,31 @@ export class WritebackEngine {
         filtered_reasons: filteredReasons,
       };
     } catch (error) {
-      this.logger?.warn?.({ err: error }, "memory quality assessor failed, using unassessed candidates");
-      return result;
+      this.logger?.warn?.({ err: error }, "memory quality assessor failed, applying conservative fallback");
+      const filtered_reasons = [...result.filtered_reasons];
+      const candidates = result.candidates.filter((candidate) => {
+        const extractionMethod = candidate.source.extraction_method;
+        const refineAction =
+          typeof candidate.details.refine_action === "string" ? candidate.details.refine_action : undefined;
+
+        if (extractionMethod !== "llm") {
+          return true;
+        }
+
+        if (refineAction === "keep" || refineAction === "merge") {
+          return true;
+        }
+
+        filtered_reasons.push(`quality_assessor_fallback_blocked:${candidate.candidate_type}`);
+        return false;
+      });
+
+      return {
+        ...result,
+        candidates,
+        filtered_count: filtered_reasons.length,
+        filtered_reasons,
+      };
     }
   }
 }
