@@ -71,6 +71,11 @@ export interface CandidateMemory {
   summary_embedding?: number[];
   semantic_score?: number;
   rerank_score?: number;
+  recent_injection_hint?: {
+    recently_injected: boolean;
+    injected_at: string;
+    turns_since_last_injection: number;
+  };
 }
 
 export interface TriggerDecision {
@@ -298,6 +303,10 @@ export interface RecallRunRecord {
   requested_memory_types: MemoryType[];
   candidate_count: number;
   selected_count: number;
+  recently_filtered_record_ids?: string[];
+  recently_filtered_reasons?: string[];
+  recently_soft_marked_record_ids?: string[];
+  replay_escape_reason?: string;
   result_state: "not_triggered" | "dependency_unavailable" | "empty" | "matched";
   degraded: boolean;
   degradation_reason?: string;
@@ -335,6 +344,10 @@ export interface InjectionRunRecord {
   selected_scopes: ScopeType[];
   trimmed_record_ids: string[];
   trim_reasons: string[];
+  recently_filtered_record_ids?: string[];
+  recently_filtered_reasons?: string[];
+  recently_soft_marked_record_ids?: string[];
+  replay_escape_reason?: string;
   result_state: "not_triggered" | "no_records" | "trimmed_to_zero" | "injected";
   duration_ms: number;
   created_at: string;

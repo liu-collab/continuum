@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
+import type { AppConfig } from "./config.js";
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
 import { buildMemoryPacket } from "./injection/packet-builder.js";
 import type {
@@ -50,6 +51,51 @@ const MEMORY_RECOMMENDATION_PROMPT_VERSION = "memory-recommendation-plan-v1";
 const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
 const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
 const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
+
+type RecentInjectionRuntimeConfig = Pick<
+  AppConfig,
+  | "INJECTION_DEDUP_ENABLED"
+  | "INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE"
+  | "INJECTION_HARD_WINDOW_TURNS_TASK_STATE"
+  | "INJECTION_HARD_WINDOW_TURNS_EPISODIC"
+  | "INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE"
+  | "INJECTION_HARD_WINDOW_MS_TASK_STATE"
+  | "INJECTION_HARD_WINDOW_MS_EPISODIC"
+  | "INJECTION_SOFT_WINDOW_MS_TASK_STATE"
+  | "INJECTION_SOFT_WINDOW_MS_EPISODIC"
+  | "INJECTION_RECENT_STATE_TTL_MS"
+  | "INJECTION_RECENT_STATE_MAX_SESSIONS"
+>;
+
+const DEFAULT_RECENT_INJECTION_CONFIG: RecentInjectionRuntimeConfig = {
+  INJECTION_DEDUP_ENABLED: true,
+  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+  INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
+  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_EPISODIC: 15 * 60 * 1000,
+  INJECTION_RECENT_STATE_TTL_MS: 60 * 60 * 1000,
+  INJECTION_RECENT_STATE_MAX_SESSIONS: 500,
+};
+
+type RecentInjectionRecord = {
+  record_id: string;
+  memory_type: MemoryType;
+  injected_at: number;
+  turn_index: number;
+  trace_id?: string;
+  source_phase: TriggerContext["phase"];
+};
+
+type RecentInjectionDecision = {
+  hardFiltered: CandidateMemory[];
+  softMarked: CandidateMemory[];
+  remaining: CandidateMemory[];
+  replayEscapeReason?: string;
+};
 
 function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
   return memoryMode ?? "workspace_plus_global";
@@ -150,32 +196,137 @@ async function resolveTraceId(
 }
 
 export class RetrievalRuntimeService {
+  private readonly config: RecentInjectionRuntimeConfig;
+  private readonly triggerEngine: TriggerEngine;
+  private readonly queryEngine: QueryEngine;
+  private readonly embeddingsClient: EmbeddingsClient;
+  private readonly injectionEngine: InjectionEngine;
+  private readonly writebackEngine: WritebackEngine;
+  private readonly repository: RuntimeRepository;
+  private readonly dependencyGuard: DependencyGuard;
+  private readonly logger: Logger;
+  private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache;
+  private readonly embeddingTimeoutMs: number;
+  private readonly memoryOrchestrator?: MemoryOrchestrator;
+  private readonly maintenanceWorker?: WritebackMaintenanceWorker;
+  private readonly storageClient?: StorageWritebackClient;
   private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
   private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
   private readonly recentInjectionContexts = new Map<string, {
     memories: RecallEffectivenessInputMemory[];
     created_at: number;
   }>();
+  private readonly recentInjections = new Map<string, Map<string, RecentInjectionRecord>>();
+  private readonly sessionTurnCounters = new Map<string, number>();
   private readonly relatedMemoryCache = new Map<string, {
     relations: MemoryRelationSnapshot[];
     created_at: number;
   }>();
 
   constructor(
-    private readonly triggerEngine: TriggerEngine,
-    private readonly queryEngine: QueryEngine,
-    private readonly embeddingsClient: EmbeddingsClient,
-    private readonly injectionEngine: InjectionEngine,
-    private readonly writebackEngine: WritebackEngine,
-    private readonly repository: RuntimeRepository,
-    private readonly dependencyGuard: DependencyGuard,
-    private readonly logger: Logger,
-    private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache,
-    private readonly embeddingTimeoutMs = 800,
-    private readonly memoryOrchestrator?: MemoryOrchestrator,
-    private readonly maintenanceWorker?: WritebackMaintenanceWorker,
-    private readonly storageClient?: StorageWritebackClient,
-  ) {}
+    config: AppConfig,
+    triggerEngine: TriggerEngine,
+    queryEngine: QueryEngine,
+    embeddingsClient: EmbeddingsClient,
+    injectionEngine: InjectionEngine,
+    writebackEngine: WritebackEngine,
+    repository: RuntimeRepository,
+    dependencyGuard: DependencyGuard,
+    logger: Logger,
+    finalizeIdempotencyCache?: FinalizeIdempotencyCache,
+    embeddingTimeoutMs?: number,
+    memoryOrchestrator?: MemoryOrchestrator,
+    maintenanceWorker?: WritebackMaintenanceWorker,
+    storageClient?: StorageWritebackClient,
+  );
+  constructor(
+    triggerEngine: TriggerEngine,
+    queryEngine: QueryEngine,
+    embeddingsClient: EmbeddingsClient,
+    injectionEngine: InjectionEngine,
+    writebackEngine: WritebackEngine,
+    repository: RuntimeRepository,
+    dependencyGuard: DependencyGuard,
+    logger: Logger,
+    finalizeIdempotencyCache?: FinalizeIdempotencyCache,
+    embeddingTimeoutMs?: number,
+    memoryOrchestrator?: MemoryOrchestrator,
+    maintenanceWorker?: WritebackMaintenanceWorker,
+    storageClient?: StorageWritebackClient,
+  );
+  constructor(
+    configOrTriggerEngine: AppConfig | TriggerEngine,
+    triggerEngineOrQueryEngine: TriggerEngine | QueryEngine,
+    queryEngineOrEmbeddingsClient: QueryEngine | EmbeddingsClient,
+    embeddingsClientOrInjectionEngine: EmbeddingsClient | InjectionEngine,
+    injectionEngineOrWritebackEngine: InjectionEngine | WritebackEngine,
+    writebackEngineOrRepository: WritebackEngine | RuntimeRepository,
+    repositoryOrDependencyGuard: RuntimeRepository | DependencyGuard,
+    dependencyGuardOrLogger: DependencyGuard | Logger,
+    loggerOrFinalizeIdempotencyCache: Logger | FinalizeIdempotencyCache | undefined,
+    finalizeIdempotencyCacheOrEmbeddingTimeoutMs?: FinalizeIdempotencyCache | number,
+    embeddingTimeoutMsOrMemoryOrchestrator?: number | MemoryOrchestrator,
+    memoryOrchestratorOrMaintenanceWorker?: MemoryOrchestrator | WritebackMaintenanceWorker,
+    maintenanceWorkerOrStorageClient?: WritebackMaintenanceWorker | StorageWritebackClient,
+    storageClient?: StorageWritebackClient,
+  ) {
+    if (isAppConfig(configOrTriggerEngine)) {
+      this.config = pickRecentInjectionConfig(configOrTriggerEngine);
+      this.triggerEngine = triggerEngineOrQueryEngine as TriggerEngine;
+      this.queryEngine = queryEngineOrEmbeddingsClient as QueryEngine;
+      this.embeddingsClient = embeddingsClientOrInjectionEngine as EmbeddingsClient;
+      this.injectionEngine = injectionEngineOrWritebackEngine as InjectionEngine;
+      this.writebackEngine = writebackEngineOrRepository as WritebackEngine;
+      this.repository = repositoryOrDependencyGuard as RuntimeRepository;
+      this.dependencyGuard = dependencyGuardOrLogger as DependencyGuard;
+      this.logger = loggerOrFinalizeIdempotencyCache as Logger;
+      this.finalizeIdempotencyCache = finalizeIdempotencyCacheOrEmbeddingTimeoutMs as
+        | FinalizeIdempotencyCache
+        | undefined;
+      this.embeddingTimeoutMs =
+        typeof embeddingTimeoutMsOrMemoryOrchestrator === "number" ? embeddingTimeoutMsOrMemoryOrchestrator : 800;
+      this.memoryOrchestrator =
+        typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
+          ? memoryOrchestratorOrMaintenanceWorker as MemoryOrchestrator | undefined
+          : embeddingTimeoutMsOrMemoryOrchestrator;
+      this.maintenanceWorker =
+        typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
+          ? maintenanceWorkerOrStorageClient as WritebackMaintenanceWorker | undefined
+          : memoryOrchestratorOrMaintenanceWorker as WritebackMaintenanceWorker | undefined;
+      this.storageClient =
+        typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
+          ? storageClient
+          : maintenanceWorkerOrStorageClient as StorageWritebackClient | undefined;
+      return;
+    }
+
+    this.config = DEFAULT_RECENT_INJECTION_CONFIG;
+    this.triggerEngine = configOrTriggerEngine;
+    this.queryEngine = triggerEngineOrQueryEngine as QueryEngine;
+    this.embeddingsClient = queryEngineOrEmbeddingsClient as EmbeddingsClient;
+    this.injectionEngine = embeddingsClientOrInjectionEngine as InjectionEngine;
+    this.writebackEngine = injectionEngineOrWritebackEngine as WritebackEngine;
+    this.repository = writebackEngineOrRepository as RuntimeRepository;
+    this.dependencyGuard = repositoryOrDependencyGuard as DependencyGuard;
+    this.logger = dependencyGuardOrLogger as Logger;
+    this.finalizeIdempotencyCache = loggerOrFinalizeIdempotencyCache as FinalizeIdempotencyCache | undefined;
+    this.embeddingTimeoutMs =
+      typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
+        ? finalizeIdempotencyCacheOrEmbeddingTimeoutMs
+        : 800;
+    this.memoryOrchestrator =
+      typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
+        ? embeddingTimeoutMsOrMemoryOrchestrator as MemoryOrchestrator | undefined
+        : finalizeIdempotencyCacheOrEmbeddingTimeoutMs as MemoryOrchestrator | undefined;
+    this.maintenanceWorker =
+      typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
+        ? memoryOrchestratorOrMaintenanceWorker as WritebackMaintenanceWorker | undefined
+        : embeddingTimeoutMsOrMemoryOrchestrator as WritebackMaintenanceWorker | undefined;
+    this.storageClient =
+      typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
+        ? maintenanceWorkerOrStorageClient as StorageWritebackClient | undefined
+        : memoryOrchestratorOrMaintenanceWorker as StorageWritebackClient | undefined;
+  }
 
   async runMaintenance(input?: { workspace_id?: string; force?: boolean }): Promise<MaintenanceRunSummary> {
     if (!this.maintenanceWorker) {
@@ -237,6 +388,8 @@ export class RetrievalRuntimeService {
   private async prepareContextInternal(
     normalizedContext: TriggerContext & { memory_mode: MemoryMode },
   ): Promise<PrepareContextResponse> {
+    this.cleanupExpiredRecentInjections();
+    const turnIndex = this.nextTurnIndex(normalizedContext.session_id, normalizedContext.turn_id);
     const traceId = await resolveTraceId(this.repository, {
       session_id: normalizedContext.session_id,
       turn_id: normalizedContext.turn_id,
@@ -380,6 +533,9 @@ export class RetrievalRuntimeService {
     let forceNoInjection = false;
     let degraded = queryResult.degraded;
     let degradationReason = queryResult.degradation_reason;
+    let recentlyFilteredCandidates: CandidateMemory[] = [];
+    let recentlySoftMarkedCandidates: CandidateMemory[] = [];
+    let replayEscapeReason: string | undefined;
     const proactiveRecommendations = normalizedContext.phase === "session_start"
       ? await this.collectProactiveRecommendations(normalizedContext, traceId)
       : [];
@@ -395,10 +551,22 @@ export class RetrievalRuntimeService {
       finalTriggerReason = mergeTriggerReason(finalTriggerReason, "包含关联记忆补充");
     }
 
+    const recentInjectionDecision = this.applyRecentInjectionPolicy({
+      context: normalizedContext,
+      traceId,
+      turnIndex,
+      candidates: plannedCandidates,
+    });
+    recentlyFilteredCandidates = recentInjectionDecision.hardFiltered;
+    recentlySoftMarkedCandidates = recentInjectionDecision.softMarked;
+    replayEscapeReason = recentInjectionDecision.replayEscapeReason;
+    plannedCandidates = recentInjectionDecision.remaining;
+    selectedCandidates = plannedCandidates;
+
     if (
       normalizedContext.phase === "before_response"
       && this.memoryOrchestrator?.recall?.injection
-      && this.queryResultCanBePlanned(queryResult.candidates)
+      && this.queryResultCanBePlanned(plannedCandidates)
     ) {
       const recallInjectionPlanner = this.memoryOrchestrator.recall.injection;
       const injectionPlanStartedAt = Date.now();
@@ -415,6 +583,7 @@ export class RetrievalRuntimeService {
             search_reason: decision.llm_decision_reason,
             semantic_score: decision.semantic_score,
             semantic_threshold: undefined,
+            allow_recent_replay: Boolean(replayEscapeReason),
           }),
       );
 
@@ -472,6 +641,10 @@ export class RetrievalRuntimeService {
             injectionStartedAt: Date.now(),
             dependencyStatus: await this.dependencyGuard.snapshot(),
             proactiveRecommendations,
+            turnIndex,
+            recentlyFilteredCandidates,
+            recentlySoftMarkedCandidates,
+            replayEscapeReason,
           });
         }
       } else {
@@ -520,6 +693,10 @@ export class RetrievalRuntimeService {
       requested_memory_types: decision.requested_memory_types,
       candidate_count: queryResult.candidates.length,
       selected_count: packet.records.length,
+      recently_filtered_record_ids: recentlyFilteredCandidates.map((candidate) => candidate.id),
+      recently_filtered_reasons: recentlyFilteredCandidates.map((candidate) => `hard_window_active:${candidate.memory_type}`),
+      recently_soft_marked_record_ids: recentlySoftMarkedCandidates.map((candidate) => candidate.id),
+      replay_escape_reason: replayEscapeReason,
       result_state:
         degraded && packet.records.length === 0
           ? "dependency_unavailable"
@@ -546,6 +723,10 @@ export class RetrievalRuntimeService {
       selected_scopes: injectionBlock?.selected_scopes ?? [],
       trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
       trim_reasons: injectionBlock?.trim_reasons ?? [],
+      recently_filtered_record_ids: recentlyFilteredCandidates.map((candidate) => candidate.id),
+      recently_filtered_reasons: recentlyFilteredCandidates.map((candidate) => `hard_window_active:${candidate.memory_type}`),
+      recently_soft_marked_record_ids: recentlySoftMarkedCandidates.map((candidate) => candidate.id),
+      replay_escape_reason: replayEscapeReason,
       result_state:
         packet.records.length === 0
           ? "no_records"
@@ -558,6 +739,14 @@ export class RetrievalRuntimeService {
 
     if (injectionBlock?.memory_records.length) {
       this.storeInjectionContext(normalizedContext, injectionBlock.memory_records);
+      this.rememberRecentInjection(
+        normalizedContext.session_id,
+        normalizedContext.turn_id,
+        traceId,
+        turnIndex,
+        normalizedContext.phase,
+        injectionBlock.memory_records,
+      );
     }
 
     return {
@@ -869,6 +1058,7 @@ export class RetrievalRuntimeService {
     traceId: string;
     sessionId: string;
     turnId?: string;
+    turnIndex?: number;
     decision: TriggerDecision;
     triggerReason: string;
     queryResult: {
@@ -882,6 +1072,9 @@ export class RetrievalRuntimeService {
     injectionStartedAt: number;
     dependencyStatus: DependencyStatusSnapshot;
     proactiveRecommendations: ProactiveRecommendation[];
+    recentlyFilteredCandidates?: CandidateMemory[];
+    recentlySoftMarkedCandidates?: CandidateMemory[];
+    replayEscapeReason?: string;
   }): Promise<PrepareContextResponse> {
     const scopeHitCounts = input.queryResult.candidates.reduce<Partial<Record<typeof input.packet.selected_scopes[number], number>>>((acc, candidate) => {
       acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
@@ -903,6 +1096,10 @@ export class RetrievalRuntimeService {
       requested_memory_types: input.decision.requested_memory_types,
       candidate_count: input.queryResult.candidates.length,
       selected_count: input.packet.records.length,
+      recently_filtered_record_ids: input.recentlyFilteredCandidates?.map((candidate) => candidate.id) ?? [],
+      recently_filtered_reasons: input.recentlyFilteredCandidates?.map((candidate) => `hard_window_active:${candidate.memory_type}`) ?? [],
+      recently_soft_marked_record_ids: input.recentlySoftMarkedCandidates?.map((candidate) => candidate.id) ?? [],
+      replay_escape_reason: input.replayEscapeReason,
       result_state:
         input.queryResult.degraded && input.packet.records.length === 0
           ? "dependency_unavailable"
@@ -927,6 +1124,10 @@ export class RetrievalRuntimeService {
       selected_scopes: injectionBlock?.selected_scopes ?? [],
       trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
       trim_reasons: injectionBlock?.trim_reasons ?? [],
+      recently_filtered_record_ids: input.recentlyFilteredCandidates?.map((candidate) => candidate.id) ?? [],
+      recently_filtered_reasons: input.recentlyFilteredCandidates?.map((candidate) => `hard_window_active:${candidate.memory_type}`) ?? [],
+      recently_soft_marked_record_ids: input.recentlySoftMarkedCandidates?.map((candidate) => candidate.id) ?? [],
+      replay_escape_reason: input.replayEscapeReason,
       result_state:
         input.packet.records.length === 0
           ? "no_records"
@@ -945,6 +1146,14 @@ export class RetrievalRuntimeService {
         },
         injectionBlock.memory_records,
         input.traceId,
+      );
+      this.rememberRecentInjection(
+        input.sessionId,
+        input.turnId,
+        input.traceId,
+        input.turnIndex ?? this.peekTurnIndex(input.sessionId),
+        "before_response",
+        injectionBlock.memory_records,
       );
     }
 
@@ -1372,6 +1581,217 @@ export class RetrievalRuntimeService {
     }
     return undefined;
   }
+
+  private applyRecentInjectionPolicy(input: {
+    context: TriggerContext & { memory_mode: MemoryMode };
+    traceId: string;
+    turnIndex: number;
+    candidates: CandidateMemory[];
+  }): RecentInjectionDecision {
+    if (!this.config.INJECTION_DEDUP_ENABLED || input.candidates.length === 0) {
+      return {
+        hardFiltered: [],
+        softMarked: [],
+        remaining: input.candidates,
+      };
+    }
+
+    const replayEscapeReason = this.resolveReplayEscapeReason(input.context);
+    if (replayEscapeReason) {
+      return {
+        hardFiltered: [],
+        softMarked: [],
+        remaining: input.candidates,
+        replayEscapeReason,
+      };
+    }
+
+    const sessionState = this.recentInjections.get(input.context.session_id);
+    if (!sessionState || sessionState.size === 0) {
+      return {
+        hardFiltered: [],
+        softMarked: [],
+        remaining: input.candidates,
+      };
+    }
+
+    const now = Date.now();
+    const hardFiltered: CandidateMemory[] = [];
+    const softMarked: CandidateMemory[] = [];
+    const remaining: CandidateMemory[] = [];
+
+    for (const candidate of input.candidates) {
+      const recent = sessionState.get(candidate.id);
+      if (!recent) {
+        remaining.push(candidate);
+        continue;
+      }
+
+      const elapsedMs = Math.max(0, now - recent.injected_at);
+      const turnsSince = Math.max(0, input.turnIndex - recent.turn_index);
+      const hardWindowTurns = this.getHardWindowTurns(candidate.memory_type);
+      const hardWindowMs = this.getHardWindowMs(candidate.memory_type);
+      const softWindowMs = this.getSoftWindowMs(candidate.memory_type);
+
+      if (
+        (hardWindowTurns > 0 && turnsSince <= hardWindowTurns)
+        || (hardWindowMs > 0 && elapsedMs <= hardWindowMs)
+      ) {
+        hardFiltered.push(candidate);
+        continue;
+      }
+
+      if (softWindowMs > 0 && elapsedMs <= softWindowMs) {
+        const marked: CandidateMemory = {
+          ...candidate,
+          recent_injection_hint: {
+            recently_injected: true,
+            injected_at: new Date(recent.injected_at).toISOString(),
+            turns_since_last_injection: turnsSince,
+          },
+        };
+        softMarked.push(marked);
+        remaining.push(marked);
+        continue;
+      }
+
+      remaining.push(candidate);
+    }
+
+    return {
+      hardFiltered,
+      softMarked,
+      remaining,
+    };
+  }
+
+  private resolveReplayEscapeReason(context: TriggerContext): string | undefined {
+    if (context.phase === "task_switch") {
+      return "task_switch_escape";
+    }
+    const normalized = context.current_input.toLowerCase();
+    if (["上次", "之前", "你还记得", "偏好", "last time", "previously"].some((token) => normalized.includes(token.toLowerCase()))) {
+      return "history_reference_escape";
+    }
+    return undefined;
+  }
+
+  private getHardWindowTurns(memoryType: MemoryType) {
+    switch (memoryType) {
+      case "fact_preference":
+        return this.config.INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE;
+      case "task_state":
+        return this.config.INJECTION_HARD_WINDOW_TURNS_TASK_STATE;
+      case "episodic":
+        return this.config.INJECTION_HARD_WINDOW_TURNS_EPISODIC;
+    }
+  }
+
+  private getHardWindowMs(memoryType: MemoryType) {
+    switch (memoryType) {
+      case "fact_preference":
+        return this.config.INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE;
+      case "task_state":
+        return this.config.INJECTION_HARD_WINDOW_MS_TASK_STATE;
+      case "episodic":
+        return this.config.INJECTION_HARD_WINDOW_MS_EPISODIC;
+    }
+  }
+
+  private getSoftWindowMs(memoryType: MemoryType) {
+    switch (memoryType) {
+      case "fact_preference":
+        return 0;
+      case "task_state":
+        return this.config.INJECTION_SOFT_WINDOW_MS_TASK_STATE;
+      case "episodic":
+        return this.config.INJECTION_SOFT_WINDOW_MS_EPISODIC;
+    }
+  }
+
+  private rememberRecentInjection(
+    sessionId: string,
+    turnId: string | undefined,
+    traceId: string,
+    turnIndex: number,
+    sourcePhase: TriggerContext["phase"],
+    records: Array<{ id: string; memory_type: MemoryType }>,
+  ) {
+    if (records.length === 0) {
+      return;
+    }
+
+    if (this.recentInjections.size >= this.config.INJECTION_RECENT_STATE_MAX_SESSIONS && !this.recentInjections.has(sessionId)) {
+      const oldestKey = this.recentInjections.keys().next().value;
+      if (oldestKey) {
+        this.recentInjections.delete(oldestKey);
+      }
+    }
+
+    const sessionState = this.recentInjections.get(sessionId) ?? new Map<string, RecentInjectionRecord>();
+    const now = Date.now();
+    for (const record of records) {
+      sessionState.set(record.id, {
+        record_id: record.id,
+        memory_type: record.memory_type,
+        injected_at: now,
+        turn_index: turnIndex,
+        trace_id: traceId,
+        source_phase: sourcePhase,
+      });
+    }
+    this.recentInjections.set(sessionId, sessionState);
+  }
+
+  private cleanupExpiredRecentInjections() {
+    const now = Date.now();
+    for (const [sessionId, records] of this.recentInjections.entries()) {
+      for (const [recordId, record] of records.entries()) {
+        if (now - record.injected_at > this.config.INJECTION_RECENT_STATE_TTL_MS) {
+          records.delete(recordId);
+        }
+      }
+      if (records.size === 0) {
+        this.recentInjections.delete(sessionId);
+      }
+    }
+  }
+
+  private nextTurnIndex(sessionId: string, turnId?: string) {
+    const existing = this.sessionTurnCounters.get(sessionId) ?? 0;
+    if (!turnId) {
+      const next = existing + 1;
+      this.sessionTurnCounters.set(sessionId, next);
+      return next;
+    }
+    const next = existing + 1;
+    this.sessionTurnCounters.set(sessionId, next);
+    return next;
+  }
+
+  private peekTurnIndex(sessionId: string) {
+    return this.sessionTurnCounters.get(sessionId) ?? 0;
+  }
+}
+
+function isAppConfig(value: AppConfig | TriggerEngine): value is AppConfig {
+  return typeof value === "object" && value !== null && "DATABASE_URL" in value;
+}
+
+function pickRecentInjectionConfig(config: AppConfig): RecentInjectionRuntimeConfig {
+  return {
+    INJECTION_DEDUP_ENABLED: config.INJECTION_DEDUP_ENABLED,
+    INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: config.INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE,
+    INJECTION_HARD_WINDOW_TURNS_TASK_STATE: config.INJECTION_HARD_WINDOW_TURNS_TASK_STATE,
+    INJECTION_HARD_WINDOW_TURNS_EPISODIC: config.INJECTION_HARD_WINDOW_TURNS_EPISODIC,
+    INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: config.INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE,
+    INJECTION_HARD_WINDOW_MS_TASK_STATE: config.INJECTION_HARD_WINDOW_MS_TASK_STATE,
+    INJECTION_HARD_WINDOW_MS_EPISODIC: config.INJECTION_HARD_WINDOW_MS_EPISODIC,
+    INJECTION_SOFT_WINDOW_MS_TASK_STATE: config.INJECTION_SOFT_WINDOW_MS_TASK_STATE,
+    INJECTION_SOFT_WINDOW_MS_EPISODIC: config.INJECTION_SOFT_WINDOW_MS_EPISODIC,
+    INJECTION_RECENT_STATE_TTL_MS: config.INJECTION_RECENT_STATE_TTL_MS,
+    INJECTION_RECENT_STATE_MAX_SESSIONS: config.INJECTION_RECENT_STATE_MAX_SESSIONS,
+  };
 }
 
 function reorderSelectedCandidates(

@@ -49,6 +49,7 @@ export interface RecallInjectionInput {
   search_reason?: string;
   semantic_score?: number;
   semantic_threshold?: number;
+  allow_recent_replay?: boolean;
 }
 
 export interface RecallSearchPlanner {

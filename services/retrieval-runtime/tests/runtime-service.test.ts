@@ -109,6 +109,17 @@ const baseConfig: AppConfig = {
   PACKET_RECORD_LIMIT: 10,
   INJECTION_RECORD_LIMIT: 2,
   INJECTION_TOKEN_BUDGET: 256,
+  INJECTION_DEDUP_ENABLED: true,
+  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+  INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
+  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_EPISODIC: 15 * 60 * 1000,
+  INJECTION_RECENT_STATE_TTL_MS: 60 * 60 * 1000,
+  INJECTION_RECENT_STATE_MAX_SESSIONS: 500,
   SEMANTIC_TRIGGER_THRESHOLD: 0.72,
   IMPORTANCE_THRESHOLD_SESSION_START: 4,
   IMPORTANCE_THRESHOLD_DEFAULT: 3,
@@ -548,6 +559,7 @@ function createRuntime(overrides?: {
   });
 
   const service = new RetrievalRuntimeService(
+    config,
     new TriggerEngine(
       config,
       embeddingsClient,
@@ -759,6 +771,7 @@ describe("retrieval-runtime service", () => {
     });
 
     const service = new RetrievalRuntimeService(
+      config,
       new TriggerEngine(
         config,
         embeddingsClient,
@@ -1013,6 +1026,231 @@ describe("retrieval-runtime service", () => {
     expect(response.trigger).toBe(true);
     expect(response.injection_block).not.toBeNull();
     expect(response.memory_packet?.records.length).toBeGreaterThan(0);
+  });
+
+  it("filters recently injected memories in later turns before injection planning", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续之前的任务",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务状态",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入任务状态",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "继续之前的偏好和任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    const first = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-dedup-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    expect(first.injection_block?.memory_records.map((record) => record.id)).toEqual(["mem-preference", "mem-task"]);
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-dedup-2",
+      phase: "before_response",
+      current_input: "继续上一轮的任务。",
+    });
+
+    expect(second.injection_block).not.toBeNull();
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-preference")).toBe(false);
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-task")).toBe(false);
+
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.recall_runs[0]?.recently_filtered_record_ids).toEqual(expect.arrayContaining(["mem-preference", "mem-task"]));
+    expect(runs.injection_runs[0]?.recently_filtered_record_ids).toEqual(expect.arrayContaining(["mem-preference", "mem-task"]));
+  });
+
+  it("uses different hard windows by memory type", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续之前的任务",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务状态",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入任务状态",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "继续之前的偏好和任务状态。",
+    });
+    const { service } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 1,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 0,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-window-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-window-2",
+      phase: "before_response",
+      current_input: "继续。",
+    });
+
+    const third = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-window-3",
+      phase: "before_response",
+      current_input: "继续当前任务。",
+    });
+
+    expect(third.injection_block).not.toBeNull();
+    expect(third.injection_block?.memory_records.some((record) => record.id === "mem-preference")).toBe(false);
+    expect(third.injection_block?.memory_records.some((record) => record.id === "mem-task")).toBe(true);
+  });
+
+  it("marks soft-window candidates instead of filtering them", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续之前的任务",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务状态",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入任务状态",
+      selected_record_ids: ["mem-task"],
+      memory_summary: "继续之前的任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 0,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 0,
+        INJECTION_SOFT_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-soft-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-soft-2",
+      phase: "before_response",
+      current_input: "继续当前任务。",
+    });
+
+    expect(second.injection_block).not.toBeNull();
+    expect(second.memory_packet?.records.find((record) => record.id === "mem-task")?.recent_injection_hint?.recently_injected).toBe(true);
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.recall_runs[0]?.recently_soft_marked_record_ids).toContain("mem-task");
+  });
+
+  it("allows history reference to break recent injection dedup", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续之前的任务",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务状态",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入任务状态",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "继续之前的偏好和任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: planner,
+      config: {
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 99,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      },
+    });
+
+    await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-replay-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-replay-2",
+      phase: "before_response",
+      current_input: "你还记得上次定过的偏好吗？",
+    });
+
+    expect(second.injection_block).not.toBeNull();
+    const runs = await repository.getRuns({ trace_id: second.trace_id });
+    expect(runs.recall_runs[0]?.replay_escape_reason).toBe("history_reference_escape");
   });
 
   it("degrades query when embeddings dependency fails", async () => {
@@ -1840,6 +2078,7 @@ describe("retrieval-runtime service", () => {
     });
 
     const firstService = new RetrievalRuntimeService(
+      config,
       new TriggerEngine(
         config,
         embeddingsClient,
@@ -1880,6 +2119,7 @@ describe("retrieval-runtime service", () => {
     expect(llmExtractor.refineCallCount).toBe(1);
 
     const secondService = new RetrievalRuntimeService(
+      config,
       new TriggerEngine(
         config,
         embeddingsClient,
@@ -2059,6 +2299,7 @@ describe("retrieval-runtime service", () => {
     } as unknown as WritebackMaintenanceWorker;
     const memoryOrchestrator = createMemoryOrchestrator({ config: baseConfig });
     const service = new RetrievalRuntimeService(
+      baseConfig,
       new TriggerEngine(
         baseConfig,
         embeddingsClient,

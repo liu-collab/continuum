@@ -662,6 +662,7 @@ async function createRealE2eStack(): Promise<RunningStack> {
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(runtimeConfig);
 
   const runtimeService = new RetrievalRuntimeService(
+    runtimeConfig,
     new TriggerEngine(
       runtimeConfig,
       embeddingsClient,
@@ -774,7 +775,7 @@ async function runTurn(wsUrl: string, input: { turnId: string; text: string; tim
 
   const completion = new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`timed out waiting for turn_end: ${JSON.stringify(messages.slice(-20), null, 2)}`));
+      reject(new Error(`timed out waiting for turn_end: ${JSON.stringify(events.slice(-20), null, 2)}`));
     }, input.timeoutMs ?? 40_000);
 
     ws.addEventListener("message", (event) => {

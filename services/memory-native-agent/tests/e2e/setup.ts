@@ -791,6 +791,7 @@ async function createRuntimeStack(storageBaseUrl: string) {
     runtimeRepository,
     createService(readModelRepository: StorageReadModelRepository) {
       return new RetrievalRuntimeService(
+        RUNTIME_BASE_CONFIG,
         new TriggerEngine(RUNTIME_BASE_CONFIG, embeddingsClient, readModelRepository, dependencyGuard, logger),
         new QueryEngine(RUNTIME_BASE_CONFIG, readModelRepository, embeddingsClient, dependencyGuard, logger),
         embeddingsClient,

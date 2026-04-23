@@ -195,6 +195,7 @@ async function main() {
   });
 
   const runtimeService = new RetrievalRuntimeService(
+    config,
     new TriggerEngine(
       config,
       embeddingsClient,

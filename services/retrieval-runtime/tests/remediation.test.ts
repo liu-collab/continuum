@@ -135,6 +135,17 @@ const config: AppConfig = {
   PACKET_RECORD_LIMIT: 10,
   INJECTION_RECORD_LIMIT: 3,
   INJECTION_TOKEN_BUDGET: 120,
+  INJECTION_DEDUP_ENABLED: true,
+  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+  INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
+  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
+  INJECTION_SOFT_WINDOW_MS_EPISODIC: 15 * 60 * 1000,
+  INJECTION_RECENT_STATE_TTL_MS: 60 * 60 * 1000,
+  INJECTION_RECENT_STATE_MAX_SESSIONS: 500,
   SEMANTIC_TRIGGER_THRESHOLD: 0.72,
   IMPORTANCE_THRESHOLD_SESSION_START: 4,
   IMPORTANCE_THRESHOLD_DEFAULT: 3,
@@ -943,6 +954,7 @@ describe("retrieval-runtime remediation", () => {
     });
 
     const firstService = new RetrievalRuntimeService(
+      config,
       new TriggerEngine(
         config,
         embeddingsClient,
@@ -984,6 +996,7 @@ describe("retrieval-runtime remediation", () => {
     const first = await firstService.finalizeTurn(request);
 
     const secondService = new RetrievalRuntimeService(
+      config,
       new TriggerEngine(
         config,
         embeddingsClient,
