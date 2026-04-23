@@ -626,6 +626,39 @@ describe("WritebackMaintenanceWorker", () => {
     expect(summary.actions_applied).toBe(1);
   });
 
+  it("prioritizes urgent maintenance workspaces ahead of checkpoint rotation", async () => {
+    const urgentWorkspace = "550e8400-e29b-41d4-a716-446655440010";
+    const checkpointWorkspace = "550e8400-e29b-41d4-a716-446655440011";
+    const repository = new InMemoryRuntimeRepository();
+    await repository.enqueueUrgentMaintenanceWorkspace({
+      workspace_id: urgentWorkspace,
+      enqueued_at: "2026-04-22T00:00:00.000Z",
+      reason: "writeback reported an open conflict",
+      source: "open_conflict",
+    });
+    await repository.upsertMaintenanceCheckpoint({
+      workspace_id: checkpointWorkspace,
+      last_scanned_at: "2026-04-01T00:00:00.000Z",
+    });
+
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      new RecordingStorageClient([], []),
+      undefined,
+      undefined,
+      guard,
+      makeConfig({ WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: 1 }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ forced: true });
+
+    expect(summary.workspace_ids_scanned).toEqual([urgentWorkspace]);
+    expect(await repository.claimUrgentMaintenanceWorkspaces(5)).toHaveLength(0);
+  });
+
   it("archives expired session episodic memories during maintenance", async () => {
     const expired = makeSessionEpisodicRecord("session-old", "2026-04-01T00:00:00.000Z");
     const fresh = makeSessionEpisodicRecord("session-fresh", "2026-04-22T00:00:00.000Z");

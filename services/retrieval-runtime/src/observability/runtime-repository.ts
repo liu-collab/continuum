@@ -12,6 +12,7 @@ import type {
   RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  UrgentMaintenanceWorkspaceRecord,
   WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
@@ -65,4 +66,7 @@ export interface RuntimeRepository {
   ): Promise<MaintenanceCheckpointRecord[]>;
   upsertMaintenanceCheckpoint(record: MaintenanceCheckpointRecord): Promise<void>;
   listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]>;
+  enqueueUrgentMaintenanceWorkspace(record: UrgentMaintenanceWorkspaceRecord): Promise<void>;
+  claimUrgentMaintenanceWorkspaces(limit: number): Promise<UrgentMaintenanceWorkspaceRecord[]>;
+  deleteUrgentMaintenanceWorkspace(workspaceId: string): Promise<void>;
 }

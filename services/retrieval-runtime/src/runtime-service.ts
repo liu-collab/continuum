@@ -172,6 +172,27 @@ function mergeTriggerReason(primary: string, secondary?: string) {
   return `${primary}; ${secondary}`;
 }
 
+function shouldEnqueueUrgentMaintenance(input: {
+  candidates: FinalizeTurnResponse["write_back_candidates"];
+  submittedJobs: FinalizeTurnResponse["submitted_jobs"];
+}): { source: "open_conflict" | "pending_confirmation"; reason: string } | null {
+  if (input.candidates.some((candidate) => candidate.suggested_status === "pending_confirmation")) {
+    return {
+      source: "pending_confirmation",
+      reason: "writeback produced pending confirmation candidates",
+    };
+  }
+
+  if (input.submittedJobs.some((job) => job.reason?.includes("open_conflict"))) {
+    return {
+      source: "open_conflict",
+      reason: "writeback reported an open conflict",
+    };
+  }
+
+  return null;
+}
+
 async function resolveTraceId(
   repository: RuntimeRepository,
   input: {
@@ -922,6 +943,18 @@ export class RetrievalRuntimeService {
       degraded,
       dependency_status: await this.dependencyGuard.snapshot(),
     };
+    const urgentMaintenance = shouldEnqueueUrgentMaintenance({
+      candidates: response.write_back_candidates,
+      submittedJobs: response.submitted_jobs,
+    });
+    if (urgentMaintenance) {
+      await this.repository.enqueueUrgentMaintenanceWorkspace({
+        workspace_id: normalizedInput.workspace_id,
+        enqueued_at: nowIso(),
+        reason: urgentMaintenance.reason,
+        source: urgentMaintenance.source,
+      });
+    }
     await this.finalizeIdempotencyCache?.set(finalizeCacheKey, response);
     await this.repository.upsertFinalizeIdempotencyRecord(
       buildFinalizeIdempotencyRecord(

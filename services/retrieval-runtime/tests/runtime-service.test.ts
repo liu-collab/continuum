@@ -2122,6 +2122,57 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates[0]?.summary).toBe("默认用中文输出");
   });
 
+  it("enqueues urgent maintenance when finalize-turn yields pending confirmation candidates", async () => {
+    const { service, repository } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "默认用中文输出",
+            importance: 5,
+            confidence: 0.92,
+            write_reason: "stable preference confirmed in this turn",
+          },
+        ],
+      }),
+      qualityAssessor: new StubQualityAssessor([
+        {
+          candidate_id: undefined,
+          quality_score: 0.72,
+          confidence: 0.86,
+          potential_conflicts: ["rec-existing"],
+          suggested_importance: 4,
+          suggested_status: "pending_confirmation",
+          issues: [
+            {
+              type: "conflict",
+              severity: "medium",
+              description: "与历史偏好接近",
+            },
+          ],
+          reason: "建议人工确认",
+        },
+      ]),
+    });
+
+    await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "后续都用中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    });
+
+    const urgent = await repository.claimUrgentMaintenanceWorkspaces(5);
+    expect(urgent).toHaveLength(1);
+    expect(urgent[0]).toMatchObject({
+      workspace_id: ids.workspace,
+      source: "pending_confirmation",
+    });
+  });
+
   it("records recall effectiveness evaluation after finalize-turn when injected memory was used", async () => {
     const evaluator = new StubRecallEffectivenessEvaluator(1);
     const { service, repository } = createRuntime({

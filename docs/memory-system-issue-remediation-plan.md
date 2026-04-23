@@ -45,7 +45,7 @@
 | 10 | 注入预算贪心导致类型饥饿 | 已完成 | 无 | 第 4 批 | `services/retrieval-runtime/tests/remediation.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): reserve injection slots for task state` |
 | 11 | `episodic` 半衰期比 `task_state` 长 | 已完成 | 无 | 第 2 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): rebalance memory recency decay` |
 | 12 | 历史引用关键词太窄 | 已完成 | 无 | 第 3 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): widen history reference matching` |
-| 13 | 维护 worker 轮询导致冲突处理延迟不可控 | 未提交 | 8 | 第 13 批 | 待补 | 待补 |
+| 13 | 维护 worker 轮询导致冲突处理延迟不可控 | 已完成 | 8 | 第 13 批 | `services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): prioritize urgent maintenance workspaces` |
 | 14 | 治理 `verifier` 阻塞缺少升级和告警 | 未提交 | 8 | 第 14 批 | 待补 | 待补 |
 | 15 | 记忆溯源信息不足 | 未提交 | 4 | 第 15 批 | 待补 | 待补 |
 
@@ -538,10 +538,27 @@
 - 维护 `urgent_since` 字段
 - `selectWorkspaces()` 时优先取最近产生开放冲突的 workspace
 
+这次实际落地用的是“持久化优先队列”版本：
+
+- `runtime repository` 新增 `urgent maintenance workspace` 队列
+- `finalize-turn` 一旦产出 `pending_confirmation` 候选，就立刻把当前 workspace 入队
+- 后续如果 storage 回传 `open_conflict` 原因，也走同一条优先通道
+- `maintenance worker` 在正常 checkpoint 扫描前，先消费这批 urgent workspace
+- workspace 处理结束后立即出队，避免长期卡在高优先级
+
 **落地建议**
 
 - 首版不必做复杂事件总线
 - 只要把“新冲突优先于普通轮询”做出来，体验就会明显改善
+
+**当前结果**
+
+- 已完成
+- 新冲突和待确认写回不再完全依赖轮询 checkpoint 才被扫到
+- 单测已补：
+  - `services/retrieval-runtime/tests/maintenance-worker.test.ts`
+  - `services/retrieval-runtime/tests/runtime-service.test.ts`
+- 提交记录：`fix(retrieval-runtime): prioritize urgent maintenance workspaces`
 
 ### 14. 治理验证器是阻塞式的，`LLM` 不可用时冲突永远不解决
 

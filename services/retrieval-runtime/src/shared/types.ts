@@ -513,6 +513,13 @@ export interface MaintenanceCheckpointRecord {
   last_scanned_at: string;
 }
 
+export interface UrgentMaintenanceWorkspaceRecord {
+  workspace_id: string;
+  enqueued_at: string;
+  reason: string;
+  source: "open_conflict" | "pending_confirmation";
+}
+
 export interface MaintenanceRunSummary {
   workspace_ids_scanned: string[];
   seeds_inspected: number;

@@ -14,6 +14,7 @@ import type {
   RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  UrgentMaintenanceWorkspaceRecord,
   WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
@@ -342,6 +343,14 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_maintenance_checkpoints (
         workspace_id TEXT PRIMARY KEY,
         last_scanned_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_urgent_maintenance_workspaces (
+        workspace_id TEXT PRIMARY KEY,
+        enqueued_at TIMESTAMPTZ NOT NULL,
+        reason TEXT NOT NULL,
+        source TEXT NOT NULL
       )
     `);
     await this.pool.query(`
@@ -1236,6 +1245,57 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       [sinceIso, limit],
     );
     return result.rows.map((row) => row.workspace_id);
+  }
+
+  async enqueueUrgentMaintenanceWorkspace(record: UrgentMaintenanceWorkspaceRecord): Promise<void> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    await this.pool.query(
+      `
+        INSERT INTO ${schema}.runtime_urgent_maintenance_workspaces (workspace_id, enqueued_at, reason, source)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (workspace_id) DO UPDATE
+        SET enqueued_at = EXCLUDED.enqueued_at,
+            reason = EXCLUDED.reason,
+            source = EXCLUDED.source
+      `,
+      [record.workspace_id, record.enqueued_at, record.reason, record.source],
+    );
+  }
+
+  async claimUrgentMaintenanceWorkspaces(limit: number): Promise<UrgentMaintenanceWorkspaceRecord[]> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    const result = await this.pool.query<{
+      workspace_id: string;
+      enqueued_at: Date | string;
+      reason: string;
+      source: UrgentMaintenanceWorkspaceRecord["source"];
+    }>(
+      `
+        SELECT workspace_id, enqueued_at, reason, source
+        FROM ${schema}.runtime_urgent_maintenance_workspaces
+        ORDER BY enqueued_at ASC
+        LIMIT $1
+      `,
+      [limit],
+    );
+
+    return result.rows.map((row) => ({
+      workspace_id: row.workspace_id,
+      enqueued_at: toIso(row.enqueued_at),
+      reason: row.reason,
+      source: row.source,
+    }));
+  }
+
+  async deleteUrgentMaintenanceWorkspace(workspaceId: string): Promise<void> {
+    const schema = quoteIdentifier(this.runtimeSchema);
+    await this.pool.query(
+      `
+        DELETE FROM ${schema}.runtime_urgent_maintenance_workspaces
+        WHERE workspace_id = $1
+      `,
+      [workspaceId],
+    );
   }
 
   private mapWritebackOutbox(row: WritebackOutboxRow): WritebackOutboxRecord {

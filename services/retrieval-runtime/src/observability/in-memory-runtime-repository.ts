@@ -12,6 +12,7 @@ import type {
   RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  UrgentMaintenanceWorkspaceRecord,
   WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
@@ -37,6 +38,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly writebackOutbox: WritebackOutboxRecord[] = [];
   private readonly finalizeIdempotencyRecords = new Map<string, FinalizeIdempotencyRecord>();
   private readonly maintenanceCheckpoints = new Map<string, MaintenanceCheckpointRecord>();
+  private readonly urgentMaintenanceWorkspaces = new Map<string, UrgentMaintenanceWorkspaceRecord>();
   private readonly recentInjectionStates = new Map<string, RecentInjectionStateRecord>();
   private readonly dependencies: Map<DependencyStatus["name"], DependencyStatus> = new Map([
     ["read_model", defaultDependencyStatus("read_model")],
@@ -414,5 +416,23 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       }
     }
     return [...seen];
+  }
+
+  async enqueueUrgentMaintenanceWorkspace(record: UrgentMaintenanceWorkspaceRecord): Promise<void> {
+    const existing = this.urgentMaintenanceWorkspaces.get(record.workspace_id);
+    if (!existing || Date.parse(record.enqueued_at) >= Date.parse(existing.enqueued_at)) {
+      this.urgentMaintenanceWorkspaces.set(record.workspace_id, { ...record });
+    }
+  }
+
+  async claimUrgentMaintenanceWorkspaces(limit: number): Promise<UrgentMaintenanceWorkspaceRecord[]> {
+    return [...this.urgentMaintenanceWorkspaces.values()]
+      .sort((a, b) => Date.parse(a.enqueued_at) - Date.parse(b.enqueued_at))
+      .slice(0, limit)
+      .map((record) => ({ ...record }));
+  }
+
+  async deleteUrgentMaintenanceWorkspace(workspaceId: string): Promise<void> {
+    this.urgentMaintenanceWorkspaces.delete(workspaceId);
   }
 }

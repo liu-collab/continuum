@@ -12,6 +12,7 @@ import type {
   RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
+  UrgentMaintenanceWorkspaceRecord,
   WritebackOutboxRecord,
   WritebackSubmissionRecord,
 } from "../shared/types.js";
@@ -159,6 +160,18 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
 
   async listWorkspacesWithRecentWrites(sinceIso: string, limit: number): Promise<string[]> {
     return this.tryRead((repository) => repository.listWorkspacesWithRecentWrites(sinceIso, limit));
+  }
+
+  async enqueueUrgentMaintenanceWorkspace(record: UrgentMaintenanceWorkspaceRecord): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.enqueueUrgentMaintenanceWorkspace(record));
+  }
+
+  async claimUrgentMaintenanceWorkspaces(limit: number): Promise<UrgentMaintenanceWorkspaceRecord[]> {
+    return this.tryRead((repository) => repository.claimUrgentMaintenanceWorkspaces(limit));
+  }
+
+  async deleteUrgentMaintenanceWorkspace(workspaceId: string): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.deleteUrgentMaintenanceWorkspace(workspaceId));
   }
 
   private async tryPrimaryOrFallback(task: (repository: RuntimeRepository) => Promise<void>): Promise<void> {

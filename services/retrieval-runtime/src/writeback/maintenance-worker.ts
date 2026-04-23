@@ -176,10 +176,21 @@ export class WritebackMaintenanceWorker {
       return [options.workspaceId];
     }
 
+    const ids = new Set<string>();
+    const urgentWorkspaces = await this.repository.claimUrgentMaintenanceWorkspaces(batch);
+    for (const urgent of urgentWorkspaces) {
+      if (ids.size >= batch) {
+        break;
+      }
+      ids.add(urgent.workspace_id);
+    }
+
     const minInterval = options.forced ? 0 : this.config.WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS;
     const checkpoints = await this.repository.getMaintenanceCheckpoints(now, minInterval, batch);
-    const ids = new Set<string>();
     for (const record of checkpoints) {
+      if (ids.size >= batch) {
+        break;
+      }
       ids.add(record.workspace_id);
     }
 
@@ -198,67 +209,94 @@ export class WritebackMaintenanceWorker {
   }
 
   private async processWorkspace(workspaceId: string, summary: MaintenanceRunSummary): Promise<void> {
-    const traceId = `maintenance:${workspaceId}:${summary.next_checkpoint}`;
-    await this.repository.recordTurn({
-      trace_id: traceId,
-      host: "memory_native_agent",
-      workspace_id: workspaceId,
-      user_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
-      session_id: `maintenance:${workspaceId}`,
-      phase: "after_response",
-      current_input: `governance maintenance scan for workspace ${workspaceId}`,
-      assistant_output: "memory governance maintenance",
-      created_at: summary.next_checkpoint,
-    });
-
-    const seeds = await this.fetchSeeds(workspaceId);
-    summary.seeds_inspected += seeds.length;
-
-    const related = await this.fetchRelated(workspaceId, seeds);
-    summary.related_fetched += related.length;
-
-    const conflicts = await this.fetchConflicts(workspaceId);
-    const workspaceContext: WorkspaceMaintenanceContext = {
-      seed_records: seeds,
-      related_records: related,
-      open_conflicts: conflicts,
-    };
-    const lifecycleActions = this.buildLifecycleActions(workspaceContext, summary.next_checkpoint);
-
-    await this.discoverRelations(workspaceId, seeds, related, traceId, summary.next_checkpoint);
-    await this.planEvolution(workspaceId, seeds, related, traceId, summary.next_checkpoint);
-
-    if (seeds.length + related.length < 2 && conflicts.length === 0) {
-      await this.repository.upsertMaintenanceCheckpoint({
+    try {
+      const traceId = `maintenance:${workspaceId}:${summary.next_checkpoint}`;
+      await this.repository.recordTurn({
+        trace_id: traceId,
+        host: "memory_native_agent",
         workspace_id: workspaceId,
-        last_scanned_at: summary.next_checkpoint,
+        user_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
+        session_id: `maintenance:${workspaceId}`,
+        phase: "after_response",
+        current_input: `governance maintenance scan for workspace ${workspaceId}`,
+        assistant_output: "memory governance maintenance",
+        created_at: summary.next_checkpoint,
       });
-      return;
-    }
 
-    if (!this.planner) {
-      summary.degraded = true;
-      summary.degradation_reason = summary.degradation_reason ?? "memory_llm_unavailable";
-      await this.repository.upsertMaintenanceCheckpoint({
-        workspace_id: workspaceId,
-        last_scanned_at: summary.next_checkpoint,
-      });
-      return;
-    }
+      const seeds = await this.fetchSeeds(workspaceId);
+      summary.seeds_inspected += seeds.length;
 
-    const planStartedAt = Date.now();
-    const planResult = await this.dependencyGuard.run(
-      "memory_llm",
-      this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
-      () =>
-        this.planner!.plan({
-          seed_records: workspaceContext.seed_records,
-          related_records: workspaceContext.related_records,
-          open_conflicts: workspaceContext.open_conflicts,
-        }),
-    );
+      const related = await this.fetchRelated(workspaceId, seeds);
+      summary.related_fetched += related.length;
 
-    if (!planResult.ok || !planResult.value) {
+      const conflicts = await this.fetchConflicts(workspaceId);
+      const workspaceContext: WorkspaceMaintenanceContext = {
+        seed_records: seeds,
+        related_records: related,
+        open_conflicts: conflicts,
+      };
+      const lifecycleActions = this.buildLifecycleActions(workspaceContext, summary.next_checkpoint);
+
+      await this.discoverRelations(workspaceId, seeds, related, traceId, summary.next_checkpoint);
+      await this.planEvolution(workspaceId, seeds, related, traceId, summary.next_checkpoint);
+
+      if (seeds.length + related.length < 2 && conflicts.length === 0) {
+        await this.repository.upsertMaintenanceCheckpoint({
+          workspace_id: workspaceId,
+          last_scanned_at: summary.next_checkpoint,
+        });
+        return;
+      }
+
+      if (!this.planner) {
+        summary.degraded = true;
+        summary.degradation_reason = summary.degradation_reason ?? "memory_llm_unavailable";
+        await this.repository.upsertMaintenanceCheckpoint({
+          workspace_id: workspaceId,
+          last_scanned_at: summary.next_checkpoint,
+        });
+        return;
+      }
+
+      const planStartedAt = Date.now();
+      const planResult = await this.dependencyGuard.run(
+        "memory_llm",
+        this.config.WRITEBACK_MAINTENANCE_TIMEOUT_MS,
+        () =>
+          this.planner!.plan({
+            seed_records: workspaceContext.seed_records,
+            related_records: workspaceContext.related_records,
+            open_conflicts: workspaceContext.open_conflicts,
+          }),
+      );
+
+      if (!planResult.ok || !planResult.value) {
+        await this.repository.recordMemoryPlanRun({
+          trace_id: traceId,
+          phase: "after_response",
+          plan_kind: "memory_governance_plan",
+          input_summary: summarizePlanText(
+            `workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}; conflicts=${conflicts.length}`,
+          ),
+          output_summary: summarizePlanText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+          prompt_version: GOVERNANCE_PLAN_PROMPT_VERSION,
+          schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
+          degraded: true,
+          degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
+          result_state: "fallback",
+          duration_ms: Date.now() - planStartedAt,
+          created_at: summary.next_checkpoint,
+        });
+        summary.degraded = true;
+        summary.degradation_reason = summary.degradation_reason ?? planResult.error?.code ?? "memory_llm_unavailable";
+        await this.repository.upsertMaintenanceCheckpoint({
+          workspace_id: workspaceId,
+          last_scanned_at: summary.next_checkpoint,
+        });
+        return;
+      }
+
+      const plan = this.mergeLifecycleActions(this.capPlan(planResult.value), lifecycleActions);
       await this.repository.recordMemoryPlanRun({
         trace_id: traceId,
         phase: "after_response",
@@ -266,53 +304,30 @@ export class WritebackMaintenanceWorker {
         input_summary: summarizePlanText(
           `workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}; conflicts=${conflicts.length}`,
         ),
-        output_summary: summarizePlanText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
+        output_summary: summarizePlanText(
+          `actions=${plan.actions.length}; notes=${plan.notes ?? ""}; action_types=${plan.actions.map((action) => action.type).join(",")}`,
+        ),
         prompt_version: GOVERNANCE_PLAN_PROMPT_VERSION,
         schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
-        degraded: true,
-        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
-        result_state: "fallback",
+        degraded: false,
+        result_state: plan.actions.length > 0 ? "planned" : "skipped",
         duration_ms: Date.now() - planStartedAt,
         created_at: summary.next_checkpoint,
       });
-      summary.degraded = true;
-      summary.degradation_reason = summary.degradation_reason ?? planResult.error?.code ?? "memory_llm_unavailable";
+      summary.actions_proposed += plan.actions.length;
+
+      const outcome = await this.applyActions(workspaceId, plan, workspaceContext);
+      summary.actions_applied += outcome.applied;
+      summary.actions_skipped += outcome.skipped;
+      summary.conflicts_resolved += outcome.conflicts_resolved;
+
       await this.repository.upsertMaintenanceCheckpoint({
         workspace_id: workspaceId,
         last_scanned_at: summary.next_checkpoint,
       });
-      return;
+    } finally {
+      await this.repository.deleteUrgentMaintenanceWorkspace(workspaceId);
     }
-
-    const plan = this.mergeLifecycleActions(this.capPlan(planResult.value), lifecycleActions);
-    await this.repository.recordMemoryPlanRun({
-      trace_id: traceId,
-      phase: "after_response",
-      plan_kind: "memory_governance_plan",
-      input_summary: summarizePlanText(
-        `workspace=${workspaceId}; seeds=${seeds.length}; related=${related.length}; conflicts=${conflicts.length}`,
-      ),
-      output_summary: summarizePlanText(
-        `actions=${plan.actions.length}; notes=${plan.notes ?? ""}; action_types=${plan.actions.map((action) => action.type).join(",")}`,
-      ),
-      prompt_version: GOVERNANCE_PLAN_PROMPT_VERSION,
-      schema_version: GOVERNANCE_PLAN_SCHEMA_VERSION,
-      degraded: false,
-      result_state: plan.actions.length > 0 ? "planned" : "skipped",
-      duration_ms: Date.now() - planStartedAt,
-      created_at: summary.next_checkpoint,
-    });
-    summary.actions_proposed += plan.actions.length;
-
-    const outcome = await this.applyActions(workspaceId, plan, workspaceContext);
-    summary.actions_applied += outcome.applied;
-    summary.actions_skipped += outcome.skipped;
-    summary.conflicts_resolved += outcome.conflicts_resolved;
-
-    await this.repository.upsertMaintenanceCheckpoint({
-      workspace_id: workspaceId,
-      last_scanned_at: summary.next_checkpoint,
-    });
   }
 
   private buildLifecycleActions(
