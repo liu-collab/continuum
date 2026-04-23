@@ -131,33 +131,12 @@ export class AgentPage {
     await expect(this.toolCallBlocks().last()).toContainText(text);
   }
 
-  mcpPanel() {
-    return this.page.getByTestId("mcp-panel");
-  }
-
-  async expectMcpServerVisible(name: string) {
-    await expect(this.mcpPanel()).toContainText(name);
-  }
-
-  mcpServerCard(name: string) {
-    return this.page.getByTestId(`mcp-server-${name}`);
-  }
-
-  async restartMcpServer(name: string) {
-    await this.mcpServerCard(name).getByRole("button", { name: /重启|Restart/i }).click();
-  }
-
-  async disableMcpServer(name: string) {
-    await this.mcpServerCard(name).getByRole("button", { name: /禁用|Disable/i }).click();
-  }
-
   async expectOfflineState() {
     await expect(this.page.getByTestId("agent-offline-state")).toBeVisible();
   }
 
   async expectRuntimeDependencyState(text: RegExp | string) {
-    const dependencyCard = this.page.getByTestId("agent-dependency-card");
-    await expect(dependencyCard).toContainText(text);
+    await expect(this.page.getByTestId("agent-runtime-badge")).toContainText(text);
   }
 
   async createNewSession() {

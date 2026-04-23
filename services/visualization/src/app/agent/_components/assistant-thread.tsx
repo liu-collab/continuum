@@ -71,7 +71,6 @@ export function AssistantThread({
           <div className="min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,rgba(148,163,184,0.08),transparent_38%)] px-4 py-6">
             <EmptyState
               title={t("chatPanel.emptyTitle")}
-              description={t("chatPanel.emptyDescription")}
             />
           </div>
         ) : (

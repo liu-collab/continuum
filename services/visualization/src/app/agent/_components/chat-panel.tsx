@@ -1,14 +1,28 @@
 "use client";
 
 import React from "react";
-import { LoaderCircle, SendHorizontal, Square } from "lucide-react";
+import {
+  Bot,
+  BrainCircuit,
+  Database,
+  LoaderCircle,
+  Orbit,
+  SendHorizontal,
+  Settings2,
+  Sparkles,
+  Square
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
 
 import { useAgentI18n } from "../_i18n/provider";
-import type { AgentConnectionState, MnaSkillSummary } from "../_lib/openapi-types";
+import type {
+  AgentConnectionState,
+  MnaDependencyStatusResponse,
+  MnaSkillSummary
+} from "../_lib/openapi-types";
 import type { AgentTurnState } from "../_lib/event-reducer";
 import { AssistantThread } from "./assistant-thread";
 
@@ -18,10 +32,12 @@ type ChatPanelProps = {
   degraded: boolean;
   activeTaskLabel: string | null;
   providerLabel?: string | null;
+  dependencyStatus?: MnaDependencyStatusResponse | null;
   skills: MnaSkillSummary[];
   onSend(text: string): void;
   onAbort(): void;
   onOpenPrompt(turnId: string): void;
+  onOpenSettings?(): void;
 };
 
 const INITIAL_VISIBLE_TURNS = 12;
@@ -34,10 +50,12 @@ export function ChatPanel({
   degraded,
   activeTaskLabel,
   providerLabel,
+  dependencyStatus,
   skills,
   onSend,
   onAbort,
-  onOpenPrompt
+  onOpenPrompt,
+  onOpenSettings
 }: ChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [visibleTurnCount, setVisibleTurnCount] = useState(INITIAL_VISIBLE_TURNS);
@@ -140,35 +158,72 @@ export function ChatPanel({
   return (
     <div className={`flex flex-1 ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
-          {providerLabel ? (
-            <div
-              data-testid="chat-provider-model"
-              className="truncate text-sm text-muted-foreground"
-            >
-              {providerLabel}
-            </div>
-          ) : null}
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
+            {providerLabel ? (
+              <div
+                data-testid="chat-provider-model"
+                className="truncate text-sm text-muted-foreground"
+              >
+                {providerLabel}
+              </div>
+            ) : null}
+          </div>
+          <div data-testid="chat-status-bar" className="flex flex-wrap items-center gap-2">
+            <TopStatusBadge
+              testId="agent-connection-badge"
+              icon={<Bot className="h-3.5 w-3.5" />}
+              label="agent"
+              tone={resolveConnectionTone(connection)}
+              value={formatConnection(connection)}
+              stateTestId="agent-connection-state"
+            />
+            <TopStatusBadge
+              testId="agent-runtime-badge"
+              icon={<Orbit className="h-3.5 w-3.5" />}
+              label="runtime"
+              tone={resolveStatusTone(dependencyStatus?.runtime.status)}
+              value={String(dependencyStatus?.runtime.status ?? "unknown")}
+            />
+            <TopStatusBadge
+              testId="agent-provider-badge"
+              icon={<Sparkles className="h-3.5 w-3.5" />}
+              label="provider"
+              tone={resolveStatusTone(dependencyStatus?.provider.status)}
+              value={dependencyStatus?.provider.status ?? "unknown"}
+            />
+            <TopStatusBadge
+              testId="agent-embedding-badge"
+              icon={<Database className="h-3.5 w-3.5" />}
+              label="embedding"
+              tone={resolveStatusTone(dependencyStatus?.runtime.embeddings?.status)}
+              value={String(dependencyStatus?.runtime.embeddings?.status ?? "unknown")}
+            />
+            <TopStatusBadge
+              testId="agent-memory-llm-badge"
+              icon={<BrainCircuit className="h-3.5 w-3.5" />}
+              label="memory llm"
+              tone={resolveStatusTone(dependencyStatus?.runtime.memory_llm?.status)}
+              value={String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown")}
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge
-            tone={
-              connection === "open"
-                ? "success"
-                : connection === "reconnecting" || connection === "connecting"
-                  ? "warning"
-                  : "danger"
-            }
-          >
-            <span data-testid="agent-connection-state">{formatConnection(connection)}</span>
-          </StatusBadge>
           {degraded ? (
             <StatusBadge tone="warning">
               <span data-testid="agent-degraded-banner">{t("chatPanel.memoryDegraded")}</span>
             </StatusBadge>
           ) : null}
           {activeTaskLabel ? <StatusBadge tone="neutral">{activeTaskLabel}</StatusBadge> : null}
+          <button
+            type="button"
+            onClick={() => onOpenSettings?.()}
+            className="btn-outline"
+          >
+            <Settings2 className="h-4 w-4" />
+            设置
+          </button>
         </div>
       </div>
 
@@ -320,5 +375,65 @@ export function ChatPanel({
         </form>
       </div>
     </div>
+  );
+}
+
+function resolveConnectionTone(connection: AgentConnectionState): "success" | "warning" | "danger" {
+  if (connection === "open") {
+    return "success";
+  }
+
+  if (connection === "connecting" || connection === "reconnecting") {
+    return "warning";
+  }
+
+  return "danger";
+}
+
+function resolveStatusTone(status?: string | null): "neutral" | "success" | "warning" | "danger" {
+  if (!status) {
+    return "neutral";
+  }
+
+  const normalized = status.toLowerCase();
+
+  if (["healthy", "configured", "reachable", "ok", "online"].includes(normalized)) {
+    return "success";
+  }
+
+  if (["degraded", "connecting", "reconnecting"].includes(normalized)) {
+    return "warning";
+  }
+
+  if (["unavailable", "closed", "misconfigured", "not_configured", "error"].includes(normalized)) {
+    return "danger";
+  }
+
+  return "neutral";
+}
+
+function TopStatusBadge({
+  icon,
+  label,
+  value,
+  tone,
+  testId,
+  stateTestId
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "neutral" | "success" | "warning" | "danger";
+  testId: string;
+  stateTestId?: string;
+}) {
+  return (
+    <StatusBadge tone={tone}>
+      <span data-testid={testId} className="inline-flex items-center gap-1.5">
+        {icon}
+        <span className="text-[11px] uppercase tracking-[0.1em] opacity-70">{label}</span>
+        <span data-testid={stateTestId}>{value}</span>
+      </span>
+    </StatusBadge>
   );
 }

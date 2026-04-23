@@ -133,7 +133,7 @@ describe("AgentWorkspace bootstrap states", () => {
     );
   });
 
-  it("renders runtime config card and dependency status after bootstrap succeeds", () => {
+  it("renders runtime config entry and header dependency badges after bootstrap succeeds", () => {
     const createNewSession = vi.fn();
     mockedUseAgentWorkspace.mockReturnValue({
       state: {
@@ -262,10 +262,10 @@ describe("AgentWorkspace bootstrap states", () => {
 
     expect(screen.getByText("openai · deepseek-chat")).toBeInTheDocument();
     expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · deepseek-chat");
-    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("misconfigured");
-    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("not_configured");
-    expect(screen.getByTestId("agent-dependency-card")).toHaveTextContent("openai:deepseek-chat");
-    expect(screen.getAllByText("记忆面板")).toHaveLength(1);
+    expect(screen.getByTestId("agent-provider-badge")).toHaveTextContent("misconfigured");
+    expect(screen.getByTestId("agent-embedding-badge")).toHaveTextContent("not_configured");
+    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveTextContent("unknown");
+    expect(screen.queryByText("记忆面板")).not.toBeInTheDocument();
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
 

@@ -415,4 +415,47 @@ describe("ChatPanel", () => {
 
     expect(screen.getByText("回复前 已降级跳过")).toBeInTheDocument();
   });
+
+  it("renders connection and dependency badges in the header", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          providerLabel="openai · gpt-5.4"
+          dependencyStatus={{
+            runtime: {
+              status: "healthy",
+              embeddings: {
+                status: "not_configured"
+              },
+              memory_llm: {
+                status: "misconfigured"
+              }
+            },
+            provider: {
+              id: "openai-compatible",
+              model: "gpt-5.4",
+              status: "configured"
+            },
+            mcp: [],
+            provider_key: "openai-compatible:gpt-5.4"
+          }}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-connection-badge")).toHaveTextContent("agent");
+    expect(screen.getByTestId("agent-connection-state")).toHaveTextContent("在线");
+    expect(screen.getByTestId("agent-runtime-badge")).toHaveTextContent("healthy");
+    expect(screen.getByTestId("agent-provider-badge")).toHaveTextContent("configured");
+    expect(screen.getByTestId("agent-embedding-badge")).toHaveTextContent("not_configured");
+    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveTextContent("misconfigured");
+  });
 });
