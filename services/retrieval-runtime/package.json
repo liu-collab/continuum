@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Continuum retrieval runtime service and host adapters.",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "continuum-runtime": "./bin/continuum-runtime.mjs",

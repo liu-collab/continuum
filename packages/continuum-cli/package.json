@@ -2,6 +2,7 @@
   "name": "@jiankarlin/continuum",
   "version": "0.2.3",
   "description": "Continuum delivery CLI for status, UI, Claude plugin install, and Codex launch.",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "continuum": "./bin/continuum.mjs"
