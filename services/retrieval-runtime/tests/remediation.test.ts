@@ -170,11 +170,21 @@ class FakeClient {
   public released = false;
   public destroyed = false;
 
-  constructor(private readonly rows: Record<string, unknown>[] = [], private readonly onQuery?: (text: string) => Promise<void> | void) {}
+  constructor(
+    private readonly rows: Record<string, unknown>[] = [],
+    private readonly onQuery?: (text: string) => Promise<void> | void,
+  ) {}
 
-  async query<T>(queryTextOrConfig: string | { text: string; values?: unknown[] }, values?: unknown[]) {
-    const text = typeof queryTextOrConfig === "string" ? queryTextOrConfig : queryTextOrConfig.text;
-    const boundValues = typeof queryTextOrConfig === "string" ? values : queryTextOrConfig.values;
+  async query<T>(
+    queryTextOrConfig: string | { text: string; values?: unknown[] },
+    values?: unknown[],
+  ) {
+    const text =
+      typeof queryTextOrConfig === "string"
+        ? queryTextOrConfig
+        : queryTextOrConfig.text;
+    const boundValues =
+      typeof queryTextOrConfig === "string" ? values : queryTextOrConfig.values;
     this.queries.push({ text, values: boundValues });
     await this.onQuery?.(text);
     return {
@@ -192,11 +202,21 @@ class FakePool {
   public readonly queries: Array<{ text: string; values?: unknown[] }> = [];
   public clients: FakeClient[] = [];
 
-  constructor(private readonly rows: Record<string, unknown>[] = [], private readonly onQuery?: (text: string) => Promise<void> | void) {}
+  constructor(
+    private readonly rows: Record<string, unknown>[] = [],
+    private readonly onQuery?: (text: string) => Promise<void> | void,
+  ) {}
 
-  async query<T>(queryTextOrConfig: string | { text: string; values?: unknown[] }, values?: unknown[]) {
-    const text = typeof queryTextOrConfig === "string" ? queryTextOrConfig : queryTextOrConfig.text;
-    const boundValues = typeof queryTextOrConfig === "string" ? values : queryTextOrConfig.values;
+  async query<T>(
+    queryTextOrConfig: string | { text: string; values?: unknown[] },
+    values?: unknown[],
+  ) {
+    const text =
+      typeof queryTextOrConfig === "string"
+        ? queryTextOrConfig
+        : queryTextOrConfig.text;
+    const boundValues =
+      typeof queryTextOrConfig === "string" ? values : queryTextOrConfig.values;
     this.queries.push({ text, values: boundValues });
     return {
       rows: this.rows as T[],
@@ -254,7 +274,9 @@ class StubStorageClient {
   }
 
   async resolveConflict(): Promise<never> {
-    throw new Error("StubStorageClient.resolveConflict not implemented in test");
+    throw new Error(
+      "StubStorageClient.resolveConflict not implemented in test",
+    );
   }
 
   async upsertRelations() {
@@ -346,7 +368,12 @@ describe("retrieval-runtime remediation", () => {
 
     for (const relativePath of expectedFiles) {
       await expect(
-        access(path.resolve("C:/workspace/work/agent-memory/services/retrieval-runtime", relativePath)),
+        access(
+          path.resolve(
+            "C:/workspace/work/agent-memory/services/retrieval-runtime",
+            relativePath,
+          ),
+        ),
       ).resolves.toBeUndefined();
     }
   });
@@ -387,11 +414,13 @@ describe("retrieval-runtime remediation", () => {
       phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
-      trigger_reason: "current input explicitly references prior context or preferences",
+      trigger_reason:
+        "current input explicitly references prior context or preferences",
       requested_memory_types: ["fact_preference"],
       memory_mode: "workspace_plus_global",
       requested_scopes: ["workspace", "task", "user"],
-      scope_reason: "before_response can use workspace, task, session, and global user memory",
+      scope_reason:
+        "before_response can use workspace, task, session, and global user memory",
       importance_threshold: 3,
       cooldown_applied: false,
       semantic_score: 0.91,
@@ -407,7 +436,9 @@ describe("retrieval-runtime remediation", () => {
       final_scopes: ["user", "workspace"],
       filtered_count: 1,
       filtered_reasons: ["duplicate_candidate"],
-      scope_reasons: ["默认中文输出: stable preference or working habit is classified as global user memory"],
+      scope_reasons: [
+        "默认中文输出: stable preference or working habit is classified as global user memory",
+      ],
       result_state: "submitted",
       degraded: false,
       duration_ms: 20,
@@ -427,11 +458,31 @@ describe("retrieval-runtime remediation", () => {
       created_at: "2026-04-15T12:00:00.000Z",
     });
 
-    expect(pool.queries.some((entry) => entry.text.includes("CREATE TABLE IF NOT EXISTS") && entry.text.includes("runtime_trigger_runs"))).toBe(true);
-    expect(pool.queries.some((entry) => entry.text.includes(".runtime_turns"))).toBe(true);
-    expect(pool.queries.some((entry) => entry.text.includes(".runtime_trigger_runs"))).toBe(true);
-    expect(pool.queries.some((entry) => entry.text.includes(".runtime_memory_plan_runs"))).toBe(true);
-    expect(pool.queries.some((entry) => entry.text.includes(".runtime_writeback_submissions"))).toBe(true);
+    expect(
+      pool.queries.some(
+        (entry) =>
+          entry.text.includes("CREATE TABLE IF NOT EXISTS") &&
+          entry.text.includes("runtime_trigger_runs"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) => entry.text.includes(".runtime_turns")),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_trigger_runs"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_memory_plan_runs"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_writeback_submissions"),
+      ),
+    ).toBe(true);
   });
 
   it("propagates query timeout to the read model repository and aborts the database client", async () => {
@@ -442,7 +493,10 @@ describe("retrieval-runtime remediation", () => {
     });
     const repository = new PostgresReadModelRepository(config, pool as never);
     const dependencyRepository = new InMemoryRuntimeRepository();
-    const guard = new DependencyGuard(dependencyRepository, pino({ enabled: false }));
+    const guard = new DependencyGuard(
+      dependencyRepository,
+      pino({ enabled: false }),
+    );
     const queryEngine = new QueryEngine(
       config,
       repository,
@@ -453,11 +507,11 @@ describe("retrieval-runtime remediation", () => {
 
     const result = await queryEngine.query(
       {
-      host: "claude_code_plugin",
-      workspace_id: ids.workspace,
-      user_id: ids.user,
-      session_id: ids.session,
-      task_id: ids.task,
+        host: "claude_code_plugin",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
         phase: "before_response",
         current_input: "之前的偏好还继续保留",
         memory_mode: "workspace_plus_global",
@@ -465,11 +519,13 @@ describe("retrieval-runtime remediation", () => {
       {
         hit: true,
         trigger_type: "history_reference",
-        trigger_reason: "current input explicitly references prior context or preferences",
+        trigger_reason:
+          "current input explicitly references prior context or preferences",
         requested_memory_types: ["fact_preference"],
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "task", "user"],
-        scope_reason: "before_response can use workspace, task, session, and global user memory",
+        scope_reason:
+          "before_response can use workspace, task, session, and global user memory",
         importance_threshold: 3,
         cooldown_applied: false,
       },
@@ -504,10 +560,14 @@ describe("retrieval-runtime remediation", () => {
       candidate_limit: 10,
     });
 
-    const selectQuery = pool.clients[0]?.queries.find((entry) => entry.text.includes("FROM"));
+    const selectQuery = pool.clients[0]?.queries.find((entry) =>
+      entry.text.includes("FROM"),
+    );
     expect(selectQuery?.text).toContain("workspace_id = $5::uuid");
     expect(selectQuery?.text).toContain("user_id = $6::uuid");
-    expect(selectQuery?.text).toContain("$7::uuid IS NOT NULL AND task_id = $7::uuid");
+    expect(selectQuery?.text).toContain(
+      "$7::uuid IS NOT NULL AND task_id = $7::uuid",
+    );
     expect(selectQuery?.text).toContain("session_id = $8::uuid");
   });
 
@@ -529,11 +589,13 @@ describe("retrieval-runtime remediation", () => {
       phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
-      trigger_reason: "current input explicitly references prior context or preferences",
+      trigger_reason:
+        "current input explicitly references prior context or preferences",
       requested_memory_types: ["fact_preference"],
       memory_mode: "workspace_plus_global",
       requested_scopes: ["workspace", "user"],
-      scope_reason: "session_start restores workspace memory plus global user memory",
+      scope_reason:
+        "session_start restores workspace memory plus global user memory",
       importance_threshold: 3,
       cooldown_applied: false,
       duration_ms: 6,
@@ -544,12 +606,14 @@ describe("retrieval-runtime remediation", () => {
       phase: "before_response",
       trigger_hit: true,
       trigger_type: "history_reference",
-      trigger_reason: "current input explicitly references prior context or preferences",
+      trigger_reason:
+        "current input explicitly references prior context or preferences",
       memory_mode: "workspace_plus_global",
       requested_scopes: ["workspace", "user"],
       matched_scopes: [],
       scope_hit_counts: {},
-      scope_reason: "session_start restores workspace memory plus global user memory",
+      scope_reason:
+        "session_start restores workspace memory plus global user memory",
       query_scope: "scope=user",
       requested_memory_types: ["fact_preference"],
       candidate_count: 0,
@@ -568,7 +632,9 @@ describe("retrieval-runtime remediation", () => {
       final_scopes: ["workspace"],
       filtered_count: 2,
       filtered_reasons: ["duplicate_candidate", "candidate_limit_exceeded"],
-      scope_reasons: ["仓库规则: repository or project-specific constraint is classified as workspace memory"],
+      scope_reasons: [
+        "仓库规则: repository or project-specific constraint is classified as workspace memory",
+      ],
       result_state: "failed",
       degraded: true,
       degradation_reason: "dependency_unavailable",
@@ -597,22 +663,38 @@ describe("retrieval-runtime remediation", () => {
     expect(runs.memory_plan_runs[0]?.plan_kind).toBe("memory_search_plan");
     expect(runs.trigger_runs[0]?.requested_scopes).toContain("workspace");
     expect(runs.writeback_submissions[0]?.filtered_count).toBe(2);
-    expect(runs.writeback_submissions[0]?.filtered_reasons).toContain("duplicate_candidate");
+    expect(runs.writeback_submissions[0]?.filtered_reasons).toContain(
+      "duplicate_candidate",
+    );
   });
 
   it("emits writeback candidates that pass the storage runtime batch contract", async () => {
-    const guard = new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false }));
+    const guard = new DependencyGuard(
+      new InMemoryRuntimeRepository(),
+      pino({ enabled: false }),
+    );
     const engine = new WritebackEngine(
       config,
       {
         submitCandidates: async () => [],
         getWriteProjectionStatuses: async () => [],
-        listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        listRecords: async () => ({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        }),
         getRecordsByIds: async () => [],
-        patchRecord: async () => { throw new Error("not implemented"); },
-        archiveRecord: async () => { throw new Error("not implemented"); },
+        patchRecord: async () => {
+          throw new Error("not implemented");
+        },
+        archiveRecord: async () => {
+          throw new Error("not implemented");
+        },
         listConflicts: async () => [],
-        resolveConflict: async () => { throw new Error("not implemented"); },
+        resolveConflict: async () => {
+          throw new Error("not implemented");
+        },
         upsertRelations: async () => [],
         listRelations: async () => [],
         submitGovernanceExecutions: async () => [],
@@ -630,8 +712,10 @@ describe("retrieval-runtime remediation", () => {
       task_id: "550e8400-e29b-41d4-a716-446655440003",
       turn_id: "turn-1",
       current_input: "我偏好: 默认中文输出",
-      assistant_output: "已确认: 后续都用中文。下一步: 完成接口测试。我会在每次发布前补齐桥接脚本并验证。",
-      tool_results_summary: "tool summary: runtime observed a stable external event",
+      assistant_output:
+        "已确认: 后续都用中文。下一步: 完成接口测试。我会在每次发布前补齐桥接脚本并验证。",
+      tool_results_summary:
+        "tool summary: runtime observed a stable external event",
     });
 
     const parsed = localWriteBackBatchRequestSchema.safeParse({
@@ -639,16 +723,26 @@ describe("retrieval-runtime remediation", () => {
     });
 
     expect(parsed.success).toBe(true);
-    expect(extracted.candidates.every((candidate) => ["fact_preference", "task_state", "episodic"].includes(candidate.candidate_type))).toBe(true);
+    expect(
+      extracted.candidates.every((candidate) =>
+        ["fact_preference", "task_state", "episodic"].includes(
+          candidate.candidate_type,
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("renders runtime migration sql with schema placeholders replaced", async () => {
     const template = await readFile(
-      path.resolve("C:/workspace/work/agent-memory/services/retrieval-runtime/migrations/0001_runtime_init.sql"),
+      path.resolve(
+        "C:/workspace/work/agent-memory/services/retrieval-runtime/migrations/0001_runtime_init.sql",
+      ),
       "utf8",
     );
 
-    const rendered = renderMigrationTemplate(template, { RUNTIME_SCHEMA: "runtime_private" });
+    const rendered = renderMigrationTemplate(template, {
+      RUNTIME_SCHEMA: "runtime_private",
+    });
 
     expect(rendered).toContain('"runtime_private".runtime_turns');
     expect(rendered).not.toContain("__RUNTIME_SCHEMA_IDENT__");
@@ -757,7 +851,11 @@ describe("retrieval-runtime remediation", () => {
       expect(result.ok).toBe(false);
     }
 
-    const blocked = await guard.run("memory_llm", 20, async () => "should-not-run");
+    const blocked = await guard.run(
+      "memory_llm",
+      20,
+      async () => "should-not-run",
+    );
     expect(blocked.ok).toBe(false);
     expect(blocked.error?.message).toContain("recovery window");
     expect(blocked.status.status).toBe("degraded");
@@ -771,8 +869,12 @@ describe("retrieval-runtime remediation", () => {
       MEMORY_LLM_RECOVERY_INTERVAL_MS: 60_000,
     });
 
-    await expect(guard.run("memory_llm", 20, async () => "ok")).resolves.toMatchObject({ ok: true });
-    await expect(guard.run("memory_llm", 20, async () => "ok")).resolves.toMatchObject({ ok: true });
+    await expect(
+      guard.run("memory_llm", 20, async () => "ok"),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      guard.run("memory_llm", 20, async () => "ok"),
+    ).resolves.toMatchObject({ ok: true });
     await expect(
       guard.run("memory_llm", 20, async () => {
         throw new Error("memory llm unavailable");
@@ -789,7 +891,11 @@ describe("retrieval-runtime remediation", () => {
       }),
     ).resolves.toMatchObject({ ok: false });
 
-    const blocked = await guard.run("memory_llm", 20, async () => "should-not-run");
+    const blocked = await guard.run(
+      "memory_llm",
+      20,
+      async () => "should-not-run",
+    );
     expect(blocked.ok).toBe(false);
     expect(blocked.error?.message).toContain("recovery window");
     expect(blocked.status.status).toBe("degraded");
@@ -829,7 +935,9 @@ describe("retrieval-runtime remediation", () => {
   });
 
   it("estimates more tokens for chinese text than for equivalent latin text", () => {
-    expect(estimateTokens("默认中文输出默认中文输出")).toBeGreaterThan(estimateTokens("default output default output"));
+    expect(estimateTokens("默认中文输出默认中文输出")).toBeGreaterThan(
+      estimateTokens("default output default output"),
+    );
     expect(estimateTokens("  ")).toBe(0);
   });
 
@@ -869,22 +977,38 @@ describe("retrieval-runtime remediation", () => {
 
     expect(decision.hit).toBe(true);
     expect(decision.trigger_type).toBe("semantic_fallback");
-    expect((decision.semantic_score ?? 0)).toBeLessThan(config.SEMANTIC_TRIGGER_THRESHOLD);
+    expect(decision.semantic_score ?? 0).toBeLessThan(
+      config.SEMANTIC_TRIGGER_THRESHOLD,
+    );
   });
 
   it("avoids extracting polite assistant promises as commitments in rules mode", async () => {
-    const guard = new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false }));
+    const guard = new DependencyGuard(
+      new InMemoryRuntimeRepository(),
+      pino({ enabled: false }),
+    );
     const engine = new WritebackEngine(
       config,
       {
         submitCandidates: async () => [],
         getWriteProjectionStatuses: async () => [],
-        listRecords: async () => ({ items: [], total: 0, page: 1, page_size: 20 }),
+        listRecords: async () => ({
+          items: [],
+          total: 0,
+          page: 1,
+          page_size: 20,
+        }),
         getRecordsByIds: async () => [],
-        patchRecord: async () => { throw new Error("not implemented"); },
-        archiveRecord: async () => { throw new Error("not implemented"); },
+        patchRecord: async () => {
+          throw new Error("not implemented");
+        },
+        archiveRecord: async () => {
+          throw new Error("not implemented");
+        },
         listConflicts: async () => [],
-        resolveConflict: async () => { throw new Error("not implemented"); },
+        resolveConflict: async () => {
+          throw new Error("not implemented");
+        },
         upsertRelations: async () => [],
         listRelations: async () => [],
         submitGovernanceExecutions: async () => [],
@@ -904,7 +1028,11 @@ describe("retrieval-runtime remediation", () => {
       tool_results_summary: "ok",
     });
 
-    expect(extracted.candidates.some((candidate) => candidate.candidate_type === "episodic")).toBe(false);
+    expect(
+      extracted.candidates.some(
+        (candidate) => candidate.candidate_type === "episodic",
+      ),
+    ).toBe(false);
   });
 
   it("keeps rerank ordering inside the same memory type during injection trimming", () => {
@@ -1012,15 +1140,21 @@ describe("retrieval-runtime remediation", () => {
     });
 
     expect(block?.memory_records).toHaveLength(2);
-    expect(block?.memory_records.some((record) => record.id === "task-1")).toBe(true);
-    expect(block?.memory_records.some((record) => record.id === "pref-1")).toBe(true);
+    expect(block?.memory_records.some((record) => record.id === "task-1")).toBe(
+      true,
+    );
+    expect(block?.memory_records.some((record) => record.id === "pref-1")).toBe(
+      true,
+    );
   });
 
   it("persists finalize idempotency responses at request scope", async () => {
     const repository = new InMemoryRuntimeRepository();
     const logger = pino({ enabled: false });
     const dependencyGuard = new DependencyGuard(repository, logger);
-    const readModelRepository = new InMemoryReadModelRepository(candidateRecords);
+    const readModelRepository = new InMemoryReadModelRepository(
+      candidateRecords,
+    );
     const storageClient = new StubStorageClient();
     const llmExtractor = new CountingLlmExtractor();
     const embeddingsClient = new StubEmbeddingsClient();
@@ -1039,7 +1173,13 @@ describe("retrieval-runtime remediation", () => {
         logger,
         memoryOrchestrator?.recall?.search,
       ),
-      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      new QueryEngine(
+        config,
+        readModelRepository,
+        embeddingsClient,
+        dependencyGuard,
+        logger,
+      ),
       embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(
@@ -1081,7 +1221,13 @@ describe("retrieval-runtime remediation", () => {
         logger,
         memoryOrchestrator?.recall?.search,
       ),
-      new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+      new QueryEngine(
+        config,
+        readModelRepository,
+        embeddingsClient,
+        dependencyGuard,
+        logger,
+      ),
       embeddingsClient,
       new InjectionEngine(config),
       new WritebackEngine(
@@ -1123,7 +1269,8 @@ describe("retrieval-runtime remediation", () => {
     ]);
 
     expect(bridgeContent).toContain("missing required identity field");
-    expect(proxyContent).toContain("missing required identity field");
+    // Codex proxy derives identity via UUID v5 instead of rejecting with an error message
+    expect(proxyContent).toContain("deriveWorkspaceId");
     expect(bridgeContent).not.toContain("unknown-workspace");
     expect(bridgeContent).not.toContain("unknown-user");
     expect(bridgeContent).not.toContain("unknown-session");
@@ -1150,9 +1297,8 @@ describe("retrieval-runtime remediation", () => {
     );
     const content = await readFile(proxyPath, "utf8");
 
-    expect(content).toContain("finalize-turn failed with");
-    expect(content).toContain("forwarded: false");
-    expect(content).not.toContain('JSON.stringify({ forwarded: true })');
+    expect(content).toContain("finalize-turn degraded:");
+    expect(content).not.toContain("JSON.stringify({ forwarded: true })");
   });
 
   it("resolves Claude bridge identity fields from environment variables", async () => {
@@ -1162,12 +1308,22 @@ describe("retrieval-runtime remediation", () => {
       ),
     ).href;
     const bridge = (await import(moduleUrl)) as {
-      resolveField: (event: Record<string, unknown>, keys: string[], envKey: string, label: string) => string;
+      resolveField: (
+        event: Record<string, unknown>,
+        keys: string[],
+        envKey: string,
+        label: string,
+      ) => string;
     };
     process.env.MEMORY_USER_ID = ids.user;
 
     try {
-      const value = bridge.resolveField({}, ["user_id"], "MEMORY_USER_ID", "user_id");
+      const value = bridge.resolveField(
+        {},
+        ["user_id"],
+        "MEMORY_USER_ID",
+        "user_id",
+      );
       expect(value).toBe(ids.user);
     } finally {
       delete process.env.MEMORY_USER_ID;
@@ -1182,7 +1338,12 @@ describe("retrieval-runtime remediation", () => {
       ),
     ).href;
     const mcp = (await import(moduleUrl)) as {
-      createTools: (baseUrl?: string) => Record<string, { run: (input: Record<string, unknown>) => Promise<unknown> }>;
+      createTools: (
+        baseUrl?: string,
+      ) => Record<
+        string,
+        { run: (input: Record<string, unknown>) => Promise<unknown> }
+      >;
     };
 
     globalThis.fetch = (async (input, init) => {
@@ -1203,9 +1364,29 @@ describe("retrieval-runtime remediation", () => {
       return {
         ok: true,
         json: async () => ({
-          trigger_runs: [{ trigger_hit: true, trigger_type: "history_reference", trigger_reason: "matched" }],
-          recall_runs: [{ result_state: "matched", candidate_count: 3, selected_count: 2, degraded: false }],
-          injection_runs: [{ injected: true, injected_count: 2, trimmed_record_ids: ["a"], result_state: "injected" }],
+          trigger_runs: [
+            {
+              trigger_hit: true,
+              trigger_type: "history_reference",
+              trigger_reason: "matched",
+            },
+          ],
+          recall_runs: [
+            {
+              result_state: "matched",
+              candidate_count: 3,
+              selected_count: 2,
+              degraded: false,
+            },
+          ],
+          injection_runs: [
+            {
+              injected: true,
+              injected_count: 2,
+              trimmed_record_ids: ["a"],
+              result_state: "injected",
+            },
+          ],
         }),
       } as Response;
     }) as typeof fetch;
@@ -1218,8 +1399,15 @@ describe("retrieval-runtime remediation", () => {
       expect(memorySearch).toBeTruthy();
       expect(memoryExplainHit).toBeTruthy();
 
-      const searchResult = await memorySearch!.run({ query: "之前那个偏好", workspace_id: ids.workspace, user_id: ids.user, session_id: ids.session });
-      const explainResult = await memoryExplainHit!.run({ trace_id: "trace-1" });
+      const searchResult = await memorySearch!.run({
+        query: "之前那个偏好",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+      });
+      const explainResult = await memoryExplainHit!.run({
+        trace_id: "trace-1",
+      });
 
       expect(searchResult).toMatchObject({ trigger: true, degraded: false });
       expect(explainResult).toMatchObject({
@@ -1364,7 +1552,10 @@ describe("retrieval-runtime remediation", () => {
     };
 
     const ordered = [conflicted, clean].sort(compareRankedCandidates);
-    expect(ordered.map((candidate) => candidate.id)).toEqual(["clean-pref", "conflicted-pref"]);
+    expect(ordered.map((candidate) => candidate.id)).toEqual([
+      "clean-pref",
+      "conflicted-pref",
+    ]);
   });
 
   it("skips open-conflict fact preferences during injection trimming", () => {
@@ -1409,7 +1600,9 @@ describe("retrieval-runtime remediation", () => {
       ],
     });
 
-    expect(block?.memory_records.map((record) => record.id)).toEqual(["task-clean"]);
+    expect(block?.memory_records.map((record) => record.id)).toEqual([
+      "task-clean",
+    ]);
     expect(block?.trimmed_record_ids).toContain("pref-conflict");
     expect(block?.trim_reasons).toContain("open_conflict");
   });

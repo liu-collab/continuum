@@ -3,10 +3,11 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
+const runtimeBaseUrl =
+  process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
 
 function write(message) {
-  process.stdout.write(`${JSON.stringify(message)}\n`);
+  process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
 }
 
 async function callRuntime(path, init) {
@@ -28,7 +29,9 @@ function resolveIdentityField(input, key, envKey, label) {
     return envValue.trim();
   }
 
-  throw new Error(`missing required identity field: ${label}. Set ${envKey} or provide ${key}.`);
+  throw new Error(
+    `missing required identity field: ${label}. Set ${envKey} or provide ${key}.`,
+  );
 }
 
 export function createTools(baseUrl = runtimeBaseUrl) {
@@ -42,7 +45,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
 
   return {
     memory_dependency_status: {
-      description: "Read retrieval-runtime dependency status for Codex debugging.",
+      description:
+        "Read retrieval-runtime dependency status for Codex debugging.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -51,7 +55,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
       run: async () => runtimeCall("/v1/runtime/health/dependencies"),
     },
     memory_trace_turn: {
-      description: "Read retrieval-runtime observability data for a trace or turn.",
+      description:
+        "Read retrieval-runtime observability data for a trace or turn.",
       inputSchema: {
         type: "object",
         properties: {
@@ -77,7 +82,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
       },
     },
     memory_search: {
-      description: "Search runtime memory through retrieval-runtime prepare-context.",
+      description:
+        "Search runtime memory through retrieval-runtime prepare-context.",
       inputSchema: {
         type: "object",
         properties: {
@@ -85,7 +91,10 @@ export function createTools(baseUrl = runtimeBaseUrl) {
           workspace_id: { type: "string" },
           user_id: { type: "string" },
           session_id: { type: "string" },
-          memory_mode: { type: "string", enum: ["workspace_only", "workspace_plus_global"] },
+          memory_mode: {
+            type: "string",
+            enum: ["workspace_only", "workspace_plus_global"],
+          },
         },
         required: ["query"],
         additionalProperties: false,
@@ -96,9 +105,24 @@ export function createTools(baseUrl = runtimeBaseUrl) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             host: "codex_app_server",
-            workspace_id: resolveIdentityField(input, "workspace_id", "MEMORY_WORKSPACE_ID", "workspace_id"),
-            user_id: resolveIdentityField(input, "user_id", "MEMORY_USER_ID", "user_id"),
-            session_id: resolveIdentityField(input, "session_id", "MEMORY_SESSION_ID", "session_id"),
+            workspace_id: resolveIdentityField(
+              input,
+              "workspace_id",
+              "MEMORY_WORKSPACE_ID",
+              "workspace_id",
+            ),
+            user_id: resolveIdentityField(
+              input,
+              "user_id",
+              "MEMORY_USER_ID",
+              "user_id",
+            ),
+            session_id: resolveIdentityField(
+              input,
+              "session_id",
+              "MEMORY_SESSION_ID",
+              "session_id",
+            ),
             phase: "before_response",
             current_input: input.query,
             memory_mode: input.memory_mode ?? process.env.MEMORY_MODE,
@@ -115,7 +139,8 @@ export function createTools(baseUrl = runtimeBaseUrl) {
       },
     },
     memory_explain_hit: {
-      description: "Explain why a specific trace produced its recall and injection result.",
+      description:
+        "Explain why a specific trace produced its recall and injection result.",
       inputSchema: {
         type: "object",
         properties: {
@@ -126,7 +151,9 @@ export function createTools(baseUrl = runtimeBaseUrl) {
       },
       run: async (input) => {
         const params = new URLSearchParams({ trace_id: input.trace_id });
-        const runs = await runtimeCall(`/v1/runtime/observe/runs?${params.toString()}`);
+        const runs = await runtimeCall(
+          `/v1/runtime/observe/runs?${params.toString()}`,
+        );
         const trigger = runs.trigger_runs?.[0];
         const recall = runs.recall_runs?.[0];
         const injection = runs.injection_runs?.[0];
@@ -174,15 +201,31 @@ export async function handleLine(line) {
     return;
   }
 
-  const message = JSON.parse(line);
+  let message;
+  try {
+    message = JSON.parse(line);
+  } catch {
+    // Silently ignore non-JSON lines to avoid polluting stdout
+    return;
+  }
+
   const { id, method, params } = message;
+
+  // Notifications (no id) that we don't need to respond to
+  if (id === undefined || id === null) {
+    // All notifications are silently accepted — never write a response
+    // for messages without an id per JSON-RPC 2.0 spec.
+    return;
+  }
 
   try {
     if (method === "initialize") {
+      // Echo back the client's protocol version to match expectations
+      const clientVersion = params?.protocolVersion ?? "2024-11-05";
       write({
         id,
         result: {
-          protocolVersion: "2024-11-05",
+          protocolVersion: clientVersion,
           serverInfo: {
             name: "memory-codex-bridge",
             version: "0.1.0",
@@ -212,7 +255,14 @@ export async function handleLine(line) {
     if (method === "tools/call") {
       const tool = tools[params?.name];
       if (!tool) {
-        throw new Error(`unknown tool: ${params?.name ?? "undefined"}`);
+        write({
+          id,
+          error: {
+            code: -32601,
+            message: `unknown tool: ${params?.name ?? "undefined"}`,
+          },
+        });
+        return;
       }
 
       const payload = await tool.run(params?.arguments ?? {});
@@ -230,11 +280,14 @@ export async function handleLine(line) {
       return;
     }
 
-    if (method === "notifications/initialized") {
-      return;
-    }
-
-    throw new Error(`unsupported method: ${method}`);
+    // Unknown method with id — respond with method-not-found
+    write({
+      id,
+      error: {
+        code: -32601,
+        message: `unsupported method: ${method}`,
+      },
+    });
   } catch (error) {
     write({
       id,
