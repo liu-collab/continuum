@@ -28,6 +28,7 @@ import type {
   ObserveRunsFilters,
   ProactiveRecommendation,
   PrepareContextResponse,
+  RecentInjectionStateRecord,
   RetrievalQuery,
   SessionStartResponse,
   ScopeType,
@@ -219,6 +220,7 @@ export class RetrievalRuntimeService {
     created_at: number;
   }>();
   private readonly recentInjections = new Map<string, Map<string, RecentInjectionRecord>>();
+  private readonly recentInjectionSessionsLoaded = new Set<string>();
   private readonly sessionTurnCounters = new Map<string, number>();
   private readonly relatedMemoryCache = new Map<string, {
     relations: MemoryRelationSnapshot[];
@@ -390,7 +392,8 @@ export class RetrievalRuntimeService {
   private async prepareContextInternal(
     normalizedContext: TriggerContext & { memory_mode: MemoryMode },
   ): Promise<PrepareContextResponse> {
-    this.cleanupExpiredRecentInjections();
+    await this.cleanupExpiredRecentInjections();
+    await this.ensureRecentInjectionStateLoaded(normalizedContext.session_id);
     const turnIndex = this.nextTurnIndex(normalizedContext.session_id, normalizedContext.turn_id);
     const traceId = await resolveTraceId(this.repository, {
       session_id: normalizedContext.session_id,
@@ -1754,8 +1757,9 @@ export class RetrievalRuntimeService {
 
     const sessionState = this.recentInjections.get(sessionId) ?? new Map<string, RecentInjectionRecord>();
     const now = Date.now();
+    const persisted: RecentInjectionStateRecord[] = [];
     for (const record of records) {
-      sessionState.set(record.id, {
+      const recentRecord: RecentInjectionRecord = {
         record_id: record.id,
         memory_type: record.memory_type,
         record_updated_at: record.updated_at,
@@ -1763,13 +1767,39 @@ export class RetrievalRuntimeService {
         turn_index: turnIndex,
         trace_id: traceId,
         source_phase: sourcePhase,
+      };
+      sessionState.set(record.id, recentRecord);
+      persisted.push({
+        session_id: sessionId,
+        record_id: recentRecord.record_id,
+        memory_type: recentRecord.memory_type,
+        record_updated_at: recentRecord.record_updated_at,
+        injected_at: new Date(recentRecord.injected_at).toISOString(),
+        turn_index: recentRecord.turn_index,
+        trace_id: recentRecord.trace_id,
+        source_phase: recentRecord.source_phase,
+        expires_at: new Date(recentRecord.injected_at + this.config.INJECTION_RECENT_STATE_TTL_MS).toISOString(),
       });
     }
     this.recentInjections.set(sessionId, sessionState);
+    this.recentInjectionSessionsLoaded.add(sessionId);
+    void this.repository.upsertRecentInjectionStates(persisted).catch((error) => {
+      this.logger.warn(
+        {
+          session_id: sessionId,
+          turn_id: turnId,
+          trace_id: traceId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "failed to persist recent injection state",
+      );
+    });
   }
 
-  private cleanupExpiredRecentInjections() {
-    const now = Date.now();
+  private async cleanupExpiredRecentInjections() {
+    const currentNowIso = nowIso();
+    await this.repository.deleteExpiredRecentInjectionStates(currentNowIso);
+    const now = Date.parse(currentNowIso);
     for (const [sessionId, records] of this.recentInjections.entries()) {
       for (const [recordId, record] of records.entries()) {
         if (now - record.injected_at > this.config.INJECTION_RECENT_STATE_TTL_MS) {
@@ -1796,6 +1826,42 @@ export class RetrievalRuntimeService {
 
   private peekTurnIndex(sessionId: string) {
     return this.sessionTurnCounters.get(sessionId) ?? 0;
+  }
+
+  private async ensureRecentInjectionStateLoaded(sessionId: string) {
+    if (this.recentInjectionSessionsLoaded.has(sessionId)) {
+      return;
+    }
+
+    const records = await this.repository.listRecentInjectionStates(sessionId, nowIso());
+    if (records.length > 0) {
+      const sessionState = new Map<string, RecentInjectionRecord>();
+      let latestTurnIndex = 0;
+      for (const record of records) {
+        sessionState.set(record.record_id, {
+          record_id: record.record_id,
+          memory_type: record.memory_type,
+          record_updated_at: record.record_updated_at,
+          injected_at: Date.parse(record.injected_at),
+          turn_index: record.turn_index,
+          trace_id: record.trace_id,
+          source_phase: record.source_phase,
+        });
+        latestTurnIndex = Math.max(latestTurnIndex, record.turn_index);
+      }
+      this.recentInjections.set(sessionId, sessionState);
+      this.sessionTurnCounters.set(
+        sessionId,
+        Math.max(this.sessionTurnCounters.get(sessionId) ?? 0, latestTurnIndex),
+      );
+    } else if (!this.sessionTurnCounters.has(sessionId)) {
+      const latestTurnIndex = await this.repository.findLatestTurnIndexBySession(sessionId);
+      if (latestTurnIndex > 0) {
+        this.sessionTurnCounters.set(sessionId, latestTurnIndex);
+      }
+    }
+
+    this.recentInjectionSessionsLoaded.add(sessionId);
   }
 
   private hasRecentTaskSwitch(sessionId: string) {

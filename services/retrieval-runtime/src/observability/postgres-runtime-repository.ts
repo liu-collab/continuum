@@ -11,6 +11,7 @@ import type {
   ObserveRunsFilters,
   ObserveRunsResponse,
   RecallRunRecord,
+  RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
   WritebackOutboxRecord,
@@ -148,6 +149,18 @@ interface FinalizeIdempotencyRow {
   idempotency_key: string;
   response_json: unknown;
   created_at: Date | string;
+  expires_at: Date | string;
+}
+
+interface RecentInjectionStateRow {
+  session_id: string;
+  record_id: string;
+  memory_type: RecentInjectionStateRecord["memory_type"];
+  record_updated_at: string | null;
+  injected_at: Date | string;
+  turn_index: number;
+  trace_id: string | null;
+  source_phase: RecentInjectionStateRecord["source_phase"];
   expires_at: Date | string;
 }
 
@@ -329,6 +342,20 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_maintenance_checkpoints (
         workspace_id TEXT PRIMARY KEY,
         last_scanned_at TIMESTAMPTZ NOT NULL
+      )
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${schema}.runtime_recent_injections (
+        session_id TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        memory_type TEXT NOT NULL,
+        record_updated_at TEXT NULL,
+        injected_at TIMESTAMPTZ NOT NULL,
+        turn_index INTEGER NOT NULL,
+        trace_id TEXT NULL,
+        source_phase TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (session_id, record_id)
       )
     `);
   }
@@ -827,6 +854,86 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       storage_writeback: fallback("storage_writeback"),
       memory_llm: fallback("memory_llm"),
     };
+  }
+
+  async upsertRecentInjectionStates(records: RecentInjectionStateRecord[]): Promise<void> {
+    if (records.length === 0) {
+      return;
+    }
+
+    const schema = quoteIdentifier(this.runtimeSchema);
+    for (const record of records) {
+      await this.pool.query(
+        `
+        INSERT INTO ${schema}.runtime_recent_injections (
+          session_id, record_id, memory_type, record_updated_at, injected_at, turn_index, trace_id, source_phase, expires_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        ON CONFLICT (session_id, record_id) DO UPDATE
+        SET memory_type = EXCLUDED.memory_type,
+            record_updated_at = EXCLUDED.record_updated_at,
+            injected_at = EXCLUDED.injected_at,
+            turn_index = EXCLUDED.turn_index,
+            trace_id = EXCLUDED.trace_id,
+            source_phase = EXCLUDED.source_phase,
+            expires_at = EXCLUDED.expires_at
+        `,
+        [
+          record.session_id,
+          record.record_id,
+          record.memory_type,
+          record.record_updated_at ?? null,
+          record.injected_at,
+          record.turn_index,
+          record.trace_id ?? null,
+          record.source_phase,
+          record.expires_at,
+        ],
+      );
+    }
+  }
+
+  async listRecentInjectionStates(sessionId: string, nowIso: string): Promise<RecentInjectionStateRecord[]> {
+    const result = await this.pool.query<RecentInjectionStateRow>(
+      `
+      SELECT session_id, record_id, memory_type, record_updated_at, injected_at, turn_index, trace_id, source_phase, expires_at
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recent_injections
+      WHERE session_id = $1 AND expires_at > $2::timestamptz
+      ORDER BY turn_index DESC, injected_at DESC
+      `,
+      [sessionId, nowIso],
+    );
+
+    return result.rows.map((row) => ({
+      session_id: row.session_id,
+      record_id: row.record_id,
+      memory_type: row.memory_type,
+      record_updated_at: row.record_updated_at ?? undefined,
+      injected_at: toIso(row.injected_at),
+      turn_index: row.turn_index,
+      trace_id: row.trace_id ?? undefined,
+      source_phase: row.source_phase,
+      expires_at: toIso(row.expires_at),
+    }));
+  }
+
+  async deleteExpiredRecentInjectionStates(nowIso: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recent_injections WHERE expires_at <= $1::timestamptz`,
+      [nowIso],
+    );
+  }
+
+  async findLatestTurnIndexBySession(sessionId: string): Promise<number> {
+    const result = await this.pool.query<{ latest_turn_index: number | null }>(
+      `
+      SELECT MAX(turn_index) AS latest_turn_index
+      FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_recent_injections
+      WHERE session_id = $1
+      `,
+      [sessionId],
+    );
+
+    return result.rows[0]?.latest_turn_index ?? 0;
   }
 
   async getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse> {

@@ -1420,6 +1420,107 @@ describe("retrieval-runtime service", () => {
     expect(runs.recall_runs[0]?.replay_escape_reason).toBe("task_switch_escape");
   });
 
+  it("restores recent injection dedup state after runtime restart", async () => {
+    const planner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "需要继续之前的任务",
+      requested_scopes: ["workspace", "task", "session", "user"],
+      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务状态",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入任务状态",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "继续之前的偏好和任务状态。",
+    });
+    const repository = new InMemoryRuntimeRepository();
+    const readModelRepository = new InMemoryReadModelRepository(sampleRecords);
+    const logger = pino({ enabled: false });
+    const storageClient = new StubStorageClient();
+
+    const createService = () => {
+      const config = {
+        ...baseConfig,
+        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
+      };
+      const dependencyGuard = new DependencyGuard(repository, logger);
+      const embeddingsClient = new StubEmbeddingsClient();
+      const memoryOrchestrator = createMemoryOrchestrator({
+        config,
+        recallPlanner: {
+          search: new StubRecallSearchPlanner(planner),
+          injection: new StubRecallInjectionPlanner(planner),
+        },
+        writebackPlanner: undefined,
+        qualityAssessor: undefined,
+      });
+
+      return new RetrievalRuntimeService(
+        config,
+        new TriggerEngine(
+          config,
+          embeddingsClient,
+          readModelRepository,
+          dependencyGuard,
+          logger,
+          memoryOrchestrator?.recall?.search,
+          memoryOrchestrator?.intent,
+        ),
+        new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
+        embeddingsClient,
+        new InjectionEngine(config),
+        new WritebackEngine(
+          config,
+          storageClient,
+          dependencyGuard,
+          memoryOrchestrator?.writeback,
+          memoryOrchestrator?.quality,
+        ),
+        repository,
+        dependencyGuard,
+        logger,
+        new FinalizeIdempotencyCache(config),
+        config.EMBEDDING_TIMEOUT_MS,
+        memoryOrchestrator,
+        undefined,
+        storageClient,
+      );
+    };
+
+    const firstService = createService();
+    await firstService.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-restart-1",
+      phase: "before_response",
+      current_input: "照旧，按之前定的方式继续。",
+    });
+
+    const restartedService = createService();
+    const second = await restartedService.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-restart-2",
+      phase: "before_response",
+      current_input: "继续上一轮的任务。",
+    });
+
+    expect(second.injection_block).not.toBeNull();
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-preference")).toBe(false);
+    expect(second.injection_block?.memory_records.some((record) => record.id === "mem-task")).toBe(false);
+  });
+
   it("allows updated records to break recent injection dedup", async () => {
     const planner = new StubLlmRecallPlanner({
       should_search: true,

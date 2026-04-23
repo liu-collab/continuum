@@ -277,6 +277,18 @@ export interface FinalizeTurnResponse {
   dependency_status: DependencyStatusSnapshot;
 }
 
+export interface RecentInjectionStateRecord {
+  session_id: string;
+  record_id: string;
+  memory_type: MemoryType;
+  record_updated_at?: string;
+  injected_at: string;
+  turn_index: number;
+  trace_id?: string;
+  source_phase: RuntimePhase;
+  expires_at: string;
+}
+
 export interface RuntimeTurnRecord {
   trace_id: string;
   host: HostKind;

@@ -37,7 +37,7 @@
 | 2 | `Embedding` 缺失，语义检索静默失败 | 已完成 | 无 | 第 5 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): add lexical fallback for pending embeddings` |
 | 3 | 冲突感知召回缺失 | 未提交 | 4 | 第 10 批 | 待补 | 待补 |
 | 4 | 写回幂等键太脆弱，语义重复 | 未提交 | 无 | 第 9 批 | 待补 | 待补 |
-| 5 | 会话级状态全在内存，进程重启归零 | 未提交 | 无 | 第 7 批 | 待补 | 待补 |
+| 5 | 会话级状态全在内存，进程重启归零 | 已完成 | 无 | 第 7 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): persist recent injection dedup state` |
 | 6 | `LLM + Embedding` 同时挂时宿主降级感知不足 | 已完成 | 2 | 第 6 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/http/__tests__/sessions.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/agent-event-reducer.test.ts`；`services/visualization/tests/chat-panel.test.tsx` | `fix(memory-clients): surface degraded skip state across host chain` |
 | 7 | `Quality assessor` 失败后全量放行 | 已完成 | 无 | 第 1 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/retrieval-runtime/tests/writeback-quality-assessor.test.ts` | `fix(retrieval-runtime): tighten quality assessor fallback` |
 | 8 | `pending_confirmation` 缺少用户与运营闭环 | 未提交 | 3 | 第 11 批 | 待补 | 待补 |

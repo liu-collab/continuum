@@ -9,6 +9,7 @@ import type {
   ObserveRunsFilters,
   ObserveRunsResponse,
   RecallRunRecord,
+  RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
   WritebackOutboxRecord,
@@ -36,6 +37,7 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
   private readonly writebackOutbox: WritebackOutboxRecord[] = [];
   private readonly finalizeIdempotencyRecords = new Map<string, FinalizeIdempotencyRecord>();
   private readonly maintenanceCheckpoints = new Map<string, MaintenanceCheckpointRecord>();
+  private readonly recentInjectionStates = new Map<string, RecentInjectionStateRecord>();
   private readonly dependencies: Map<DependencyStatus["name"], DependencyStatus> = new Map([
     ["read_model", defaultDependencyStatus("read_model")],
     ["embeddings", defaultDependencyStatus("embeddings")],
@@ -229,6 +231,38 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
       storage_writeback: this.dependencies.get("storage_writeback") ?? defaultDependencyStatus("storage_writeback"),
       memory_llm: this.dependencies.get("memory_llm") ?? defaultDependencyStatus("memory_llm"),
     };
+  }
+
+  async upsertRecentInjectionStates(records: RecentInjectionStateRecord[]): Promise<void> {
+    for (const record of records) {
+      this.recentInjectionStates.set(`${record.session_id}:${record.record_id}`, record);
+    }
+  }
+
+  async listRecentInjectionStates(sessionId: string, nowIso: string): Promise<RecentInjectionStateRecord[]> {
+    const now = Date.parse(nowIso);
+    return Array.from(this.recentInjectionStates.values()).filter((record) => {
+      return record.session_id === sessionId && Date.parse(record.expires_at) > now;
+    });
+  }
+
+  async deleteExpiredRecentInjectionStates(nowIso: string): Promise<void> {
+    const now = Date.parse(nowIso);
+    for (const [key, record] of this.recentInjectionStates.entries()) {
+      if (Date.parse(record.expires_at) <= now) {
+        this.recentInjectionStates.delete(key);
+      }
+    }
+  }
+
+  async findLatestTurnIndexBySession(sessionId: string): Promise<number> {
+    let latest = 0;
+    for (const record of this.recentInjectionStates.values()) {
+      if (record.session_id === sessionId) {
+        latest = Math.max(latest, record.turn_index);
+      }
+    }
+    return latest;
   }
 
   async getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse> {

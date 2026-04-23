@@ -9,6 +9,7 @@ import type {
   ObserveRunsFilters,
   ObserveRunsResponse,
   RecallRunRecord,
+  RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
   WritebackOutboxRecord,
@@ -51,6 +52,10 @@ export interface RuntimeRepository {
   upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void>;
   updateDependencyStatus(status: DependencyStatus): Promise<void>;
   getDependencyStatus(): Promise<DependencyStatusSnapshot>;
+  upsertRecentInjectionStates(records: RecentInjectionStateRecord[]): Promise<void>;
+  listRecentInjectionStates(sessionId: string, nowIso: string): Promise<RecentInjectionStateRecord[]>;
+  deleteExpiredRecentInjectionStates(nowIso: string): Promise<void>;
+  findLatestTurnIndexBySession(sessionId: string): Promise<number>;
   getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse>;
   getMetrics(): Promise<ObserveMetricsResponse>;
   getMaintenanceCheckpoints(

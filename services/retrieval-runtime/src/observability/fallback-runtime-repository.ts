@@ -9,6 +9,7 @@ import type {
   ObserveRunsFilters,
   ObserveRunsResponse,
   RecallRunRecord,
+  RecentInjectionStateRecord,
   RuntimeTurnRecord,
   TriggerRunRecord,
   WritebackOutboxRecord,
@@ -118,6 +119,22 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
 
   async getDependencyStatus(): Promise<DependencyStatusSnapshot> {
     return this.tryRead((repository) => repository.getDependencyStatus());
+  }
+
+  async upsertRecentInjectionStates(records: RecentInjectionStateRecord[]): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.upsertRecentInjectionStates(records));
+  }
+
+  async listRecentInjectionStates(sessionId: string, nowIso: string): Promise<RecentInjectionStateRecord[]> {
+    return this.tryRead((repository) => repository.listRecentInjectionStates(sessionId, nowIso));
+  }
+
+  async deleteExpiredRecentInjectionStates(nowIso: string): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.deleteExpiredRecentInjectionStates(nowIso));
+  }
+
+  async findLatestTurnIndexBySession(sessionId: string): Promise<number> {
+    return this.tryRead((repository) => repository.findLatestTurnIndexBySession(sessionId));
   }
 
   async getRuns(filters?: ObserveRunsFilters): Promise<ObserveRunsResponse> {
