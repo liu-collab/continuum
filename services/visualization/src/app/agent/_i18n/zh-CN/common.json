@@ -48,6 +48,7 @@
     "loadEarlier": "加载更早消息（还有 {count} 轮）",
     "turnLabel": "轮次 {id}",
     "injectionReady": "注入已就绪",
+    "phaseDegradedSkip": "{phase} 已降级跳过",
     "viewPrompt": "查看 prompt",
     "injectionTitle": "Injection Banner",
     "you": "你",

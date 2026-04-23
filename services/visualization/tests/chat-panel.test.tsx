@@ -382,4 +382,37 @@ describe("ChatPanel", () => {
 
     expect(screen.queryByTestId("slash-command-menu")).not.toBeInTheDocument();
   });
+
+  it("renders degraded skip phase badges for skipped memory recall", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            createTurn({
+              turnId: "turn-degraded-skip",
+              userInput: "继续刚才那个方案",
+              assistantOutput: "当前先按现有上下文继续。",
+              phases: [
+                {
+                  phase: "before_response",
+                  traceId: "trace-before-response",
+                  degraded: true,
+                  degradedSkipReason: "trigger_dependencies_unavailable"
+                }
+              ]
+            }),
+          ]}
+          connection="open"
+          degraded={true}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByText("回复前 已降级跳过")).toBeInTheDocument();
+  });
 });

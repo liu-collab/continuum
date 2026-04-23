@@ -436,6 +436,12 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         phase,
         trace_id: resp && "trace_id" in resp ? resp.trace_id : null,
         degraded: Boolean(resp && "degraded" in resp && resp.degraded),
+        degraded_skip_reason:
+          resp &&
+          "degraded_skip_reason" in resp &&
+          typeof resp.degraded_skip_reason === "string"
+            ? resp.degraded_skip_reason
+            : undefined,
         injection_summary: resp && "injection_block" in resp && resp.injection_block ? resp.injection_block.memory_summary : undefined,
       });
     },

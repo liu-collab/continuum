@@ -521,6 +521,7 @@ export class RetrievalRuntimeService {
         injection_block: null,
         proactive_recommendations: [],
         degraded: Boolean(decision.degraded),
+        degraded_skip_reason: decision.degraded && !decision.hit ? decision.degraded_skip_reason : undefined,
         dependency_status: await this.dependencyGuard.snapshot(),
         budget_used: 0,
         memory_packet_ids: [],
@@ -761,6 +762,10 @@ export class RetrievalRuntimeService {
       injection_block: injectionBlock,
       proactive_recommendations: proactiveRecommendations,
       degraded,
+      degraded_skip_reason:
+        degraded && (forceNoInjection || packet.records.length === 0)
+          ? decision.degraded_skip_reason
+          : undefined,
       dependency_status: await this.dependencyGuard.snapshot(),
       budget_used: injectionBlock?.token_estimate ?? 0,
       memory_packet_ids: forceNoInjection ? [] : [packet.packet_id],

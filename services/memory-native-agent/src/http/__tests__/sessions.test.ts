@@ -1043,6 +1043,88 @@ describe("http session routes", () => {
     expect(Array.isArray(payload.tools)).toBe(true);
   });
 
+  it("includes degraded skip reason in phase results when runtime skips recall under degradation", async () => {
+    runtimeCalls.prepareContext.mockImplementation(async ({ phase }: { phase: string }) => ({
+      trace_id: `trace-${phase}`,
+      trigger: phase !== "before_response",
+      trigger_reason: "dependency_unavailable",
+      memory_packet: null,
+      injection_block: null,
+      degraded: phase === "before_response",
+      degraded_skip_reason:
+        phase === "before_response" ? "trigger_dependencies_unavailable" : undefined,
+      dependency_status: {
+        read_model: {
+          name: "read_model" as const,
+          status: phase === "before_response" ? "degraded" as const : "healthy" as const,
+          detail: "",
+          last_checked_at: "now"
+        },
+        embeddings: {
+          name: "embeddings" as const,
+          status: phase === "before_response" ? "unavailable" as const : "healthy" as const,
+          detail: "",
+          last_checked_at: "now"
+        },
+        storage_writeback: { name: "storage_writeback" as const, status: "healthy" as const, detail: "", last_checked_at: "now" },
+        memory_llm: {
+          name: "memory_llm" as const,
+          status: phase === "before_response" ? "unavailable" as const : "healthy" as const,
+          detail: "",
+          last_checked_at: "now"
+        },
+      },
+      budget_used: 0,
+      memory_packet_ids: [],
+    }));
+
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(home, workspaceRoot), { homeDirectory: home });
+    apps.push(app);
+    const token = app.mnaToken;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/v1/agent/sessions",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+    const created = createResponse.json() as { session_id: string };
+    const session = app.runtimeState.sessions.get(created.session_id);
+    expect(session).toBeTruthy();
+
+    await session?.runner.submit("继续刚才那个方案", "turn-degraded-skip");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/agent/turns/turn-degraded-skip/dispatched-messages",
+      headers: {
+        authorization: `Bearer ${token}`
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      phase_results: [
+        {
+          phase: "task_start",
+          trace_id: "trace-task_start",
+          degraded: false,
+        },
+        {
+          phase: "before_response",
+          trace_id: "trace-before_response",
+          degraded: true,
+          degraded_skip_reason: "trigger_dependencies_unavailable",
+        },
+      ],
+    });
+  });
+
   it("returns the latest dispatched round for prompt inspector", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");

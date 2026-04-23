@@ -48,6 +48,7 @@
     "loadEarlier": "Load earlier messages ({count} more turns)",
     "turnLabel": "turn {id}",
     "injectionReady": "Injection ready",
+    "phaseDegradedSkip": "{phase} degraded skip",
     "viewPrompt": "View prompt",
     "injectionTitle": "Injection Banner",
     "you": "You",

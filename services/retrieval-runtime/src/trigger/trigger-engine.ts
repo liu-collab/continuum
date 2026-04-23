@@ -343,6 +343,7 @@ export class TriggerEngine {
         semantic_score: semanticScore.score,
         degraded: true,
         degradation_reason: semanticScore.degradation_reason,
+        degraded_skip_reason: "trigger_dependencies_unavailable",
       });
     }
 
@@ -411,6 +412,7 @@ export class TriggerEngine {
         semantic_score: semanticScore.score,
         degraded: true,
         degradation_reason: semanticScore.degradation_reason,
+        degraded_skip_reason: "trigger_dependencies_unavailable",
       };
     }
 

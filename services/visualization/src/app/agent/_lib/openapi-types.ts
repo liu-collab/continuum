@@ -425,6 +425,7 @@ export type MnaWsPhaseResultEvent = {
   phase: string;
   trace_id: string | null;
   degraded: boolean;
+  degraded_skip_reason?: string;
   injection_summary?: string;
 };
 

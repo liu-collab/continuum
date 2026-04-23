@@ -170,6 +170,7 @@ export const prepareContextResultSchema = z.object({
   memory_packet: memoryPacketSchema.nullable(),
   injection_block: injectionBlockSchema.nullable(),
   degraded: z.boolean(),
+  degraded_skip_reason: z.string().optional(),
   dependency_status: dependencyStatusSnapshotSchema,
   budget_used: z.number(),
   memory_packet_ids: z.array(z.string()),

@@ -35,6 +35,7 @@ export type AgentTurnState = {
     phase: string;
     traceId: string | null;
     degraded: boolean;
+    degradedSkipReason?: string;
     injectionSummary?: string;
   }>;
   injection: MnaInjectionBlock | null;
@@ -347,6 +348,7 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
               phase: event.phase,
               traceId: event.trace_id,
               degraded: event.degraded,
+              degradedSkipReason: event.degraded_skip_reason,
               injectionSummary: event.injection_summary
             }
           ])

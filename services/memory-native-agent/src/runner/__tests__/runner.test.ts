@@ -1092,6 +1092,87 @@ describe("AgentRunner", () => {
     expect(phaseResults.every((result) => result.injection_summary === "用户长期偏好与当前任务上下文")).toBe(true);
   });
 
+  it("persists degraded skip reason in dispatched phase results", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.prepareContext.mockImplementation((async ({ phase }: { phase: string }) => ({
+      trace_id: `trace-${phase}`,
+      trigger: phase !== "before_response",
+      trigger_reason: phase,
+      memory_packet: null,
+      injection_block: null,
+      degraded: phase === "before_response",
+      degraded_skip_reason:
+        phase === "before_response" ? "trigger_dependencies_unavailable" : undefined,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+      budget_used: 0,
+      memory_packet_ids: [],
+    })) as never);
+    const saveDispatchedMessages = vi.fn();
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+      store: {
+        openTurn: vi.fn(),
+        appendMessage: vi.fn(),
+        closeTurn: vi.fn(),
+        saveDispatchedMessages,
+        getMessages: vi.fn(() => []),
+      } as never,
+    });
+
+    await runner.start();
+    await runner.submit("继续刚才那个方案", "turn-degraded-phase");
+
+    const payload = saveDispatchedMessages.mock.calls.at(-1)?.[1] as {
+      phase_results_json: string;
+    };
+    const phaseResults = JSON.parse(payload.phase_results_json) as Array<{
+      phase: string;
+      degraded: boolean;
+      degraded_skip_reason?: string;
+    }>;
+
+    expect(phaseResults).toEqual([
+      {
+        phase: "task_start",
+        trace_id: "trace-task_start",
+        degraded: false,
+      },
+      {
+        phase: "before_response",
+        trace_id: "trace-before_response",
+        degraded: true,
+        degraded_skip_reason: "trigger_dependencies_unavailable",
+      },
+    ]);
+  });
+
   it("keeps session_start stable memories as resident prompt content across turns", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();

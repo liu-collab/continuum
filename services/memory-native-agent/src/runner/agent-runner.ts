@@ -66,6 +66,7 @@ export interface PromptPhaseResult {
   phase: Phase;
   trace_id: string | null;
   degraded: boolean;
+  degraded_skip_reason?: string;
   injection_summary?: string;
 }
 
@@ -1037,6 +1038,10 @@ function toPromptPhaseResult(
     phase,
     trace_id: response?.trace_id ?? null,
     degraded: Boolean(response?.degraded),
+    degraded_skip_reason:
+      response && "degraded_skip_reason" in response && typeof response.degraded_skip_reason === "string"
+        ? response.degraded_skip_reason
+        : undefined,
     injection_summary: response?.injection_block?.memory_summary,
   };
 }

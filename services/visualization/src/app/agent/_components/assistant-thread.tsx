@@ -203,8 +203,13 @@ function AssistantMessageBubble({
         {meta?.phases.length ? (
           <div className="mt-4 flex flex-wrap gap-1.5">
             {meta.phases.map((phase) => (
-              <StatusBadge key={`${turnId}:${phase.phase}:${phase.traceId ?? ""}`} tone="neutral">
-                {formatPhaseLabel(phase.phase)}
+              <StatusBadge
+                key={`${turnId}:${phase.phase}:${phase.traceId ?? ""}`}
+                tone={phase.degradedSkipReason ? "warning" : "neutral"}
+              >
+                {phase.degradedSkipReason
+                  ? t("chatPanel.phaseDegradedSkip", { phase: formatPhaseLabel(phase.phase) })
+                  : formatPhaseLabel(phase.phase)}
               </StatusBadge>
             ))}
           </div>

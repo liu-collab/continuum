@@ -112,6 +112,32 @@ describe("agent event reducer", () => {
     });
   });
 
+  it("stores degraded skip reason on phase events", () => {
+    let state = reduceAgentEvent(initialAgentState, {
+      type: "user_turn_submitted",
+      turnId: "turn-degraded-skip",
+      text: "继续刚才那个方案"
+    });
+
+    state = reduceAgentEvent(state, {
+      type: "server_event",
+      event: {
+        kind: "phase_result",
+        turn_id: "turn-degraded-skip",
+        phase: "before_response",
+        trace_id: "trace-before-response",
+        degraded: true,
+        degraded_skip_reason: "trigger_dependencies_unavailable"
+      }
+    });
+
+    expect(state.turns[0]?.phases[0]).toMatchObject({
+      phase: "before_response",
+      degraded: true,
+      degradedSkipReason: "trigger_dependencies_unavailable"
+    });
+  });
+
   it("keeps pending turn state until turn_end after a turn error", () => {
     let state = reduceAgentEvent(initialAgentState, {
       type: "user_turn_submitted",

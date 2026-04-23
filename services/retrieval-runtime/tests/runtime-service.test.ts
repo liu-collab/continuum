@@ -1499,6 +1499,26 @@ describe("retrieval-runtime service", () => {
     expect(response.dependency_status.embeddings.status).not.toBe("healthy");
   });
 
+  it("returns degraded skip reason when trigger-stage dependencies fail and recall is skipped", async () => {
+    const { service } = createRuntime({
+      embeddingsClient: new StubEmbeddingsClient([1, 0, 0], true),
+    });
+
+    const response = await service.prepareContext({
+      host: "custom_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "继续刚才那个方案",
+    });
+
+    expect(response.trigger).toBe(false);
+    expect(response.degraded).toBe(true);
+    expect(response.degraded_skip_reason).toBe("trigger_dependencies_unavailable");
+  });
+
   it("uses lexical fallback scoring when embedding is pending on a relevant record", async () => {
     const { service } = createRuntime({
       records: [

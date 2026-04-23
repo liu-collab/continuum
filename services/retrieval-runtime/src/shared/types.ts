@@ -114,6 +114,7 @@ export interface TriggerDecision {
   search_plan_degradation_reason?: string;
   degraded?: boolean;
   degradation_reason?: string;
+  degraded_skip_reason?: string;
 }
 
 export interface MemoryPacket {
@@ -232,6 +233,7 @@ export interface PrepareContextResponse {
   injection_block: InjectionBlock | null;
   proactive_recommendations: ProactiveRecommendation[];
   degraded: boolean;
+  degraded_skip_reason?: string;
   dependency_status: DependencyStatusSnapshot;
   budget_used: number;
   memory_packet_ids: string[];
