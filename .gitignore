@@ -20,4 +20,5 @@ services/visualization/tmp-agent-page.png
 output/imagegen/
 .tmp-*
 .mna
+.tocodex
 AGENTS.md
