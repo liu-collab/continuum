@@ -1,14 +1,22 @@
 import { createHash } from "node:crypto";
 
 import type { NormalizedMemory, WriteBackCandidate } from "../contracts.js";
+import {
+  buildFactPreferenceDedupeKey,
+  canonicalizeFactPreference,
+} from "./fact-preference.js";
 import { computeDefaultConfidence, computeDefaultImportance } from "./scoring.js";
 
 export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMemory {
   const { suggested_status, ...candidateRest } = candidate;
   const normalizedSummary = normalizeText(candidate.summary);
   const normalizedDetails = normalizeDetails(candidate.details);
-  const normalizedScope = classifyCandidateScope(candidate, normalizedDetails);
-  const dedupeKey = buildDedupeKey(candidate, normalizedDetails, normalizedScope);
+  const enrichedDetails =
+    candidate.candidate_type === "fact_preference"
+      ? enrichFactPreferenceDetails(normalizedSummary, normalizedDetails)
+      : normalizedDetails;
+  const normalizedScope = classifyCandidateScope(candidate, enrichedDetails);
+  const dedupeKey = buildDedupeKey(candidate, enrichedDetails, normalizedScope);
 
   const normalized = {
     ...candidateRest,
@@ -22,7 +30,7 @@ export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMem
       confirmed_by_user: candidate.source.confirmed_by_user ?? false,
     },
     summary: normalizedSummary,
-    details: normalizedDetails,
+    details: enrichedDetails,
     memory_type: candidate.candidate_type,
     importance: candidate.importance ?? computeDefaultImportance(candidate),
     confidence: candidate.confidence ?? computeDefaultConfidence(candidate),
@@ -34,7 +42,7 @@ export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMem
       candidate_type: candidate.candidate_type,
       scope: normalizedScope,
       summary: normalizedSummary,
-      details: normalizedDetails,
+      details: enrichedDetails,
       source_ref: candidate.source.source_ref,
       write_reason: candidate.write_reason,
     }),
@@ -69,10 +77,13 @@ function buildDedupeKey(
     return `episodic:${scope}:${normalizeText(eventKind)}:${normalizeText(timeBucket)}:${createContentHash(details).slice(0, 12)}`;
   }
 
-  const subject = stringOrFallback(details.subject, candidate.summary);
-  const predicate = stringOrFallback(details.predicate, candidate.write_reason);
-
-  return `fact_preference:${scope}:${normalizeText(subject)}:${normalizeSemanticPredicate(predicate)}`;
+  return buildFactPreferenceDedupeKey(
+    scope,
+    canonicalizeFactPreference({
+      summary: candidate.summary,
+      details,
+    }),
+  );
 }
 
 function normalizeDetails(details: Record<string, unknown>): Record<string, unknown> {
@@ -91,20 +102,31 @@ function normalizeText(input: string): string {
   return input.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function enrichFactPreferenceDetails(
+  summary: string,
+  details: Record<string, unknown>,
+): Record<string, unknown> {
+  const canonical = canonicalizeFactPreference({
+    summary,
+    details,
+  });
+
+  return {
+    ...details,
+    subject: canonical.subject,
+    predicate_canonical: canonical.predicate_canonical,
+    preference_axis: canonical.axis,
+    preference_value: canonical.value,
+    preference_polarity: canonical.polarity,
+  };
+}
+
 function stringOrFallback(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
 
 function createContentHash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function normalizeSemanticPredicate(input: string): string {
-  return normalizeText(input)
-    .replace(/\b(do not|don't|not|dislike|avoid|hate)\b/g, "")
-    .replace(/\b(prefers|prefer|likes|like|love|loves|wants|want)\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 export function classifyCandidateScope(

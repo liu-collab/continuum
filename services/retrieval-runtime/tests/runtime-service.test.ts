@@ -2186,6 +2186,31 @@ describe("retrieval-runtime service", () => {
     expect(factPreferences[0]?.scope).toBe("user");
   });
 
+  it("emits canonical fact preference details for stable preference extraction", async () => {
+    const { service } = createRuntime();
+
+    const response = await service.finalizeTurn({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "以后默认用中文输出",
+      assistant_output: "收到，后续默认中文输出。",
+    });
+
+    const factPreference = response.write_back_candidates.find(
+      (candidate) => candidate.candidate_type === "fact_preference",
+    );
+
+    expect(factPreference?.details).toMatchObject({
+      subject: "user",
+      preference_axis: "response_language",
+      preference_value: "zh",
+      preference_polarity: "positive",
+      predicate_canonical: "response_language zh",
+    });
+  });
+
   it("applies writeback max candidates to llm extraction output", async () => {
     const { service } = createRuntime({
       config: { WRITEBACK_MAX_CANDIDATES: 2 },

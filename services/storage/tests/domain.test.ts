@@ -158,6 +158,58 @@ describe("storage domain rules", () => {
     expect(normalizedB.source.origin_workspace_id).toBe("aaaaaaaa-1111-4111-8111-111111111111");
   });
 
+  it("normalizes semantically equivalent fact preferences to the same dedupe key", () => {
+    const normalizedA = normalizeCandidate(
+      buildCandidate({
+        summary: "我偏好默认中文回答",
+        details: {
+          subject: "user",
+          predicate: "偏好默认中文回答",
+        },
+      }),
+    );
+    const normalizedB = normalizeCandidate(
+      buildCandidate({
+        summary: "以后默认用中文输出",
+        details: {
+          subject: "user",
+          predicate: "默认用中文输出",
+        },
+      }),
+    );
+
+    expect(normalizedA.dedupe_key).toBe("fact_preference:user:user:response_language");
+    expect(normalizedA.dedupe_key).toBe(normalizedB.dedupe_key);
+    expect(normalizedA.details.preference_value).toBe("zh");
+    expect(normalizedB.details.preference_value).toBe("zh");
+  });
+
+  it("normalizes equivalent indentation preferences to the same dedupe key", () => {
+    const normalizedA = normalizeCandidate(
+      buildCandidate({
+        summary: "我习惯用 4 空格缩进",
+        details: {
+          subject: "user",
+          predicate: "习惯用 4 空格缩进",
+        },
+      }),
+    );
+    const normalizedB = normalizeCandidate(
+      buildCandidate({
+        summary: "my default is four spaces for indentation",
+        details: {
+          subject: "user",
+          predicate: "default is four spaces for indentation",
+        },
+      }),
+    );
+
+    expect(normalizedA.dedupe_key).toBe("fact_preference:user:user:indentation");
+    expect(normalizedA.dedupe_key).toBe(normalizedB.dedupe_key);
+    expect(normalizedA.details.preference_value).toBe("spaces:4");
+    expect(normalizedB.details.preference_value).toBe("spaces:4");
+  });
+
   it("keeps project rules in workspace scope instead of user scope", () => {
     const normalized = normalizeCandidate(
       buildCandidate({

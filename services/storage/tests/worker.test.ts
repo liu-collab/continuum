@@ -494,6 +494,71 @@ describe("job worker", () => {
     expect(metrics.duplicate_ignored_jobs).toBe(1);
   });
 
+  it("merges semantically equivalent user preferences even when summaries differ", async () => {
+    const repositories = createMemoryRepositories();
+    const logger = createLogger("silent");
+    const first = buildCandidate({
+      summary: "我偏好默认中文回答",
+      details: {
+        subject: "user",
+        predicate: "偏好默认中文回答",
+      },
+    });
+    const second = buildCandidate({
+      summary: "以后默认用中文输出",
+      details: {
+        subject: "user",
+        predicate: "默认用中文输出",
+      },
+      source: {
+        source_type: "user_input",
+        source_ref: "turn-2",
+        service_name: "retrieval-runtime",
+        origin_workspace_id: "11111111-1111-4111-8111-111111111111",
+        confirmed_by_user: true,
+      },
+    });
+
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-semantic-pref-1",
+      candidate_hash: normalizeCandidate(first).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: first,
+    });
+    await repositories.jobs.enqueue({
+      idempotency_key: "job-key-semantic-pref-2",
+      candidate_hash: normalizeCandidate(second).candidate_hash,
+      source_service: "retrieval-runtime",
+      candidate: second,
+    });
+
+    const worker = new JobWorker(repositories, logger, {
+      batch_size: 10,
+      max_retries: 3,
+      read_model_refresh_max_retries: 2,
+    });
+
+    await worker.processAvailableJobs();
+
+    const records = await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      user_id: "22222222-2222-4222-8222-222222222222",
+      task_id: undefined,
+      memory_type: undefined,
+      scope: "user",
+      status: undefined,
+      page: 1,
+      page_size: 10,
+    });
+
+    expect(records.items).toHaveLength(1);
+    expect(records.items[0]?.details_json.preference_axis).toBe("response_language");
+    expect(records.items[0]?.details_json.preference_value).toBe("zh");
+
+    const secondJob = await repositories.jobs.findByIdempotencyKey("job-key-semantic-pref-2");
+    expect(secondJob?.result_status).toBe("ignore_duplicate");
+  });
+
   it("dedupes workspace memory only inside the same workspace", async () => {
     const repositories = createMemoryRepositories();
     const logger = createLogger("silent");

@@ -1,4 +1,9 @@
 import type { MemoryRecord, NormalizedMemory } from "../contracts.js";
+import {
+  canonicalizeFactPreference,
+  isConflictingFactPreference,
+  isSameFactPreference,
+} from "./fact-preference.js";
 
 export type MergeDecisionType =
   | "insert_new"
@@ -63,7 +68,7 @@ export function decideMerge(
     };
   }
 
-  if (existing.summary === normalized.summary) {
+  if (isSameFact(existing, normalized)) {
     return {
       decision: "ignore_duplicate",
       existing_record: existing,
@@ -93,42 +98,27 @@ function isSameState(existing: MemoryRecord, normalized: NormalizedMemory): bool
 }
 
 function isOppositeFact(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
-  const existingPolarity = polarity(existing.summary);
-  const nextPolarity = polarity(normalized.summary);
+  const existingPreference = canonicalizeFactPreference({
+    summary: existing.summary,
+    details: existing.details_json,
+  });
+  const nextPreference = canonicalizeFactPreference({
+    summary: normalized.summary,
+    details: normalized.details,
+  });
 
-  return (
-    existingPolarity !== "neutral" &&
-    nextPolarity !== "neutral" &&
-    existingPolarity !== nextPolarity
-  );
+  return isConflictingFactPreference(existingPreference, nextPreference);
 }
 
-function polarity(value: string): "positive" | "negative" | "neutral" {
-  const normalized = value.toLowerCase();
-  const negativeZh = ["不喜欢", "讨厌", "反对", "避免", "拒绝", "不要"];
-  const positiveZh = ["喜欢", "偏好", "习惯", "要求", "倾向", "选择"];
+function isSameFact(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
+  const existingPreference = canonicalizeFactPreference({
+    summary: existing.summary,
+    details: existing.details_json,
+  });
+  const nextPreference = canonicalizeFactPreference({
+    summary: normalized.summary,
+    details: normalized.details,
+  });
 
-  if (
-    negativeZh.some((token) => value.includes(token)) ||
-    normalized.includes("not ") ||
-    normalized.includes("don't ") ||
-    normalized.includes("do not ") ||
-    normalized.includes("dislike") ||
-    normalized.includes("avoid") ||
-    normalized.includes("hate")
-  ) {
-    return "negative";
-  }
-
-  if (
-    positiveZh.some((token) => value.includes(token)) ||
-    normalized.includes("prefer") ||
-    normalized.includes("like") ||
-    normalized.includes("love") ||
-    normalized.includes("want")
-  ) {
-    return "positive";
-  }
-
-  return "neutral";
+  return isSameFactPreference(existingPreference, nextPreference);
 }

@@ -99,9 +99,14 @@ function summarizeObservationText(value: string, maxLength = 220) {
 
 function extractPreferenceDetails(text: string): Record<string, unknown> {
   const normalized = normalizeText(text);
+  const canonical = inferPreferenceCanonical(normalized);
   return {
     subject: "user",
     predicate: normalized,
+    predicate_canonical: canonical.predicate_canonical,
+    preference_axis: canonical.preference_axis,
+    preference_value: canonical.preference_value,
+    preference_polarity: canonical.preference_polarity,
     stability: "long_term",
   };
 }
@@ -121,6 +126,85 @@ function cleanupPreferenceSummary(text: string): string {
 function containsStablePreferenceHint(text: string): boolean {
   const normalized = normalizeText(text).toLowerCase();
   return STABLE_PREFERENCE_HINTS.some((hint) => normalized.includes(hint.toLowerCase()));
+}
+
+function inferPreferenceCanonical(text: string): {
+  predicate_canonical: string;
+  preference_axis: string;
+  preference_value: string;
+  preference_polarity: "positive" | "negative" | "neutral";
+} {
+  const normalized = normalizeText(text);
+
+  if (
+    normalized.includes("中文") ||
+    normalized.includes("chinese")
+  ) {
+    return {
+      predicate_canonical: "response_language zh",
+      preference_axis: "response_language",
+      preference_value: "zh",
+      preference_polarity: "positive",
+    };
+  }
+
+  if (
+    normalized.includes("英文") ||
+    normalized.includes("english")
+  ) {
+    return {
+      predicate_canonical: "response_language en",
+      preference_axis: "response_language",
+      preference_value: "en",
+      preference_polarity: "positive",
+    };
+  }
+
+  if (
+    normalized.includes("4 空格") ||
+    normalized.includes("四 空格") ||
+    normalized.includes("four spaces")
+  ) {
+    return {
+      predicate_canonical: "indentation spaces 4",
+      preference_axis: "indentation",
+      preference_value: "spaces:4",
+      preference_polarity: "positive",
+    };
+  }
+
+  if (normalized.includes("tab")) {
+    return {
+      predicate_canonical: "indentation tab",
+      preference_axis: "indentation",
+      preference_value: "tab",
+      preference_polarity:
+        normalized.includes("不用 tab") || normalized.includes("不用tab") || normalized.includes("不要 tab")
+          ? "negative"
+          : "positive",
+    };
+  }
+
+  if (
+    normalized.includes("简洁") ||
+    normalized.includes("简短") ||
+    normalized.includes("concise") ||
+    normalized.includes("brief")
+  ) {
+    return {
+      predicate_canonical: "response_verbosity concise",
+      preference_axis: "response_verbosity",
+      preference_value: "concise",
+      preference_polarity: normalized.includes("不") || normalized.includes("not") ? "negative" : "positive",
+    };
+  }
+
+  return {
+    predicate_canonical: normalized,
+    preference_axis: normalized,
+    preference_value: normalized,
+    preference_polarity: normalized.includes("不") || normalized.includes("not") ? "negative" : "positive",
+  };
 }
 
 function extractStablePreferenceFromUserInput(text: string): string | null {
