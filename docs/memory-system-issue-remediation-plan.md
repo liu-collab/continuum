@@ -41,7 +41,7 @@
 | 6 | `LLM + Embedding` 同时挂时宿主降级感知不足 | 已完成 | 2 | 第 6 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/http/__tests__/sessions.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/agent-event-reducer.test.ts`；`services/visualization/tests/chat-panel.test.tsx` | `fix(memory-clients): surface degraded skip state across host chain` |
 | 7 | `Quality assessor` 失败后全量放行 | 已完成 | 无 | 第 1 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/retrieval-runtime/tests/writeback-quality-assessor.test.ts` | `fix(retrieval-runtime): tighten quality assessor fallback` |
 | 8 | `pending_confirmation` 缺少用户与运营闭环 | 已完成 | 3 | 第 11 批 | `services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/memory-catalog-service.test.ts` | `fix(memory-clients): surface pending confirmation follow-up` |
-| 9 | `session` 级 `episodic` 缺少生命周期管理 | 未提交 | 无 | 第 12 批 | 待补 | 待补 |
+| 9 | `session` 级 `episodic` 缺少生命周期管理 | 已完成 | 无 | 第 12 批 | `services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/retrieval-runtime/tests/embeddings-client.test.ts`；`services/retrieval-runtime/tests/host-memory-injection.test.ts` | `fix(retrieval-runtime): expire stale session episodic memories` |
 | 10 | 注入预算贪心导致类型饥饿 | 已完成 | 无 | 第 4 批 | `services/retrieval-runtime/tests/remediation.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): reserve injection slots for task state` |
 | 11 | `episodic` 半衰期比 `task_state` 长 | 已完成 | 无 | 第 2 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): rebalance memory recency decay` |
 | 12 | 历史引用关键词太窄 | 已完成 | 无 | 第 3 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): widen history reference matching` |
@@ -405,13 +405,27 @@
 
 实现路径：
 
-- storage 增加 `expires_at` 字段，先只对 session episodic 填充
-- maintenance worker 扫到过期记录时自动归档
+- 先不改 storage schema，也不新增 `expires_at`
+- 在 `retrieval-runtime` 的 maintenance worker 增加 `session episodic` 生命周期扫描
+- 只针对 `scope=session + memory_type=episodic + status=active` 生效
+- 默认用 `last_used_at -> updated_at -> created_at` 作为参考时间
+- 超过 `WRITEBACK_SESSION_EPISODIC_TTL_MS`（当前默认 7 天）后，自动生成 `archive` 治理动作
+- 取 seed 时保留这类记录，不再受普通 `lookback` 窗口裁掉，避免过期记录永远扫不到
 
 **落地建议**
 
 - 这是 P1
 - 因为它更多影响检索质量和存量膨胀，不像前面几项那样会直接造成写后读错觉
+
+**当前结果**
+
+- 已完成
+- 维护扫描现在会自动归档过期的 `session episodic`
+- 单测已补：
+  - `services/retrieval-runtime/tests/maintenance-worker.test.ts`
+  - `services/retrieval-runtime/tests/embeddings-client.test.ts`
+  - `services/retrieval-runtime/tests/host-memory-injection.test.ts`
+- 提交记录：`fix(retrieval-runtime): expire stale session episodic memories`
 
 ### 10. `Token` 预算贪心分配，类型饥饿
 

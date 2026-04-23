@@ -47,6 +47,23 @@ interface WorkspaceMaintenanceContext {
   open_conflicts: MemoryConflictSnapshot[];
 }
 
+function isExpiredSessionEpisodic(record: MemoryRecordSnapshot, ttlMs: number, nowMs: number): boolean {
+  if (record.scope !== "session" || record.memory_type !== "episodic" || record.status !== "active") {
+    return false;
+  }
+
+  const referenceTime = Date.parse(record.last_used_at ?? record.updated_at ?? record.created_at);
+  if (!Number.isFinite(referenceTime)) {
+    return false;
+  }
+
+  return nowMs - referenceTime >= ttlMs;
+}
+
+function isSessionEpisodicLifecycleCandidate(record: MemoryRecordSnapshot): boolean {
+  return record.scope === "session" && record.memory_type === "episodic" && record.status === "active";
+}
+
 function summarizePlanText(value: string, maxLength = 220) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -206,6 +223,7 @@ export class WritebackMaintenanceWorker {
       related_records: related,
       open_conflicts: conflicts,
     };
+    const lifecycleActions = this.buildLifecycleActions(workspaceContext, summary.next_checkpoint);
 
     await this.discoverRelations(workspaceId, seeds, related, traceId, summary.next_checkpoint);
     await this.planEvolution(workspaceId, seeds, related, traceId, summary.next_checkpoint);
@@ -266,7 +284,7 @@ export class WritebackMaintenanceWorker {
       return;
     }
 
-    const plan = this.capPlan(planResult.value);
+    const plan = this.mergeLifecycleActions(this.capPlan(planResult.value), lifecycleActions);
     await this.repository.recordMemoryPlanRun({
       trace_id: traceId,
       phase: "after_response",
@@ -295,6 +313,45 @@ export class WritebackMaintenanceWorker {
       workspace_id: workspaceId,
       last_scanned_at: summary.next_checkpoint,
     });
+  }
+
+  private buildLifecycleActions(
+    workspaceContext: WorkspaceMaintenanceContext,
+    checkpointIso: string,
+  ): GovernancePlan["actions"] {
+    const nowMs = Date.parse(checkpointIso);
+    const sourceRecords = [...workspaceContext.seed_records, ...workspaceContext.related_records];
+    const expired = sourceRecords.filter((record, index, array) =>
+      array.findIndex((candidate) => candidate.id === record.id) === index
+      && isExpiredSessionEpisodic(record, this.config.WRITEBACK_SESSION_EPISODIC_TTL_MS, nowMs),
+    );
+
+    return expired.map((record) => ({
+      type: "archive" as const,
+      record_id: record.id,
+      reason: "expired session episodic memory",
+    }));
+  }
+
+  private mergeLifecycleActions(plan: GovernancePlan, lifecycleActions: GovernancePlan["actions"]): GovernancePlan {
+    if (lifecycleActions.length === 0) {
+      return plan;
+    }
+
+    const actionKeys = new Set<string>();
+    const mergedActions = [...lifecycleActions, ...plan.actions].filter((action) => {
+      const key = JSON.stringify(action);
+      if (actionKeys.has(key)) {
+        return false;
+      }
+      actionKeys.add(key);
+      return true;
+    });
+
+    return {
+      actions: mergedActions.slice(0, this.config.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
+      notes: plan.notes,
+    };
   }
 
   private async discoverRelations(
@@ -512,6 +569,9 @@ export class WritebackMaintenanceWorker {
     }
 
     return response.items.filter((record) => {
+      if (isSessionEpisodicLifecycleCandidate(record)) {
+        return true;
+      }
       const createdAt = Date.parse(record.created_at);
       if (!Number.isFinite(createdAt)) {
         return true;

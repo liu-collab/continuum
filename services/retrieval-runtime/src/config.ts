@@ -65,6 +65,7 @@ const envSchema = z.object({
   WRITEBACK_MAINTENANCE_MAX_ACTIONS: z.coerce.number().int().min(1).max(100).default(10),
   WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: z.coerce.number().int().min(1).max(5).default(2),
   WRITEBACK_MAINTENANCE_ACTOR_ID: z.string().min(1).default("retrieval-runtime-maintenance"),
+  WRITEBACK_SESSION_EPISODIC_TTL_MS: z.coerce.number().int().positive().default(7 * 24 * 60 * 60 * 1000),
   WRITEBACK_GOVERNANCE_VERIFY_ENABLED: booleanCoerceSchema.default(true),
   WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: z.coerce.number().int().positive().default(1000),
   WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.85),

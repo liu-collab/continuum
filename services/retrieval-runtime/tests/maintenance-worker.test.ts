@@ -69,6 +69,26 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
   };
 }
 
+function makeSessionEpisodicRecord(id: string, updatedAt: string, lastUsedAt: string | null = null): MemoryRecordSnapshot {
+  return {
+    id,
+    workspace_id: workspaceId,
+    user_id: null,
+    task_id: null,
+    session_id: "550e8400-e29b-41d4-a716-446655440099",
+    memory_type: "episodic",
+    scope: "session",
+    status: "active",
+    summary: `session episodic ${id}`,
+    details: null,
+    importance: 3,
+    confidence: 0.82,
+    created_at: updatedAt,
+    updated_at: updatedAt,
+    last_used_at: lastUsedAt,
+  };
+}
+
 class RecordingStorageClient implements StorageWritebackClient {
   public governanceBatches: Array<unknown> = [];
   public relationBatches: Array<unknown> = [];
@@ -604,5 +624,36 @@ describe("WritebackMaintenanceWorker", () => {
     planner.releaseNext();
     const summary = await firstRun;
     expect(summary.actions_applied).toBe(1);
+  });
+
+  it("archives expired session episodic memories during maintenance", async () => {
+    const expired = makeSessionEpisodicRecord("session-old", "2026-04-01T00:00:00.000Z");
+    const fresh = makeSessionEpisodicRecord("session-fresh", "2026-04-22T00:00:00.000Z");
+    const storage = new RecordingStorageClient([expired, fresh], []);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig({
+        WRITEBACK_SESSION_EPISODIC_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+      }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(1);
+    const batch = storage.governanceBatches[0] as {
+      items: Array<{ proposal_type: string; targets: { record_ids: string[] } }>;
+    };
+    expect(batch.items.some((item) => item.proposal_type === "archive" && item.targets.record_ids.includes("session-old"))).toBe(true);
+    expect(batch.items.some((item) => item.targets.record_ids.includes("session-fresh"))).toBe(false);
   });
 });
