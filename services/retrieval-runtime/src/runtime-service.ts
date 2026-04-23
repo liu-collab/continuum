@@ -37,6 +37,7 @@ import type {
   WriteProjectionStatusSnapshot,
 } from "./shared/types.js";
 import type { EmbeddingsClient } from "./query/embeddings-client.js";
+import { applyOpenConflictPenalty, compareRankedCandidates } from "./query/query-engine.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
@@ -534,8 +535,9 @@ export class RetrievalRuntimeService {
 
     const recallStartedAt = Date.now();
     const queryResult = await this.queryEngine.query(normalizedContext, decision);
-    let selectedCandidates = queryResult.candidates;
-    let plannedCandidates = queryResult.candidates;
+    const conflictAwareCandidates = await this.annotateOpenConflicts(normalizedContext, queryResult.candidates);
+    let selectedCandidates = conflictAwareCandidates;
+    let plannedCandidates = conflictAwareCandidates;
     let finalTriggerReason = mergeTriggerReason(decision.trigger_reason, decision.intent_reason);
     let forceNoInjection = false;
     let degraded = queryResult.degraded;
@@ -553,7 +555,7 @@ export class RetrievalRuntimeService {
       traceId,
     );
     if (relationCandidates.length > 0) {
-      selectedCandidates = dedupeCandidates([...selectedCandidates, ...relationCandidates]);
+      selectedCandidates = dedupeCandidates([...selectedCandidates, ...relationCandidates]).sort(compareRankedCandidates);
       plannedCandidates = selectedCandidates;
       finalTriggerReason = mergeTriggerReason(finalTriggerReason, "包含关联记忆补充");
     }
@@ -639,7 +641,7 @@ export class RetrievalRuntimeService {
             triggerReason: finalTriggerReason,
             queryResult: {
               ...queryResult,
-              candidates: selectedCandidates,
+              candidates: conflictAwareCandidates,
               degraded,
               degradation_reason: degradationReason,
             },
@@ -680,7 +682,7 @@ export class RetrievalRuntimeService {
     if (forceNoInjection) {
       packet.packet_summary = finalTriggerReason;
     }
-    const scopeHitCounts = queryResult.candidates.reduce<Partial<Record<typeof packet.selected_scopes[number], number>>>((acc, candidate) => {
+    const scopeHitCounts = conflictAwareCandidates.reduce<Partial<Record<typeof packet.selected_scopes[number], number>>>((acc, candidate) => {
       acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
       return acc;
     }, {});
@@ -698,7 +700,7 @@ export class RetrievalRuntimeService {
       scope_reason: decision.scope_reason,
       query_scope: packet.query_scope,
       requested_memory_types: decision.requested_memory_types,
-      candidate_count: queryResult.candidates.length,
+      candidate_count: conflictAwareCandidates.length,
       selected_count: packet.records.length,
       recently_filtered_record_ids: recentlyFilteredCandidates.map((candidate) => candidate.id),
       recently_filtered_reasons: recentlyFilteredCandidates.map((candidate) => `hard_window_active:${candidate.memory_type}`),
@@ -1466,22 +1468,85 @@ export class RetrievalRuntimeService {
           rerank_score: relation?.strength ?? 0.7,
         } satisfies CandidateMemory;
       });
+    const conflictAwareRelatedCandidates = await this.annotateOpenConflicts(context, relatedCandidates);
 
     await this.repository.recordMemoryPlanRun({
       trace_id: traceId,
       phase: context.phase,
       plan_kind: "memory_relation_plan",
       input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
-      output_summary: summarizeText(`relations=${relationItems.length}; expanded=${relatedCandidates.length}`),
+      output_summary: summarizeText(`relations=${relationItems.length}; expanded=${conflictAwareRelatedCandidates.length}`),
       prompt_version: MEMORY_RELATION_PROMPT_VERSION,
       schema_version: MEMORY_PLAN_SCHEMA_VERSION,
       degraded: false,
-      result_state: relatedCandidates.length > 0 ? "planned" : "skipped",
+      result_state: conflictAwareRelatedCandidates.length > 0 ? "planned" : "skipped",
       duration_ms: Date.now() - startedAt,
       created_at: nowIso(),
     });
 
-    return relatedCandidates;
+    return conflictAwareRelatedCandidates;
+  }
+
+  private async annotateOpenConflicts(
+    context: Pick<TriggerContext, "workspace_id">,
+    candidates: CandidateMemory[],
+  ): Promise<CandidateMemory[]> {
+    if (!this.storageClient || candidates.length === 0) {
+      return candidates;
+    }
+
+    const result = await this.dependencyGuard.run(
+      "storage_writeback",
+      this.embeddingTimeoutMs,
+      (signal) => this.storageClient!.listConflicts("open", signal),
+    );
+
+    if (!result.ok || !result.value) {
+      this.logger.warn(
+        {
+          workspace_id: context.workspace_id,
+          code: result.error?.code,
+          detail: result.error?.message,
+        },
+        "open conflict lookup degraded",
+      );
+      return candidates;
+    }
+
+    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+    const conflictedIds = new Set<string>();
+    for (const conflict of result.value) {
+      if (conflict.workspace_id !== context.workspace_id) {
+        continue;
+      }
+      if (candidateIds.has(conflict.record_id)) {
+        conflictedIds.add(conflict.record_id);
+      }
+      if (candidateIds.has(conflict.conflict_with_record_id)) {
+        conflictedIds.add(conflict.conflict_with_record_id);
+      }
+    }
+
+    if (conflictedIds.size === 0) {
+      return candidates;
+    }
+
+    return candidates
+      .map((candidate) => {
+        if (!conflictedIds.has(candidate.id)) {
+          return candidate;
+        }
+
+        return {
+          ...candidate,
+          has_open_conflict: true,
+          rerank_score: applyOpenConflictPenalty(
+            { has_open_conflict: true },
+            candidate.rerank_score ?? 0,
+          ),
+        } satisfies CandidateMemory;
+      })
+      .sort(compareRankedCandidates);
   }
 
   private storeInjectionContext(

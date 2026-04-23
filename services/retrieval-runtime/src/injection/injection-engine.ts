@@ -43,6 +43,10 @@ function recordToInjectionRecord(record: MemoryPacket["records"][number]): Injec
   };
 }
 
+function isBlockedByOpenConflict(record: MemoryPacket["records"][number]) {
+  return record.memory_type === "fact_preference" && record.has_open_conflict === true;
+}
+
 export class InjectionEngine {
   constructor(private readonly config: AppConfig) {}
 
@@ -61,10 +65,15 @@ export class InjectionEngine {
     const summaryTokens = estimateTokens(packet.packet_summary);
     const tokenBudget = this.config.INJECTION_TOKEN_BUDGET;
     const sortedRecords = sortRecords(packet.records);
+    const eligibleRecords = sortedRecords.filter((record) => !isBlockedByOpenConflict(record));
 
     const kept: InjectionRecord[] = [];
-    const trimmedRecordIds: string[] = [];
-    const trimReasons: string[] = [];
+    const trimmedRecordIds = sortedRecords
+      .filter((record) => isBlockedByOpenConflict(record))
+      .map((record) => record.id);
+    const trimReasons = sortedRecords
+      .filter((record) => isBlockedByOpenConflict(record))
+      .map(() => "open_conflict");
     let usedTokens = summaryTokens;
     const keptIds = new Set<string>();
 
@@ -93,7 +102,7 @@ export class InjectionEngine {
       for (const type of TYPE_ORDER) {
         grouped.set(
           type,
-          sortedRecords.filter((record) => record.memory_type === type),
+          eligibleRecords.filter((record) => record.memory_type === type),
         );
       }
 
@@ -109,7 +118,7 @@ export class InjectionEngine {
       }
     }
 
-    for (const record of sortedRecords) {
+    for (const record of eligibleRecords) {
       if (keptIds.has(record.id)) {
         continue;
       }

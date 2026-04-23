@@ -5,12 +5,16 @@ import { injectionHintLabel, memoryTypeLabels, runtimeMessages } from "../shared
 import { textToLines } from "../shared/utils.js";
 
 function summarizeRecords(records: CandidateMemory[]): string {
-  if (records.length === 0) {
+  const visibleRecords = records.filter(
+    (record) => !(record.memory_type === "fact_preference" && record.has_open_conflict),
+  );
+
+  if (visibleRecords.length === 0) {
     return runtimeMessages.noMatchedMemory;
   }
 
   const groups = new Map<MemoryType, CandidateMemory[]>();
-  for (const record of records) {
+  for (const record of visibleRecords) {
     const current = groups.get(record.memory_type) ?? [];
     current.push(record);
     groups.set(record.memory_type, current);

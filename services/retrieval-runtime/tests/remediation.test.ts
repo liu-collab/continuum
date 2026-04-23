@@ -14,7 +14,12 @@ import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtim
 import { PostgresRuntimeRepository } from "../src/observability/postgres-runtime-repository.js";
 import { InMemoryReadModelRepository } from "../src/query/in-memory-read-model-repository.js";
 import { PostgresReadModelRepository } from "../src/query/postgres-read-model-repository.js";
-import { buildRetrievalQuery, QueryEngine } from "../src/query/query-engine.js";
+import {
+  applyOpenConflictPenalty,
+  buildRetrievalQuery,
+  compareRankedCandidates,
+  QueryEngine,
+} from "../src/query/query-engine.js";
 import { RetrievalRuntimeService } from "../src/runtime-service.js";
 import type { CandidateMemory } from "../src/shared/types.js";
 import { estimateTokens } from "../src/shared/utils.js";
@@ -1341,5 +1346,70 @@ describe("retrieval-runtime remediation", () => {
         controller.signal,
       ),
     ).rejects.toThrow("cancelled");
+  });
+
+  it("pushes open-conflict candidates behind clean candidates when scores tie", () => {
+    const clean = {
+      ...baseCandidateRecord,
+      id: "clean-pref",
+      rerank_score: 0.66,
+      has_open_conflict: false,
+    };
+    const conflicted = {
+      ...baseCandidateRecord,
+      id: "conflicted-pref",
+      rerank_score: applyOpenConflictPenalty({ has_open_conflict: true }, 0.86),
+      has_open_conflict: true,
+    };
+
+    const ordered = [conflicted, clean].sort(compareRankedCandidates);
+    expect(ordered.map((candidate) => candidate.id)).toEqual(["clean-pref", "conflicted-pref"]);
+  });
+
+  it("skips open-conflict fact preferences during injection trimming", () => {
+    const engine = new InjectionEngine({
+      ...config,
+      INJECTION_RECORD_LIMIT: 3,
+      INJECTION_TOKEN_BUDGET: 256,
+    });
+
+    const block = engine.build({
+      packet_id: "packet-conflict-filter",
+      trigger: "history_reference",
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task", "user"],
+      selected_scopes: ["workspace", "task", "user"],
+      scope_reason: "test",
+      query_scope: "scope=workspace,task,user",
+      packet_summary: "测试摘要",
+      injection_hint: "测试提示",
+      ttl_ms: 1000,
+      priority_breakdown: {
+        fact_preference: 2,
+        task_state: 1,
+        episodic: 0,
+      },
+      records: [
+        {
+          ...baseCandidateRecord,
+          id: "pref-conflict",
+          memory_type: "fact_preference",
+          summary: "偏好：用 tab 缩进",
+          has_open_conflict: true,
+          rerank_score: 0.95,
+        },
+        {
+          ...baseCandidateRecord,
+          id: "task-clean",
+          memory_type: "task_state",
+          summary: "任务状态：继续补测试",
+          rerank_score: 0.9,
+        },
+      ],
+    });
+
+    expect(block?.memory_records.map((record) => record.id)).toEqual(["task-clean"]);
+    expect(block?.trimmed_record_ids).toContain("pref-conflict");
+    expect(block?.trim_reasons).toContain("open_conflict");
   });
 });

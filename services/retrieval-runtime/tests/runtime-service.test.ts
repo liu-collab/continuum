@@ -291,6 +291,7 @@ class StubStorageClient implements StorageWritebackClient {
     private readonly shouldFail = false,
     private readonly recordItems: MemoryRecordSnapshot[] = [],
     private readonly relationItems: MemoryRelationSnapshot[] = [],
+    private readonly conflictItems: MemoryConflictSnapshot[] = [],
   ) {}
 
   async submitCandidates(candidates: WriteBackCandidate[]): Promise<SubmittedWriteBackJob[]> {
@@ -332,7 +333,7 @@ class StubStorageClient implements StorageWritebackClient {
   }
 
   async listConflicts(): Promise<MemoryConflictSnapshot[]> {
-    return [];
+    return this.conflictItems;
   }
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<MemoryConflictSnapshot> {
@@ -2397,6 +2398,146 @@ describe("retrieval-runtime service", () => {
 
     expect(response.memory_packet?.records.some((record) => record.id === "mem-other-workspace")).toBe(false);
     expect(response.memory_packet?.records.some((record) => record.id === "mem-global-origin-other-workspace")).toBe(true);
+  });
+
+  it("marks open conflicts on queried candidates and excludes conflicted preferences from injection", async () => {
+    const { service } = createRuntime({
+      records: [
+        {
+          ...sampleRecords[1]!,
+          id: "mem-conflict-pref",
+          summary: "用户偏好：用 tab 缩进。",
+          updated_at: "2026-04-16T10:00:00.000Z",
+        },
+        {
+          ...sampleRecords[2]!,
+          id: "mem-clean-task",
+          summary: "当前任务状态：继续补 `runtime-service`（运行时服务）测试。",
+          updated_at: "2026-04-16T11:00:00.000Z",
+        },
+      ],
+      storageClient: new StubStorageClient(
+        [],
+        false,
+        [],
+        [],
+        [
+          {
+            id: "conflict-1",
+            workspace_id: ids.workspace,
+            record_id: "mem-conflict-pref",
+            conflict_with_record_id: "some-other-record",
+            conflict_type: "preference_conflict",
+            conflict_summary: "缩进偏好存在冲突",
+            status: "open",
+            created_at: "2026-04-16T12:00:00.000Z",
+          },
+        ],
+      ),
+      config: {
+        INJECTION_RECORD_LIMIT: 4,
+        INJECTION_TOKEN_BUDGET: 256,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "把之前的偏好和当前任务状态都恢复出来。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    const conflicted = response.memory_packet?.records.find((record) => record.id === "mem-conflict-pref");
+    expect(conflicted?.has_open_conflict).toBe(true);
+    expect(response.injection_block?.memory_records.some((record) => record.id === "mem-conflict-pref")).toBe(false);
+    expect(response.injection_block?.memory_records.some((record) => record.id === "mem-clean-task")).toBe(true);
+  });
+
+  it("keeps relation-expanded conflicted preferences out of injection", async () => {
+    const { service } = createRuntime({
+      records: [
+        {
+          ...sampleRecords[2]!,
+          id: "mem-seed-task",
+          summary: "任务状态：正在修复检索冲突问题。",
+          updated_at: "2026-04-17T09:00:00.000Z",
+        },
+      ],
+      storageClient: new StubStorageClient(
+        [],
+        false,
+        [
+          {
+            id: "mem-related-pref",
+            workspace_id: ids.workspace,
+            user_id: ids.user,
+            task_id: null,
+            session_id: null,
+            memory_type: "fact_preference",
+            scope: "user",
+            status: "active",
+            summary: "用户偏好：用 4 空格缩进。",
+            details: {},
+            importance: 5,
+            confidence: 0.94,
+            created_at: "2026-04-16T08:00:00.000Z",
+            updated_at: "2026-04-17T08:30:00.000Z",
+            last_used_at: null,
+          },
+        ],
+        [
+          {
+            id: "rel-1",
+            workspace_id: ids.workspace,
+            source_record_id: "mem-seed-task",
+            target_record_id: "mem-related-pref",
+            relation_type: "related_to",
+            strength: 0.9,
+            bidirectional: false,
+            reason: "任务上下文关联到缩进偏好",
+            created_by_service: "retrieval-runtime",
+            created_at: "2026-04-17T09:00:00.000Z",
+            updated_at: "2026-04-17T09:00:00.000Z",
+          },
+        ],
+        [
+          {
+            id: "conflict-rel-1",
+            workspace_id: ids.workspace,
+            record_id: "mem-related-pref",
+            conflict_with_record_id: "mem-other-pref",
+            conflict_type: "preference_conflict",
+            conflict_summary: "缩进偏好冲突待确认",
+            status: "open",
+            created_at: "2026-04-17T09:10:00.000Z",
+          },
+        ],
+      ),
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+        INJECTION_RECORD_LIMIT: 4,
+        INJECTION_TOKEN_BUDGET: 256,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "上次修到哪了？",
+      memory_mode: "workspace_plus_global",
+    });
+
+    const relatedRecord = response.memory_packet?.records.find((record) => record.id === "mem-related-pref");
+    expect(relatedRecord?.has_open_conflict).toBe(true);
+    expect(response.injection_block?.memory_records.some((record) => record.id === "mem-related-pref")).toBe(false);
   });
 
   it("records mode and scope explanations in runtime observability", async () => {

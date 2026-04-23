@@ -35,7 +35,7 @@
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 | 读模型投影延迟，写后读不到 | 已完成 | 5 | 第 8 批 | `services/storage/tests/api.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/memory-client/__tests__/client.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts` | `fix(memory-runtime): gate resident refresh on projection readiness` |
 | 2 | `Embedding` 缺失，语义检索静默失败 | 已完成 | 无 | 第 5 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): add lexical fallback for pending embeddings` |
-| 3 | 冲突感知召回缺失 | 未提交 | 4 | 第 10 批 | 待补 | 待补 |
+| 3 | 冲突感知召回缺失 | 已完成 | 4 | 第 10 批 | `services/retrieval-runtime/tests/remediation.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): add conflict-aware recall filtering` |
 | 4 | 写回幂等键太脆弱，语义重复 | 已完成 | 无 | 第 9 批 | `services/storage/tests/domain.test.ts`；`services/storage/tests/worker.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(storage): canonicalize fact preference dedupe keys` |
 | 5 | 会话级状态全在内存，进程重启归零 | 已完成 | 无 | 第 7 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): persist recent injection dedup state` |
 | 6 | `LLM + Embedding` 同时挂时宿主降级感知不足 | 已完成 | 2 | 第 6 批 | `services/retrieval-runtime/tests/runtime-service.test.ts`；`services/memory-native-agent/src/http/__tests__/sessions.test.ts`；`services/memory-native-agent/src/runner/__tests__/runner.test.ts`；`services/visualization/tests/agent-event-reducer.test.ts`；`services/visualization/tests/chat-panel.test.tsx` | `fix(memory-clients): surface degraded skip state across host chain` |

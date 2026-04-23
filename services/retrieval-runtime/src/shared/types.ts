@@ -73,6 +73,7 @@ export interface CandidateMemory {
   semantic_score?: number;
   fallback_semantic_score?: number;
   rerank_score?: number;
+  has_open_conflict?: boolean;
   recent_injection_hint?: {
     recently_injected: boolean;
     injected_at: string;

@@ -19,6 +19,7 @@ const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
   task_state: 30,
   episodic: 14,
 };
+const OPEN_CONFLICT_SCORE_PENALTY = 0.2;
 
 function recencyScore(updatedAt: string, memoryType: CandidateMemory["memory_type"]): number {
   const ageMs = Date.now() - new Date(updatedAt).getTime();
@@ -59,6 +60,39 @@ function fallbackSemanticScore(queryText: string, candidateSummary: string): num
   }
 
   return clamp(overlap / queryTokens.size, 0, 1);
+}
+
+export function applyOpenConflictPenalty(
+  candidate: Pick<CandidateMemory, "has_open_conflict">,
+  score: number,
+): number {
+  if (!candidate.has_open_conflict) {
+    return score;
+  }
+
+  return clamp(score - OPEN_CONFLICT_SCORE_PENALTY, 0, 1);
+}
+
+export function compareRankedCandidates(left: CandidateMemory, right: CandidateMemory): number {
+  const leftScore = left.rerank_score ?? 0;
+  const rightScore = right.rerank_score ?? 0;
+  if (rightScore !== leftScore) {
+    return rightScore - leftScore;
+  }
+
+  if (Boolean(left.has_open_conflict) !== Boolean(right.has_open_conflict)) {
+    return Number(left.has_open_conflict) - Number(right.has_open_conflict);
+  }
+
+  if (left.importance !== right.importance) {
+    return right.importance - left.importance;
+  }
+
+  if (left.confidence !== right.confidence) {
+    return right.confidence - left.confidence;
+  }
+
+  return Date.parse(right.updated_at) - Date.parse(left.updated_at);
 }
 
 function weightsByPhase(phase: TriggerContext["phase"]): PhaseScoringWeights {
@@ -178,15 +212,16 @@ export class QueryEngine {
           clamp(candidate.confidence, 0, 1) * weights.confidence +
           recencyScore(candidate.updated_at, candidate.memory_type) * weights.recency +
           scopeBoost(candidate.scope, context) * weights.scope;
+        const rerankScore = applyOpenConflictPenalty(candidate, score);
 
         return {
           ...candidate,
           semantic_score: semanticScore,
           fallback_semantic_score: lexicalFallbackScore > 0 ? lexicalFallbackScore : undefined,
-          rerank_score: score,
+          rerank_score: rerankScore,
         };
       })
-      .sort((left, right) => (right.rerank_score ?? 0) - (left.rerank_score ?? 0))
+      .sort(compareRankedCandidates)
       .slice(0, maxRankedCandidates);
 
     this.logger.debug(
