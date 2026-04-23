@@ -163,7 +163,6 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       <div>
         <p className="eyebrow">{t("runtimeConfig.eyebrow")}</p>
         <h2 className="mt-2 text-xl font-semibold text-slate-900">{t("runtimeConfig.title")}</h2>
-        <p className="mt-2 text-sm text-slate-500">{t("runtimeConfig.description")}</p>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">

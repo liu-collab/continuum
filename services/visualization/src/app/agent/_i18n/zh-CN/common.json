@@ -100,24 +100,25 @@
   "runtimeConfig": {
     "eyebrow": "配置",
     "title": "运行时配置",
-    "description": "这里可以补充 embedding 和 memory-native-agent 的模型配置。服务会先启动，配置保存后再生效。",
     "saving": "保存中...",
     "embeddingTitle": "Embedding 配置",
-    "embeddingDescription": "这里配置第三方向量模型。先启动服务，后续在页面补全后即可正常使用。",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY（可选）",
-    "memoryLlmTitle": "Memory LLM 配置",
-    "memoryLlmDescription": "这里配置统一的记忆模型。配置完成后，运行时会优先用它来处理召回规划、写回提取和治理决策。",
+    "memoryLlmTitle": "记忆模型",
+    "memoryLlmMode": "记忆模型来源",
+    "memoryLlmModeOptions": {
+      "same_as_primary": "与聊天主模型一致",
+      "custom": "独立配置"
+    },
     "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
     "memoryLlmModel": "MEMORY_LLM_MODEL",
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY（可选）",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
-    "providerTitle": "memory-native-agent 模型配置",
-    "providerDescription": "按聊天产品常见方式直接填写模型地址、模型名和 API Key。页面里不再暴露环境变量式字段。",
+    "providerTitle": "聊天主模型",
+    "providerKind": "类型",
     "mcpTitle": "MCP 服务配置",
-    "mcpDescription": "在这里维护可连接的 MCP 服务列表。保存后会写入本地配置，并立即刷新当前服务连接。",
     "mcpAdd": "新增 MCP 服务",
     "mcpEmpty": "当前还没有配置 MCP 服务。",
     "mcpName": "服务名",
@@ -134,13 +135,17 @@
     "providerApiKey": "provider api_key",
     "providerEffort": "思考模式",
     "providerMaxTokens": "最大输出 token",
+    "planMode": "计划模式",
+    "planModeOptions": {
+      "advisory": "advisory",
+      "confirm": "confirm"
+    },
     "checkEmbedding": "检查 embedding 配置",
     "checkingEmbedding": "检查中...",
     "checkMemoryLlm": "检查 memory llm 配置",
     "checkingMemoryLlm": "检查中...",
     "saveEmbeddingBeforeCheck": "请先保存当前 embedding 配置，再执行检查。",
     "saveMemoryLlmBeforeCheck": "请先保存当前 memory llm 配置，再执行检查。",
-    "memoryLlmProtocolHint": "记忆模型支持两种协议：`OpenAI-compatible`（兼容 `/v1/chat/completions`）和 `Anthropic`（兼容 `/v1/messages`）。请按目标服务实际协议选择。",
     "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
@@ -163,6 +168,7 @@
       "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
       "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
+      "memoryLlmFollowUnsupported": "当前聊天主模型不能直接同步为记忆模型，请改为独立配置。",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS 需要是正整数。",
       "memoryLlmMaxTokensInvalid": "memory llm 最大输出 token 需要是正整数。"
     }

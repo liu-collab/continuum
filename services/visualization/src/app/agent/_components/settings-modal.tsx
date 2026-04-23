@@ -101,6 +101,28 @@ function resolveStatusTone(status: string | undefined) {
   return "neutral" as const;
 }
 
+type MemoryModelMode = "same_as_primary" | "custom";
+
+function resolveMemoryProtocolFromProviderKind(
+  kind: ProviderKind,
+): "anthropic" | "openai-compatible" | null {
+  if (kind === "anthropic") {
+    return "anthropic";
+  }
+  if (kind === "openai-compatible") {
+    return "openai-compatible";
+  }
+  return null;
+}
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim();
+}
+
+function normalizeOptionalNumber(value: number | null | undefined) {
+  return value ? String(value) : "";
+}
+
 export function SettingsModal({
   open,
   onClose,
@@ -135,12 +157,25 @@ export function SettingsModal({
   const [memoryLlmTimeoutMs, setMemoryLlmTimeoutMs] = useState("");
   const [memoryLlmEffort, setMemoryLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
   const [memoryLlmMaxTokens, setMemoryLlmMaxTokens] = useState("");
+  const [memoryModelMode, setMemoryModelMode] = useState<MemoryModelMode>("custom");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
   const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
+
+  const currentProviderKind: ProviderKind = useMemo(
+    () => (isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave),
+    [providerKind, providerKindToSave],
+  );
+
+  const primaryMemoryProtocol = useMemo(
+    () => resolveMemoryProtocolFromProviderKind(currentProviderKind),
+    [currentProviderKind],
+  );
+
+  const canMirrorPrimaryModel = primaryMemoryProtocol !== null;
 
   useEffect(() => {
     if (!config) {
@@ -167,6 +202,17 @@ export function SettingsModal({
     setMemoryLlmTimeoutMs(config.memory_llm.timeout_ms ? String(config.memory_llm.timeout_ms) : "");
     setMemoryLlmEffort(config.memory_llm.effort ?? "");
     setMemoryLlmMaxTokens(config.memory_llm.max_tokens ? String(config.memory_llm.max_tokens) : "");
+    const mirroredProtocol = resolveMemoryProtocolFromProviderKind(config.provider.kind);
+    const matchesPrimaryModel = Boolean(
+      mirroredProtocol
+      && normalizeText(config.memory_llm.base_url) === normalizeText(config.provider.base_url)
+      && normalizeText(config.memory_llm.model) === normalizeText(config.provider.model)
+      && normalizeText(config.memory_llm.api_key) === normalizeText(config.provider.api_key)
+      && (config.memory_llm.protocol ?? "openai-compatible") === mirroredProtocol
+      && (config.memory_llm.effort ?? "") === (config.provider.effort ?? "")
+      && normalizeOptionalNumber(config.memory_llm.max_tokens) === normalizeOptionalNumber(config.provider.max_tokens),
+    );
+    setMemoryModelMode(matchesPrimaryModel ? "same_as_primary" : "custom");
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
     setFeedbackMessage(null);
@@ -175,21 +221,60 @@ export function SettingsModal({
     setCheckingMemoryLlm(false);
   }, [config, open]);
 
+  useEffect(() => {
+    if (!canMirrorPrimaryModel && memoryModelMode === "same_as_primary") {
+      setMemoryModelMode("custom");
+    }
+  }, [canMirrorPrimaryModel, memoryModelMode]);
+
   const providerRequiresBaseUrl = useMemo(
-    () => {
-      const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
-      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama";
-    },
-    [providerKind, providerKindToSave]
+    () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",
+    [currentProviderKind],
   );
 
   const providerRequiresApiKey = useMemo(
-    () => {
-      const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
-      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic";
-    },
-    [providerKind, providerKindToSave]
+    () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic",
+    [currentProviderKind],
   );
+
+  const effectiveMemoryConfig = useMemo(() => {
+    if (memoryModelMode === "same_as_primary" && primaryMemoryProtocol) {
+      return {
+        baseUrl: providerBaseUrl.trim(),
+        model: providerModel.trim(),
+        apiKey: providerApiKey.trim(),
+        protocol: primaryMemoryProtocol,
+        timeoutMs: memoryLlmTimeoutMs.trim(),
+        effort: providerEffort,
+        maxTokens: providerMaxTokens.trim(),
+      };
+    }
+
+    return {
+      baseUrl: memoryLlmBaseUrl.trim(),
+      model: memoryLlmModel.trim(),
+      apiKey: memoryLlmApiKey.trim(),
+      protocol: memoryLlmProtocol,
+      timeoutMs: memoryLlmTimeoutMs.trim(),
+      effort: memoryLlmEffort,
+      maxTokens: memoryLlmMaxTokens.trim(),
+    };
+  }, [
+    memoryLlmApiKey,
+    memoryLlmBaseUrl,
+    memoryLlmEffort,
+    memoryLlmMaxTokens,
+    memoryLlmModel,
+    memoryLlmProtocol,
+    memoryLlmTimeoutMs,
+    memoryModelMode,
+    primaryMemoryProtocol,
+    providerApiKey,
+    providerBaseUrl,
+    providerEffort,
+    providerMaxTokens,
+    providerModel,
+  ]);
 
   async function handleSave() {
     const trimmedProviderModel = providerModel.trim();
@@ -224,12 +309,17 @@ export function SettingsModal({
       return;
     }
 
-    if (trimmedMemoryLlmBaseUrl && !trimmedMemoryLlmModel) {
+    if (memoryModelMode === "same_as_primary" && !primaryMemoryProtocol) {
+      setErrorMessage(t("runtimeConfig.errors.memoryLlmFollowUnsupported"));
+      return;
+    }
+
+    if (effectiveMemoryConfig.baseUrl && !effectiveMemoryConfig.model) {
       setErrorMessage(t("runtimeConfig.errors.memoryLlmModelRequired"));
       return;
     }
 
-    if (trimmedMemoryLlmTimeoutMs && !/^\d+$/.test(trimmedMemoryLlmTimeoutMs)) {
+    if (effectiveMemoryConfig.timeoutMs && !/^\d+$/.test(effectiveMemoryConfig.timeoutMs)) {
       setErrorMessage(t("runtimeConfig.errors.memoryLlmTimeoutInvalid"));
       return;
     }
@@ -239,7 +329,7 @@ export function SettingsModal({
       return;
     }
 
-    if (trimmedMemoryLlmMaxTokens && !/^\d+$/.test(trimmedMemoryLlmMaxTokens)) {
+    if (effectiveMemoryConfig.maxTokens && !/^\d+$/.test(effectiveMemoryConfig.maxTokens)) {
       setErrorMessage(t("runtimeConfig.errors.memoryLlmMaxTokensInvalid"));
       return;
     }
@@ -248,8 +338,6 @@ export function SettingsModal({
     setFeedbackMessage(null);
     setSaving(true);
     try {
-      const currentProviderKind: ProviderKind =
-        isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
       await onSaveRuntime({
         provider: {
           kind: currentProviderKind,
@@ -271,13 +359,13 @@ export function SettingsModal({
           plan_mode: planMode,
         },
         memory_llm: {
-          ...(trimmedMemoryLlmBaseUrl ? { base_url: trimmedMemoryLlmBaseUrl } : {}),
-          ...(trimmedMemoryLlmModel ? { model: trimmedMemoryLlmModel } : {}),
-          ...(trimmedMemoryLlmApiKey ? { api_key: trimmedMemoryLlmApiKey } : {}),
-          protocol: memoryLlmProtocol,
-          ...(trimmedMemoryLlmTimeoutMs ? { timeout_ms: Number(trimmedMemoryLlmTimeoutMs) } : {}),
-          effort: memoryLlmEffort || null,
-          ...(trimmedMemoryLlmMaxTokens ? { max_tokens: Number(trimmedMemoryLlmMaxTokens) } : {}),
+          ...(effectiveMemoryConfig.baseUrl ? { base_url: effectiveMemoryConfig.baseUrl } : {}),
+          ...(effectiveMemoryConfig.model ? { model: effectiveMemoryConfig.model } : {}),
+          ...(effectiveMemoryConfig.apiKey ? { api_key: effectiveMemoryConfig.apiKey } : {}),
+          protocol: effectiveMemoryConfig.protocol,
+          ...(effectiveMemoryConfig.timeoutMs ? { timeout_ms: Number(effectiveMemoryConfig.timeoutMs) } : {}),
+          effort: effectiveMemoryConfig.effort || null,
+          ...(effectiveMemoryConfig.maxTokens ? { max_tokens: Number(effectiveMemoryConfig.maxTokens) } : {}),
         },
         mcp: {
           servers: mcpServers.map((server) => ({
@@ -339,13 +427,13 @@ export function SettingsModal({
     const currentEffort = config?.memory_llm.effort ?? "";
     const currentMaxTokens = config?.memory_llm.max_tokens ? String(config.memory_llm.max_tokens) : "";
     if (
-      memoryLlmBaseUrl.trim() !== currentBaseUrl ||
-      memoryLlmModel.trim() !== currentModel ||
-      memoryLlmApiKey.trim() !== currentApiKey ||
-      memoryLlmProtocol !== currentProtocol ||
-      memoryLlmTimeoutMs.trim() !== currentTimeout ||
-      memoryLlmEffort !== currentEffort ||
-      memoryLlmMaxTokens.trim() !== currentMaxTokens
+      effectiveMemoryConfig.baseUrl !== currentBaseUrl ||
+      effectiveMemoryConfig.model !== currentModel ||
+      effectiveMemoryConfig.apiKey !== currentApiKey ||
+      effectiveMemoryConfig.protocol !== currentProtocol ||
+      effectiveMemoryConfig.timeoutMs !== currentTimeout ||
+      effectiveMemoryConfig.effort !== currentEffort ||
+      effectiveMemoryConfig.maxTokens !== currentMaxTokens
     ) {
       setFeedbackMessage({
         tone: "warning",
@@ -382,7 +470,6 @@ export function SettingsModal({
       open={open}
       onClose={onClose}
       title={t("runtimeConfig.title")}
-      description={t("runtimeConfig.description")}
       size="xl"
       footer={
         <>
@@ -513,14 +600,9 @@ export function SettingsModal({
                 {t("approvalModeSwitch.options.yolo")}
               </button>
             </div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {approvalMode === "yolo"
-                ? t("approvalModeSwitch.descriptions.yolo")
-                : t("approvalModeSwitch.descriptions.confirm")}
-            </p>
           </div>
           <div className="block">
-            <span className="text-xs font-medium text-muted-foreground">计划模式</span>
+            <span className="text-xs font-medium text-muted-foreground">{t("runtimeConfig.planMode")}</span>
             <div className="mt-1 inline-flex w-full rounded-md border bg-surface p-1">
               <button
                 type="button"
@@ -533,7 +615,7 @@ export function SettingsModal({
                     : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
                 }`}
               >
-                advisory
+                {t("runtimeConfig.planModeOptions.advisory")}
               </button>
               <button
                 type="button"
@@ -546,14 +628,9 @@ export function SettingsModal({
                     : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"
                 }`}
               >
-                confirm
+                {t("runtimeConfig.planModeOptions.confirm")}
               </button>
             </div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              {planMode === "confirm"
-                ? "先生成计划，等确认后再继续执行。"
-                : "先生成计划，然后自动继续执行。"}
-            </p>
           </div>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("localeSwitch.label")}</span>
@@ -570,15 +647,10 @@ export function SettingsModal({
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.providerTitle")}</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.providerDescription")}
-              </div>
-            </div>
+          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="primary-model-config">
+            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.providerTitle")}</div>
             <label className="block">
-              <span className="text-xs text-muted-foreground">kind</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerKind")}</span>
               <select
                 value={isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave}
                 onChange={(event) => {
@@ -650,13 +722,8 @@ export function SettingsModal({
             </label>
           </div>
 
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.embeddingDescription")}
-              </div>
-            </div>
+          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="embedding-config">
+            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingBaseUrl")}</span>
               <input
@@ -687,55 +754,65 @@ export function SettingsModal({
             </label>
           </div>
 
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.memoryLlmDescription")}
-              </div>
-              <div className="mt-2 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.memoryLlmProtocolHint")}
-              </div>
-            </div>
+          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="memory-model-config">
+            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
             <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
+              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMode")}</span>
               <select
-                value={memoryLlmProtocol}
-                onChange={(event) => setMemoryLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
+                value={memoryModelMode}
+                onChange={(event) => setMemoryModelMode(event.target.value as MemoryModelMode)}
                 className="field mt-1"
+                data-testid="memory-model-mode-select"
               >
-                <option value="openai-compatible">{t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible")}</option>
-                <option value="anthropic">{t("runtimeConfig.memoryLlmProtocolOptions.anthropic")}</option>
+                {canMirrorPrimaryModel ? (
+                  <option value="same_as_primary">{t("runtimeConfig.memoryLlmModeOptions.same_as_primary")}</option>
+                ) : null}
+                <option value="custom">{t("runtimeConfig.memoryLlmModeOptions.custom")}</option>
               </select>
             </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
-              <input
-                value={memoryLlmBaseUrl}
-                onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
-                placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
-              <input
-                value={memoryLlmModel}
-                onChange={(event) => setMemoryLlmModel(event.target.value)}
-                placeholder={t("runtimeConfig.memoryLlmModel")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
-              <input
-                type="password"
-                value={memoryLlmApiKey}
-                onChange={(event) => setMemoryLlmApiKey(event.target.value)}
-                placeholder={t("runtimeConfig.memoryLlmApiKey")}
-                className="field mt-1"
-              />
-            </label>
+            {memoryModelMode === "custom" ? (
+              <>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
+                  <select
+                    value={memoryLlmProtocol}
+                    onChange={(event) => setMemoryLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
+                    className="field mt-1"
+                  >
+                    <option value="openai-compatible">{t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible")}</option>
+                    <option value="anthropic">{t("runtimeConfig.memoryLlmProtocolOptions.anthropic")}</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
+                  <input
+                    value={memoryLlmBaseUrl}
+                    onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
+                    placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
+                    className="field mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
+                  <input
+                    value={memoryLlmModel}
+                    onChange={(event) => setMemoryLlmModel(event.target.value)}
+                    placeholder={t("runtimeConfig.memoryLlmModel")}
+                    className="field mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
+                  <input
+                    type="password"
+                    value={memoryLlmApiKey}
+                    onChange={(event) => setMemoryLlmApiKey(event.target.value)}
+                    placeholder={t("runtimeConfig.memoryLlmApiKey")}
+                    className="field mt-1"
+                  />
+                </label>
+              </>
+            ) : null}
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
               <input
@@ -746,42 +823,41 @@ export function SettingsModal({
                 inputMode="numeric"
               />
             </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
-              <select
-                value={memoryLlmEffort}
-                onChange={(event) => setMemoryLlmEffort(event.target.value as typeof memoryLlmEffort)}
-                className="field mt-1"
-              >
-                <option value="">{t("runtimeConfig.effortDisabled")}</option>
-                <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
-                <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
-                <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
-                <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
-                <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
-              <input
-                value={memoryLlmMaxTokens}
-                onChange={(event) => setMemoryLlmMaxTokens(event.target.value)}
-                placeholder={t("runtimeConfig.memoryLlmMaxTokens")}
-                className="field mt-1"
-                inputMode="numeric"
-              />
-            </label>
+            {memoryModelMode === "custom" ? (
+              <>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
+                  <select
+                    value={memoryLlmEffort}
+                    onChange={(event) => setMemoryLlmEffort(event.target.value as typeof memoryLlmEffort)}
+                    className="field mt-1"
+                  >
+                    <option value="">{t("runtimeConfig.effortDisabled")}</option>
+                    <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
+                    <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
+                    <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
+                    <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
+                    <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
+                  <input
+                    value={memoryLlmMaxTokens}
+                    onChange={(event) => setMemoryLlmMaxTokens(event.target.value)}
+                    placeholder={t("runtimeConfig.memoryLlmMaxTokens")}
+                    className="field mt-1"
+                    inputMode="numeric"
+                  />
+                </label>
+              </>
+            ) : null}
           </div>
         </div>
 
         <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.mcpTitle")}</div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("runtimeConfig.mcpDescription")}
-              </div>
-            </div>
+            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.mcpTitle")}</div>
             <button
               type="button"
               className="btn-outline"

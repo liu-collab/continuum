@@ -100,24 +100,25 @@
   "runtimeConfig": {
     "eyebrow": "Config",
     "title": "Runtime config",
-    "description": "Fill in embedding and memory-native-agent model settings here. Services start first, and the config takes effect after you save it.",
     "saving": "Saving...",
     "embeddingTitle": "Embedding config",
-    "embeddingDescription": "Configure the third-party embedding model here. Services can start first, then become usable after you complete the page config.",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY (optional)",
-    "memoryLlmTitle": "Memory LLM config",
-    "memoryLlmDescription": "Configure the shared memory model here. Once saved, runtime will prefer it for recall planning, writeback extraction, and governance decisions.",
+    "memoryLlmTitle": "Memory model",
+    "memoryLlmMode": "Memory model source",
+    "memoryLlmModeOptions": {
+      "same_as_primary": "Same as primary chat model",
+      "custom": "Custom"
+    },
     "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
     "memoryLlmModel": "MEMORY_LLM_MODEL",
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY (optional)",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
-    "providerTitle": "memory-native-agent model config",
-    "providerDescription": "Use the familiar chat-product style setup: base URL, model, and API key. No environment-variable style field in the page.",
+    "providerTitle": "Primary chat model",
+    "providerKind": "Kind",
     "mcpTitle": "MCP server config",
-    "mcpDescription": "Maintain the MCP server list here. After saving, the local config is updated and current connections are refreshed immediately.",
     "mcpAdd": "Add MCP server",
     "mcpEmpty": "No MCP server is configured yet.",
     "mcpName": "Server name",
@@ -134,13 +135,17 @@
     "providerApiKey": "provider api_key",
     "providerEffort": "Reasoning effort",
     "providerMaxTokens": "Max output tokens",
+    "planMode": "Plan mode",
+    "planModeOptions": {
+      "advisory": "advisory",
+      "confirm": "confirm"
+    },
     "checkEmbedding": "Check embedding config",
     "checkingEmbedding": "Checking...",
     "checkMemoryLlm": "Check memory llm config",
     "checkingMemoryLlm": "Checking...",
     "saveEmbeddingBeforeCheck": "Save the current embedding config before running the check.",
     "saveMemoryLlmBeforeCheck": "Save the current memory llm config before running the check.",
-    "memoryLlmProtocolHint": "The memory model supports two protocols: `OpenAI-compatible` over `/v1/chat/completions` and `Anthropic` over `/v1/messages`. Choose the one your service actually implements.",
     "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"
@@ -163,6 +168,7 @@
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
+      "memoryLlmFollowUnsupported": "The current primary chat model cannot be mirrored directly as the memory model. Switch to custom mode.",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS must be a positive integer.",
       "memoryLlmMaxTokensInvalid": "memory llm max output tokens must be a positive integer."
     }

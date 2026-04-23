@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -293,7 +293,45 @@ describe("SettingsModal", () => {
     );
 
     expect(screen.getByDisplayValue("Anthropic")).toBeInTheDocument();
-    expect(screen.getByText(/记忆模型支持两种协议/)).toBeInTheDocument();
+    expect(screen.getByTestId("memory-model-mode-select")).toBeInTheDocument();
+  });
+
+  it("detects mirrored memory model config and defaults to same-as-primary mode", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            memory_llm: {
+              base_url: baseConfig.provider.base_url,
+              model: baseConfig.provider.model,
+              api_key: baseConfig.provider.api_key,
+              protocol: "openai-compatible",
+              timeout_ms: 15000,
+              effort: baseConfig.provider.effort,
+              max_tokens: baseConfig.provider.max_tokens,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveValue("same_as_primary");
+    expect(screen.queryByPlaceholderText("MEMORY_LLM_MODEL")).not.toBeInTheDocument();
   });
 
   it("shows and submits provider and memory llm thinking config", async () => {
@@ -322,12 +360,21 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    await user.selectOptions(screen.getAllByRole("combobox")[3]!, "max");
-    await user.clear(screen.getByPlaceholderText("最大输出 token"));
-    await user.type(screen.getByPlaceholderText("最大输出 token"), "8192");
-    await user.selectOptions(screen.getAllByRole("combobox")[5]!, "xhigh");
-    await user.clear(screen.getByPlaceholderText("记忆模型最大输出 token"));
-    await user.type(screen.getByPlaceholderText("记忆模型最大输出 token"), "2048");
+    const primaryConfig = screen.getByTestId("primary-model-config");
+    const memoryConfig = screen.getByTestId("memory-model-config");
+
+    await user.selectOptions(
+      within(primaryConfig).getByDisplayValue("高"),
+      "max",
+    );
+    await user.clear(within(primaryConfig).getByPlaceholderText("最大输出 token"));
+    await user.type(within(primaryConfig).getByPlaceholderText("最大输出 token"), "8192");
+    await user.selectOptions(
+      within(memoryConfig).getByDisplayValue("中"),
+      "xhigh",
+    );
+    await user.clear(within(memoryConfig).getByPlaceholderText("记忆模型最大输出 token"));
+    await user.type(within(memoryConfig).getByPlaceholderText("记忆模型最大输出 token"), "2048");
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(
@@ -342,6 +389,49 @@ describe("SettingsModal", () => {
         memory_llm: expect.objectContaining({
           effort: "xhigh",
           max_tokens: 2048,
+        }),
+      }),
+    );
+  });
+
+  it("can save the memory model as the same config as the primary chat model", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.selectOptions(screen.getByTestId("memory-model-mode-select"), "same_as_primary");
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memory_llm: expect.objectContaining({
+          base_url: baseConfig.provider.base_url,
+          model: baseConfig.provider.model,
+          api_key: baseConfig.provider.api_key,
+          protocol: "openai-compatible",
+          effort: baseConfig.provider.effort,
+          max_tokens: baseConfig.provider.max_tokens,
         }),
       }),
     );
