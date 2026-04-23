@@ -1475,6 +1475,63 @@ describe("retrieval-runtime service", () => {
     });
   });
 
+  it("prefers task_state over episodic for older but still relevant task progress", async () => {
+    const now = Date.now();
+    const records: CandidateMemory[] = [
+      {
+        id: "task-state-older",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        memory_type: "task_state",
+        scope: "task",
+        summary: "当前任务状态：迁移做到第 3 步，下一步补回归测试。",
+        details: null,
+        source: { turn_id: "task-recency" },
+        importance: 4,
+        confidence: 0.9,
+        status: "active",
+        updated_at: new Date(now - 15 * 24 * 60 * 60 * 1000).toISOString(),
+        last_confirmed_at: null,
+        summary_embedding: [1, 0, 0],
+      },
+      {
+        id: "episodic-newer",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        memory_type: "episodic",
+        scope: "task",
+        summary: "历史事件：之前试过一次迁移命令。",
+        details: null,
+        source: { turn_id: "episodic-recency" },
+        importance: 4,
+        confidence: 0.9,
+        status: "active",
+        updated_at: new Date(now - 20 * 24 * 60 * 60 * 1000).toISOString(),
+        last_confirmed_at: null,
+        summary_embedding: [1, 0, 0],
+      },
+    ];
+    const { service } = createRuntime({ records });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-task-recency-balance",
+      phase: "task_start",
+      current_input: "开始当前任务",
+    });
+
+    expect(response.memory_packet?.records[0]?.id).toBe("task-state-older");
+    expect(response.injection_block?.memory_records[0]?.id).toBe("task-state-older");
+  });
+
   it("actively checks memory llm health and records a healthy status", async () => {
     const { service } = createRuntime({
       llmExtractor: {

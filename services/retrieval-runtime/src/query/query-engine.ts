@@ -16,8 +16,8 @@ export interface QueryEngineResult {
 
 const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
   fact_preference: 180,
-  task_state: 14,
-  episodic: 30,
+  task_state: 30,
+  episodic: 14,
 };
 
 function recencyScore(updatedAt: string, memoryType: CandidateMemory["memory_type"]): number {
