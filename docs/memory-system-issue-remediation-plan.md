@@ -46,7 +46,7 @@
 | 11 | `episodic` 半衰期比 `task_state` 长 | 已完成 | 无 | 第 2 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): rebalance memory recency decay` |
 | 12 | 历史引用关键词太窄 | 已完成 | 无 | 第 3 批 | `services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): widen history reference matching` |
 | 13 | 维护 worker 轮询导致冲突处理延迟不可控 | 已完成 | 8 | 第 13 批 | `services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/retrieval-runtime/tests/runtime-service.test.ts` | `fix(retrieval-runtime): prioritize urgent maintenance workspaces` |
-| 14 | 治理 `verifier` 阻塞缺少升级和告警 | 未提交 | 8 | 第 14 批 | 待补 | 待补 |
+| 14 | 治理 `verifier` 阻塞缺少升级和告警 | 已完成 | 8 | 第 14 批 | `services/storage/tests/governance-execution.test.ts`；`services/retrieval-runtime/tests/maintenance-worker.test.ts`；`services/visualization/tests/storage-governance-executions-client.test.ts` | `fix(governance): surface blocked verifier executions` |
 | 15 | 记忆溯源信息不足 | 未提交 | 4 | 第 15 批 | 待补 | 待补 |
 
 ## 1.3 修复顺序说明
@@ -593,10 +593,27 @@
 - 只允许低影响动作在 verifier 不可用时继续
 - 高影响动作仍必须人工或模型复核
 
+这次实际落地保持“高影响动作不自动执行”，但把阻塞状态正式落盘并展示出来：
+
+- `storage` 的治理执行引擎现在允许高影响动作带 `verifier.reject`
+- 这类动作不会被执行，而是生成 `proposal.status=rejected_by_guard` 和 `execution.execution_status=rejected_by_guard`
+- `retrieval-runtime maintenance` 遇到 `verifier` 关闭、不可用或明确拒绝时，不再无声跳过，而是提交阻塞执行记录
+- `visualization` 治理页和记忆详情页新增 `verificationBlocked` 展示，直接看到阻塞原因
+
 **落地建议**
 
 - 先补观测和告警
 - 不建议把高影响动作改成自动降级执行
+
+**当前结果**
+
+- 已完成
+- 高影响治理动作仍然安全地停在复核前，但不会再“消失”
+- 单测已补：
+  - `services/storage/tests/governance-execution.test.ts`
+  - `services/retrieval-runtime/tests/maintenance-worker.test.ts`
+  - `services/visualization/tests/storage-governance-executions-client.test.ts`
+- 提交记录：`fix(governance): surface blocked verifier executions`
 
 ### 15. 没有记忆溯源，无法排查“为什么记了这个”
 

@@ -168,10 +168,10 @@ export const governanceExecutionItemSchema = z
       });
     }
 
-    if (needsVerifier && value.verifier.decision !== "approve") {
+    if (needsVerifier && !value.verifier.decision) {
       ctx.addIssue({
         code: "custom",
-        message: "verifier must approve high-impact actions",
+        message: "verifier decision is required for high-impact actions",
         path: ["verifier", "decision"],
       });
     }

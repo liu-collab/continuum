@@ -140,6 +140,7 @@ export default async function MemoryDetailPage({
                       <div>目标: {item.targetSummary}</div>
                       <div>Planner: {item.plannerModel} / {item.plannerConfidence ?? "—"}</div>
                       <div>Verifier: {item.verifierRequired ? item.verifierDecision ?? "待复核" : "不需要"}</div>
+                      {item.verificationBlocked ? <div>阻塞原因: {item.verificationBlockedReason ?? "等待复核"}</div> : null}
                       <div>执行时间: {formatTimestamp(item.startedAt)}</div>
                       {item.deleteReason ? <div>删除原因: {item.deleteReason}</div> : null}
                       {item.errorMessage ? <div>失败原因: {item.errorMessage}</div> : null}

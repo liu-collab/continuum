@@ -155,6 +155,11 @@ export default async function GovernancePage({
                     <div className="mt-2 text-xs leading-5 text-muted-foreground line-clamp-2">
                       {item.reasonText}
                     </div>
+                    {item.verificationBlocked ? (
+                      <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+                        Verifier 阻塞: {item.verificationBlockedReason ?? "等待复核"}
+                      </div>
+                    ) : null}
                     <div className="mt-2 text-[11px] text-muted-foreground">
                       {formatTimestamp(item.startedAt)}
                     </div>
@@ -202,6 +207,7 @@ export default async function GovernancePage({
                     <Row label="Planner 置信度" value={String(detailResult.detail.plannerConfidence ?? "—")} />
                     <Row label="Verifier 必需" value={detailResult.detail.verifierRequired ? "是" : "否"} />
                     <Row label="Verifier 结论" value={detailResult.detail.verifierDecision ?? "—"} />
+                    <Row label="阻塞状态" value={detailResult.detail.verificationBlocked ? "已阻塞" : "未阻塞"} />
                     <Row label="Verifier 置信度" value={String(detailResult.detail.verifierConfidence ?? "—")} />
                     <Row label="Verifier 模型" value={detailResult.detail.verifierModel ?? "—"} />
                     <Row label="Verifier 备注" value={detailResult.detail.verifierNotes ?? "—"} />
@@ -213,6 +219,11 @@ export default async function GovernancePage({
                   <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                     Storage 执行
                   </div>
+                  {detailResult.detail.verificationBlocked ? (
+                    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      当前治理动作被 verifier 阻塞: {detailResult.detail.verificationBlockedReason ?? "等待复核"}
+                    </div>
+                  ) : null}
                   <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm">
                     <Row label="Execution id" value={detailResult.detail.executionId} />
                     <Row label="Proposal id" value={detailResult.detail.proposalId} />

@@ -139,6 +139,8 @@ export const GovernanceExecutionListItemSchema = z.object({
   verifierDecision: z.string().nullable(),
   verifierConfidence: z.number().nullable(),
   verifierNotes: z.string().nullable(),
+  verificationBlocked: z.boolean().default(false),
+  verificationBlockedReason: z.string().nullable().default(null),
   targetSummary: z.string(),
   targetRecordIds: z.array(z.string()),
   resultSummary: z.string().nullable(),

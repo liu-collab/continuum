@@ -167,4 +167,43 @@ describe("governance execution engine", () => {
     expect(result[0]?.execution.execution_status).toBe("cancelled");
     expect(result[0]?.execution.error_message).toContain("status changed before execution");
   });
+
+  it("records rejected_by_guard execution when verifier approval is missing", async () => {
+    const seed = buildSeed("Potentially destructive cleanup");
+    const repositories = createMemoryRepositories({
+      records: [seed],
+    });
+    const engine = new GovernanceExecutionEngine(repositories);
+
+    const result = await engine.executeBatch({
+      workspace_id: seed.workspace_id,
+      source_service: "retrieval-runtime",
+      items: [
+        {
+          proposal_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          proposal_type: "delete",
+          targets: { record_ids: [seed.id] },
+          suggested_changes: { delete_mode: "soft" },
+          reason_code: "obsolete_task_state",
+          reason_text: "delete obsolete task state",
+          evidence: { delete_reason: "replaced by newer task state" },
+          planner: { model: "writeback_llm", confidence: 0.95 },
+          verifier: {
+            required: true,
+            model: "writeback_llm",
+            decision: "reject",
+            confidence: 0.41,
+            notes: "needs manual review",
+          },
+          policy_version: "memory-governance-v1",
+          idempotency_key: "delete-batch-rejected",
+        },
+      ],
+    });
+
+    expect(result[0]?.proposal.status).toBe("rejected_by_guard");
+    expect(result[0]?.execution.execution_status).toBe("rejected_by_guard");
+    expect(result[0]?.execution.error_message).toBe("needs manual review");
+    expect((await repositories.records.findById(seed.id))?.status).toBe("active");
+  });
 });

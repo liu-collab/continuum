@@ -82,6 +82,13 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
     .map((target) => pickString(target, "record_id", "recordId"))
     .filter((target): target is string => Boolean(target));
   const evidence = pickRecord(proposal ?? {}, "evidence_json", "evidence") ?? {};
+  const verifierRequired = pickBoolean(proposal ?? {}, "verifier_required", "verifierRequired") ?? false;
+  const verifierDecision = pickString(proposal ?? {}, "verifier_decision", "verifierDecision") ?? null;
+  const executionError = pickString(execution, "error_message", "errorMessage") ?? null;
+  const verificationBlocked =
+    verifierRequired
+    && executionStatus === "rejected_by_guard"
+    && verifierDecision !== "approve";
 
   return {
     executionId: pickString(execution, "id") ?? "unknown-execution",
@@ -103,16 +110,21 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
     sourceService: pickString(execution, "source_service", "sourceService") ?? "unknown",
     plannerModel: pickString(proposal ?? {}, "planner_model", "plannerModel") ?? "unknown",
     plannerConfidence: pickNumber(proposal ?? {}, "planner_confidence", "plannerConfidence") ?? null,
-    verifierRequired: pickBoolean(proposal ?? {}, "verifier_required", "verifierRequired") ?? false,
+    verifierRequired,
     verifierModel: pickString(proposal ?? {}, "verifier_model", "verifierModel") ?? null,
-    verifierDecision: pickString(proposal ?? {}, "verifier_decision", "verifierDecision") ?? null,
+    verifierDecision,
     verifierConfidence:
       pickNumber(proposal ?? {}, "verifier_confidence", "verifierConfidence") ?? null,
     verifierNotes: pickString(proposal ?? {}, "verifier_notes", "verifierNotes") ?? null,
+    verificationBlocked,
+    verificationBlockedReason:
+      verificationBlocked
+        ? executionError ?? pickString(proposal ?? {}, "verifier_notes", "verifierNotes") ?? "等待 verifier 通过"
+        : null,
     targetSummary,
     targetRecordIds,
     resultSummary: pickString(execution, "result_summary", "resultSummary") ?? null,
-    errorMessage: pickString(execution, "error_message", "errorMessage") ?? null,
+    errorMessage: executionError,
   };
 }
 

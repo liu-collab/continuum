@@ -339,6 +339,16 @@ export function createMemoryRepositories(
         null
       );
     },
+    async updateProposal(proposalId, patch) {
+      const proposal = state.governanceProposals.find((item) => item.id === proposalId);
+      if (!proposal) {
+        throw new NotFoundError("governance proposal not found", { proposalId });
+      }
+      Object.assign(proposal, patch, {
+        updated_at: patch.updated_at ?? new Date().toISOString(),
+      });
+      return proposal;
+    },
     async listProposals(filters) {
       return state.governanceProposals
         .filter((proposal) => {

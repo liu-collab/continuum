@@ -118,6 +118,10 @@ export interface GovernanceRepository {
   }): Promise<GovernanceProposal>;
   findProposalById(proposalId: string): Promise<GovernanceProposal | null>;
   findProposalByIdempotencyKey(idempotencyKey: string): Promise<GovernanceProposal | null>;
+  updateProposal(
+    proposalId: string,
+    patch: Partial<Pick<GovernanceProposal, "status" | "verifier_notes" | "updated_at">>,
+  ): Promise<GovernanceProposal>;
   listProposals(filters?: {
     workspace_id?: string;
     status?: string;
@@ -861,6 +865,30 @@ function createGovernanceRepository(session: DbSession): GovernanceRepository {
         [idempotencyKey],
       );
       return result.rows[0] ? mapGovernanceProposal(result.rows[0]) : null;
+    },
+    async updateProposal(proposalId, patch) {
+      const assignments: string[] = [];
+      const params: unknown[] = [proposalId];
+      if (patch.status !== undefined) {
+        params.push(patch.status);
+        assignments.push(`status = $${params.length}`);
+      }
+      if (patch.verifier_notes !== undefined) {
+        params.push(patch.verifier_notes);
+        assignments.push(`verifier_notes = $${params.length}`);
+      }
+      params.push(patch.updated_at ?? new Date().toISOString());
+      assignments.push(`updated_at = $${params.length}`);
+      const result = await session.query(
+        `
+          update ${proposalsTable}
+          set ${assignments.join(", ")}
+          where id = $1
+          returning *
+        `,
+        params,
+      );
+      return mapGovernanceProposal(requireRow(result.rows[0], "memory_governance_proposals update"));
     },
     async listProposals(filters) {
       const clauses: string[] = [];

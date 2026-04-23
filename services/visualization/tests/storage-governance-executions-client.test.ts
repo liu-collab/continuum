@@ -127,5 +127,62 @@ describe("storage governance executions client", () => {
     expect(result.detail?.targets).toHaveLength(2);
     expect(result.detail?.verifierNotes).toBe("clear duplicate");
   });
+
+  it("marks governance executions blocked by verifier", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            proposal: {
+              id: "proposal-blocked",
+              workspace_id: "ws-1",
+              proposal_type: "delete",
+              reason_code: "obsolete_task_state",
+              reason_text: "delete obsolete task state",
+              evidence_json: {
+                delete_reason: "replaced by newer state",
+              },
+              planner_model: "memory_llm",
+              planner_confidence: 0.95,
+              verifier_required: true,
+              verifier_decision: "reject",
+              verifier_confidence: 0,
+              verifier_notes: "verifier_unavailable",
+            },
+            execution: {
+              id: "execution-blocked",
+              workspace_id: "ws-1",
+              proposal_id: "proposal-blocked",
+              proposal_type: "delete",
+              execution_status: "rejected_by_guard",
+              result_summary: null,
+              error_message: "verifier_unavailable",
+              source_service: "retrieval-runtime",
+              started_at: "2026-04-22T00:00:00Z",
+              finished_at: "2026-04-22T00:01:00Z",
+            },
+            targets: [
+              {
+                record_id: "memory-1",
+                conflict_id: null,
+                role: "target",
+              },
+            ],
+          },
+        ],
+      }),
+    } as Response);
+
+    const result = await fetchGovernanceExecutions({
+      workspaceId: "ws-1",
+      proposalType: undefined,
+      executionStatus: undefined,
+      limit: 20,
+    });
+
+    expect(result.items[0]?.verificationBlocked).toBe(true);
+    expect(result.items[0]?.verificationBlockedReason).toBe("verifier_unavailable");
+  });
 });
 

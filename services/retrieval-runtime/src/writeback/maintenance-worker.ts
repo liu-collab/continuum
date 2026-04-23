@@ -743,13 +743,31 @@ export class WritebackMaintenanceWorker {
     }
 
     if (!this.config.WRITEBACK_GOVERNANCE_VERIFY_ENABLED) {
-      this.logger.warn({ action_type: action.type }, "governance verifier disabled, skipping high-impact action");
-      return null;
+      this.logger.warn({ action_type: action.type }, "governance verifier disabled, marking high-impact action as blocked");
+      return {
+        ...base,
+        verifier: {
+          required: true,
+          model: "memory_llm",
+          decision: "reject",
+          confidence: 0,
+          notes: "verifier_disabled",
+        },
+      };
     }
 
     if (!this.verifier) {
-      this.logger.warn({ action_type: action.type }, "governance verifier unavailable, skipping high-impact action");
-      return null;
+      this.logger.warn({ action_type: action.type }, "governance verifier unavailable, marking high-impact action as blocked");
+      return {
+        ...base,
+        verifier: {
+          required: true,
+          model: "memory_llm",
+          decision: "reject",
+          confidence: 0,
+          notes: "verifier_unavailable",
+        },
+      };
     }
 
     const verifyResult = await this.dependencyGuard.run(
@@ -767,8 +785,30 @@ export class WritebackMaintenanceWorker {
         }),
     );
 
-    if (!verifyResult.ok || !verifyResult.value || verifyResult.value.decision !== "approve") {
-      return null;
+    if (!verifyResult.ok || !verifyResult.value) {
+      return {
+        ...base,
+        verifier: {
+          required: true,
+          model: "memory_llm",
+          decision: "reject",
+          confidence: 0,
+          notes: verifyResult.error?.code ?? "verifier_unavailable",
+        },
+      };
+    }
+
+    if (verifyResult.value.decision !== "approve") {
+      return {
+        ...base,
+        verifier: {
+          required: true,
+          model: "memory_llm",
+          decision: verifyResult.value.decision,
+          confidence: verifyResult.value.confidence,
+          notes: verifyResult.value.notes,
+        },
+      };
     }
 
     return {

@@ -47,6 +47,23 @@ export class GovernanceExecutionEngine {
     item: GovernanceExecutionItem,
   ): Promise<GovernanceExecutionResult> {
     const proposal = await this.upsertProposal(workspaceId, item);
+    if (proposal.verifier_required && proposal.verifier_decision !== "approve") {
+      const blockedExecution = await this.repositories.governance.createExecution({
+        workspace_id: workspaceId,
+        proposal_id: proposal.id,
+        proposal_type: proposal.proposal_type,
+        execution_status: "rejected_by_guard",
+        source_service: sourceService,
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        error_message: proposal.verifier_notes ?? "verifier approval is required before execution",
+      });
+
+      return {
+        proposal,
+        execution: blockedExecution,
+      };
+    }
     const startedAt = new Date().toISOString();
     const execution = await this.repositories.governance.createExecution({
       workspace_id: workspaceId,
@@ -112,7 +129,12 @@ export class GovernanceExecutionEngine {
       proposal: {
         workspace_id: workspaceId,
         proposal_type: item.proposal_type,
-        status: item.verifier.required ? "verified" : "proposed",
+        status:
+          item.verifier.required
+            ? item.verifier.decision === "approve"
+              ? "verified"
+              : "rejected_by_guard"
+            : "proposed",
         reason_code: item.reason_code,
         reason_text: item.reason_text,
         suggested_changes_json: item.suggested_changes,

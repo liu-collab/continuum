@@ -168,24 +168,31 @@ class RecordingStorageClient implements StorageWritebackClient {
         this.batchResolvers.push(resolve);
       });
     }
-    const typed = batch as { workspace_id: string; items: Array<{ proposal_id: string; proposal_type: GovernanceExecutionResponseItem["execution"]["proposal_type"] }> };
+    const typed = batch as {
+      workspace_id: string;
+      items: Array<{
+        proposal_id: string;
+        proposal_type: GovernanceExecutionResponseItem["execution"]["proposal_type"];
+        verifier?: { required?: boolean; decision?: "approve" | "reject"; notes?: string };
+      }>;
+    };
     return typed.items.map((item, index) => ({
       proposal: {
         id: item.proposal_id,
         workspace_id: typed.workspace_id,
         proposal_type: item.proposal_type,
-        status: "verified",
+        status: item.verifier?.required && item.verifier?.decision !== "approve" ? "rejected_by_guard" : "verified",
         reason_code: "test_reason",
         reason_text: "test reason",
         suggested_changes_json: {},
         evidence_json: {},
         planner_model: "memory_llm",
         planner_confidence: 0.9,
-        verifier_required: false,
-        verifier_model: null,
-        verifier_decision: null,
-        verifier_confidence: null,
-        verifier_notes: null,
+        verifier_required: Boolean(item.verifier?.required),
+        verifier_model: item.verifier?.required ? "memory_llm" : null,
+        verifier_decision: item.verifier?.decision ?? null,
+        verifier_confidence: item.verifier?.decision === "approve" ? 0.9 : 0,
+        verifier_notes: item.verifier?.notes ?? null,
         policy_version: "memory-governance-v1",
         idempotency_key: `test-${index}`,
         created_at: new Date().toISOString(),
@@ -196,9 +203,9 @@ class RecordingStorageClient implements StorageWritebackClient {
         workspace_id: typed.workspace_id,
         proposal_id: item.proposal_id,
         proposal_type: item.proposal_type,
-        execution_status: "executed",
-        result_summary: "executed",
-        error_message: null,
+        execution_status: item.verifier?.required && item.verifier?.decision !== "approve" ? "rejected_by_guard" : "executed",
+        result_summary: item.verifier?.required && item.verifier?.decision !== "approve" ? null : "executed",
+        error_message: item.verifier?.required && item.verifier?.decision !== "approve" ? item.verifier?.notes ?? "blocked" : null,
         source_service: "retrieval-runtime",
         started_at: new Date().toISOString(),
         finished_at: new Date().toISOString(),
@@ -493,7 +500,15 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.actions_applied).toBe(0);
     expect(summary.actions_skipped).toBe(1);
-    expect(storage.governanceBatches).toHaveLength(0);
+    expect(storage.governanceBatches).toHaveLength(1);
+    const batch = storage.governanceBatches[0] as {
+      items: Array<{ verifier: { required: boolean; decision?: string; notes?: string } }>;
+    };
+    expect(batch.items[0]?.verifier).toMatchObject({
+      required: true,
+      decision: "reject",
+      notes: "verifier_disabled",
+    });
   });
 
   it("does not submit governance batch when shadow mode is enabled", async () => {
@@ -657,6 +672,50 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(summary.workspace_ids_scanned).toEqual([urgentWorkspace]);
     expect(await repository.claimUrgentMaintenanceWorkspaces(5)).toHaveLength(0);
+  });
+
+  it("submits a blocked governance execution when verifier is unavailable", async () => {
+    const seed = makeRecord("seed-verifier-missing", "默认使用中文输出", 4);
+    const related = makeRecord("rel-verifier-missing", "偏好中文输出", 3);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new StubPlanner(() => ({
+      actions: [
+        {
+          type: "merge",
+          target_record_ids: [seed.id, related.id],
+          merged_summary: "默认使用中文输出（合并后）",
+          merged_importance: 5,
+          reason: "duplicate stable preference",
+        },
+      ],
+    }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig(),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(0);
+    expect(summary.actions_skipped).toBe(1);
+    expect(storage.governanceBatches).toHaveLength(1);
+    const batch = storage.governanceBatches[0] as {
+      items: Array<{ verifier: { required: boolean; decision?: string; notes?: string } }>;
+    };
+    expect(batch.items[0]?.verifier).toMatchObject({
+      required: true,
+      decision: "reject",
+      notes: "verifier_unavailable",
+    });
   });
 
   it("archives expired session episodic memories during maintenance", async () => {
