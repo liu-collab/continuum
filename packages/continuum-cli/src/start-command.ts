@@ -107,13 +107,16 @@ function npmCommand() {
   return process.platform === "win32" ? "npm.cmd" : "npm";
 }
 
-function getManagedVisualizationDevRecord(services: ManagedServiceRecord[]) {
-  return services.find((service) => service.name === UI_DEV_SERVICE_NAME) ?? null;
+function isManagedVisualizationDevRecord(service: ManagedServiceRecord) {
+  return (
+    service.name === UI_DEV_SERVICE_NAME
+    || service.name.startsWith(`${UI_DEV_SERVICE_NAME}:`)
+  );
 }
 
 async function writeManagedVisualizationDevRecord(record: ManagedServiceRecord | null) {
   const state = await readManagedState();
-  const services = state.services.filter((service) => service.name !== UI_DEV_SERVICE_NAME);
+  const services = state.services.filter((service) => !isManagedVisualizationDevRecord(service));
   if (record) {
     services.push(record);
   }
@@ -152,12 +155,12 @@ async function terminateManagedProcess(pid: number) {
 
 async function stopManagedVisualizationDevServer() {
   const state = await readManagedState();
-  const record = getManagedVisualizationDevRecord(state.services);
-  if (!record) {
+  const records = state.services.filter(isManagedVisualizationDevRecord);
+  if (records.length === 0) {
     return false;
   }
 
-  await terminateManagedProcess(record.pid);
+  await Promise.all(records.map((service) => terminateManagedProcess(service.pid)));
   await writeManagedVisualizationDevRecord(null);
   return true;
 }
@@ -176,19 +179,21 @@ async function waitForHealthy(url: string, timeoutMs: number) {
   throw new Error(`服务未在预期时间内就绪: ${url}`);
 }
 
-async function waitForTcpListening(host: string, port: number, timeoutMs: number) {
+async function waitForTcpAvailable(host: string, port: number, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     const available = await isTcpPortAvailable(host, port);
-    if (!available) {
+    if (available) {
       return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  throw new Error(`端口未在预期时间内开始监听: ${host}:${port}`);
+  throw new Error(
+    `visualization dev 端口仍被占用: ${host}:${port}。旧的 --ui-dev 进程可能没有退出，请先运行 npm run stop，或手动结束占用 3003 的进程后重试。`,
+  );
 }
 
 async function ensureDockerInstalled() {
@@ -485,6 +490,7 @@ async function startManagedVisualizationDevServer(options: {
   packageRoot: string;
   bindHost: string;
   publicHost: string;
+  readModelDsn: string;
   runtimeUrl: string;
   storageUrl: string;
   mnaUrl: string;
@@ -503,11 +509,15 @@ async function startManagedVisualizationDevServer(options: {
   const logPath = path.join(continuumLogsDir(), "visualization-dev.log");
   const port = "3003";
   const uiUrl = `http://${options.publicHost}:${port}`;
+  await waitForTcpAvailable(options.bindHost, Number(port), 10_000);
   const childEnv = {
     ...process.env,
     NODE_ENV: "development",
     STORAGE_API_BASE_URL: options.storageUrl,
     RUNTIME_API_BASE_URL: options.runtimeUrl,
+    STORAGE_READ_MODEL_DSN: options.readModelDsn,
+    STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
+    STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
     NEXT_PUBLIC_MNA_BASE_URL: options.mnaUrl,
     MNA_INTERNAL_BASE_URL: options.mnaUrl,
     MNA_TOKEN_PATH: options.mnaTokenPath,
@@ -557,7 +567,7 @@ async function startManagedVisualizationDevServer(options: {
 
   try {
     await Promise.race([
-      waitForTcpListening(options.publicHost, Number(port), 30_000),
+      waitForHealthy(`${uiUrl}/api/health/readiness`, 30_000),
       exitPromise.then((code) => {
         throw new Error(`visualization dev 启动失败，退出码 ${code ?? 1}`);
       }),
@@ -673,6 +683,9 @@ export async function runStartCommand(
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
+  const readModelDsn =
+    process.env.STORAGE_READ_MODEL_DSN
+    ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
   const stackMemoryLlmConfigPath = "/opt/continuum/managed/memory-llm-config.json";
   const localMemoryLlmConfigPath = continuumManagedMemoryLlmConfigPath();
@@ -751,6 +764,7 @@ export async function runStartCommand(
         packageRoot,
         bindHost,
         publicHost: accessibleHost,
+        readModelDsn,
         runtimeUrl,
         storageUrl,
         mnaUrl: mna.url,

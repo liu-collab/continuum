@@ -20,6 +20,34 @@ const rmMock = vi.hoisted(() => vi.fn());
 const planVendorBuildMock = vi.hoisted(() => vi.fn());
 const planStackImageBuildMock = vi.hoisted(() => vi.fn());
 const writeBuildStateMock = vi.hoisted(() => vi.fn());
+const tcpPortAvailableMock = vi.hoisted(() =>
+  vi.fn((_host: string, port: number) => port !== 54329)
+);
+
+vi.mock("node:net", () => ({
+  createServer: () => {
+    const handlers = new Map<string, (...args: unknown[]) => void>();
+
+    return {
+      once(event: string, handler: (...args: unknown[]) => void) {
+        handlers.set(event, handler);
+        return this;
+      },
+      close(callback?: () => void) {
+        callback?.();
+        return this;
+      },
+      listen(options: { host: string; port: number }) {
+        setImmediate(() => {
+          const available = tcpPortAvailableMock(options.host, options.port);
+          const handler = handlers.get(available ? "listening" : "error");
+          handler?.(available ? undefined : new Error("EADDRINUSE"));
+        });
+        return this;
+      },
+    };
+  },
+}));
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -131,6 +159,8 @@ describe("runStartCommand", () => {
     planVendorBuildMock.mockReset();
     planStackImageBuildMock.mockReset();
     writeBuildStateMock.mockReset();
+    tcpPortAvailableMock.mockReset();
+    tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
@@ -876,6 +906,12 @@ describe("runStartCommand", () => {
 
     expect(dockerRun?.[1]).not.toContain("127.0.0.1:3003:3003");
     expect(uiDevSpawn).toBeDefined();
+    expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
+      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54330/continuum",
+      STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
+      STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
+    });
+    expect(fetchJsonMock).toHaveBeenCalledWith("http://127.0.0.1:3003/api/health/readiness", 1_500);
     expect(writeManagedStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         services: expect.arrayContaining([
