@@ -41,6 +41,8 @@ export interface RetrievalQuery {
   status_filter: RecordStatus[];
   importance_threshold: number;
   semantic_query_text: string;
+  semantic_query_terms?: string[];
+  semantic_query_embedding?: number[];
   candidate_limit: number;
 }
 

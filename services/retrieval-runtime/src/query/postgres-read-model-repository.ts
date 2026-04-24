@@ -59,7 +59,55 @@ export class PostgresReadModelRepository implements ReadModelRepository {
 
   async searchCandidates(query: RetrievalQuery, signal?: AbortSignal): Promise<CandidateMemory[]> {
     const tableName = `${quoteIdentifier(this.config.READ_MODEL_SCHEMA)}.${quoteIdentifier(this.config.READ_MODEL_TABLE)}`;
+    const queryEmbedding = query.semantic_query_embedding
+      ? `[${query.semantic_query_embedding.join(",")}]`
+      : null;
     const sql = `
+      WITH filtered AS (
+        SELECT
+          id,
+          workspace_id,
+          user_id,
+          session_id,
+          task_id,
+          memory_type,
+          scope,
+          summary,
+          details,
+          source,
+          importance,
+          confidence,
+          status,
+          updated_at,
+          last_confirmed_at,
+          summary_embedding,
+          embedding_status
+        FROM ${tableName}
+        WHERE status = ANY($1::text[])
+          AND scope = ANY($2::text[])
+          AND memory_type = ANY($3::text[])
+          AND importance >= $4
+          AND (
+            (scope = 'workspace' AND workspace_id = $5::uuid)
+            OR (scope = 'user' AND user_id = $6::uuid)
+            OR (scope = 'task' AND workspace_id = $5::uuid AND $7::uuid IS NOT NULL AND task_id = $7::uuid)
+            OR (scope = 'session' AND workspace_id = $5::uuid AND session_id = $8::uuid)
+          )
+      ),
+      ranked AS (
+        SELECT
+          *,
+          (
+            SELECT count(*)::int
+            FROM unnest($9::text[]) AS term
+            WHERE lower(summary) LIKE '%' || lower(term) || '%'
+          ) AS lexical_overlap,
+          CASE
+            WHEN $10::vector IS NULL OR summary_embedding IS NULL THEN NULL
+            ELSE summary_embedding <=> $10::vector
+          END AS vector_distance
+        FROM filtered
+      )
       SELECT
         id,
         workspace_id,
@@ -78,19 +126,19 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         last_confirmed_at,
         summary_embedding,
         embedding_status
-      FROM ${tableName}
-      WHERE status = ANY($1::text[])
-        AND scope = ANY($2::text[])
-        AND memory_type = ANY($3::text[])
-        AND importance >= $4
-        AND (
-          (scope = 'workspace' AND workspace_id = $5::uuid)
-          OR (scope = 'user' AND user_id = $6::uuid)
-          OR (scope = 'task' AND workspace_id = $5::uuid AND $7::uuid IS NOT NULL AND task_id = $7::uuid)
-          OR (scope = 'session' AND workspace_id = $5::uuid AND session_id = $8::uuid)
-        )
-      ORDER BY importance DESC, confidence DESC, updated_at DESC
-      LIMIT $9
+      FROM ranked
+      ORDER BY
+        GREATEST(
+          CASE WHEN cardinality($9::text[]) = 0 THEN 0 ELSE lexical_overlap::float / cardinality($9::text[]) END,
+          CASE WHEN vector_distance IS NULL THEN 0 ELSE 1 - vector_distance END
+        ) DESC,
+        lexical_overlap DESC,
+        CASE WHEN vector_distance IS NULL THEN 1 ELSE 0 END,
+        vector_distance ASC,
+        importance DESC,
+        confidence DESC,
+        updated_at DESC
+      LIMIT $11
     `;
 
     const values = [
@@ -102,6 +150,8 @@ export class PostgresReadModelRepository implements ReadModelRepository {
       query.user_id,
       query.task_id ?? null,
       query.session_id,
+      query.semantic_query_terms ?? [],
+      queryEmbedding,
       query.candidate_limit,
     ];
 

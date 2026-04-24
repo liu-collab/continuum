@@ -20,6 +20,7 @@ const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
   episodic: 14,
 };
 const OPEN_CONFLICT_SCORE_PENALTY = 0.2;
+const MAX_SEMANTIC_QUERY_TERMS = 48;
 
 function recencyScore(updatedAt: string, memoryType: CandidateMemory["memory_type"]): number {
   const ageMs = Date.now() - new Date(updatedAt).getTime();
@@ -114,10 +115,49 @@ function weightsByPhase(phase: TriggerContext["phase"]): PhaseScoringWeights {
 function buildSemanticQueryText(context: TriggerContext): string {
   const currentInput = truncateFromTail(context.current_input, 512);
   const recentContextSummary = truncateFromTail(context.recent_context_summary, 512);
+  const recallExpansion = buildRecallQueryExpansion(currentInput);
   return truncateFromTail(
-    normalizeText([currentInput, recentContextSummary].filter(Boolean).join("\n")),
+    normalizeText([currentInput, recallExpansion, recentContextSummary].filter(Boolean).join("\n")),
     1024,
   );
+}
+
+function buildSemanticQueryTerms(text: string): string[] {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const rawToken of tokenizeForOverlap(text)) {
+    const term = rawToken.trim().toLowerCase();
+    if (!term || seen.has(term)) {
+      continue;
+    }
+
+    seen.add(term);
+    terms.push(term);
+    if (terms.length >= MAX_SEMANTIC_QUERY_TERMS) {
+      break;
+    }
+  }
+
+  return terms;
+}
+
+function buildRecallQueryExpansion(currentInput: string): string {
+  const normalized = normalizeText(currentInput);
+  const isAskingAboutAssistantIdentity = [
+    /你.{0,6}是(谁|什么|啥)/u,
+    /你.{0,8}叫.{0,8}(什么|啥|哪个|谁)/u,
+    /叫.{0,8}你.{0,8}(什么|啥|哪个|谁)/u,
+    /让你.{0,8}叫/u,
+    /称呼.{0,8}你/u,
+    /你.{0,6}(名字|昵称|称呼)/u,
+  ].some((pattern) => pattern.test(normalized));
+
+  if (!isAskingAboutAssistantIdentity) {
+    return "";
+  }
+
+  return "用户希望助手以后叫 用户给助手的称呼 助手名字 助手昵称 以后叫";
 }
 
 export function buildRetrievalQuery(
@@ -125,6 +165,13 @@ export function buildRetrievalQuery(
   decision: TriggerDecision,
   config: AppConfig,
 ): RetrievalQuery {
+  const candidateLimit = Math.max(
+    decision.candidate_limit ?? 0,
+    config.QUERY_CANDIDATE_LIMIT,
+    config.RECALL_LLM_CANDIDATE_LIMIT ?? 0,
+    config.PACKET_RECORD_LIMIT,
+  );
+
   return {
     workspace_id: context.workspace_id,
     user_id: context.user_id,
@@ -137,7 +184,7 @@ export function buildRetrievalQuery(
     status_filter: ["active"],
     importance_threshold: decision.importance_threshold,
     semantic_query_text: decision.query_hint?.trim() ? decision.query_hint : buildSemanticQueryText(context),
-    candidate_limit: decision.candidate_limit ?? config.QUERY_CANDIDATE_LIMIT,
+    candidate_limit: candidateLimit,
   };
 }
 
@@ -153,31 +200,11 @@ export class QueryEngine {
   async query(context: TriggerContext, decision: TriggerDecision): Promise<QueryEngineResult> {
     const query = buildRetrievalQuery(context, decision, this.config);
     const startedAt = Date.now();
-
-    const readModelResult = await this.dependencyGuard.run("read_model", this.config.QUERY_TIMEOUT_MS, (signal) =>
-      this.repository.searchCandidates(query, signal),
-    );
-
-    if (!readModelResult.ok) {
-      return {
-        query,
-        candidates: [],
-        degraded: true,
-        degradation_reason: readModelResult.error?.code ?? "dependency_unavailable",
-      };
-    }
-
-    const baseCandidates = readModelResult.value ?? [];
-    if (baseCandidates.length === 0) {
-      return { query, candidates: [], degraded: false };
-    }
-
     const embeddingsResult = await this.dependencyGuard.run(
       "embeddings",
       this.config.EMBEDDING_TIMEOUT_MS,
       (signal) => this.embeddingsClient.embedText(query.semantic_query_text, signal),
     );
-
     let degraded = false;
     let degradationReason: string | undefined;
     let queryEmbedding: number[] | undefined;
@@ -187,6 +214,30 @@ export class QueryEngine {
     } else {
       degraded = true;
       degradationReason = embeddingsResult.error?.code ?? "embedding_unavailable";
+    }
+
+    const contextualQuery = {
+      ...query,
+      semantic_query_terms: buildSemanticQueryTerms(query.semantic_query_text),
+      semantic_query_embedding: queryEmbedding,
+    };
+
+    const readModelResult = await this.dependencyGuard.run("read_model", this.config.QUERY_TIMEOUT_MS, (signal) =>
+      this.repository.searchCandidates(contextualQuery, signal),
+    );
+
+    if (!readModelResult.ok) {
+      return {
+        query: contextualQuery,
+        candidates: [],
+        degraded: true,
+        degradation_reason: readModelResult.error?.code ?? "dependency_unavailable",
+      };
+    }
+
+    const baseCandidates = readModelResult.value ?? [];
+    if (baseCandidates.length === 0) {
+      return { query: contextualQuery, candidates: [], degraded: false };
     }
 
     const maxRankedCandidates = Math.max(
@@ -202,7 +253,7 @@ export class QueryEngine {
             : 0;
         const lexicalFallbackScore =
           !candidate.summary_embedding || candidate.embedding_status === "pending" || candidate.embedding_status === "failed"
-            ? fallbackSemanticScore(query.semantic_query_text, candidate.summary)
+            ? fallbackSemanticScore(contextualQuery.semantic_query_text, candidate.summary)
             : 0;
         const semanticScore = vectorSemanticScore > 0 ? vectorSemanticScore : lexicalFallbackScore;
         const weights = weightsByPhase(context.phase);
@@ -234,7 +285,7 @@ export class QueryEngine {
     );
 
     return {
-      query,
+      query: contextualQuery,
       candidates: ranked,
       degraded,
       degradation_reason: degradationReason,

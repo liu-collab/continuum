@@ -48,10 +48,15 @@ describe("memory orchestrator llm client", () => {
 
   it("targets the openai-compatible chat endpoint and extracts message content", async () => {
     let calledUrl = "";
+    let systemPrompt = "";
 
     globalThis.fetch = (async (input, init) => {
       calledUrl = String(input);
       expect(new Headers(init?.headers).get("authorization")).toBe("Bearer openai-key");
+      const parsedBody = JSON.parse(String(init?.body)) as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      systemPrompt = parsedBody.messages.find((message) => message.role === "system")?.content ?? "";
       return {
         ok: true,
         json: async () => ({
@@ -81,6 +86,7 @@ describe("memory orchestrator llm client", () => {
     );
 
     expect(calledUrl).toBe("https://api.openai.com/v1/chat/completions");
+    expect(systemPrompt.toLowerCase()).toContain("json");
     expect(result).toBe("{\"ok\":true,\"source\":\"openai\"}");
   });
 

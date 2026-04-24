@@ -9,6 +9,7 @@ Search SHOULD happen when:
 - the user implicitly refers to prior preferences, prior decisions, prior task state, or prior conversation context
 - the user says things like "照旧", "还是那个", "按之前的", "按我习惯", "继续刚才", "延续上次"
 - the user is asking for continuity, personalization, or context carry-over
+- the user asks who the assistant is, what the assistant is called, or how to address the assistant
 
 Search should NOT happen when:
 - the input is self-contained and does not depend on memory
@@ -39,6 +40,7 @@ Your task is to judge whether the current input depends on prior context or dura
 
 Rules:
 - Focus on whether the user is continuing earlier work, relying on preferences, or asking for continuity.
+- Treat assistant identity, assistant name, and addressing questions as potentially dependent on durable user preferences.
 - memory_types must only use: fact_preference | task_state | episodic.
 - suggested_scopes must only use: workspace | user | task | session.
 - If uncertain, prefer a conservative answer that keeps memory available.
@@ -90,6 +92,7 @@ Rules:
 - Ignore raw transcript fragments, temporary chatter, and speculative content.
 - Use "task_state" only when the turn contains a concrete task progress or next-step update.
 - Use "fact_preference" for stable preferences or confirmed durable facts.
+- Use "fact_preference" for durable naming, addressing, language, style, and interaction preferences.
 - Use "episodic" for concrete commitments or externally observable events that may matter later.
 - Use "workspace" for repository rules, project constraints, directory conventions, or workspace background.
 - Return at most 5 candidates.
@@ -101,6 +104,7 @@ DO NOT extract:
 
 Examples of good extractions:
 - User: "我习惯用 4 空格缩进" -> fact_preference, scope=user, summary="偏好 4 空格缩进"
+- User: "你以后就叫贾维斯" -> fact_preference, scope=user, summary="用户希望助手以后叫贾维斯"
 - Assistant: "数据库迁移已完成，下一步验证回滚" -> task_state, scope=task
 
 Examples of bad extractions:

@@ -153,6 +153,16 @@ const HISTORY_REFERENCE_PATTERNS = [
   "we discussed",
   "as before",
   "remember when",
+  "你叫什么",
+  "你是谁",
+  "你是啥",
+  "你是什么",
+  "你叫啥",
+  "你的名字",
+  "怎么称呼你",
+  "称呼你",
+  "叫你什么",
+  "让你叫什么",
 ];
 
 export function matchesHistoryReference(text: string): boolean {

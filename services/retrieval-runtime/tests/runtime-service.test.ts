@@ -738,6 +738,79 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block?.memory_summary).toContain("偏好与任务状态");
   });
 
+  it("uses current context before static importance when selecting read model candidates", async () => {
+    const oldPreferences: CandidateMemory[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `old-static-pref-${index}`,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: null,
+      task_id: null,
+      memory_type: "fact_preference",
+      scope: "user",
+      summary: `用户纠正后的长期偏好：旧偏好 ${index}`,
+      details: null,
+      source: { turn_id: `old-static-${index}` },
+      importance: 5,
+      confidence: 0.96,
+      status: "active",
+      updated_at: `2026-04-20T10:${String(index).padStart(2, "0")}:00.000Z`,
+      last_confirmed_at: null,
+      summary_embedding: [1, 0, 0],
+      embedding_status: "ok",
+    }));
+    const contextPreference: CandidateMemory = {
+      id: "assistant-name-context-pref",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: null,
+      task_id: null,
+      memory_type: "fact_preference",
+      scope: "user",
+      summary: "用户希望助手以后叫基维斯",
+      details: null,
+      source: { turn_id: "name-context" },
+      importance: 4,
+      confidence: 0.98,
+      status: "active",
+      updated_at: "2026-04-24T07:11:51.928Z",
+      last_confirmed_at: null,
+      embedding_status: "pending",
+    };
+    const { service } = createRuntime({
+      records: [...oldPreferences, contextPreference],
+      embeddingsClient: new StubEmbeddingsClient([0, 1, 0]),
+      intentAnalyzer: new StubIntentAnalyzer({
+        needs_memory: false,
+        memory_types: ["fact_preference", "task_state", "episodic"],
+        urgency: "optional",
+        confidence: 0.98,
+        reason: "用户在询问当前助手身份。",
+        suggested_scopes: ["session"],
+      }),
+      config: {
+        QUERY_CANDIDATE_LIMIT: 5,
+        RECALL_LLM_CANDIDATE_LIMIT: 5,
+        PACKET_RECORD_LIMIT: 5,
+        INJECTION_RECORD_LIMIT: 2,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "你是谁？",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.trigger).toBe(true);
+    expect(response.memory_packet?.records.map((record) => record.id)).toContain("assistant-name-context-pref");
+    expect(response.memory_packet?.records[0]?.id).toBe("assistant-name-context-pref");
+    expect(response.injection_block?.memory_records.some((record) => record.id === "assistant-name-context-pref")).toBe(true);
+  });
+
   it("records memory intent plan when intent analyzer is configured", async () => {
     const { service, repository } = createRuntime({
       intentAnalyzer: new StubIntentAnalyzer({
