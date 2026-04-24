@@ -515,6 +515,11 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       workspace_id: selectedWorkspaceId ?? undefined,
       locale: options.uiLocale
     });
+    const sessions = await client.listSessions();
+    dispatch({
+      type: "session_list_loaded",
+      items: sessions.items
+    });
     router.push(toAgentRoute(created.session_id));
   }
 
