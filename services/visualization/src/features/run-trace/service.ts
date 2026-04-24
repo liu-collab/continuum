@@ -415,17 +415,43 @@ function toDependencyStatus(dependencies: RuntimeDependencyRecord[]) {
   }));
 }
 
+function hasRunRecords(data: RuntimeObserveRunsSnapshot) {
+  return (
+    data.turns.length > 0 ||
+    data.triggerRuns.length > 0 ||
+    data.recallRuns.length > 0 ||
+    data.injectionRuns.length > 0 ||
+    data.memoryPlanRuns.length > 0 ||
+    data.writeBackRuns.length > 0
+  );
+}
+
 export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceResponse> {
-  const result = await fetchRuntimeRuns(toRunTraceQuery(filters));
+  let result = await fetchRuntimeRuns(toRunTraceQuery(filters));
+  let selectionFilters = filters;
+
+  if (filters.turnId && !filters.traceId && !hasRunRecords(result.data)) {
+    const fallbackFilters = {
+      ...filters,
+      turnId: undefined,
+      traceId: filters.turnId
+    };
+    const fallbackResult = await fetchRuntimeRuns(toRunTraceQuery(fallbackFilters));
+    if (hasRunRecords(fallbackResult.data)) {
+      result = fallbackResult;
+      selectionFilters = fallbackFilters;
+    }
+  }
+
   const grouped = groupByTrace(result.data).sort((left, right) =>
     (right.turn.createdAt ?? "").localeCompare(left.turn.createdAt ?? "")
   );
 
   const selected =
-    filters.turnId
-      ? grouped.find((item) => item.turn.turnId === filters.turnId) ?? null
-      : filters.traceId
-        ? grouped.find((item) => item.turn.traceId === filters.traceId) ?? null
+    selectionFilters.turnId
+      ? grouped.find((item) => item.turn.turnId === selectionFilters.turnId) ?? null
+      : selectionFilters.traceId
+        ? grouped.find((item) => item.turn.traceId === selectionFilters.traceId) ?? null
         : grouped[0] ?? null;
 
   return {

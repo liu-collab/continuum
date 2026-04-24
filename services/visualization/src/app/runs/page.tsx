@@ -1,5 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
+import React from "react";
 
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
@@ -83,7 +84,7 @@ export default async function RunsPage({
               response.items.map((item) => (
                 <Link
                   key={item.traceId}
-                  href={`/runs?turn_id=${encodeURIComponent(item.turnId)}` as Route}
+                  href={`/runs?trace_id=${encodeURIComponent(item.traceId)}` as Route}
                   className="block rounded-lg border bg-surface p-3 transition hover:border-border-strong"
                 >
                   <div className="flex items-start justify-between gap-2">

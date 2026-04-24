@@ -1,9 +1,46 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildNarrative, buildPhaseNarratives, describeRunTraceEmptyState } from "@/features/run-trace/service";
+const { fetchRuntimeRunsMock } = vi.hoisted(() => ({
+  fetchRuntimeRunsMock: vi.fn<() => Promise<any>>()
+}));
+
+vi.mock("@/lib/server/runtime-observe-client", () => ({
+  fetchRuntimeRuns: fetchRuntimeRunsMock
+}));
+
+import { buildNarrative, buildPhaseNarratives, describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
 import { RunTraceResponse } from "@/lib/contracts";
 
+const healthyStatus = {
+  name: "runtime_api",
+  label: "Runtime observe API",
+  kind: "dependency" as const,
+  status: "healthy" as const,
+  checkedAt: new Date().toISOString(),
+  lastCheckedAt: new Date().toISOString(),
+  lastOkAt: new Date().toISOString(),
+  lastError: null,
+  responseTimeMs: 20,
+  detail: null,
+  activeConnections: null,
+  connectionLimit: null
+};
+
+const emptyRuntimeRuns = {
+  turns: [],
+  triggerRuns: [],
+  recallRuns: [],
+  injectionRuns: [],
+  memoryPlanRuns: [],
+  writeBackRuns: [],
+  dependencyStatus: []
+};
+
 describe("run trace narrative", () => {
+  beforeEach(() => {
+    fetchRuntimeRunsMock.mockReset();
+  });
+
   const baseDetail = {
     turn: {
       traceId: "trace-1",
@@ -377,6 +414,50 @@ describe("run trace narrative", () => {
     expect(planNarratives.some((item) => item.summary.includes("memory_intent_plan"))).toBe(true);
     expect(planNarratives.some((item) => item.summary.includes("memory_recommendation_plan"))).toBe(true);
     expect(planNarratives.some((item) => item.details.some((detail) => detail.includes("memory_evolution_plan")))).toBe(true);
+  });
+
+  it("falls back to trace_id when a legacy turn_id query contains a trace id", async () => {
+    const traceId = "a048c6c0-900a-443e-9d34-d8db2981c2bf";
+    fetchRuntimeRunsMock
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: emptyRuntimeRuns
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          memoryPlanRuns: [
+            {
+              traceId,
+              phase: "before_response",
+              planKind: "memory_intent_plan",
+              inputSummary: "input=继续",
+              outputSummary: "needs_memory=true",
+              promptVersion: "memory-intent-plan-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "planned",
+              durationMs: 3,
+              createdAt: "2026-04-22T00:00:00Z"
+            }
+          ]
+        }
+      });
+
+    const response = await getRunTrace({
+      turnId: traceId,
+      sessionId: undefined,
+      traceId: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(1, `turn_id=${traceId}&page=1&page_size=20`);
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(2, `trace_id=${traceId}&page=1&page_size=20`);
+    expect(response.selectedTurn?.turn.traceId).toBe(traceId);
+    expect(response.selectedTurn?.narrative.outcomeCode).toBe("plan_only");
   });
 });
 
