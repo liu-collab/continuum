@@ -173,6 +173,7 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       "全局记忆",
       "直接查看平台级偏好和长期事实，不受 session_id 限制。",
       {
+        workspaceId: filters.workspaceId,
         memoryViewMode: "workspace_plus_global",
         scope: "user"
       }

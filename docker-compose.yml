@@ -50,6 +50,9 @@ services:
     build:
       context: ./services/visualization
     environment:
+      STORAGE_READ_MODEL_DSN: postgres://postgres:postgres@postgres:5432/agent_memory
+      STORAGE_READ_MODEL_SCHEMA: storage_shared_v1
+      STORAGE_READ_MODEL_TABLE: memory_read_model_v1
       STORAGE_API_BASE_URL: http://storage:3001
       RUNTIME_API_BASE_URL: http://retrieval-runtime:3002
     depends_on:

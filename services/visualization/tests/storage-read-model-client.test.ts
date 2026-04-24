@@ -103,6 +103,55 @@ describe("storage read model catalog view", () => {
     expect(result.total).toBe(1);
   });
 
+  it("does not warn about missing workspace_id for the global memory view", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] });
+
+    const result = await queryCatalogView({
+      workspaceId: undefined,
+      taskId: undefined,
+      sessionId: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: "user",
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.status.status).toBe("healthy");
+    expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not warn about missing workspace_id for bare /memories", async () => {
+    queryMock
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }] });
+
+    const result = await queryCatalogView({
+      workspaceId: undefined,
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.status.status).toBe("healthy");
+    expect(queryMock).toHaveBeenCalledTimes(2);
+  });
+
   it("workspace_plus_global with scope=workspace does not query the global branch", async () => {
     const workspaceRow = {
       id: "memory-2",

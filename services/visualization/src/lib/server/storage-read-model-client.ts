@@ -268,6 +268,17 @@ function mapSource(source: Record<string, unknown> | null) {
   };
 }
 
+function isImplicitGlobalCatalogView(filters: MemoryCatalogFilters) {
+  return (
+    !filters.workspaceId
+    && !filters.taskId
+    && !filters.sessionId
+    && !filters.sourceRef
+    && !filters.scope
+    && filters.memoryViewMode === "workspace_plus_global"
+  );
+}
+
 export async function queryMemoryReadModel(
   filters: MemoryCatalogFilters
 ): Promise<ReadModelQueryResult> {
@@ -354,7 +365,11 @@ export async function queryCatalogView(
     };
   }
 
-  if (!filters.workspaceId) {
+  const globalOnlyView =
+    filters.memoryViewMode === "workspace_plus_global"
+    && (filters.scope === "user" || isImplicitGlobalCatalogView(filters));
+
+  if (!filters.workspaceId && !globalOnlyView) {
     warnings.push(
       "当前缺少 workspace_id，无法正确解析工作区、任务和会话级别的记录。"
     );

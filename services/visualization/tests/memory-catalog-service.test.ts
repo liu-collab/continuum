@@ -382,8 +382,35 @@ describe("memory catalog service", () => {
       pageSize: 20
     });
 
-    expect(views.some((view) => view.label === "全局记忆" && view.href.includes("scope=user"))).toBe(true);
+    const globalView = views.find((view) => view.label === "全局记忆");
+    expect(globalView?.href).toContain("workspace_id=ws-1");
+    expect(globalView?.href).toContain("scope=user");
     expect(views.some((view) => view.label === "去掉会话限制")).toBe(true);
+  });
+
+  it("keeps workspace quick views after opening global memory from a workspace page", () => {
+    const views = buildMemoryCatalogQuickViews({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: "user",
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(views.map((view) => view.label)).toEqual([
+      "全局记忆",
+      "待确认队列",
+      "当前工作区 + 全局",
+      "仅当前工作区"
+    ]);
+    expect(views.find((view) => view.label === "全局记忆")?.active).toBe(true);
   });
 
   it("explains why session_id can hide global memory", () => {
