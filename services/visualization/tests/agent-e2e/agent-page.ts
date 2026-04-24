@@ -22,11 +22,11 @@ export class AgentPage {
   }
 
   async expectConnected() {
-    await expect(this.connectionState()).toHaveText(/open|connecting|reconnecting|在线|连接中|重连中|online/);
+    await expect(this.connectionState()).toHaveAttribute("data-state", /open|connecting|reconnecting|在线|连接中|重连中|online/);
   }
 
   async expectReadyToSend() {
-    await expect(this.connectionState()).toHaveText(/open|在线|online/);
+    await expect(this.connectionState()).toHaveAttribute("data-state", /open|在线|online/);
     await expect(this.page.getByTestId("agent-input")).toBeEnabled();
     await expect(this.page.getByTestId("send-message")).toBeDisabled();
   }
@@ -37,8 +37,8 @@ export class AgentPage {
     while (Date.now() < deadline) {
       const connection = this.page.getByTestId("agent-connection-state");
       if (await connection.count()) {
-        const text = (await connection.first().textContent()) ?? "";
-        if (/open|connecting|reconnecting|在线|连接中|重连中|online/.test(text)) {
+        const state = (await connection.first().getAttribute("data-state")) ?? "";
+        if (/open|connecting|reconnecting|在线|连接中|重连中|online/.test(state)) {
           return;
         }
       }
@@ -136,7 +136,7 @@ export class AgentPage {
   }
 
   async expectRuntimeDependencyState(text: RegExp | string) {
-    await expect(this.page.getByTestId("agent-runtime-badge")).toContainText(text);
+    await expect(this.page.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", text);
   }
 
   async createNewSession() {
@@ -208,7 +208,7 @@ export class AgentPage {
       await this.expectSessionSelected(title);
     }
     await expect(this.page.getByTestId("agent-input")).toBeVisible();
-    await expect(this.connectionState()).toHaveText(/open|在线|online/);
+    await expect(this.connectionState()).toHaveAttribute("data-state", /open|在线|online/);
     await expect(this.page.getByTestId("agent-input")).toBeEnabled();
   }
 

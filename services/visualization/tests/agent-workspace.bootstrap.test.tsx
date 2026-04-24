@@ -262,9 +262,9 @@ describe("AgentWorkspace bootstrap states", () => {
 
     expect(screen.getByText("openai · deepseek-chat")).toBeInTheDocument();
     expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · deepseek-chat");
-    expect(screen.getByTestId("agent-provider-badge")).toHaveTextContent("misconfigured");
-    expect(screen.getByTestId("agent-embedding-badge")).toHaveTextContent("not_configured");
-    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveTextContent("unknown");
+    expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
+    expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
+    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
     expect(screen.queryByText("记忆面板")).not.toBeInTheDocument();
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();

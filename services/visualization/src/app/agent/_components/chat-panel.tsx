@@ -174,7 +174,6 @@ export function ChatPanel({
             <TopStatusBadge
               testId="agent-connection-badge"
               icon={<Bot className="h-3.5 w-3.5" />}
-              label="agent"
               tone={resolveConnectionTone(connection)}
               value={formatConnection(connection)}
               stateTestId="agent-connection-state"
@@ -182,28 +181,24 @@ export function ChatPanel({
             <TopStatusBadge
               testId="agent-runtime-badge"
               icon={<Orbit className="h-3.5 w-3.5" />}
-              label="runtime"
               tone={resolveStatusTone(dependencyStatus?.runtime.status)}
               value={String(dependencyStatus?.runtime.status ?? "unknown")}
             />
             <TopStatusBadge
               testId="agent-provider-badge"
               icon={<Sparkles className="h-3.5 w-3.5" />}
-              label="provider"
               tone={resolveStatusTone(dependencyStatus?.provider.status)}
               value={dependencyStatus?.provider.status ?? "unknown"}
             />
             <TopStatusBadge
               testId="agent-embedding-badge"
               icon={<Database className="h-3.5 w-3.5" />}
-              label="embedding"
               tone={resolveStatusTone(dependencyStatus?.runtime.embeddings?.status)}
               value={String(dependencyStatus?.runtime.embeddings?.status ?? "unknown")}
             />
             <TopStatusBadge
               testId="agent-memory-llm-badge"
               icon={<BrainCircuit className="h-3.5 w-3.5" />}
-              label="memory llm"
               tone={resolveStatusTone(dependencyStatus?.runtime.memory_llm?.status)}
               value={String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown")}
             />
@@ -414,14 +409,12 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
 
 function TopStatusBadge({
   icon,
-  label,
   value,
   tone,
   testId,
   stateTestId
 }: {
   icon: React.ReactNode;
-  label: string;
   value: string;
   tone: "neutral" | "success" | "warning" | "danger";
   testId: string;
@@ -429,10 +422,13 @@ function TopStatusBadge({
 }) {
   return (
     <StatusBadge tone={tone}>
-      <span data-testid={testId} className="inline-flex items-center gap-1.5">
+      <span
+        data-testid={testId}
+        data-state={value}
+        className="inline-flex h-5 w-5 items-center justify-center"
+      >
         {icon}
-        <span className="text-[11px] uppercase tracking-[0.1em] opacity-70">{label}</span>
-        <span data-testid={stateTestId}>{value}</span>
+        {stateTestId ? <span data-testid={stateTestId} data-state={value} className="sr-only" /> : null}
       </span>
     </StatusBadge>
   );

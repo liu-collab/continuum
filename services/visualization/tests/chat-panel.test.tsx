@@ -451,11 +451,11 @@ describe("ChatPanel", () => {
       </AgentI18nProvider>
     );
 
-    expect(screen.getByTestId("agent-connection-badge")).toHaveTextContent("agent");
-    expect(screen.getByTestId("agent-connection-state")).toHaveTextContent("在线");
-    expect(screen.getByTestId("agent-runtime-badge")).toHaveTextContent("healthy");
-    expect(screen.getByTestId("agent-provider-badge")).toHaveTextContent("configured");
-    expect(screen.getByTestId("agent-embedding-badge")).toHaveTextContent("not_configured");
-    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveTextContent("misconfigured");
+    expect(screen.getByTestId("agent-connection-badge")).toHaveAttribute("data-state", "在线");
+    expect(screen.getByTestId("agent-connection-state")).toHaveAttribute("data-state", "在线");
+    expect(screen.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", "healthy");
+    expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "configured");
+    expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
+    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "misconfigured");
   });
 });
