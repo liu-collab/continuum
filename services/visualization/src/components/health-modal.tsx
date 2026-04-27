@@ -11,17 +11,25 @@ type HealthModalButtonProps =
   | { label?: string; health: ServiceHealthResponse; sources?: never }
   | { label?: string; health?: never; sources: SourceStatus[] };
 
+type HealthTone = "neutral" | "success" | "warning" | "danger";
+
 function healthTone(health: ServiceHealthResponse | undefined, sources: SourceStatus[] | undefined) {
   if (health) {
     if (health.readiness.status === "ready") return "success";
     return "warning";
   }
-  if (sources?.some((item) => item.status === "unavailable")) return "danger";
+  if (!sources || sources.length === 0) {
+    return "neutral";
+  }
+  if (sources?.some((item) => ["unavailable", "timeout", "misconfigured"].includes(item.status))) {
+    return "danger";
+  }
   if (sources?.some((item) => item.status === "partial")) return "warning";
   return "success";
 }
 
-const toneDot: Record<"success" | "warning" | "danger", string> = {
+const toneDot: Record<HealthTone, string> = {
+  neutral: "bg-zinc-400",
   success: "bg-emerald-500",
   warning: "bg-amber-500",
   danger: "bg-rose-500"

@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "../_i18n/provider";
 import { useAgentWorkspace } from "../_hooks/use-agent-workspace";
@@ -13,6 +14,7 @@ import { ChatPanel } from "./chat-panel";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FilePreview } from "./file-preview";
 import { FileTree } from "./file-tree";
+import { MemoryPanel } from "./memory-panel";
 import { PromptInspector } from "./prompt-inspector";
 import { SessionList } from "./session-list";
 import { SettingsModal } from "./settings-modal";
@@ -21,7 +23,7 @@ type AgentWorkspaceProps = {
   sessionId?: string;
 };
 
-const PANEL_HEIGHT_CLASS = "h-full min-h-0";
+const PANEL_HEIGHT_CLASS = "min-h-0 xl:h-full";
 
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const { locale, t, formatAgentError } = useAgentI18n();
@@ -73,9 +75,17 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="grid h-full min-h-0 flex-1 overflow-hidden xl:grid-cols-[20rem_minmax(0,1fr)] [grid-template-rows:minmax(0,1fr)] gap-6">
-          <section className={`flex ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
+      <div className="flex min-h-0 flex-col overflow-visible xl:h-full xl:overflow-hidden">
+        <div
+          data-testid="agent-workspace-layout"
+          className={cn(
+            "grid min-h-0 flex-1 gap-4 xl:h-full xl:grid-cols-[20rem_minmax(0,1fr)_21rem] xl:grid-rows-[minmax(0,1fr)] xl:gap-6 xl:overflow-hidden"
+          )}
+        >
+          <section
+            data-testid="agent-sidebar-column"
+            className={`order-2 flex ${PANEL_HEIGHT_CLASS} max-h-[32rem] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm xl:order-1 xl:max-h-none`}
+          >
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
               <button
@@ -116,10 +126,10 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                   onPickWorkspace={() => workspace.pickWorkspace().then(() => undefined)}
                   onClearWorkspace={() => workspace.selectWorkspace(null)}
                   onOpenDirectory={(nextPath) => {
-                    void workspace.refreshFileTree(nextPath);
+                    return workspace.refreshFileTree(nextPath);
                   }}
                   onOpenFile={(filePath) => {
-                    void workspace.openFile(filePath);
+                    return workspace.openFile(filePath);
                   }}
                 />
               </div>
@@ -132,7 +142,10 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             </div>
           </section>
 
-          <div className="flex min-h-0 flex-col gap-4">
+          <div
+            data-testid="agent-chat-column"
+            className="order-1 flex min-h-[calc(100dvh-9rem)] flex-col gap-4 xl:order-2 xl:min-h-0"
+          >
             {workspace.state.replayGapDetected ? (
               <ErrorState
                 testId="agent-replay-gap"
@@ -163,6 +176,13 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               onOpenSettings={() => setSettingsOpen(true)}
             />
           </div>
+
+          <aside
+            data-testid="agent-memory-column"
+            className={`order-3 flex ${PANEL_HEIGHT_CLASS} max-h-[32rem] flex-col xl:max-h-none`}
+          >
+            <MemoryPanel activeTurn={workspace.activeTurn} />
+          </aside>
         </div>
       </div>
 

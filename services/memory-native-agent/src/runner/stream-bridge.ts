@@ -6,7 +6,7 @@ export interface StreamBridgeSink {
   emitToolCallStart(turnId: string, call: ToolCall): void;
   emitToolCallResult(callId: string, result: ToolResult): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
-  emitError(scope: "turn" | "session", error: Error & { code?: string }): void;
+  emitError(scope: "turn" | "session", error: Error & { code?: string }, turnId?: string): void;
 }
 
 export interface StreamBridgeOptions {

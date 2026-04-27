@@ -94,7 +94,7 @@ export interface RunnerIO {
   emitEvaluation?(turnId: string, event: EvaluationEvent): void;
   emitTrace?(turnId: string, spans: RuntimeSpan[]): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
-  emitError(scope: "turn" | "session", err: Error & { code?: string }): void;
+  emitError(scope: "turn" | "session", err: Error & { code?: string }, turnId?: string): void;
   recordPrepareContextLatency?(phase: Phase, latencyMs: number): void;
   recordProviderCall?(providerKey: string): void;
   recordProviderFirstTokenLatency?(providerKey: string, latencyMs: number): void;
@@ -521,7 +521,7 @@ export class AgentRunner {
       const providerError = error instanceof Error ? error : new Error(String(error));
       this.deps.io.emitError("turn", Object.assign(providerError, {
         code: (providerError as Error & { code?: string }).code ?? "provider_stream_error",
-      }));
+      }), turnId);
       finishReason = abortController.signal.aborted ? "abort" : "error";
       this.deps.io.emitTurnEnd(turnId, finishReason);
       terminalEventEmitted = true;
@@ -596,9 +596,9 @@ export class AgentRunner {
         memory_mode: this.deps.config.memory.mode,
       }).catch((error) => {
         finalizeSpan.finish("error");
-        this.deps.io.emitError("session", Object.assign(error instanceof Error ? error : new Error(String(error)), {
-          code: (error as Error & { code?: string }).code ?? "memory_unavailable",
-        }));
+        this.deps.io.emitError("turn", Object.assign(error instanceof Error ? error : new Error(String(error)), {
+          code: "memory_writeback_incomplete",
+        }), turnId);
       }).then((response) => {
         if (!response) {
           return;

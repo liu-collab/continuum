@@ -54,6 +54,32 @@ export function formatMetricValue(value: number | null, unit: DashboardMetric["u
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+export function dashboardSeverityLabel(value: string) {
+  switch (value) {
+    case "danger":
+      return "异常";
+    case "warning":
+      return "关注";
+    case "info":
+      return "提示";
+    case "normal":
+      return "正常";
+    case "healthy":
+      return "健康";
+    case "unknown":
+      return "未知";
+    default:
+      return value;
+  }
+}
+
+export function dashboardSeverityTone(value: string) {
+  if (value === "danger") return "danger";
+  if (value === "warning") return "warning";
+  if (value === "normal" || value === "healthy") return "success";
+  return "neutral";
+}
+
 export function memoryTypeLabel(value: MemoryType) {
   switch (value) {
     case "fact_preference":
@@ -182,6 +208,21 @@ export function sourceStatusTone(status: SourceHealthStatus) {
     case "timeout":
     case "unavailable":
       return "danger";
+  }
+}
+
+export function sourceStatusLabel(status: SourceHealthStatus) {
+  switch (status) {
+    case "healthy":
+      return "健康";
+    case "partial":
+      return "部分可用";
+    case "misconfigured":
+      return "配置异常";
+    case "timeout":
+      return "超时";
+    case "unavailable":
+      return "不可用";
   }
 }
 

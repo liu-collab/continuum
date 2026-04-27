@@ -19,9 +19,11 @@ import type {
   ToolInvocation,
   ToolInvocationInput,
   Turn,
+  ResidentMemoryState,
 } from "./types.js";
 
 const DEFAULT_DB_FILENAME = "sessions.db";
+const SESSION_CURSOR_PREFIX = "v1:";
 
 type SqliteRow = Record<string, unknown>;
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -81,8 +83,14 @@ export class SqliteSessionStore implements SessionStore {
     }
 
     if (filter.cursor) {
-      where.push("s.last_active_at < ?");
-      params.push(filter.cursor);
+      const cursor = decodeSessionCursor(filter.cursor);
+      if (cursor.id) {
+        where.push("(s.last_active_at < ? OR (s.last_active_at = ? AND s.id < ?))");
+        params.push(cursor.lastActiveAt, cursor.lastActiveAt, cursor.id);
+      } else {
+        where.push("s.last_active_at < ?");
+        params.push(cursor.lastActiveAt);
+      }
     }
 
     const rows = this.db
@@ -99,17 +107,17 @@ export class SqliteSessionStore implements SessionStore {
             ) AS latest_turn_id
           FROM sessions s
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-          ORDER BY s.last_active_at DESC
+          ORDER BY s.last_active_at DESC, s.id DESC
           LIMIT ?
         `,
       )
       .all(...params, limit + 1) as SqliteRow[];
 
-    const next = rows.length > limit ? rows[limit] : undefined;
     const items = rows.slice(0, limit).map(mapSessionSummary);
+    const lastItem = rows.length > limit ? items.at(-1) : undefined;
     return {
       items,
-      next_cursor: typeof next?.last_active_at === "string" ? next.last_active_at : null,
+      next_cursor: lastItem ? encodeSessionCursor(lastItem) : null,
     };
   }
 
@@ -301,6 +309,55 @@ export class SqliteSessionStore implements SessionStore {
       });
   }
 
+  getResidentMemoryState(session_id: string): ResidentMemoryState | null {
+    const row = this.db.prepare(`SELECT * FROM resident_memory_states WHERE session_id = ?`).get(session_id) as
+      | SqliteRow
+      | undefined;
+    if (!row) {
+      return null;
+    }
+
+    return {
+      resident_memory_json: readNullableString(row.resident_memory_json),
+      resident_memory_dirty: readBoolean(row.resident_memory_dirty),
+      pending_resident_refresh_job_ids: readStringArray(row.pending_resident_refresh_job_ids_json),
+    };
+  }
+
+  saveResidentMemoryState(session_id: string, state: ResidentMemoryState): void {
+    this.db
+      .prepare(
+        `
+          INSERT INTO resident_memory_states (
+            session_id,
+            resident_memory_json,
+            resident_memory_dirty,
+            pending_resident_refresh_job_ids_json,
+            updated_at
+          )
+          VALUES (
+            @session_id,
+            @resident_memory_json,
+            @resident_memory_dirty,
+            @pending_resident_refresh_job_ids_json,
+            @updated_at
+          )
+          ON CONFLICT(session_id) DO UPDATE SET
+            resident_memory_json = excluded.resident_memory_json,
+            resident_memory_dirty = excluded.resident_memory_dirty,
+            pending_resident_refresh_job_ids_json = excluded.pending_resident_refresh_job_ids_json,
+            updated_at = excluded.updated_at
+        `,
+      )
+      .run({
+        session_id,
+        resident_memory_json: state.resident_memory_json,
+        resident_memory_dirty: state.resident_memory_dirty ? 1 : 0,
+        pending_resident_refresh_job_ids_json: JSON.stringify(state.pending_resident_refresh_job_ids),
+        updated_at: new Date().toISOString(),
+      });
+  }
+
   savePlanRevision(input: {
     id: string;
     session_id: string;
@@ -448,6 +505,13 @@ export class SqliteSessionStore implements SessionStore {
     this.ensureColumn("dispatched_messages", "trace_spans_json", "TEXT");
     this.ensureColumn("dispatched_messages", "evaluation_json", "TEXT");
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS resident_memory_states (
+        session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+        resident_memory_json TEXT,
+        resident_memory_dirty INTEGER NOT NULL DEFAULT 0,
+        pending_resident_refresh_job_ids_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS plans (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -596,10 +660,60 @@ function readNullableNumber(value: unknown): number | null {
   return readNumber(value);
 }
 
+function readBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  return Boolean(value);
+}
+
+function readStringArray(value: unknown): string[] {
+  const raw = readString(value);
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 function truncate(value: string | null, maxLength: number): string | null {
   if (value === null) {
     return null;
   }
 
   return value.length <= maxLength ? value : value.slice(0, maxLength);
+}
+
+function encodeSessionCursor(session: Pick<SessionSummary, "last_active_at" | "id">): string {
+  return `${SESSION_CURSOR_PREFIX}${Buffer.from(JSON.stringify({
+    last_active_at: session.last_active_at,
+    id: session.id,
+  })).toString("base64url")}`;
+}
+
+function decodeSessionCursor(cursor: string): { lastActiveAt: string; id?: string } {
+  if (!cursor.startsWith(SESSION_CURSOR_PREFIX)) {
+    return { lastActiveAt: cursor };
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(cursor.slice(SESSION_CURSOR_PREFIX.length), "base64url").toString("utf8")) as {
+      last_active_at?: unknown;
+      id?: unknown;
+    };
+    if (typeof payload.last_active_at === "string") {
+      return {
+        lastActiveAt: payload.last_active_at,
+        id: typeof payload.id === "string" ? payload.id : undefined,
+      };
+    }
+  } catch {
+    // Fall through to legacy timestamp cursor handling.
+  }
+
+  return { lastActiveAt: cursor };
 }

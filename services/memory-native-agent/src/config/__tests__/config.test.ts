@@ -40,6 +40,7 @@ describe("config loader", () => {
     });
 
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3002");
+    expect(config.runtime.finalizeTimeoutMs).toBe(10_000);
     expect(config.provider.kind).toBe("demo");
     expect(config.provider.model).toBe("continuum-demo");
     expect(config.provider.effort).toBeNull();

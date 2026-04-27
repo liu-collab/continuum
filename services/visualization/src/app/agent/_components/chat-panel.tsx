@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
+import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "../_i18n/provider";
 import type {
@@ -63,6 +64,12 @@ export function ChatPanel({
   const { formatConnection, t } = useAgentI18n();
   const isBusy = turns.some((turn) => turn.status === "streaming");
   const latestTurn = turns.at(-1) ?? null;
+  const canSend = connection === "open" && !isBusy;
+  const connectionLabel = formatConnection(connection);
+  const runtimeStatus = String(dependencyStatus?.runtime.status ?? "unknown");
+  const providerStatus = dependencyStatus?.provider.status ?? "unknown";
+  const embeddingStatus = String(dependencyStatus?.runtime.embeddings?.status ?? "unknown");
+  const memoryLlmStatus = String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown");
   const hiddenTurnCount = Math.max(turns.length - visibleTurnCount, 0);
   const visibleTurns = useMemo(
     () => turns.slice(Math.max(turns.length - visibleTurnCount, 0)),
@@ -142,7 +149,7 @@ export function ChatPanel({
 
   function submitDraft() {
     const nextText = draft.trim();
-    if (!nextText || connection !== "open") {
+    if (!nextText || !canSend) {
       return;
     }
 
@@ -175,32 +182,37 @@ export function ChatPanel({
               testId="agent-connection-badge"
               icon={<Bot className="h-3.5 w-3.5" />}
               tone={resolveConnectionTone(connection)}
-              value={formatConnection(connection)}
+              label={t("chatPanel.connectionLabel")}
+              value={connectionLabel}
               stateTestId="agent-connection-state"
             />
             <TopStatusBadge
               testId="agent-runtime-badge"
               icon={<Orbit className="h-3.5 w-3.5" />}
-              tone={resolveStatusTone(dependencyStatus?.runtime.status)}
-              value={String(dependencyStatus?.runtime.status ?? "unknown")}
+              tone={resolveStatusTone(runtimeStatus)}
+              label={t("workspace.runtimeLabel")}
+              value={runtimeStatus}
             />
             <TopStatusBadge
               testId="agent-provider-badge"
               icon={<Sparkles className="h-3.5 w-3.5" />}
-              tone={resolveStatusTone(dependencyStatus?.provider.status)}
-              value={dependencyStatus?.provider.status ?? "unknown"}
+              tone={resolveStatusTone(providerStatus)}
+              label={t("workspace.providerLabel")}
+              value={providerStatus}
             />
             <TopStatusBadge
               testId="agent-embedding-badge"
               icon={<Database className="h-3.5 w-3.5" />}
-              tone={resolveStatusTone(dependencyStatus?.runtime.embeddings?.status)}
-              value={String(dependencyStatus?.runtime.embeddings?.status ?? "unknown")}
+              tone={resolveStatusTone(embeddingStatus)}
+              label={t("workspace.embeddingLabel")}
+              value={embeddingStatus}
             />
             <TopStatusBadge
               testId="agent-memory-llm-badge"
               icon={<BrainCircuit className="h-3.5 w-3.5" />}
-              tone={resolveStatusTone(dependencyStatus?.runtime.memory_llm?.status)}
-              value={String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown")}
+              tone={resolveStatusTone(memoryLlmStatus)}
+              label={t("workspace.memoryLlmLabel")}
+              value={memoryLlmStatus}
             />
           </div>
         </div>
@@ -214,10 +226,11 @@ export function ChatPanel({
           <button
             type="button"
             onClick={() => onOpenSettings?.()}
-            className="btn-outline"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-surface text-foreground transition hover:bg-surface-muted"
+            aria-label={t("runtimeConfig.title")}
+            title={t("runtimeConfig.title")}
           >
             <Settings2 className="h-4 w-4" />
-            设置
           </button>
         </div>
       </div>
@@ -338,31 +351,34 @@ export function ChatPanel({
                 </div>
               ) : null}
             </div>
-            <div className="flex items-center justify-between gap-3 border-t pt-3">
-              <div className="text-xs text-muted-foreground">{t("chatPanel.placeholder")}</div>
+            <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs text-muted-foreground">{t("chatPanel.inputHint")}</div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={onAbort}
                   disabled={!isBusy}
                   data-testid="abort-turn"
-                  className="btn-outline"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-surface text-foreground transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={t("chatPanel.abort")}
+                  title={t("chatPanel.abort")}
                 >
                   <Square className="h-3.5 w-3.5" />
-                  {t("chatPanel.abort")}
                 </button>
                 <button
                   type="submit"
-                  disabled={connection !== "open" || !draft.trim()}
+                  disabled={!canSend || !draft.trim()}
                   data-testid="send-message"
-                  className="btn-primary"
+                  className="inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={t("chatPanel.send")}
+                  title={t("chatPanel.send")}
                 >
                   {isBusy ? (
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <SendHorizontal className="h-3.5 w-3.5" />
                   )}
-                  {t("chatPanel.send")}
+                  <span className="hidden sm:inline">{t("chatPanel.send")}</span>
                 </button>
               </div>
             </div>
@@ -409,12 +425,14 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
 
 function TopStatusBadge({
   icon,
+  label,
   value,
   tone,
   testId,
   stateTestId
 }: {
   icon: React.ReactNode;
+  label: string;
   value: string;
   tone: "neutral" | "success" | "warning" | "danger";
   testId: string;
@@ -425,9 +443,18 @@ function TopStatusBadge({
       <span
         data-testid={testId}
         data-state={value}
-        className="inline-flex h-5 w-5 items-center justify-center"
+        title={`${label}: ${value}`}
+        aria-label={`${label}: ${value}`}
+        className={cn(
+          "inline-flex min-w-0 items-center gap-1.5",
+          tone === "neutral" && "text-muted-foreground",
+          tone === "success" && "text-emerald-700",
+          tone === "warning" && "text-amber-700",
+          tone === "danger" && "text-rose-700"
+        )}
       >
-        {icon}
+        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">{icon}</span>
+        <span className="max-w-[7rem] truncate">{value}</span>
         {stateTestId ? <span data-testid={stateTestId} data-state={value} className="sr-only" /> : null}
       </span>
     </StatusBadge>

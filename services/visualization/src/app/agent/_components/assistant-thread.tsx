@@ -149,10 +149,11 @@ function AssistantMessageBubble({
   message: MessageState;
   onOpenPrompt(turnId: string): void;
 }) {
-  const { formatFinishReasonLabel, formatPhaseLabel, t } = useAgentI18n();
+  const { formatAgentError, formatFinishReasonLabel, formatPhaseLabel, t } = useAgentI18n();
   const meta = readContinuumMeta(message);
   const turnId = meta?.turnId ?? message.id;
   const hasRenderableParts = message.content.length > 0;
+  const errorContents = meta?.errors.map((item) => formatAgentError(item.code, null)) ?? [];
 
   return (
     <div className="flex justify-start">
@@ -243,11 +244,11 @@ function AssistantMessageBubble({
           </div>
         ) : null}
 
-        {meta?.errors.length ? (
+        {errorContents.length ? (
           <div className="mt-4">
             <ErrorState
-              title={t("chatPanel.turnErrorTitle")}
-              description={meta.errors.map((item) => `${item.code}: ${item.message}`).join("；")}
+              title={errorContents.length === 1 ? errorContents[0]!.title : t("chatPanel.turnErrorTitle")}
+              description={errorContents.map((item) => item.description).join("；")}
             />
           </div>
         ) : null}
@@ -280,6 +281,7 @@ function ToolCallGroup({ children }: React.PropsWithChildren) {
 function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, unknown>) {
   const { t } = useAgentI18n();
   const artifact = readToolArtifact(props.artifact);
+  const errorOutput = artifact?.status === "error" ? artifact.outputPreview.trim() : "";
 
   return (
     <div
@@ -317,6 +319,14 @@ function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, u
         ) : null}
       </div>
       <div className="mt-2 text-xs leading-5 text-muted-foreground">{artifact?.argsPreview ?? props.argsText}</div>
+      {errorOutput ? (
+        <div
+          data-testid={`tool-call-output-${props.toolCallId}`}
+          className="mt-2 whitespace-pre-wrap break-words rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs leading-5 text-rose-800"
+        >
+          {errorOutput}
+        </div>
+      ) : null}
     </div>
   );
 }

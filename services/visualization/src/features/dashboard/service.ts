@@ -20,6 +20,37 @@ type TrendSource = {
   points: Array<number | null>;
 };
 
+type SeverityDirection = "higher_is_worse" | "lower_is_worse";
+
+function thresholdSeverity(
+  value: number | null,
+  warningAt: number | undefined,
+  dangerAt: number | undefined,
+  direction: SeverityDirection
+): DashboardMetric["severity"] {
+  if (value === null) {
+    return "unknown";
+  }
+
+  if (direction === "lower_is_worse") {
+    if (dangerAt !== undefined && value <= dangerAt) {
+      return "danger";
+    }
+    if (warningAt !== undefined && value <= warningAt) {
+      return "warning";
+    }
+    return "normal";
+  }
+
+  if (dangerAt !== undefined && value >= dangerAt) {
+    return "danger";
+  }
+  if (warningAt !== undefined && value >= warningAt) {
+    return "warning";
+  }
+  return "normal";
+}
+
 function metric(
   key: string,
   label: string,
@@ -28,19 +59,10 @@ function metric(
   source: DashboardMetric["source"],
   description: string,
   warningAt?: number,
-  dangerAt?: number
+  dangerAt?: number,
+  direction: SeverityDirection = "higher_is_worse"
 ): DashboardMetric {
-  let severity: DashboardMetric["severity"] = "unknown";
-
-  if (value !== null) {
-    severity = "normal";
-
-    if (dangerAt !== undefined && value >= dangerAt) {
-      severity = "danger";
-    } else if (warningAt !== undefined && value >= warningAt) {
-      severity = "warning";
-    }
-  }
+  const severity = thresholdSeverity(value, warningAt, dangerAt, direction);
 
   return {
     key,
@@ -90,20 +112,13 @@ function deltaFormatted(current: number | null, previous: number | null, unit: D
   return `${delta >= 0 ? "+" : ""}${Math.round(delta)}`;
 }
 
-function trendSeverity(current: number | null, warningAt?: number, dangerAt?: number): DashboardTrend["severity"] {
-  if (current === null) {
-    return "unknown";
-  }
-
-  if (dangerAt !== undefined && current >= dangerAt) {
-    return "danger";
-  }
-
-  if (warningAt !== undefined && current >= warningAt) {
-    return "warning";
-  }
-
-  return "normal";
+function trendSeverity(
+  current: number | null,
+  warningAt?: number,
+  dangerAt?: number,
+  direction: SeverityDirection = "higher_is_worse"
+): DashboardTrend["severity"] {
+  return thresholdSeverity(current, warningAt, dangerAt, direction);
 }
 
 function seriesFromPair(current: number | null, previous: number | null): TrendSource {
@@ -321,7 +336,8 @@ function buildTrend(
   values: TrendSource,
   window: string,
   warningAt?: number,
-  dangerAt?: number
+  dangerAt?: number,
+  direction: SeverityDirection = "higher_is_worse"
 ): DashboardTrend {
   const labels = buildPointLabels(window);
 
@@ -336,7 +352,7 @@ function buildTrend(
     currentFormatted: formatMetricValue(values.current, unit),
     previousFormatted: formatMetricValue(values.previous, unit),
     deltaFormatted: deltaFormatted(values.current, values.previous, unit),
-    severity: trendSeverity(values.current, warningAt, dangerAt),
+    severity: trendSeverity(values.current, warningAt, dangerAt, direction),
     points: labels.map((label, index) => ({
       label,
       value: values.points[index] ?? null
@@ -554,7 +570,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "runtime",
         "触发记忆检索的轮次占比。",
         0.7,
-        0.9
+        0.5,
+        "lower_is_worse"
       ),
       metric(
         "recall_hit_rate",
@@ -562,7 +579,10 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         runtimeCurrent.metrics?.recallHitRate ?? null,
         "percent",
         "runtime",
-        "已触发召回里，至少找到一条记录的占比。"
+        "已触发召回里，至少找到一条记录的占比。",
+        0.6,
+        0.4,
+        "lower_is_worse"
       ),
       metric(
         "empty_recall_rate",
@@ -580,7 +600,10 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         runtimeCurrent.metrics?.injectionRate ?? null,
         "percent",
         "runtime",
-        "真正把记忆块注入到提示词中的轮次占比。"
+        "真正把记忆块注入到提示词中的轮次占比。",
+        0.45,
+        0.25,
+        "lower_is_worse"
       ),
       metric(
         "trim_rate",
@@ -618,7 +641,10 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         runtimeCurrent.metrics?.writeBackSubmitRate ?? null,
         "percent",
         "runtime",
-        "产生并成功提交写回候选的轮次占比。"
+        "产生并成功提交写回候选的轮次占比。",
+        0.25,
+        0.1,
+        "lower_is_worse"
       ),
       metric(
         "runtime_outbox_pending_count",
@@ -792,7 +818,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "storage",
         "需要 verifier 的高影响提案里，通过二次复核的占比。",
         0.8,
-        0.95
+        0.6,
+        "lower_is_worse"
       ),
       metric(
         "governance_execution_success_rate",
@@ -803,7 +830,10 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         ),
         "percent",
         "storage",
-        "治理执行记录里，最终成功落盘的占比。"
+        "治理执行记录里，最终成功落盘的占比。",
+        0.8,
+        0.6,
+        "lower_is_worse"
       ),
       metric(
         "governance_soft_delete_rate",
@@ -915,7 +945,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         governanceTrend.verificationPassRate,
         window,
         0.8,
-        0.95
+        0.6,
+        "lower_is_worse"
       ),
       buildTrend(
         "governance_execution_success_rate",
@@ -926,7 +957,8 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         governanceTrend.executionSuccessRate,
         window,
         0.8,
-        0.95
+        0.6,
+        "lower_is_worse"
       ),
       buildTrend(
         "governance_retry_rate",
@@ -946,7 +978,10 @@ export async function getDashboard(window: string): Promise<DashboardResponse> {
         "storage",
         "percent",
         governanceTrend.recallHitRateAfterGovernance,
-        window
+        window,
+        0.5,
+        0.3,
+        "lower_is_worse"
       )
     ];
 

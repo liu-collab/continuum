@@ -14,6 +14,7 @@ const errorCodes = [
   "provider_rate_limited",
   "provider_timeout",
   "provider_stream_error",
+  "memory_writeback_incomplete",
   "tool_denied_path",
   "tool_denied_pattern",
   "tool_confirm_timeout",

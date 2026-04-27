@@ -135,4 +135,49 @@ describe("file tree", () => {
       resolvePick?.();
     });
   });
+
+  it("shows pending feedback while opening a directory", async () => {
+    const user = userEvent.setup();
+    let resolveOpen: ((value: void | PromiseLike<void>) => void) | undefined;
+    const onOpenDirectory = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOpen = resolve;
+        }),
+    );
+
+    renderFileTree({
+      entries: [
+        {
+          name: "docs",
+          type: "directory",
+        },
+      ],
+      onOpenDirectory,
+    });
+
+    await user.click(screen.getByRole("button", { name: "docs" }));
+
+    expect(onOpenDirectory).toHaveBeenCalledWith("docs");
+    expect(screen.getByTestId("file-tree-open-pending")).toHaveTextContent("正在读取文件树...");
+    expect(screen.getByRole("button", { name: "docs" })).toBeDisabled();
+
+    await act(async () => {
+      resolveOpen?.();
+    });
+  });
+
+  it("shows an inline error when opening a file fails", async () => {
+    const user = userEvent.setup();
+
+    renderFileTree({
+      onOpenFile: vi.fn(async () => {
+        throw new Error("failed");
+      }),
+    });
+
+    await user.click(screen.getByRole("button", { name: "README.md" }));
+
+    expect(screen.getByTestId("file-tree-open-error")).toHaveTextContent("文件打开失败，请稍后重试。");
+  });
 });

@@ -44,21 +44,47 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className={cn(sans.variable, mono.variable, "font-[var(--font-sans)] antialiased")}>
         <Providers>
-          <div className="flex h-screen flex-col overflow-hidden">
-            <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
-              <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
-                <Link href={"/" as Route} className="flex items-center gap-2">
-                  <BrandMark className="h-7 w-7 shrink-0" animated />
-                  <span className="text-sm font-semibold tracking-tight">Memory Observatory</span>
-                </Link>
-                <nav className="flex items-center gap-1">
+          <div className="flex h-screen overflow-hidden bg-background">
+            <aside className="hidden w-56 shrink-0 border-r bg-surface md:flex md:flex-col">
+              <Link href={"/" as Route} className="flex h-12 items-center gap-2 border-b px-3">
+                <BrandMark className="h-6 w-6 shrink-0" />
+                <span className="truncate text-sm font-semibold tracking-tight">Memory Observatory</span>
+              </Link>
+              <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+                {navigation.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+              <div className="border-t px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+                runtime / storage / agent
+              </div>
+            </aside>
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <header className="shrink-0 border-b bg-surface md:hidden">
+                <div className="flex h-12 items-center gap-2 px-3">
+                  <Link href={"/" as Route} className="flex min-w-0 items-center gap-2">
+                    <BrandMark className="h-6 w-6 shrink-0" />
+                    <span className="truncate text-sm font-semibold tracking-tight">Memory Observatory</span>
+                  </Link>
+                </div>
+                <nav className="flex gap-1 overflow-x-auto border-t px-3 py-1.5">
                   {navigation.map((item) => {
                     const Icon = item.icon;
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
-                        className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
                       >
                         <Icon className="h-3.5 w-3.5" />
                         {item.label}
@@ -66,11 +92,11 @@ export default function RootLayout({
                     );
                   })}
                 </nav>
-              </div>
-            </header>
-            <main className="min-h-0 w-full flex-1 overflow-auto p-6">
-              {children}
-            </main>
+              </header>
+              <main className="min-h-0 w-full flex-1 overflow-auto p-4 lg:p-5">
+                {children}
+              </main>
+            </div>
           </div>
         </Providers>
       </body>

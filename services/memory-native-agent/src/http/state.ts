@@ -247,10 +247,14 @@ export function pushSessionEvent(session: SessionState, payload: Record<string, 
   }
 
   for (const socket of session.sockets) {
-    socket.send(JSON.stringify({
-      event_id: event.id,
-      ...event.payload,
-    }));
+    try {
+      socket.send(JSON.stringify({
+        event_id: event.id,
+        ...event.payload,
+      }));
+    } catch {
+      session.sockets.delete(socket);
+    }
   }
 }
 
@@ -486,7 +490,7 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         finish_reason: finishReason,
       });
     },
-    emitError(scope, err) {
+    emitError(scope, err, turnId) {
       incrementCounter(state.metrics.runtimeErrorsTotal, err.code ?? "unknown");
       if (isProviderErrorCode(err.code)) {
         incrementCounter(state.metrics.providerErrorsTotal, normalizeProviderErrorCode(err.code));
@@ -496,6 +500,7 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         scope,
         code: err.code ?? "unknown",
         message: err.message,
+        ...(scope === "turn" && turnId ? { turn_id: turnId } : {}),
       });
     },
     recordPrepareContextLatency(_phase, latencyMs) {

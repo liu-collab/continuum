@@ -57,9 +57,11 @@
     "streaming": "Generating...",
     "noOutput": "No output yet.",
     "turnErrorTitle": "This turn hit an error",
+    "connectionLabel": "Connection",
     "connectionClosedTitle": "Connection closed",
     "connectionClosedDescription": "Restore `memory-native-agent` before sending more messages.",
     "placeholder": "Type a message. Enter to send, Shift+Enter for a new line",
+    "inputHint": "Supports /skill and imported skill commands",
     "slash": {
       "title": "Available commands",
       "skill": "Invoke an imported skill by name"
@@ -200,7 +202,10 @@
     "pickFolderAction": "Pick folder",
     "pickFolderPendingAction": "Opening...",
     "pickFolderPendingHint": "The native folder picker is opening. If no dialog is visible, check whether another window is covering it.",
-    "pickError": "Failed to open the folder picker. Make sure memory-native-agent is updated and restarted."
+    "pickError": "Failed to open the folder picker. Make sure memory-native-agent is updated and restarted.",
+    "openPending": "Reading the file tree...",
+    "openDirectoryError": "Could not open this folder. Try again later.",
+    "openFileError": "Could not open this file. Try again later."
   },
   "filePreview": {
     "title": "File preview"
@@ -218,7 +223,20 @@
     "description": "Shows the actual injected memory summary and matched records for the active turn.",
     "degraded": "memory degraded",
     "emptyTitle": "No injection block in the current turn",
-    "importanceConfidence": "importance {importance} / confidence {confidence}"
+    "emptyDescription": "When memory is matched and injected for this turn, the injection summary and matched records will appear here.",
+    "recordsEmpty": "No detailed records in this turn.",
+    "importanceConfidence": "importance {importance} / confidence {confidence}",
+    "scopes": {
+      "workspace": "Workspace",
+      "task": "Task",
+      "session": "Session",
+      "user": "User"
+    },
+    "types": {
+      "fact_preference": "Preference",
+      "task_state": "Task state",
+      "episodic": "Episode"
+    }
   },
   "phases": {
     "session_start": "Session start",
@@ -237,6 +255,10 @@
     "crashed": "Crashed"
   },
   "errors": {
+    "unknown": {
+      "title": "Action did not complete",
+      "description": "Try again later."
+    },
     "token_invalid": {
       "title": "Authentication failed",
       "description": "The current token is invalid or no longer accepted. Fetch a new token and try again."
@@ -280,6 +302,10 @@
     "provider_stream_error": {
       "title": "Provider stream interrupted",
       "description": "The provider failed while streaming output, so this turn ended early."
+    },
+    "memory_writeback_incomplete": {
+      "title": "Memory was not saved",
+      "description": "This reply is unaffected."
     },
     "tool_denied_path": {
       "title": "Tool path denied",
@@ -343,9 +369,24 @@
   "confirmDialog": {
     "title": "Permission required",
     "description": "Tool {tool} wants to execute. The run will continue only after you confirm it.",
+    "planTitle": "Confirm plan",
+    "planDescription": "This turn generated an execution plan first. It will continue only after you confirm it.",
+    "revisionFeedback": "Revision feedback",
+    "revisionFeedbackPlaceholder": "Describe what should change before continuing.",
+    "close": "Close permission confirmation",
+    "submitting": "Sending confirmation...",
+    "riskHint": "Risk type: {risk}",
+    "risk": {
+      "write": "Write",
+      "shell": "Shell command",
+      "mcp": "MCP tool"
+    },
     "deny": "Deny",
     "allow": "Allow",
-    "allowSession": "Always allow in this session"
+    "allowSession": "Always allow in this session",
+    "planCancel": "Cancel",
+    "planRevise": "Revise first",
+    "planApprove": "Continue"
   },
   "untrusted": {
     "builtin_read": "Built-in read",

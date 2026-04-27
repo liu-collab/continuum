@@ -150,6 +150,7 @@ describe("agent event reducer", () => {
       event: {
         kind: "error",
         scope: "turn",
+        turn_id: "turn-error",
         code: "provider_stream_error",
         message: "stream interrupted"
       }
@@ -175,6 +176,77 @@ describe("agent event reducer", () => {
 
     expect(state.turns[0]?.finishReason).toBe("error");
     expect(state.turns[0]?.status).toBe("error");
+  });
+
+  it("attaches turn errors to the provided turn id", () => {
+    let state = reduceAgentEvent(initialAgentState, {
+      type: "user_turn_submitted",
+      turnId: "turn-1",
+      text: "first"
+    });
+
+    state = reduceAgentEvent(state, {
+      type: "user_turn_submitted",
+      turnId: "turn-2",
+      text: "second"
+    });
+
+    state = reduceAgentEvent(state, {
+      type: "server_event",
+      event: {
+        kind: "error",
+        scope: "turn",
+        turn_id: "turn-1",
+        code: "provider_stream_error",
+        message: "stream interrupted"
+      }
+    });
+
+    expect(state.turns.find((turn) => turn.turnId === "turn-1")?.errors).toEqual([
+      {
+        code: "provider_stream_error",
+        message: "stream interrupted"
+      }
+    ]);
+    expect(state.turns.find((turn) => turn.turnId === "turn-2")?.errors).toEqual([]);
+  });
+
+  it("keeps completed turns complete when memory writeback is incomplete", () => {
+    let state = reduceAgentEvent(initialAgentState, {
+      type: "user_turn_submitted",
+      turnId: "turn-writeback",
+      text: "remember this"
+    });
+
+    state = reduceAgentEvent(state, {
+      type: "server_event",
+      event: {
+        kind: "turn_end",
+        turn_id: "turn-writeback",
+        finish_reason: "stop"
+      }
+    });
+
+    state = reduceAgentEvent(state, {
+      type: "server_event",
+      event: {
+        kind: "error",
+        scope: "turn",
+        turn_id: "turn-writeback",
+        code: "memory_writeback_incomplete",
+        message: "memory request timed out after 10000ms"
+      }
+    });
+
+    expect(state.sessionError).toBeNull();
+    expect(state.turns[0]?.finishReason).toBe("stop");
+    expect(state.turns[0]?.status).toBe("complete");
+    expect(state.turns[0]?.errors).toEqual([
+      {
+        code: "memory_writeback_incomplete",
+        message: "memory request timed out after 10000ms"
+      }
+    ]);
   });
 
   it("updates session metadata from session_started without dropping turns", () => {

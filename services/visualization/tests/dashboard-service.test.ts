@@ -520,5 +520,165 @@ describe("dashboard window selection", () => {
       result.storageMetrics.find((item) => item.key === "governance_recall_hit_rate_after")?.value
     ).toBe(1);
   });
+
+  it("treats high success-rate metrics as healthy and low success-rate metrics as warning or danger", async () => {
+    fetchRuntimeMetricsMock.mockResolvedValueOnce({
+      status: {
+        name: "runtime_api",
+        label: "Runtime observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 25,
+        detail: null
+      },
+      metrics: {
+        triggerRate: 0.92,
+        recallHitRate: 0.82,
+        emptyRecallRate: 0.1,
+        injectionRate: 0.61,
+        trimRate: 0.1,
+        recallP95Ms: 200,
+        injectionP95Ms: 50,
+        writeBackSubmitRate: 0.32,
+        outboxPendingCount: 1,
+        outboxDeadLetterCount: 0,
+        outboxSubmitLatencyMs: 25
+      }
+    });
+    fetchStorageMetricsMock.mockResolvedValueOnce({
+      status: {
+        name: "storage_api",
+        label: "Storage observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 30,
+        detail: null
+      },
+      metrics: {
+        writeAccepted: 10,
+        writeSucceeded: 8,
+        duplicateIgnoredRate: 0.1,
+        mergeRate: 0.2,
+        conflictRate: 0.05,
+        deadLetterJobs: 0,
+        refreshFailureRate: 0.01,
+        writeP95Ms: 220,
+        newPendingEmbeddingRecords: 1,
+        retryPendingEmbeddingRecords: 2,
+        oldestPendingEmbeddingAgeSeconds: 180,
+        governanceProposalCount: 4,
+        governanceVerifierRequiredCount: 5,
+        governanceVerifierApprovedCount: 5,
+        governanceGuardRejectedCount: 0,
+        governanceExecutionCount: 10,
+        governanceExecutionSuccessCount: 9,
+        governanceExecutionFailureCount: 1,
+        governanceSoftDeleteCount: 1,
+        governanceRetryCount: 1
+      }
+    });
+
+    const healthyResult = await getDashboard("30m");
+
+    expect(healthyResult.retrievalMetrics.find((item) => item.key === "trigger_rate")?.severity).toBe("normal");
+    expect(healthyResult.retrievalMetrics.find((item) => item.key === "recall_hit_rate")?.severity).toBe("normal");
+    expect(healthyResult.retrievalMetrics.find((item) => item.key === "injection_rate")?.severity).toBe("normal");
+    expect(healthyResult.retrievalMetrics.find((item) => item.key === "writeback_submit_rate")?.severity).toBe(
+      "normal"
+    );
+    expect(
+      healthyResult.storageMetrics.find((item) => item.key === "governance_verification_pass_rate")?.severity
+    ).toBe("normal");
+    expect(
+      healthyResult.storageMetrics.find((item) => item.key === "governance_execution_success_rate")?.severity
+    ).toBe("normal");
+
+    fetchRuntimeMetricsMock.mockResolvedValueOnce({
+      status: {
+        name: "runtime_api",
+        label: "Runtime observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 25,
+        detail: null
+      },
+      metrics: {
+        triggerRate: 0.45,
+        recallHitRate: 0.35,
+        emptyRecallRate: 0.1,
+        injectionRate: 0.2,
+        trimRate: 0.1,
+        recallP95Ms: 200,
+        injectionP95Ms: 50,
+        writeBackSubmitRate: 0.08,
+        outboxPendingCount: 1,
+        outboxDeadLetterCount: 0,
+        outboxSubmitLatencyMs: 25
+      }
+    });
+    fetchStorageMetricsMock.mockResolvedValueOnce({
+      status: {
+        name: "storage_api",
+        label: "Storage observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 30,
+        detail: null
+      },
+      metrics: {
+        writeAccepted: 10,
+        writeSucceeded: 8,
+        duplicateIgnoredRate: 0.1,
+        mergeRate: 0.2,
+        conflictRate: 0.05,
+        deadLetterJobs: 0,
+        refreshFailureRate: 0.01,
+        writeP95Ms: 220,
+        newPendingEmbeddingRecords: 1,
+        retryPendingEmbeddingRecords: 2,
+        oldestPendingEmbeddingAgeSeconds: 180,
+        governanceProposalCount: 4,
+        governanceVerifierRequiredCount: 5,
+        governanceVerifierApprovedCount: 2,
+        governanceGuardRejectedCount: 0,
+        governanceExecutionCount: 10,
+        governanceExecutionSuccessCount: 4,
+        governanceExecutionFailureCount: 6,
+        governanceSoftDeleteCount: 1,
+        governanceRetryCount: 1
+      }
+    });
+
+    const degradedResult = await getDashboard("30m");
+
+    expect(degradedResult.retrievalMetrics.find((item) => item.key === "trigger_rate")?.severity).toBe("danger");
+    expect(degradedResult.retrievalMetrics.find((item) => item.key === "recall_hit_rate")?.severity).toBe("danger");
+    expect(degradedResult.retrievalMetrics.find((item) => item.key === "injection_rate")?.severity).toBe("danger");
+    expect(degradedResult.retrievalMetrics.find((item) => item.key === "writeback_submit_rate")?.severity).toBe(
+      "danger"
+    );
+    expect(
+      degradedResult.storageMetrics.find((item) => item.key === "governance_verification_pass_rate")?.severity
+    ).toBe("danger");
+    expect(
+      degradedResult.storageMetrics.find((item) => item.key === "governance_execution_success_rate")?.severity
+    ).toBe("danger");
+  });
 });
 

@@ -57,6 +57,42 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("agent-input")).toHaveValue("");
   });
 
+  it("keeps draft input but does not submit a new turn while one is running", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            createTurn({
+              turnId: "turn-running",
+              userInput: "先处理这个",
+              assistantOutput: "处理中",
+              status: "streaming",
+              finishReason: null,
+            }),
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={onSend}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const input = screen.getByTestId("agent-input");
+    await user.type(input, "下一条先放这里");
+    await user.keyboard("{Enter}");
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByTestId("send-message")).toBeDisabled();
+    expect(input).toHaveValue("下一条先放这里");
+  });
+
   it("renders chat messages in conversation order", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -152,6 +188,44 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("assistant-message-turn-tool")).toHaveTextContent("我先读取一下文件。");
   });
 
+  it("renders denied tool feedback inside the tool call card", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            createTurn({
+              turnId: "turn-tool-denied",
+              userInput: "创建文件",
+              toolCalls: [
+                {
+                  callId: "call-denied",
+                  name: "fs_write",
+                  argsPreview: "{\"path\":\"demo.txt\"}",
+                  status: "error",
+                  outputPreview: "Tool execution was denied.",
+                  trustLevel: "builtin_write",
+                  artifactRef: null,
+                },
+              ],
+              finishReason: "tool_use",
+            }),
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("tool-call-call-denied")).toHaveTextContent("fs_write");
+    expect(screen.getByTestId("tool-call-call-denied")).toHaveTextContent("执行失败");
+    expect(screen.getByTestId("tool-call-output-call-denied")).toHaveTextContent("Tool execution was denied.");
+  });
+
   it("hides older turns behind a load earlier button", async () => {
     const user = userEvent.setup();
     const turns = Array.from({ length: 14 }, (_, index) => createTurn({
@@ -208,6 +282,39 @@ describe("ChatPanel", () => {
     );
 
     expect(screen.getByTestId("assistant-thread-viewport")).toBeInTheDocument();
+  });
+
+  it("shows memory writeback errors under the related assistant message", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            createTurn({
+              turnId: "turn-writeback",
+              userInput: "记住这个偏好",
+              assistantOutput: "好的。",
+              errors: [
+                {
+                  code: "memory_writeback_incomplete",
+                  message: "memory request timed out after 10000ms",
+                },
+              ],
+            }),
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByText("记忆保存未完成")).toBeInTheDocument();
+    expect(screen.getByText("不影响本轮回复。")).toBeInTheDocument();
+    expect(screen.queryByText(/memory request timed out/)).not.toBeInTheDocument();
   });
 
   it("keeps only the injection status badge inside the chat message", () => {

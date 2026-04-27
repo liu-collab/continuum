@@ -57,9 +57,11 @@
     "streaming": "正在生成...",
     "noOutput": "还没有输出。",
     "turnErrorTitle": "本轮出现错误",
+    "connectionLabel": "连接",
     "connectionClosedTitle": "连接已关闭",
     "connectionClosedDescription": "请先恢复 `memory-native-agent`，然后再继续发送消息。",
     "placeholder": "输入消息，Enter 发送，Shift+Enter 换行",
+    "inputHint": "支持 /skill 或已导入 skill 命令",
     "slash": {
       "title": "可用命令",
       "skill": "按名称触发已导入的 skill"
@@ -200,7 +202,10 @@
     "pickFolderAction": "选择文件夹",
     "pickFolderPendingAction": "正在打开...",
     "pickFolderPendingHint": "正在打开系统文件夹选择框，如果没有看到弹窗，请检查是否被其他窗口遮挡。",
-    "pickError": "打开文件夹选择器失败。请确认本地 memory-native-agent 已更新并重启。"
+    "pickError": "打开文件夹选择器失败。请确认本地 memory-native-agent 已更新并重启。",
+    "openPending": "正在读取文件树...",
+    "openDirectoryError": "目录打开失败，请稍后重试。",
+    "openFileError": "文件打开失败，请稍后重试。"
   },
   "filePreview": {
     "title": "文件预览"
@@ -218,7 +223,20 @@
     "description": "展示本轮实际注入的记忆摘要和命中记录。",
     "degraded": "记忆降级",
     "emptyTitle": "当前轮次没有注入块",
-    "importanceConfidence": "importance {importance} / confidence {confidence}"
+    "emptyDescription": "当本轮命中并注入记忆后，这里会显示注入摘要和命中记录。",
+    "recordsEmpty": "本轮没有明细记录。",
+    "importanceConfidence": "importance {importance} / confidence {confidence}",
+    "scopes": {
+      "workspace": "工作区",
+      "task": "任务",
+      "session": "会话",
+      "user": "用户"
+    },
+    "types": {
+      "fact_preference": "偏好",
+      "task_state": "任务状态",
+      "episodic": "片段"
+    }
   },
   "phases": {
     "session_start": "会话启动",
@@ -237,6 +255,10 @@
     "crashed": "异常中断"
   },
   "errors": {
+    "unknown": {
+      "title": "操作未完成",
+      "description": "稍后再试。"
+    },
     "token_invalid": {
       "title": "鉴权失败",
       "description": "当前 token 无效或已失效，请重新获取 token 后再试。"
@@ -280,6 +302,10 @@
     "provider_stream_error": {
       "title": "模型流式输出中断",
       "description": "模型在流式输出过程中发生错误，本轮输出已提前结束。"
+    },
+    "memory_writeback_incomplete": {
+      "title": "记忆保存未完成",
+      "description": "不影响本轮回复。"
     },
     "tool_denied_path": {
       "title": "工具路径被拒绝",
@@ -343,9 +369,24 @@
   "confirmDialog": {
     "title": "需要权限确认",
     "description": "工具 {tool} 请求执行。这一步需要你确认后才会继续。",
+    "planTitle": "确认计划",
+    "planDescription": "当前轮先生成了执行计划，确认后才会继续执行。",
+    "revisionFeedback": "修订意见",
+    "revisionFeedbackPlaceholder": "可以写下希望调整的地方。",
+    "close": "关闭权限确认",
+    "submitting": "正在发送确认...",
+    "riskHint": "风险类型：{risk}",
+    "risk": {
+      "write": "写入",
+      "shell": "Shell 命令",
+      "mcp": "MCP 工具"
+    },
     "deny": "拒绝",
     "allow": "允许",
-    "allowSession": "本会话始终允许"
+    "allowSession": "本会话始终允许",
+    "planCancel": "取消",
+    "planRevise": "先修订",
+    "planApprove": "确认继续"
   },
   "untrusted": {
     "builtin_read": "内置只读",

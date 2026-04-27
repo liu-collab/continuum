@@ -328,6 +328,7 @@ export class MnaClient {
     let lastEventId: number | undefined = options.initialLastEventId ?? undefined;
     let heartbeat: number | null = null;
     let reconnectScheduled = false;
+    let connectionGeneration = 0;
     const maxRetries = 5;
 
     const scheduleReconnect = () => {
@@ -350,7 +351,10 @@ export class MnaClient {
       window.setTimeout(() => {
         reconnectScheduled = false;
         if (!disposed) {
-          void connect(true);
+          void connect(true).catch((error) => {
+            options.onError(error instanceof Error ? error : new Error(String(error)));
+            scheduleReconnect();
+          });
         }
       }, Math.min(1500 * retries, 5000));
     };
@@ -364,38 +368,70 @@ export class MnaClient {
 
     const connect = async (forceBootstrap = retries > 0) => {
       const bootstrap = await this.bootstrap(forceBootstrap);
+      if (disposed) {
+        return;
+      }
       if (bootstrap.status !== "ok" || !bootstrap.token) {
         throw new MnaUnavailableError(bootstrap.reason ?? "memory-native-agent 不可用。", bootstrap.status);
       }
 
+      const generation = connectionGeneration + 1;
+      connectionGeneration = generation;
       options.onConnectionChange(retries > 0 ? "reconnecting" : "connecting");
-      socket = new WebSocket(toWebSocketUrl(bootstrap.baseUrl, sessionId, bootstrap.token, lastEventId));
+      const activeSocket = new WebSocket(toWebSocketUrl(bootstrap.baseUrl, sessionId, bootstrap.token, lastEventId));
+      socket = activeSocket;
 
-      socket.addEventListener("open", () => {
+      const isCurrentSocket = () => !disposed && connectionGeneration === generation && socket === activeSocket;
+
+      activeSocket.addEventListener("open", () => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         retries = 0;
         reconnectScheduled = false;
         options.onConnectionChange("open");
         clearHeartbeat();
         heartbeat = window.setInterval(() => {
-          socket?.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ kind: "ping" }));
+          activeSocket.readyState === WebSocket.OPEN && activeSocket.send(JSON.stringify({ kind: "ping" }));
         }, 15000);
       });
 
-      socket.addEventListener("message", (message) => {
-        const payload = JSON.parse(String(message.data)) as MnaServerEventEnvelope;
-        if (typeof payload.event_id === "number") {
-          lastEventId = payload.event_id;
+      activeSocket.addEventListener("message", (message) => {
+        if (!isCurrentSocket()) {
+          return;
+        }
+
+        let payload: MnaServerEventEnvelope;
+        try {
+          payload = JSON.parse(String(message.data)) as MnaServerEventEnvelope;
+        } catch {
+          options.onError(new Error("Invalid websocket message."));
+          return;
+        }
+
+        const eventId = payload.event_id;
+        if (typeof eventId === "number" && Number.isInteger(eventId)) {
+          if (lastEventId !== undefined && eventId <= lastEventId) {
+            return;
+          }
+          lastEventId = eventId;
         }
         options.onEvent(payload);
       });
 
-      socket.addEventListener("close", () => {
+      activeSocket.addEventListener("close", () => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         clearHeartbeat();
         socket = null;
         scheduleReconnect();
       });
 
-      socket.addEventListener("error", () => {
+      activeSocket.addEventListener("error", () => {
+        if (!isCurrentSocket()) {
+          return;
+        }
         clearHeartbeat();
         socket = null;
         scheduleReconnect();

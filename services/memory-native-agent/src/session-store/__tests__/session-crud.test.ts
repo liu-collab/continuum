@@ -64,7 +64,7 @@ describe("SqliteSessionStore session CRUD", () => {
     expect(store.getSession("sess-1")).toBeNull();
   });
 
-  it("returns next_cursor and excludes newer rows after paging forward", () => {
+  it("returns next_cursor and includes the next older row after paging forward", () => {
     const store = createStore();
 
     store.createSession({
@@ -91,7 +91,7 @@ describe("SqliteSessionStore session CRUD", () => {
 
     expect(firstPage.items).toHaveLength(1);
     expect(firstPage.items[0]?.id).toBe("sess-2");
-    expect(firstPage.next_cursor).toBe("2026-04-18T00:00:00.000Z");
+    expect(firstPage.next_cursor).toEqual(expect.any(String));
 
     const secondPage = store.listSessions({
       workspace_id: "ws-1",
@@ -99,7 +99,75 @@ describe("SqliteSessionStore session CRUD", () => {
       cursor: firstPage.next_cursor ?? undefined,
     });
 
-    expect(secondPage.items).toEqual([]);
+    expect(secondPage.items.map((item) => item.id)).toEqual(["sess-1"]);
     expect(secondPage.next_cursor).toBeNull();
+  });
+
+  it("paginates sessions that share the same last_active_at", () => {
+    const store = createStore();
+
+    for (const id of ["sess-1", "sess-2", "sess-3"]) {
+      store.createSession({
+        id,
+        workspace_id: "ws-1",
+        user_id: "user-1",
+        memory_mode: "workspace_plus_global",
+        locale: "zh-CN",
+        created_at: "2026-04-18T00:00:00.000Z",
+      });
+    }
+
+    const firstPage = store.listSessions({
+      workspace_id: "ws-1",
+      limit: 2,
+    });
+
+    expect(firstPage.items.map((item) => item.id)).toEqual(["sess-3", "sess-2"]);
+    expect(firstPage.next_cursor).toEqual(expect.any(String));
+
+    const secondPage = store.listSessions({
+      workspace_id: "ws-1",
+      limit: 2,
+      cursor: firstPage.next_cursor ?? undefined,
+    });
+
+    expect(secondPage.items.map((item) => item.id)).toEqual(["sess-1"]);
+    expect(secondPage.next_cursor).toBeNull();
+  });
+
+  it("persists resident memory state for a session", () => {
+    const store = createStore();
+
+    store.createSession({
+      id: "sess-1",
+      workspace_id: "ws-1",
+      user_id: "user-1",
+      memory_mode: "workspace_plus_global",
+      locale: "zh-CN",
+    });
+
+    store.saveResidentMemoryState("sess-1", {
+      resident_memory_json: "{\"summary\":\"typescript\"}",
+      resident_memory_dirty: true,
+      pending_resident_refresh_job_ids: ["job-1", "job-2"],
+    });
+
+    expect(store.getResidentMemoryState("sess-1")).toEqual({
+      resident_memory_json: "{\"summary\":\"typescript\"}",
+      resident_memory_dirty: true,
+      pending_resident_refresh_job_ids: ["job-1", "job-2"],
+    });
+
+    store.saveResidentMemoryState("sess-1", {
+      resident_memory_json: null,
+      resident_memory_dirty: false,
+      pending_resident_refresh_job_ids: [],
+    });
+
+    expect(store.getResidentMemoryState("sess-1")).toEqual({
+      resident_memory_json: null,
+      resident_memory_dirty: false,
+      pending_resident_refresh_job_ids: [],
+    });
   });
 });

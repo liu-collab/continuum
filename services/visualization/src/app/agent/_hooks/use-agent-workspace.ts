@@ -289,20 +289,33 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return payload.items;
   }
 
-  function persistWorkspaceSelection(workspaceId: string | null) {
+  function persistWorkspaceSelection(
+    workspaceId: string | null,
+    options: {
+      treePath?: string;
+      selectedFilePath?: string | null;
+    } = {}
+  ) {
+    const nextTreePath = options.treePath ?? ".";
+    const nextSelectedFilePath = options.selectedFilePath ?? null;
+
     setSelectedWorkspaceId(workspaceId);
-    setTreePath(".");
+    setTreePath(nextTreePath);
     setFileTree({
-      path: ".",
+      path: nextTreePath,
       entries: []
     });
-    setSelectedFilePath(null);
+    setSelectedFilePath(nextSelectedFilePath);
     setSelectedFile(null);
-    window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    if (nextSelectedFilePath) {
+      window.localStorage.setItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY, nextSelectedFilePath);
+    } else {
+      window.localStorage.removeItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    }
 
     if (workspaceId) {
       window.localStorage.setItem(FILE_TREE_WORKSPACE_STORAGE_KEY, workspaceId);
-      window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, ".");
+      window.localStorage.setItem(FILE_TREE_PATH_STORAGE_KEY, nextTreePath);
       return;
     }
 
@@ -483,16 +496,22 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
 
     const nextWorkspaceId = detail.session.workspace_id;
-    persistWorkspaceSelection(nextWorkspaceId);
-
-    await bindSessionStream(sessionId, detail.latest_event_id);
     const storedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
-    const canReuseStoredPath = storedWorkspaceId === detail.session.workspace_id;
+    const canReuseStoredPath = storedWorkspaceId === nextWorkspaceId;
     const storedTreePath =
       canReuseStoredPath
         ? window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY) ?? treePath ?? "."
         : ".";
-    const storedSelectedFile = window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY);
+    const storedSelectedFile =
+      canReuseStoredPath
+        ? window.localStorage.getItem(FILE_TREE_SELECTED_FILE_STORAGE_KEY)
+        : null;
+    persistWorkspaceSelection(nextWorkspaceId, {
+      treePath: storedTreePath,
+      selectedFilePath: storedSelectedFile
+    });
+
+    await bindSessionStream(sessionId, detail.latest_event_id);
     await Promise.allSettled([
       refreshFileTree(storedTreePath, nextWorkspaceId),
       refreshMetrics(),
@@ -524,6 +543,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   }
 
   function sendInput(text: string) {
+    if (state.turns.some((turn) => turn.status === "streaming")) {
+      return;
+    }
+
     const turnId = crypto.randomUUID();
     dispatch({
       type: "user_turn_submitted",
@@ -538,7 +561,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   }
 
   function abortCurrentTurn() {
-    const turnId = activeTurn?.turnId;
+    const turnId = state.turns.findLast((turn) => turn.status === "streaming")?.turnId;
     if (!turnId) {
       return;
     }
@@ -549,7 +572,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
   }
 
-  function confirmTool(decision: "allow" | "deny" | "allow_session" | "approve" | "revise" | "cancel") {
+  function confirmTool(
+    decision: "allow" | "deny" | "allow_session" | "approve" | "revise" | "cancel",
+    feedback?: string
+  ) {
     if (!state.pendingConfirm) {
       return;
     }
@@ -558,7 +584,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       if (decision !== "allow" && decision !== "deny" && decision !== "allow_session") {
         return;
       }
-      streamRef.current?.send({
+      if (!streamRef.current) {
+        throw new Error("session websocket is not connected");
+      }
+      streamRef.current.send({
         kind: "tool_confirm",
         confirm_id: state.pendingConfirm.confirmId,
         decision
@@ -567,10 +596,14 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       if (decision !== "approve" && decision !== "revise" && decision !== "cancel") {
         return;
       }
-      streamRef.current?.send({
+      if (!streamRef.current) {
+        throw new Error("session websocket is not connected");
+      }
+      streamRef.current.send({
         kind: "plan_confirm",
         confirm_id: state.pendingConfirm.confirmId,
-        decision
+        decision,
+        ...(feedback ? { feedback } : {})
       });
     }
     dispatch({

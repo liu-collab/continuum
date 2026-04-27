@@ -233,13 +233,11 @@ export class AgentPage {
   }
 
   async expectInjectionOrEmptyState() {
-    const injectionSummary = this.page.getByTestId(/injection-summary-/).last();
-    const emptyInjectionState = this.page.getByRole("heading", {
-      name: /当前轮次没有注入块|No injection/i,
-    });
+    const memorySummary = this.page.getByTestId("memory-panel-summary");
+    const emptyInjectionState = this.page.getByTestId("memory-panel-empty-state");
 
-    if (await injectionSummary.count()) {
-      await expect(injectionSummary).toBeVisible();
+    if (await memorySummary.count()) {
+      await expect(memorySummary).toBeVisible();
       return;
     }
 

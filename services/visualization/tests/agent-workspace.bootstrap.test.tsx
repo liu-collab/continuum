@@ -265,11 +265,16 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
     expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
-    expect(screen.queryByText("记忆面板")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("xl:overflow-hidden");
+    expect(screen.getByTestId("agent-chat-column")).toHaveClass("order-1");
+    expect(screen.getByTestId("agent-sidebar-column")).toHaveClass("order-2");
+    expect(screen.getByTestId("agent-memory-column")).toBeInTheDocument();
+    expect(screen.getByTestId("memory-panel")).toHaveTextContent("记忆面板");
+    expect(screen.getByTestId("memory-panel")).toHaveTextContent("当前轮次没有注入块");
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /设置/ }));
+    fireEvent.click(screen.getByRole("button", { name: /运行时配置/ }));
     expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /新建会话/ }));
     expect(createNewSession).toHaveBeenCalledTimes(1);

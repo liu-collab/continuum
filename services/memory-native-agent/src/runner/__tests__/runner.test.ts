@@ -432,11 +432,58 @@ describe("AgentRunner", () => {
         code: "provider_stream_error",
         message: "provider stream broke",
       }),
+      "turn-error",
     );
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-error", "error");
     expect(io.emitError.mock.invocationCallOrder[0]!).toBeLessThan(io.emitTurnEnd.mock.invocationCallOrder[0]!);
     expect(io.recordProviderCall).toHaveBeenCalledWith("ollama");
     expect(io.recordProviderFirstTokenLatency).toHaveBeenCalledWith("ollama", expect.any(Number));
+  });
+
+  it("emits writeback failures as non-terminal turn errors", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.finalizeTurn.mockRejectedValueOnce(new Error("runtime timeout"));
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "hello" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("继续这个任务", "turn-writeback-error");
+    await Promise.resolve();
+
+    expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-writeback-error", "stop");
+    expect(io.emitError).toHaveBeenCalledWith(
+      "turn",
+      expect.objectContaining({
+        code: "memory_writeback_incomplete",
+        message: "runtime timeout",
+      }),
+      "turn-writeback-error",
+    );
+    expect(io.emitError.mock.calls.some((call) => call[0] === "session" && call[1]?.code === "memory_writeback_incomplete")).toBe(false);
   });
 
   it("emits a session error once when store writes fail but still completes the turn", async () => {

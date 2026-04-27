@@ -34,7 +34,7 @@ import {
 
 const MEMORY_NATIVE_AGENT_HOST = "memory_native_agent";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-const DEFAULT_FINALIZE_TIMEOUT_MS = 1500;
+const DEFAULT_FINALIZE_TIMEOUT_MS = 10_000;
 
 type MemoryClientLogger = {
   info?(payload: Record<string, unknown>, message?: string): void;

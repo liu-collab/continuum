@@ -417,7 +417,7 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
       return event.scope === "turn"
         ? {
             ...state,
-            turns: attachErrorToLatestTurn(state.turns, event.code, event.message)
+            turns: attachErrorToTurn(state.turns, event.turn_id, event.code, event.message)
           }
         : {
             ...state,
@@ -502,26 +502,29 @@ function dedupePhases(phases: AgentTurnState["phases"]) {
   });
 }
 
-function attachErrorToLatestTurn(turns: AgentTurnState[], code: string, message: string) {
-  const nextTurns = [...turns];
-  const latestIndex = nextTurns.length - 1;
-
-  if (latestIndex < 0) {
-    return nextTurns;
+function attachErrorToTurn(turns: AgentTurnState[], turnId: string | undefined, code: string, message: string) {
+  if (turnId) {
+    return upsertTurn(turns, turnId, (turn) => appendTurnError(turn, code, message));
   }
 
-  const latest = nextTurns[latestIndex];
+  const latest = turns.at(-1);
   if (!latest) {
-    return nextTurns;
+    return turns;
   }
 
-  nextTurns[latestIndex] = {
-    ...latest,
-    status: "error",
-    errors: [...latest.errors, { code, message }]
-  };
+  return turns.map((turn) => (turn.turnId === latest.turnId ? appendTurnError(turn, code, message) : turn));
+}
 
-  return nextTurns;
+function appendTurnError(turn: AgentTurnState, code: string, message: string): AgentTurnState {
+  return {
+    ...turn,
+    status: isNonTerminalTurnError(code) ? turn.status : "error",
+    errors: [...turn.errors, { code, message }]
+  };
+}
+
+function isNonTerminalTurnError(code: string) {
+  return code === "memory_writeback_incomplete";
 }
 
 function upsertTurn(

@@ -196,6 +196,121 @@ describe("MnaClient websocket stream", () => {
     expect(sockets[1]?.url).toContain("last_event_id=9");
   });
 
+  it("dedupes replayed events after reconnect", async () => {
+    const onEvent = vi.fn();
+    const client = new MnaClient();
+    vi.spyOn(client, "bootstrap").mockResolvedValue({
+      status: "ok",
+      token: "token-123",
+      reason: null,
+      mnaBaseUrl: "http://127.0.0.1:4193",
+      baseUrl: "http://127.0.0.1:4193"
+    });
+
+    client.connectSessionStream("session-dedupe", {
+      initialLastEventId: 6,
+      onEvent,
+      onConnectionChange: vi.fn(),
+      onError: vi.fn()
+    });
+
+    await flushAsyncWork();
+    sockets[0]?.emit("open");
+    sockets[0]?.emit("message", {
+      data: JSON.stringify({
+        event_id: 7,
+        kind: "assistant_delta",
+        turn_id: "turn-1",
+        text: "hello"
+      })
+    });
+    sockets[0]?.emit("message", {
+      data: JSON.stringify({
+        event_id: 7,
+        kind: "assistant_delta",
+        turn_id: "turn-1",
+        text: "hello"
+      })
+    });
+
+    sockets[0]?.emit("close");
+    await flushAsyncWork();
+    expect(sockets[1]?.url).toContain("last_event_id=7");
+
+    sockets[1]?.emit("open");
+    sockets[1]?.emit("message", {
+      data: JSON.stringify({
+        event_id: 7,
+        kind: "assistant_delta",
+        turn_id: "turn-1",
+        text: "hello"
+      })
+    });
+    sockets[1]?.emit("message", {
+      data: JSON.stringify({
+        event_id: 8,
+        kind: "assistant_delta",
+        turn_id: "turn-1",
+        text: " world"
+      })
+    });
+
+    expect(onEvent).toHaveBeenCalledTimes(2);
+    expect(onEvent).toHaveBeenNthCalledWith(1, {
+      event_id: 7,
+      kind: "assistant_delta",
+      turn_id: "turn-1",
+      text: "hello"
+    });
+    expect(onEvent).toHaveBeenNthCalledWith(2, {
+      event_id: 8,
+      kind: "assistant_delta",
+      turn_id: "turn-1",
+      text: " world"
+    });
+  });
+
+  it("ignores stale socket events after a reconnect starts", async () => {
+    const onEvent = vi.fn();
+    const onConnectionChange = vi.fn();
+    const client = new MnaClient();
+    vi.spyOn(client, "bootstrap").mockResolvedValue({
+      status: "ok",
+      token: "token-123",
+      reason: null,
+      mnaBaseUrl: "http://127.0.0.1:4193",
+      baseUrl: "http://127.0.0.1:4193"
+    });
+
+    client.connectSessionStream("session-stale", {
+      onEvent,
+      onConnectionChange,
+      onError: vi.fn()
+    });
+
+    await flushAsyncWork();
+    const staleSocket = sockets[0];
+    staleSocket?.emit("open");
+    staleSocket?.emit("error");
+    await flushAsyncWork();
+
+    expect(sockets).toHaveLength(2);
+    staleSocket?.emit("open");
+    staleSocket?.emit("message", {
+      data: JSON.stringify({
+        event_id: 1,
+        kind: "assistant_delta",
+        turn_id: "turn-stale",
+        text: "stale"
+      })
+    });
+    staleSocket?.emit("close");
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(onConnectionChange).toHaveBeenLastCalledWith("reconnecting");
+    expect(sockets).toHaveLength(2);
+  });
+
   it("closes after exceeding reconnect retries", async () => {
     const onConnectionChange = vi.fn();
     const client = new MnaClient();

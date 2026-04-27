@@ -69,6 +69,12 @@ export interface DispatchedMessagesPayload {
   created_at?: string;
 }
 
+export interface ResidentMemoryState {
+  resident_memory_json: string | null;
+  resident_memory_dirty: boolean;
+  pending_resident_refresh_job_ids: string[];
+}
+
 export interface PlanRevision {
   id: string;
   session_id: string;
@@ -147,6 +153,9 @@ export interface SessionStore {
   getMessages(session_id: string, opts?: { before_turn_index?: number; limit?: number }): Message[];
 
   recordToolInvocation(input: ToolInvocationInput): void;
+
+  getResidentMemoryState(session_id: string): ResidentMemoryState | null;
+  saveResidentMemoryState(session_id: string, state: ResidentMemoryState): void;
 
   saveDispatchedMessages(turn_id: string, payload: DispatchedMessagesPayload): void;
   getDispatchedMessages(turn_id: string): DispatchedMessagesPayload | null;

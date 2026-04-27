@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { ChevronRight, FileText, Folder, FolderPlus, X } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, FileText, Folder, FolderPlus, LoaderCircle, X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -40,8 +40,8 @@ type FileTreeProps = {
   selectedFilePath: string | null;
   onPickWorkspace(): Promise<void>;
   onClearWorkspace(): void;
-  onOpenDirectory(targetPath: string): void;
-  onOpenFile(targetPath: string): void;
+  onOpenDirectory(targetPath: string): Promise<void> | void;
+  onOpenFile(targetPath: string): Promise<void> | void;
 };
 
 export function FileTree({
@@ -57,13 +57,54 @@ export function FileTree({
 }: FileTreeProps) {
   const { t } = useAgentI18n();
   const [picking, setPicking] = useState(false);
+  const [openingTarget, setOpeningTarget] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const selectedWorkspace = selectedWorkspaceId
     ? workspaces.find((item) => item.workspace_id === selectedWorkspaceId) ?? null
     : null;
   const selectedWorkspacePath = selectedWorkspace?.cwd ?? null;
   const selectedWorkspaceDisplayId = selectedWorkspace ? getWorkspaceDisplayId(selectedWorkspace) : null;
   const selectedWorkspaceDisplayName = getWorkspaceDisplayName(selectedWorkspacePath);
+
+  useEffect(() => {
+    setOpenError(null);
+    setOpeningTarget(null);
+  }, [path, selectedWorkspaceId]);
+
+  async function openDirectory(targetPath: string) {
+    if (openingTarget) {
+      return;
+    }
+
+    setOpeningTarget(targetPath);
+    setRegisterError(null);
+    setOpenError(null);
+    try {
+      await onOpenDirectory(targetPath);
+    } catch {
+      setOpenError(t("fileTree.openDirectoryError"));
+    } finally {
+      setOpeningTarget(null);
+    }
+  }
+
+  async function openFile(targetPath: string) {
+    if (openingTarget) {
+      return;
+    }
+
+    setOpeningTarget(targetPath);
+    setRegisterError(null);
+    setOpenError(null);
+    try {
+      await onOpenFile(targetPath);
+    } catch {
+      setOpenError(t("fileTree.openFileError"));
+    } finally {
+      setOpeningTarget(null);
+    }
+  }
 
   return (
     <div className="rounded-[1.75rem] border bg-surface">
@@ -139,9 +180,19 @@ export function FileTree({
             {registerError ? (
               <div className="text-[11px] text-rose-700">{registerError}</div>
             ) : null}
+            {openError ? (
+              <div data-testid="file-tree-open-error" className="text-[11px] text-rose-700">
+                {openError}
+              </div>
+            ) : null}
             {picking ? (
               <div className="text-[11px] text-muted-foreground">
                 {t("fileTree.pickFolderPendingHint")}
+              </div>
+            ) : null}
+            {openingTarget ? (
+              <div data-testid="file-tree-open-pending" className="text-[11px] text-muted-foreground">
+                {t("fileTree.openPending")}
               </div>
             ) : null}
           </div>
@@ -152,8 +203,11 @@ export function FileTree({
           {path !== "." ? (
             <button
               type="button"
-              onClick={() => onOpenDirectory(parentPath(path))}
-              className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-surface-muted"
+              disabled={openingTarget !== null}
+              onClick={() => {
+                void openDirectory(parentPath(path));
+              }}
+              className="mb-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ChevronRight className="h-3.5 w-3.5 rotate-180" />
               ..
@@ -162,20 +216,24 @@ export function FileTree({
           {entries.map((entry) => {
             const targetPath = normalizeChildPath(path, entry.name);
             const isSelected = selectedFilePath === targetPath;
+            const isOpening = openingTarget === targetPath;
 
             return (
               <button
                 key={`${entry.type}:${entry.name}`}
                 type="button"
-                onClick={() =>
-                  entry.type === "directory" ? onOpenDirectory(targetPath) : onOpenFile(targetPath)
-                }
+                disabled={openingTarget !== null}
+                onClick={() => {
+                  void (entry.type === "directory" ? openDirectory(targetPath) : openFile(targetPath));
+                }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground transition hover:bg-surface-muted",
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-foreground transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60",
                   isSelected && "bg-accent-soft text-foreground"
                 )}
               >
-                {entry.type === "directory" ? (
+                {isOpening ? (
+                  <LoaderCircle className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                ) : entry.type === "directory" ? (
                   <Folder className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
                   <FileText className="h-3.5 w-3.5 text-muted-foreground" />

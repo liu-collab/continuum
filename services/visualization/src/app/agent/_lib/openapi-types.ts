@@ -472,6 +472,7 @@ export type MnaWsTurnEndEvent = {
 export type MnaWsErrorEvent = {
   kind: "error";
   scope: "turn" | "session";
+  turn_id?: string;
   code: string;
   message: string;
 };
