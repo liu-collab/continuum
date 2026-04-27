@@ -130,10 +130,11 @@ export function createTools(baseUrl = runtimeBaseUrl) {
         });
 
         return {
+          trace_id: result.trace_id,
           trigger: result.trigger,
           trigger_reason: result.trigger_reason,
-          memory_packet: result.memory_packet,
-          injection_block: result.injection_block,
+          memory_packet: result.trigger ? result.memory_packet : null,
+          injection_block: result.trigger ? result.injection_block : null,
           degraded: result.degraded,
         };
       },

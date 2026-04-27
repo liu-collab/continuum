@@ -247,33 +247,6 @@ async function finalizeTurn(context) {
   });
 }
 
-function buildInjectionItems(injectionBlock) {
-  if (!injectionBlock) {
-    return [];
-  }
-
-  const text = [injectionBlock.injection_reason, injectionBlock.memory_summary]
-    .filter((value) => typeof value === "string" && value.trim())
-    .join("\n");
-
-  if (!text) {
-    return [];
-  }
-
-  return [
-    {
-      type: "message",
-      role: "developer",
-      content: [
-        {
-          type: "input_text",
-          text,
-        },
-      ],
-    },
-  ];
-}
-
 function buildDeveloperInjectionItems(text) {
   if (typeof text !== "string" || !text.trim()) {
     return [];
@@ -291,6 +264,116 @@ function buildDeveloperInjectionItems(text) {
       ],
     },
   ];
+}
+
+function memoryRecordIdsFromResult(result) {
+  const records = result?.injection_block?.memory_records;
+  if (!Array.isArray(records)) {
+    return [];
+  }
+  return records.map((record) => record?.id).filter((id) => typeof id === "string");
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.trim()))];
+}
+
+function buildPreparedMemoryText(result) {
+  if (!result || typeof result !== "object") {
+    return "【长期记忆】无相关历史记忆，请直接回答。";
+  }
+
+  const injection = result.injection_block;
+  if (
+    injection &&
+    Array.isArray(injection.memory_records) &&
+    injection.memory_records.length > 0
+  ) {
+    const lines = [
+      "【长期记忆】以下信息仅在与当前问题直接相关时使用，请优先转化为答案中的约束、默认值或步骤，不要逐条转述：",
+    ];
+    if (injection.injection_reason) {
+      lines.push(`命中原因：${injection.injection_reason}`);
+    }
+    if (injection.memory_summary) {
+      lines.push(`可直接采用的上下文：${injection.memory_summary}`);
+    }
+    lines.push("可用事实：");
+    for (const record of injection.memory_records) {
+      const scope = record.scope ?? "";
+      const type = record.memory_type ?? record.type ?? "";
+      const summary = record.summary ?? record.content ?? JSON.stringify(record);
+      lines.push(`- 记忆[${type}${scope ? "/" + scope : ""}]：${summary}`);
+    }
+    lines.push(
+      "使用要求：如果这些记忆能帮助回答，就直接体现在最终答案里；不要单独开一段复述记忆，也不要说你看到了记忆。",
+    );
+    return lines.join("\n");
+  }
+
+  if (!result.trigger) {
+    return "【长期记忆】无相关历史记忆，请直接回答。";
+  }
+
+  const packet = result.memory_packet;
+  const records = Array.isArray(packet?.records)
+    ? packet.records
+    : Array.isArray(packet?.memory_records)
+      ? packet.memory_records
+      : [];
+  if (records.length > 0) {
+    const lines = [
+      "【长期记忆】以下信息仅在与当前问题直接相关时使用，请直接吸收到答案内容中：",
+    ];
+    for (const record of records) {
+      const summary = record.summary ?? record.content ?? JSON.stringify(record);
+      lines.push(`- 记忆：${summary}`);
+    }
+    lines.push("使用要求：只保留对当前回答必要的信息，不要复述这段上下文。");
+    return lines.join("\n");
+  }
+
+  return "【长期记忆】无相关历史记忆，请直接回答。";
+}
+
+function buildMemoryDeliveryFact({ context, prepareResults, injectedText, injectItemsSent, error }) {
+  const results = Array.isArray(prepareResults) ? prepareResults.filter(Boolean) : [];
+  const primaryResult = [...results].reverse().find((result) => typeof result?.trace_id === "string") ?? null;
+  const recordIds = uniqueStrings(results.flatMap((result) => memoryRecordIdsFromResult(result)));
+  const memoryPacketIds = uniqueStrings(
+    results.flatMap((result) =>
+      Array.isArray(result?.memory_packet_ids) ? result.memory_packet_ids : [],
+    ),
+  );
+  return {
+    method: "platform_prepare_context_thread_inject_items",
+    attempted: true,
+    prepared: results.length > 0,
+    host_context_delivered: Boolean(injectItemsSent && injectedText),
+    memory_delivered: recordIds.length > 0,
+    trace_id: typeof primaryResult?.trace_id === "string" ? primaryResult.trace_id : null,
+    trigger: results.some((result) => Boolean(result?.trigger)),
+    trigger_reason:
+      typeof primaryResult?.trigger_reason === "string"
+        ? primaryResult.trigger_reason
+        : null,
+    injected_count: recordIds.length,
+    record_ids: recordIds,
+    memory_packet_ids: memoryPacketIds,
+    content_chars: typeof injectedText === "string" ? injectedText.length : 0,
+    content_sha256:
+      typeof injectedText === "string" && injectedText.length > 0
+        ? createHash("sha256").update(injectedText).digest("hex")
+        : null,
+    session_id: context.sessionId,
+    thread_id: context.threadId,
+    turn_id: context.turnId,
+    error: error ? String(error) : null,
+  };
+}
+
+function logMemoryDelivery(fact) {
+  process.stdout.write(`[memory-codex-proxy] memory_delivery ${JSON.stringify(fact)}\n`);
 }
 
 function createProxyState() {
@@ -365,12 +448,14 @@ function startServer() {
       state.turnRequestById.set(request.id ?? `turn-start-${Date.now()}`, turnState);
 
       const injectionTexts = [];
+      const deliveryPrepareResults = [];
       if (!state.initializedThreadIds.has(threadId)) {
         try {
           const sessionStarted = await sessionStartContext(turnState);
           if (typeof sessionStarted?.additional_context === "string" && sessionStarted.additional_context.trim()) {
             injectionTexts.push(sessionStarted.additional_context.trim());
           }
+          deliveryPrepareResults.push(sessionStarted);
           state.initializedThreadIds.add(threadId);
         } catch (error) {
           console.error(
@@ -381,19 +466,22 @@ function startServer() {
         }
       }
 
+      let prepared = null;
+      let prepareError = null;
+      const prepareContextState = {
+        ...turnState,
+        turnId: String(request.id ?? `pending-${Date.now()}`),
+      };
       try {
-        const prepared = await prepareContext({
+        prepared = await prepareContext({
           ...turnState,
-          turnId: String(request.id ?? `pending-${Date.now()}`),
+          turnId: prepareContextState.turnId,
         });
-        const preparedItems = buildInjectionItems(prepared?.injection_block);
-        for (const item of preparedItems) {
-          const text = item?.content?.[0]?.text;
-          if (typeof text === "string" && text.trim()) {
-            injectionTexts.push(text.trim());
-          }
-        }
+        injectionTexts.push(buildPreparedMemoryText(prepared));
+        deliveryPrepareResults.push(prepared);
       } catch (error) {
+        prepareError = error instanceof Error ? error.message : String(error);
+        injectionTexts.push("【长期记忆】记忆上下文准备失败，请按普通问题直接回答。");
         console.error(
           `[memory-codex-proxy] prepare-context degraded: ${
             error instanceof Error ? error.message : String(error)
@@ -401,12 +489,12 @@ function startServer() {
         );
       }
 
-      const injectionItems = buildDeveloperInjectionItems(
-        [...new Set(injectionTexts)].join("\n\n"),
-      );
+      const injectedText = [...new Set(injectionTexts)].join("\n\n");
+      const injectionItems = buildDeveloperInjectionItems(injectedText);
 
       forwardToUpstream(JSON.stringify(request));
 
+      let injectItemsSent = false;
       if (injectionItems.length > 0) {
         state.injectRequestCounter += 1;
         forwardToUpstream(
@@ -420,7 +508,18 @@ function startServer() {
             },
           }),
         );
+        injectItemsSent = true;
       }
+
+      logMemoryDelivery(
+        buildMemoryDeliveryFact({
+          context: prepareContextState,
+          prepareResults: deliveryPrepareResults,
+          injectedText,
+          injectItemsSent,
+          error: prepareError,
+        }),
+      );
     }
 
     function trackTurnStarted(message) {

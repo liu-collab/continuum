@@ -176,7 +176,7 @@ async function main() {
   const event = safeJsonParse(await readStdin());
 
   try {
-    if (mode === "session-start") {
+    if (mode === "session-start" || mode === "session-start-context") {
       const response = await postJson(
         "/v1/runtime/session-start-context",
         buildSessionStartPayload(event),
@@ -199,13 +199,25 @@ async function main() {
         "/v1/runtime/prepare-context",
         buildPreparePayload(event),
       );
+      const additionalContext = response.injection_block
+        ? [
+            "以下是已检索到的高相关长期记忆，请优先按这些信息组织回答。",
+            "如果这些记忆和你默认的回答习惯冲突，以这些记忆为准。",
+            "请自然体现在最终回答里，不要机械复述“我读取了记忆”或“根据记忆”。",
+            "",
+            `触发原因：${response.injection_block.injection_reason}`,
+            response.injection_block.memory_summary,
+          ]
+            .filter(
+              (item) => typeof item === "string" && item.trim().length > 0,
+            )
+            .join("\n")
+        : "";
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
             hookEventName: "UserPromptSubmit",
-            additionalContext: response.injection_block
-              ? `${response.injection_block.injection_reason}\n${response.injection_block.memory_summary}`
-              : "",
+            additionalContext,
           },
           traceId: response.trace_id,
           memoryPacketIds: response.memory_packet_ids ?? [],
@@ -237,7 +249,7 @@ async function main() {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput:
-          mode === "session-start"
+          mode === "session-start" || mode === "session-start-context"
             ? {
                 hookEventName: "SessionStart",
                 additionalContext: "",

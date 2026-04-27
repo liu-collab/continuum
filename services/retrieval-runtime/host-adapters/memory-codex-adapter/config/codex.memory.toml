@@ -1,10 +1,12 @@
-[mcp_servers.memory]
-command = "node"
-args = ["./mcp/memory-mcp-server.mjs"]
-
 [runtime]
 base_url = "http://127.0.0.1:3002"
 
 [proxy]
 listen = "ws://127.0.0.1:3788"
 upstream = "ws://127.0.0.1:3777"
+
+[memory]
+delivery = "platform_prepare_context_thread_inject_items"
+
+# Codex 默认走平台强制注入，不注册 MCP 工具。
+# 如需临时调试 MCP server，可手动启动 ./mcp/memory-mcp-server.mjs。
