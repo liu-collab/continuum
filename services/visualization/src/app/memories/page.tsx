@@ -111,8 +111,8 @@ export default async function MemoriesPage({
               href={view.href}
               style={{
                 borderRadius: "var(--radius-md)",
-                border: view.active ? "1px solid var(--amber-dim)" : "1px solid var(--border)",
-                background: view.active ? "var(--amber-bg)" : "var(--surface)",
+                border: view.active ? "1px solid var(--cyan-dim)" : "1px solid var(--border)",
+                background: view.active ? "var(--cyan-bg)" : "var(--surface)",
                 padding: "0.75rem 0.875rem",
                 transition: "all 80ms ease",
                 textAlign: "left"

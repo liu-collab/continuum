@@ -73,7 +73,7 @@ export function SearchForm({ action, initialValues = {}, children, onSubmitted }
           type="submit"
           style={{
             ...btnStyle,
-            background: "var(--amber)",
+            background: "var(--cyan)",
             color: "var(--bg)",
             border: "none"
           }}

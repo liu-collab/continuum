@@ -46,7 +46,7 @@ export function FilterModalButton({
           <span style={{
             marginLeft: "0.25rem",
             borderRadius: "999px",
-            background: "var(--amber)",
+            background: "var(--cyan)",
             color: "var(--bg)",
             padding: "0 0.375rem",
             fontSize: "0.625rem",

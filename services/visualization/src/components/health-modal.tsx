@@ -23,7 +23,7 @@ function computeTone(health?: ServiceHealthResponse, sources?: SourceStatus[]): 
 const dotColor: Record<HealthTone, string> = {
   neutral: "#5c6072",
   success: "#4ade80",
-  warning: "#f0a84c",
+  warning: "var(--amber)",
   danger: "#f87171"
 };
 

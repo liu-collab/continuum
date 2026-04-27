@@ -38,11 +38,11 @@ export const metadata: Metadata = {
 function Brand() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="shrink-0">
-      <rect x="2" y="2" width="20" height="20" rx="4" stroke="var(--amber)" strokeWidth="1.5" />
-      <circle cx="8" cy="8" r="2" fill="var(--amber)" opacity="0.7" />
+      <rect x="2" y="2" width="20" height="20" rx="4" stroke="var(--cyan)" strokeWidth="1.5" />
+      <circle cx="8" cy="8" r="2" fill="var(--cyan)" opacity="0.7" />
       <circle cx="16" cy="8" r="2" fill="var(--cyan)" opacity="0.7" />
-      <circle cx="12" cy="16" r="2" fill="var(--amber)" opacity="0.9" />
-      <line x1="8" y1="10" x2="12" y2="14" stroke="var(--amber-dim)" strokeWidth="1" />
+      <circle cx="12" cy="16" r="2" fill="var(--cyan)" opacity="0.9" />
+      <line x1="8" y1="10" x2="12" y2="14" stroke="var(--cyan-dim)" strokeWidth="1" />
       <line x1="16" y1="10" x2="12" y2="14" stroke="var(--cyan-dim)" strokeWidth="1" />
     </svg>
   );

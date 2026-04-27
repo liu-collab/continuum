@@ -74,7 +74,7 @@ export default async function GovernancePage({
                 }).toString()}`;
                 return (
                   <a key={item.executionId} href={href} className="panel p-3 transition hover:border-border-hover block"
-                    style={item.executionId === selectedId ? { borderColor: "var(--amber-dim)", background: "var(--amber-bg)" } : undefined}
+                    style={item.executionId === selectedId ? { borderColor: "var(--cyan-dim)", background: "var(--cyan-bg)" } : undefined}
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
                       <div style={{ minWidth: 0 }}>

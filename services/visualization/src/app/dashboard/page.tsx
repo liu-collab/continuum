@@ -73,7 +73,7 @@ export default async function DashboardPage({
                     fontFamily: "var(--font-mono)",
                     fontWeight: 500,
                     color: w.value === window ? "var(--bg)" : "var(--text-muted)",
-                    background: w.value === window ? "var(--amber)" : "transparent",
+                    background: w.value === window ? "var(--cyan)" : "transparent",
                     transition: "all 80ms ease"
                   }}
                 >

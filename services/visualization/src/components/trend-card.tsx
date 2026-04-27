@@ -54,7 +54,7 @@ export function TrendCard({ trend }: TrendCardProps) {
                   className="w-full rounded-t"
                   style={{
                     height: `${Math.max((point.value / max) * 100, 10)}%`,
-                    background: "linear-gradient(180deg, var(--amber) 0%, var(--amber-dim) 100%)"
+                    background: "linear-gradient(180deg, var(--cyan) 0%, var(--cyan-dim) 100%)"
                   }}
                 />
               )}
