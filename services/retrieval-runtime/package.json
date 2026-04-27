@@ -14,6 +14,7 @@
     "dist/src/",
     "host-adapters/",
     "migrations/",
+    "scripts/",
     ".env.example",
     "README.md",
     "RELEASE.md"
@@ -26,11 +27,17 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "migrate": "tsx src/db/migrate.ts",
+    "migrate:memory-llm-config": "node scripts/migrate-memory-llm-config.mjs",
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:importer": "vitest run tests/csv-import-validator.test.ts",
+    "test:e2e": "vitest run -c vitest.e2e.config.ts",
     "test:memory-orchestrator-eval": "vitest run -c vitest.memory-orchestrator-real-eval.config.ts",
-    "eval:memory-orchestrator-real": "tsx src/cli/memory-orchestrator-real-eval.ts"
+    "test:real-user-experience": "vitest run -c vitest.real-user-experience.config.ts",
+    "eval:memory-orchestrator-real": "tsx src/cli/memory-orchestrator-real-eval.ts",
+    "eval:real-user-experience": "node tests/e2e/real-user-experience/run-ab-eval.mjs",
+    "eval:real-user-experience:host": "node tests/e2e/real-user-experience/run-real-host-ab-eval.mjs"
   },
   "dependencies": {
     "fastify": "^5.2.1",

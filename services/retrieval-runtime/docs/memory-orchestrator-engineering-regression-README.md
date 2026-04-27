@@ -87,6 +87,17 @@ npm run eval:memory-orchestrator-real -- --base-url http://localhost:8090/v1 --m
 - `--update-baseline`
   用本次结果更新基线
 
+托管配置对象示例：
+
+```json
+{
+  "provider": {
+    "base_url": "http://localhost:8090/v1",
+    "api_key": "replace-me"
+  }
+}
+```
+
 ---
 
 ## 4. 输出内容
