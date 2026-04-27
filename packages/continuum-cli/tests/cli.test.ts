@@ -135,7 +135,7 @@ describe("continuum cli", () => {
     expect(renderHelp()).toContain("continuum claude uninstall");
   });
 
-  it("parses the codex install command and exposes it in help", () => {
+  it("parses the codex install command and exposes forced injection help", () => {
     const parsed = parseArgs([
       "codex",
       "install",
@@ -143,16 +143,14 @@ describe("continuum cli", () => {
       "http://127.0.0.1:3002",
       "--codex-home",
       "C:/tmp/.codex",
-      "--server-name",
-      "memory",
     ]);
 
     expect(parsed.command).toEqual(["codex", "install"]);
     expect(parsed.options["runtime-url"]).toBe("http://127.0.0.1:3002");
     expect(parsed.options["codex-home"]).toBe("C:/tmp/.codex");
-    expect(parsed.options["server-name"]).toBe("memory");
     expect(renderHelp()).toContain("continuum codex install");
     expect(renderHelp()).toContain("continuum codex uninstall");
+    expect(renderHelp()).toContain("cleanup legacy MCP registration");
     expect(renderHelp()).toContain("continuum codex use");
   });
 

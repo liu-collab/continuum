@@ -174,51 +174,6 @@ function buildCodexCommandEnv(codexHome?: string) {
     : process.env;
 }
 
-export async function installCodexMcpServer(options: {
-  name: string;
-  cliEntryPath: string;
-  runtimeUrl: string;
-  codexHome?: string;
-  force: boolean;
-}) {
-  const { name, cliEntryPath, runtimeUrl, codexHome, force } = options;
-  const env = buildCodexCommandEnv(codexHome);
-
-  if (codexHome) {
-    await mkdir(codexHome, { recursive: true });
-  }
-
-  if (force) {
-    await uninstallCodexMcpServer({ name, codexHome }).catch(() => undefined);
-  }
-
-  const result = await runCommand(
-    "codex",
-    [
-      "mcp",
-      "add",
-      name,
-      "--env",
-      `MEMORY_RUNTIME_BASE_URL=${runtimeUrl}`,
-      "--",
-      process.execPath,
-      cliEntryPath,
-      "mcp-server",
-    ],
-    {
-      env,
-      captureOutput: true,
-    },
-  );
-
-  if (result.code === 0) {
-    return;
-  }
-
-  const errorText = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-  throw new Error(errorText || `codex mcp add failed with exit code ${result.code}`);
-}
-
 export async function uninstallCodexMcpServer(options: { name: string; codexHome?: string }) {
   const { name, codexHome } = options;
   const result = await runCommand("codex", ["mcp", "remove", name], {

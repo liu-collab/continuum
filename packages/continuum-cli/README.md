@@ -33,6 +33,7 @@
 - `continuum start` 会在 stack 就绪后再启动 `memory-native-agent`
 - `continuum mna` 用来单独安装、启动、停止、查看日志和读取 token
 - `continuum ui` 会优先连接已经通过 `continuum start` 启动好的页面；如果本地没有运行中的页面，才回退到包内自带的可视化产物
+- `continuum codex` 走平台强制注入：平台在 Codex 每轮开始前准备记忆上下文并通过 proxy 交付，不要求 Codex 主动调用 MCP 工具
 
 ## 安装
 

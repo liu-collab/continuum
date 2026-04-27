@@ -10,8 +10,8 @@ Commands:
   continuum mna <install|start|stop|logs|token> [--mna-url URL] [--mna-host HOST] [--mna-port PORT] [--mna-home PATH] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV] [--rotate]
   continuum claude install [--plugin-dir PATH] [--package PKG] [--force]
   continuum claude uninstall [--plugin-dir PATH]
-  continuum codex install [--runtime-url URL] [--codex-home PATH] [--server-name NAME] [--force]
-  continuum codex uninstall [--codex-home PATH] [--server-name NAME]
+  continuum codex install [--runtime-url URL] [--codex-home PATH]
+  continuum codex uninstall [--codex-home PATH] [--server-name NAME]  # cleanup legacy MCP registration
   continuum codex use [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
   continuum codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
 

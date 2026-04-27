@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 
 import {
   DEFAULT_CODEX_MCP_SERVER_NAME,
-  installCodexMcpServer,
   packageRootFromImportMeta,
   uninstallCodexMcpServer,
   vendorPath,
@@ -21,27 +20,16 @@ function resolveCodexMcpServerName(options: Record<string, string | boolean>) {
 
 export async function runCodexInstallCommand(
   options: Record<string, string | boolean>,
-  importMetaUrl: string,
+  _importMetaUrl: string,
 ) {
-  const packageRoot = packageRootFromImportMeta(importMetaUrl);
-  const cliEntryPath = vendorPath(packageRoot, "..", "dist", "src", "index.js");
   const runtimeUrl =
     typeof options["runtime-url"] === "string"
       ? options["runtime-url"]
       : process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
   const codexHome = resolveCodexHome(options);
-  const name = resolveCodexMcpServerName(options);
-  const force = options.force === true || options.force === "true";
 
-  await installCodexMcpServer({
-    name,
-    cliEntryPath,
-    runtimeUrl,
-    codexHome,
-    force,
-  });
-
-  process.stdout.write(`Codex MCP server installed as ${name}\n`);
+  process.stdout.write("Codex uses platform forced memory injection; no MCP server install is required.\n");
+  process.stdout.write(`Runtime URL: ${runtimeUrl}\n`);
   if (codexHome) {
     process.stdout.write(`CODEX_HOME=${codexHome}\n`);
   }
@@ -82,7 +70,6 @@ export async function runCodexUseCommand(
   const ensureRuntime =
     !(options["ensure-runtime"] === "false" || options["ensure-runtime"] === false);
   const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime`;
-  const mcpCommand = `"${process.execPath}" "${cliEntryPath}" mcp-server`;
   const codexHome = resolveCodexHome(options);
 
   const child = spawn(process.execPath, [launcherPath], {
@@ -92,7 +79,7 @@ export async function runCodexUseCommand(
       ...(codexHome ? { CODEX_HOME: codexHome } : {}),
       MEMORY_RUNTIME_BASE_URL: runtimeUrl,
       MEMORY_RUNTIME_START_COMMAND: ensureRuntime ? runtimeCommand : "off",
-      MEMORY_MCP_COMMAND: mcpCommand,
+      MEMORY_MCP_COMMAND: "off",
       MEMORY_CODEX_CLIENT_COMMAND:
         typeof options["client-command"] === "string"
           ? options["client-command"]
