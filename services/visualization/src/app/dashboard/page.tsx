@@ -147,10 +147,10 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      {[
-        ["Retrieval Runtime", response.retrievalMetrics],
-        ["Storage", response.storageMetrics]
-      ].map(([label, metrics]) => (
+      {([
+        { label: "Retrieval Runtime", metrics: response.retrievalMetrics },
+        { label: "Storage", metrics: response.storageMetrics }
+      ] as const).map(({ label, metrics }) => (
         <section key={label} style={{ display: "grid", gap: "0.5rem" }}>
           <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
           <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
