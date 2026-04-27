@@ -14,7 +14,6 @@ import { ChatPanel } from "./chat-panel";
 import { ConfirmDialog } from "./confirm-dialog";
 import { FilePreview } from "./file-preview";
 import { FileTree } from "./file-tree";
-import { MemoryPanel } from "./memory-panel";
 import { PromptInspector } from "./prompt-inspector";
 import { SessionList } from "./session-list";
 import { SettingsModal } from "./settings-modal";
@@ -79,7 +78,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         <div
           data-testid="agent-workspace-layout"
           className={cn(
-            "grid min-h-0 flex-1 gap-4 xl:h-full xl:grid-cols-[20rem_minmax(0,1fr)_21rem] xl:grid-rows-[minmax(0,1fr)] xl:gap-6 xl:overflow-hidden"
+            "grid min-h-0 flex-1 gap-4 xl:h-full xl:grid-cols-[20rem_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:gap-6 xl:overflow-hidden"
           )}
         >
           <section
@@ -177,12 +176,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             />
           </div>
 
-          <aside
-            data-testid="agent-memory-column"
-            className={`order-3 flex ${PANEL_HEIGHT_CLASS} max-h-[32rem] flex-col xl:max-h-none`}
-          >
-            <MemoryPanel activeTurn={workspace.activeTurn} />
-          </aside>
         </div>
       </div>
 
