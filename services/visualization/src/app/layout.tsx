@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import type { Route } from "next";
 import { JetBrains_Mono, DM_Sans } from "next/font/google";
 import Link from "next/link";
-import { Activity, BookText, Bot, ChartSpline, FileText, HeartPulse, ShieldCheck } from "lucide-react";
+import { Activity, BookText, Bot, ChartSpline, FileText, HeartPulse, ShieldCheck, Sun, Moon } from "lucide-react";
 
 import { Providers } from "@/app/providers";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
@@ -54,6 +55,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.theme==='light')document.documentElement.classList.add('light')}catch(e){}` }} />
+      </head>
       <body className={cn(sans.variable, mono.variable, "font-[var(--font-sans)] antialiased")}>
         <Providers>
           <div className="flex h-screen overflow-hidden bg-background">
@@ -82,10 +86,11 @@ export default function RootLayout({
                   );
                 })}
               </nav>
-              <div className="border-t border-border px-4 py-2.5">
+              <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-2">
                 <span className="text-[10px] font-[var(--font-mono)] tracking-[0.12em] text-muted-foreground">
-                  RUNTIME · STORAGE · OBSERVE
+                  OBSERVE
                 </span>
+                <ThemeToggle />
               </div>
             </aside>
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
