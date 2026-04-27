@@ -1,111 +1,113 @@
 # Continuum
 
-持续记忆层，为 AI coding agent 提供跨会话的偏好记忆、任务状态追踪和上下文延续能力。
+Persistent memory layer for AI coding agents — keeps preferences, task state, and context alive across sessions.
 
 [![GitHub Repo stars](https://img.shields.io/github/stars/liu-collab/continuum?style=social)](https://github.com/liu-collab/continuum/stargazers)
 [![npm version](https://img.shields.io/npm/v/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
 [![npm downloads](https://img.shields.io/npm/dm/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-## 思路
+[中文文档](./README_CN.md)
 
-现在 AI coding agent 的能力越来越强，但有一个根本问题没解决：**每一轮对话都是孤立的**。模型关掉再打开，之前的偏好、约定、任务进度全丢了。
+## Vision
 
-Continuum 的思路是把"记忆"从模型身上拆出来，做成一个独立运行的系统层。不是让模型自己记住一切，而是让模型在需要的时候，由系统把对的东西塞回给它。
+AI coding agents are powerful, but every session is a blank slate. Close the terminal and your preferences, conventions, and task progress are gone.
 
-更进一步的想法是：主模型不应该是单打独斗的。它身边应该有一圈辅助模型，各自做各自擅长的事——有的负责摘要、有的负责检索、有的负责判断什么时候该注入、有的负责在注入前把上下文修剪到刚好能塞进窗口的大小。主模型只做决策和生成，辅助模型负责让主模型永远有完整、干净的上下文可用。
+Continuum pulls memory out of the model and into a dedicated system layer. The model doesn't have to remember everything — the system injects the right context at the right time.
 
-当前阶段先从记忆注入开始做起。后续可以沿着这个方向继续加：上下文自动修剪、多辅助模型协作、memory 摘要与压缩，等等。
+The bigger picture: **a main model shouldn't work alone**. It should be surrounded by auxiliary models, each handling what it's best at — summarization, retrieval, injection timing, context pruning. The main model focuses on decisions and generation; the auxiliary layer ensures it always has clean, complete context.
 
-## 现在能做什么
+Memory injection is the first auxiliary pipeline we've built. More will follow: automatic context pruning, multi-model collaboration, memory summarization and compression.
 
-- **结构化记忆** — 从对话里提取偏好、规则、任务状态，而不是存原始聊天记录
-- **主动召回** — 在会话开始、回答前、任务切换时自动注入相关上下文，不等模型自己来要
-- **可观测** — 内置 dashboard 能看到什么被记住了、什么被召回了、为什么
+## What it does
 
-## 架构
+- **Structured memory** — extracts durable facts, preferences, and task state from conversations instead of storing raw chat logs
+- **Proactive recall** — injects relevant context at session start, before responses, and during task switches without waiting for the model to ask
+- **Observability** — built-in dashboard shows what was remembered, what was recalled, and why
 
-### 主模型 + 辅助模型协作
+## Architecture
+
+### Main model + auxiliary model collaboration
 
 ```mermaid
 flowchart TB
-    subgraph 主模型
-        M["Claude Code / Codex / 自定义 Agent<br/>决策与生成"]
+    subgraph main["Main Model"]
+        M["Claude Code / Codex / Custom Agent<br/>Decision & Generation"]
     end
 
-    subgraph 辅助模型层
-        T["工具调用辅助<br/>文件读写、搜索、执行"]
-        MEM["记忆辅助<br/>摘要、检索、注入、写回"]
-        CTX["上下文辅助<br/>（规划中）<br/>窗口修剪、优先级排序"]
+    subgraph aux["Auxiliary Model Layer"]
+        T["Tool Assistance<br/>file I/O, search, execution"]
+        MEM["Memory Assistance<br/>summarization, retrieval, injection, writeback"]
+        CTX["Context Assistance<br/>(planned)<br/>window pruning, priority ranking"]
     end
 
-    subgraph 记忆运行时
-        RT["retrieval-runtime<br/>触发判断 · 语义检索 · 注入 · 写回"]
-        ST["storage<br/>写入模型 · 冲突检测 · 治理 · 读模型投影"]
+    subgraph runtime["Memory Runtime"]
+        RT["retrieval-runtime<br/>trigger · recall · inject · writeback"]
+        ST["storage<br/>write model · governance · read model projection"]
     end
 
-    subgraph 存储与观测
+    subgraph store["Storage & Observability"]
         DB[("PostgreSQL + pgvector")]
-        VIZ["visualization<br/>dashboard · 运行观测"]
+        VIZ["visualization<br/>dashboard · observability"]
     end
 
-    M <-->|"工具调用"| T
-    M <-->|"记忆上下文"| MEM
+    M <-->|"tool calls"| T
+    M <-->|"memory context"| MEM
     MEM --> RT --> ST --> DB
     RT --> VIZ
     ST --> VIZ
-    CTX -.->|"后续"| M
+    CTX -.->|"coming"| M
 ```
 
-核心理念：**主模型只做决策，辅助模型负责上下文工程**。记忆是第一条辅助管线，后续工具调用优化、上下文修剪、多辅助模型协作会陆续补上。
+Core principle: **the main model decides, auxiliary models handle context engineering**. Memory is the first pipeline. Tool optimization, context pruning, and multi-model collaboration will follow.
 
-### 当前服务边界
+### Current services
 
-| 服务 | 负责 |
-|------|------|
-| **storage** | 记忆写入、结构化、冲突检测、治理规则、读模型投影 |
-| **retrieval-runtime** | 触发决策、语义检索、记忆注入、写回协调 |
-| **visualization** | 记忆记录浏览、召回轨迹查看、系统运行指标 |
+| Service | Responsibility |
+|---------|---------------|
+| **storage** | Memory writes, structuring, conflict detection, governance, read model projection |
+| **retrieval-runtime** | Trigger decisions, semantic search, memory injection, writeback coordination |
+| **visualization** | Memory record browser, recall trace viewer, system metrics |
 
-### 数据流
+### Data flow
 
 ```mermaid
 flowchart LR
-    host["宿主 Agent<br/>Claude Code · Codex"]
-    runtime["retrieval-runtime<br/>触发 · 召回 · 注入 · 写回"]
-    storage["storage<br/>写入 · 治理 · 读模型"]
+    host["Host Agent<br/>Claude Code · Codex"]
+    runtime["retrieval-runtime<br/>trigger · recall · inject · writeback"]
+    storage["storage<br/>write · govern · read model"]
     db[("PostgreSQL + pgvector")]
     viz["visualization<br/>dashboard"]
 
     host -->|"prepare-context"| runtime
-    runtime -->|"检索 / 写入"| storage
+    runtime -->|"search / write"| storage
     storage --> db
     runtime --> viz
     storage --> viz
 ```
 
-## 三宿主 A/B 评测
+## Three-host A/B evaluation
 
-我们在三种宿主上跑了 100 个任务的盲评对比（A 组无记忆，B 组有记忆）：
+We ran 100-task blind evaluations across three hosts (group A: no memory, group B: with memory):
 
-| 指标 | LLM（无工具·上限） | Claude Code | Codex |
-|------|:---:|:---:|:---:|
-| B 组胜率 | **0.75** | 0.64 | 0.57 |
-| B 组任务完成度 | **4.49** | 3.38 | 4.13 |
-| B 组记忆有用性 | **2.81** | 2.02 | 1.95 |
-| 工具调用 B/A 比 | — | 1.09 | 0.83 |
+| Metric | LLM (no tools·upper bound) | Claude Code | Codex |
+|--------|:---:|:---:|:---:|
+| B win rate | **0.75** | 0.64 | 0.57 |
+| B task success | **4.49** | 3.38 | 4.13 |
+| B memory usefulness | **2.81** | 2.02 | 1.95 |
+| Tool event ratio B/A | — | 1.09 | 0.83 |
 
-LLM 组没有工具调用，记忆是唯一信源，模型拿到直接用——这是理论上限。真实宿主（Claude Code / Codex）有工具，模型拿到记忆后会先探索文件系统去验证，这个"自己确认一遍"的行为消耗了注意力和 token，记忆有用性就打折了。详细数据和分析见 `services/retrieval-runtime/tests/e2e/real-user-experience/README.md`。
+LLM has no tools — memory is the only source, used directly. That's the theoretical ceiling. Real hosts (Claude Code / Codex) have tools; the model verifies memory against the filesystem before trusting it. That friction burns attention and tokens. Full data and analysis in `services/retrieval-runtime/tests/e2e/real-user-experience/README.md`.
 
-## 快速开始
+## Quick Start
 
-### 安装 CLI
+### Install the CLI
 
 ```bash
 npm install -g @jiankarlin/continuum
 ```
 
-### 启动全部服务
+### Start all services
 
 ```bash
 continuum start \
@@ -113,33 +115,33 @@ continuum start \
   --embedding-model text-embedding-3-small
 ```
 
-这会启动一个包含 PostgreSQL + pgvector、storage、retrieval-runtime、visualization 的 Docker 容器。所有端口绑定到 `127.0.0.1`。
+Launches a single Docker container with PostgreSQL + pgvector, storage, retrieval-runtime, and visualization. All ports bind to `127.0.0.1`.
 
-| 服务 | 默认端口 |
-|------|---------|
+| Service | Default Port |
+|---------|-------------|
 | PostgreSQL | 54329 |
 | storage | 3001 |
 | retrieval-runtime | 3002 |
 | visualization | 3003 |
 
-### 接入宿主
+### Connect hosts
 
 ```bash
 continuum claude install   # Claude Code
 continuum codex            # Codex
 ```
 
-### 其他命令
+### Other commands
 
 ```bash
-continuum status    # 查看运行状态
-continuum ui        # 打开 dashboard
-continuum stop      # 停止全部服务
+continuum status    # check running services
+continuum ui        # open the dashboard
+continuum stop      # shut everything down
 ```
 
-## 开发
+## Development
 
-需要 Node.js >= 22 和本地 PostgreSQL。
+Requires Node.js >= 22 and a local PostgreSQL instance.
 
 ```bash
 git clone https://github.com/anthropics/agent-memory.git
@@ -147,42 +149,42 @@ cd agent-memory
 npm run dev
 ```
 
-开发模式下全部服务热重载。默认数据库：`postgres://postgres:postgres@127.0.0.1:5432/agent_memory`。
+Starts all services in dev mode with hot reload. Default database: `postgres://postgres:postgres@127.0.0.1:5432/agent_memory`.
 
-### 项目结构
+### Project structure
 
 ```
 services/
-  storage/              # 记忆持久化与治理
-  retrieval-runtime/    # 召回、注入、写回
+  storage/              # memory persistence and governance
+  retrieval-runtime/    # recall, injection, and writeback
   visualization/        # Next.js dashboard
-  memory-native-agent/  # 参考宿主适配器
+  memory-native-agent/  # reference host adapter
 packages/
-  continuum-cli/        # CLI 工具与分发
+  continuum-cli/        # CLI tooling and distribution
 ```
 
-### 跑测试
+### Running tests
 
 ```bash
 cd services/retrieval-runtime && npx vitest run
 cd services/storage && npx vitest run
 ```
 
-## 后续计划
+## Roadmap
 
-当前阶段完成了最核心的记忆注入管线。后续会沿着"辅助模型层"这个方向继续做：
+The core memory injection pipeline is in place. Next steps along the auxiliary model direction:
 
-- **上下文自动修剪** — 辅助模型在注入前把上下文压缩到窗口大小，去掉重复和已失效内容
-- **多辅助模型协作** — 摘要、检索、触发判断、质量评估各自用更小更快的模型独立跑
-- **写回质量闭环** — 写回前由辅助模型做质量校验，减少噪声写入
-- **记忆去重与合并** — 相似记忆自动合并，过期记忆自动降级
-- **配置化辅助模型** — 不同辅助任务可以指定不同模型，不绑死一套配置
+- **Automatic context pruning** — auxiliary model compresses context to fit the window before injection, removing duplicates and stale content
+- **Multi-model collaboration** — summarization, retrieval, trigger decisions, and quality assessment each run on smaller, faster models independently
+- **Writeback quality gating** — auxiliary model validates writeback candidates before storage to reduce noise
+- **Memory dedup and merging** — similar memories auto-merge, expired ones auto-demote
+- **Configurable auxiliary models** — different auxiliary tasks can target different models, no hard binding
 
-目标一直没变：主模型永远有干净、完整的上下文可用，不再"失忆"。
+The goal stays the same: the main model always has clean, complete context. No more amnesia.
 
-## 平台支持
+## Platform Support
 
-`continuum start` 当前支持 **Windows**（需要 Docker Desktop）。其他平台可以手动启动服务或通过 Docker Compose。
+`continuum start` currently supports **Windows** (requires Docker Desktop). Other platforms can run services manually or via Docker Compose.
 
 ## Star History
 
