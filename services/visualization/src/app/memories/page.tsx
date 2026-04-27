@@ -23,135 +23,158 @@ export default async function MemoriesPage({
   const params = await searchParams;
   const filters = parseMemoryCatalogFilters(params);
   const response = await getMemoryCatalog(filters);
-  const es = describeCatalogEmptyState(response);
+  const emptyState = describeCatalogEmptyState(response);
   const views = buildMemoryCatalogQuickViews(filters);
   const hints = describeCatalogFilterHints(filters);
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <div>
-          <h1 style={{ fontSize: "1.375rem", fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--text)", letterSpacing: "-0.01em" }}>
-            Memories
-          </h1>
-          <p style={{ marginTop: "0.25rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-            {response.total.toLocaleString()} records
-            <span style={{ marginLeft: "0.5rem", fontSize: "0.6875rem" }}>· {memoryViewModeLabel(filters.memoryViewMode)}</span>
-            {response.pendingConfirmationCount > 0 ? (
-              <span style={{ marginLeft: "0.5rem", fontSize: "0.6875rem", color: "var(--amber)" }}>
-                · {response.pendingConfirmationCount} pending
-              </span>
-            ) : null}
-          </p>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
-          <FilterModalButton activeCount={activeCount} title="Filter Memories" description="Filter by workspace, task, type, scope, status, or date.">
-            <SearchForm
-              action="/memories"
-              initialValues={{
-                workspace_id: filters.workspaceId,
-                task_id: filters.taskId,
-                session_id: filters.sessionId,
-                source_ref: filters.sourceRef,
-                memory_view_mode: filters.memoryViewMode,
-                memory_type: filters.memoryType,
-                scope: filters.scope,
-                status: filters.status,
-                updated_from: filters.updatedFrom,
-                updated_to: filters.updatedTo
-              }}
-            >
-              <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
-              <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
-              <FormField label="Session" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-              <FormField label="Source Ref" name="source_ref" placeholder="source ref" defaultValue={filters.sourceRef} />
-              <FormField label="View" name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
-                { label: "Workspace + Global", value: "workspace_plus_global" },
-                { label: "Workspace Only", value: "workspace_only" }
-              ]} />
-              <FormField label="Type" name="memory_type" defaultValue={filters.memoryType} options={[
-                { label: "Fact / Preference", value: "fact_preference" },
-                { label: "Task State", value: "task_state" },
-                { label: "Episodic", value: "episodic" }
-              ]} />
-              <FormField label="Scope" name="scope" defaultValue={filters.scope} options={[
-                { label: "Session", value: "session" },
-                { label: "Task", value: "task" },
-                { label: "Global", value: "user" },
-                { label: "Workspace", value: "workspace" }
-              ]} />
-              <FormField label="Status" name="status" defaultValue={filters.status} options={[
-                { label: "Active", value: "active" },
-                { label: "Pending", value: "pending_confirmation" },
-                { label: "Superseded", value: "superseded" },
-                { label: "Archived", value: "archived" },
-                { label: "Deleted", value: "deleted" }
-              ]} />
-              <FormField label="Updated From" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
-              <FormField label="Updated To" name="updated_to" type="date" defaultValue={filters.updatedTo} />
-            </SearchForm>
-          </FilterModalButton>
-          <HealthModalButton sources={[response.sourceStatus]} label="Source" />
-        </div>
-      </div>
-
-      <section className="panel p-4">
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <div>
-            <h2 className="text-[13px] font-[var(--font-mono)] font-medium text-text">Quick Views</h2>
-            <p className="mt-0.5 text-[11px] font-[var(--font-mono)] text-muted">Switch between common memory views without manual filtering.</p>
+    <div className="app-page">
+      <section className="tile tile-light">
+        <div className="tile-inner">
+          <div className="tile-head tile-head-row">
+            <div>
+              <div className="section-kicker">记忆库</div>
+              <h1 className="tile-title">记忆目录</h1>
+              <p className="tile-subtitle">
+                查看已经结构化的偏好、任务状态和情景记忆。
+              </p>
+            </div>
+            <div className="tile-actions">
+              <FilterModalButton activeCount={activeCount} title="筛选记忆" description="按工作区、任务、类型、作用域、状态和更新时间筛选。">
+                <SearchForm
+                  action="/memories"
+                  initialValues={{
+                    workspace_id: filters.workspaceId,
+                    task_id: filters.taskId,
+                    session_id: filters.sessionId,
+                    source_ref: filters.sourceRef,
+                    memory_view_mode: filters.memoryViewMode,
+                    memory_type: filters.memoryType,
+                    scope: filters.scope,
+                    status: filters.status,
+                    updated_from: filters.updatedFrom,
+                    updated_to: filters.updatedTo
+                  }}
+                >
+                  <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
+                  <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
+                  <FormField label="Session" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+                  <FormField label="Source Ref" name="source_ref" placeholder="source ref" defaultValue={filters.sourceRef} />
+                  <FormField label="视图" name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
+                    { label: "工作区 + 平台", value: "workspace_plus_global" },
+                    { label: "仅工作区", value: "workspace_only" }
+                  ]} />
+                  <FormField label="类型" name="memory_type" defaultValue={filters.memoryType} options={[
+                    { label: "事实与偏好", value: "fact_preference" },
+                    { label: "任务状态", value: "task_state" },
+                    { label: "情景记忆", value: "episodic" }
+                  ]} />
+                  <FormField label="作用域" name="scope" defaultValue={filters.scope} options={[
+                    { label: "会话", value: "session" },
+                    { label: "任务", value: "task" },
+                    { label: "平台", value: "user" },
+                    { label: "工作区", value: "workspace" }
+                  ]} />
+                  <FormField label="状态" name="status" defaultValue={filters.status} options={[
+                    { label: "生效中", value: "active" },
+                    { label: "待确认", value: "pending_confirmation" },
+                    { label: "已被替代", value: "superseded" },
+                    { label: "已归档", value: "archived" },
+                    { label: "已删除", value: "deleted" }
+                  ]} />
+                  <FormField label="更新开始" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
+                  <FormField label="更新结束" name="updated_to" type="date" defaultValue={filters.updatedTo} />
+                </SearchForm>
+              </FilterModalButton>
+              <HealthModalButton sources={[response.sourceStatus]} label="数据源" />
+            </div>
           </div>
-          {hints.length > 0 ? <div className="text-[11px] font-[var(--font-mono)] text-amber">{hints.join(" ")}</div> : null}
-        </div>
-        <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
-          {views.map((view) => (
-            <Link
-              key={view.key}
-              href={view.href}
-              style={{
-                borderRadius: "var(--radius-md)",
-                border: view.active ? "1px solid var(--cyan-dim)" : "1px solid var(--border)",
-                background: view.active ? "var(--cyan-bg)" : "var(--surface)",
-                padding: "0.75rem 0.875rem",
-                transition: "all 80ms ease",
-                textAlign: "left"
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-                <span className="text-[12px] font-[var(--font-mono)] font-medium text-text">{view.label}</span>
-                {view.active ? <StatusBadge tone="success">active</StatusBadge> : null}
-              </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{view.description}</p>
-            </Link>
-          ))}
+
+          <div className="stat-grid">
+            <SummaryCard label="记录总数" value={response.total.toLocaleString()} />
+            <SummaryCard label="当前视图" value={memoryViewModeLabel(filters.memoryViewMode)} />
+            <SummaryCard label="待确认" value={response.pendingConfirmationCount.toLocaleString()} tone={response.pendingConfirmationCount > 0 ? "warning" : "neutral"} />
+          </div>
+
+          {hints.length > 0 ? (
+            <div className="notice notice-warning mt-6">{hints.join(" ")}</div>
+          ) : null}
+          {response.viewWarnings.length > 0 ? (
+            <div className="notice notice-warning mt-3">{response.viewWarnings.join(" ")}</div>
+          ) : null}
+          {response.pendingConfirmationCount > 0 && filters.status !== "pending_confirmation" ? (
+            <div className="notice notice-warning mt-3">
+              还有 {response.pendingConfirmationCount} 条待确认记忆，可以切到待确认队列集中处理。
+            </div>
+          ) : null}
         </div>
       </section>
 
-      {response.viewWarnings.length > 0 ? (
-        <div style={{ border: "1px solid rgba(240,168,76,0.3)", borderRadius: "var(--radius-lg)", background: "var(--amber-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
-          {response.viewWarnings.join(" ")}
+      <section className="tile tile-dark">
+        <div className="tile-inner">
+          <div className="tile-head">
+            <div className="section-kicker">视图</div>
+            <h2 className="tile-title">常用入口</h2>
+            <p className="tile-subtitle">
+              先按用户最常用的使用方式切换，再用筛选做精确定位。
+            </p>
+          </div>
+          <div className="utility-grid">
+            {views.map((view) => (
+              <Link
+                key={view.key}
+                href={view.href}
+                className={`record-link ${view.active ? "record-link-active" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{view.label}</h3>
+                  {view.active ? <StatusBadge tone="success">当前</StatusBadge> : null}
+                </div>
+                <p className="mt-3 text-[17px] leading-[1.47] text-muted">{view.description}</p>
+              </Link>
+            ))}
+          </div>
         </div>
-      ) : null}
-      {response.pendingConfirmationCount > 0 && filters.status !== "pending_confirmation" ? (
-        <div style={{ border: "1px solid rgba(240,168,76,0.3)", borderRadius: "var(--radius-lg)", background: "var(--amber-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
-          {response.pendingConfirmationCount} pending confirmation(s). Switch to the pending queue to review.
-        </div>
-      ) : null}
+      </section>
 
-      <div>
-        <div style={{ marginBottom: "0.5rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
-          <StatusBadge tone={response.sourceStatus.status === "healthy" ? "success" : response.sourceStatus.status === "partial" ? "warning" : "danger"}>
-            {response.sourceStatus.label}: {response.sourceStatus.status}
-          </StatusBadge>
-          <span>{response.viewSummary}</span>
+      <section className="tile tile-parchment">
+        <div className="tile-inner">
+          <div className="tile-head tile-head-row">
+            <div>
+              <div className="section-kicker">记录</div>
+              <h2 className="tile-title">当前结果</h2>
+              <p className="tile-subtitle">{response.viewSummary}</p>
+            </div>
+            <StatusBadge tone={response.sourceStatus.status === "healthy" ? "success" : response.sourceStatus.status === "partial" ? "warning" : "danger"}>
+              {response.sourceStatus.label}: {response.sourceStatus.status}
+            </StatusBadge>
+          </div>
+          {response.items.length > 0 ? (
+            <MemoryTable items={response.items} />
+          ) : (
+            <EmptyState title={emptyState.title} description={emptyState.description} />
+          )}
         </div>
-        {response.items.length > 0 ? (
-          <MemoryTable items={response.items} />
-        ) : (
-          <EmptyState title={es.title} description={es.description} />
-        )}
-      </div>
+      </section>
+    </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone = "neutral"
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "warning";
+}) {
+  return (
+    <div className="panel p-6">
+      <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{label}</div>
+      <div className="mt-4 text-[40px] font-semibold leading-[1.1] text-text">{value}</div>
+      {tone === "warning" ? <div className="notice notice-warning mt-4">需要复核</div> : null}
     </div>
   );
 }

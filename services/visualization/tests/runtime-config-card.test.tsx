@@ -108,7 +108,8 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
-    await user.selectOptions(screen.getByRole("combobox"), "openai-compatible");
+    await user.click(screen.getByRole("button", { name: "demo" }));
+    await user.click(screen.getByRole("option", { name: "openai" }));
     fireEvent.change(screen.getByPlaceholderText("provider model"), { target: { value: "deepseek-chat" } });
     fireEvent.change(screen.getByPlaceholderText("provider base_url"), {
       target: { value: "https://api.deepseek.com" },
@@ -148,7 +149,8 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
-    await user.selectOptions(screen.getByRole("combobox"), "openai-compatible");
+    await user.click(screen.getByRole("button", { name: "demo" }));
+    await user.click(screen.getByRole("option", { name: "openai" }));
     await user.clear(screen.getByPlaceholderText("provider model"));
     await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
@@ -203,6 +205,7 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "openai" }));
     const options = screen.getAllByRole("option").map((option) => option.textContent);
     expect(options).toEqual(["openai", "anthropic", "ollama"]);
   });
@@ -225,6 +228,7 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
+    await userEvent.click(screen.getByRole("button", { name: "record-replay" }));
     const options = screen.getAllByRole("option").map((option) => option.textContent);
     expect(options).toEqual(["openai", "anthropic", "ollama", "record-replay"]);
   });

@@ -10,17 +10,16 @@ type StatusBadgeProps = {
 };
 
 const styles: Record<StatusBadgeProps["tone"], string> = {
-  neutral: "bg-surface-hover text-muted border border-border",
-  success: "bg-emerald-bg text-emerald border border-emerald-900/30",
-  warning: "bg-amber-bg text-amber border border-amber-900/30",
-  danger: "bg-rose-bg text-rose border border-rose-900/30"
+  neutral: "status-badge",
+  success: "status-badge status-success",
+  warning: "status-badge status-warning",
+  danger: "status-badge status-danger"
 };
 
 export function StatusBadge({ tone, children, className }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-[3px] px-1.5 py-0.5 text-[11px] font-[var(--font-mono)] font-medium",
         styles[tone],
         className
       )}

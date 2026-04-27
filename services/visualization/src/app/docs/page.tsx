@@ -16,44 +16,51 @@ export default async function DocsIndexPage() {
   const groups = groupDocsByCategory(await getRepositoryDocs());
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">文档</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          仓库内文档的页面入口，会按文档元数据和目录自动排序。
-        </p>
-      </div>
+    <div className="app-page">
+      <section className="tile tile-light">
+        <div className="tile-inner">
+          <div className="tile-head">
+            <div className="section-kicker">文档</div>
+            <h1 className="tile-title">项目文档</h1>
+            <p className="tile-subtitle">
+              仓库内文档的只读入口，按目录和元数据分组展示。
+            </p>
+          </div>
+        </div>
+      </section>
 
-      {groups.length > 0 ? (
-        groups.map((group) => (
-          <section key={group.key} className="space-y-3">
-            <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              {group.label}
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {group.docs.map((doc) => (
-                <Link
-                  key={doc.relativePath}
-                  href={doc.href as Route}
-                  className="group flex flex-col gap-3 rounded-lg border bg-surface p-4 transition hover:border-border-strong hover:shadow-soft"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 truncate text-base font-semibold text-foreground">{doc.title}</div>
-                    <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" />
+      <section className="tile tile-parchment">
+        <div className="tile-inner">
+          {groups.length > 0 ? (
+            <div className="grid gap-12">
+              {groups.map((group) => (
+                <section key={group.key}>
+                  <div className="tile-head">
+                    <div className="section-kicker">{group.label}</div>
                   </div>
-                  <p className="text-sm leading-6 text-muted-foreground">{doc.description}</p>
-                </Link>
+                  <div className="utility-grid">
+                    {group.docs.map((doc) => (
+                      <Link key={doc.relativePath} href={doc.href as Route} className="record-link group">
+                        <div className="flex items-start justify-between gap-4">
+                          <h2 className="text-[21px] font-semibold leading-[1.19] text-text">{doc.title}</h2>
+                          <ArrowUpRight className="h-5 w-5 shrink-0 text-muted-foreground transition group-hover:text-primary" />
+                        </div>
+                        <p className="mt-3 text-[17px] leading-[1.47] text-muted">{doc.description}</p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
-          </section>
-        ))
-      ) : (
-        <EmptyState
-          title="暂无文档"
-          description="当前仓库 docs 目录下还没有可展示的 Markdown 文档。"
-          testId="docs-index-empty"
-        />
-      )}
+          ) : (
+            <EmptyState
+              title="暂无文档"
+              description="当前仓库 docs 目录下还没有可展示的 Markdown 文档。"
+              testId="docs-index-empty"
+            />
+          )}
+        </div>
+      </section>
     </div>
   );
 }

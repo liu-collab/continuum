@@ -22,21 +22,23 @@ export function ProviderSwitch({ providerId, providerLabel, model, onApply, onRe
   }, [model]);
 
   return (
-    <div className="flex items-center gap-3 rounded-full border bg-white/85 px-4 py-2 text-sm text-slate-700">
-      <span className="font-semibold text-slate-900">{t("providerSwitch.label")}</span>
-      <span data-testid="provider-label">{providerLabel}</span>
+    <div className="flex min-h-11 flex-wrap items-center gap-3 rounded-[var(--radius-pill)] border border-[var(--hairline)] bg-[var(--canvas)] px-4 py-2 text-[14px] leading-[1.43] text-[var(--ink-muted-80)]">
+      <span className="font-semibold text-[var(--ink)]">{t("providerSwitch.label")}</span>
+      <span data-testid="provider-label" className="text-[var(--ink-muted-80)]">
+        {providerLabel}
+      </span>
       <input
         data-testid="provider-model-input"
         value={draftModel}
         onChange={(event) => setDraftModel(event.target.value)}
-        className="min-w-44 rounded-full border bg-white px-3 py-1 text-xs text-slate-700 outline-none"
+        className="field !h-9 !min-h-9 min-w-44 !px-3 !py-1 !text-[14px]"
         placeholder={t("providerSwitch.modelPlaceholder")}
       />
       <button
         type="button"
         onClick={() => onApply(draftModel)}
         data-testid="provider-apply"
-        className="rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+        className="button-pearl-capsule min-h-9 px-3 py-1"
       >
         {t("providerSwitch.apply")}
       </button>
@@ -44,7 +46,7 @@ export function ProviderSwitch({ providerId, providerLabel, model, onApply, onRe
         type="button"
         onClick={onRefresh}
         data-testid="provider-refresh"
-        className="rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+        className="button-pearl-capsule min-h-9 px-3 py-1"
       >
         {t("providerSwitch.refresh")}
       </button>

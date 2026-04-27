@@ -194,7 +194,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByTestId("memory-model-mode-select")).toHaveValue("same_as_primary");
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
     expect(onCheckMemoryLlm).toHaveBeenCalledTimes(1);
@@ -355,7 +355,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByDisplayValue("Anthropic")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "MEMORY_LLM_PROTOCOL" })).toHaveTextContent("Anthropic");
     expect(screen.getByTestId("memory-model-mode-select")).toBeInTheDocument();
   });
 
@@ -393,7 +393,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByTestId("memory-model-mode-select")).toHaveValue("same_as_primary");
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
     expect(screen.queryByPlaceholderText("MEMORY_LLM_MODEL")).not.toBeInTheDocument();
   });
 
@@ -426,16 +426,12 @@ describe("SettingsModal", () => {
     const primaryConfig = screen.getByTestId("primary-model-config");
     const memoryConfig = screen.getByTestId("memory-model-config");
 
-    await user.selectOptions(
-      within(primaryConfig).getByDisplayValue("高"),
-      "max",
-    );
+    await user.click(within(primaryConfig).getByRole("button", { name: "思考模式" }));
+    await user.click(screen.getByRole("option", { name: "最大" }));
     await user.clear(within(primaryConfig).getByPlaceholderText("最大输出 token"));
     await user.type(within(primaryConfig).getByPlaceholderText("最大输出 token"), "8192");
-    await user.selectOptions(
-      within(memoryConfig).getByDisplayValue("中"),
-      "xhigh",
-    );
+    await user.click(within(memoryConfig).getByRole("button", { name: "记忆模型思考模式" }));
+    await user.click(screen.getByRole("option", { name: "超高" }));
     await user.clear(within(memoryConfig).getByPlaceholderText("记忆模型最大输出 token"));
     await user.type(within(memoryConfig).getByPlaceholderText("记忆模型最大输出 token"), "2048");
     await user.click(screen.getByTestId("runtime-config-save"));
@@ -483,7 +479,8 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    await user.selectOptions(screen.getByTestId("memory-model-mode-select"), "same_as_primary");
+    await user.click(screen.getByTestId("memory-model-mode-select"));
+    await user.click(screen.getByRole("option", { name: "与聊天主模型一致" }));
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(

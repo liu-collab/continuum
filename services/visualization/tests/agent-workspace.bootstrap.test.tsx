@@ -133,7 +133,7 @@ describe("AgentWorkspace bootstrap states", () => {
     );
   });
 
-  it("renders runtime config entry and header dependency badges after bootstrap succeeds", () => {
+  it("renders two-column workspace and header dependency badges after bootstrap succeeds", () => {
     const createNewSession = vi.fn();
     mockedUseAgentWorkspace.mockReturnValue({
       state: {
@@ -265,12 +265,13 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
     expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
-    expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("xl:overflow-hidden");
+    expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("h-full");
+    expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("overflow-hidden");
     expect(screen.getByTestId("agent-chat-column")).toHaveClass("order-1");
     expect(screen.getByTestId("agent-sidebar-column")).toHaveClass("order-2");
-    expect(screen.getByTestId("agent-memory-column")).toBeInTheDocument();
-    expect(screen.getByTestId("memory-panel")).toHaveTextContent("记忆面板");
-    expect(screen.getByTestId("memory-panel")).toHaveTextContent("当前轮次没有注入块");
+    expect(screen.queryByTestId("agent-memory-column")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("memory-panel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("runtime-config-summary-card")).not.toBeInTheDocument();
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
 

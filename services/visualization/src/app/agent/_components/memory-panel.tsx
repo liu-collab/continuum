@@ -21,7 +21,7 @@ export function MemoryPanel({
   const scopeCounts = countRecordScopes(injection?.memory_records ?? []);
 
   return (
-    <section data-testid="memory-panel" className="flex min-h-0 flex-1 flex-col rounded-[1.75rem] border bg-surface shadow-sm">
+    <section data-testid="memory-panel" className="panel flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
@@ -42,7 +42,7 @@ export function MemoryPanel({
           />
         ) : (
           <>
-            <div className="break-words rounded-md border bg-surface-muted/40 p-3" data-testid="memory-panel-summary">
+            <div className="break-words border bg-[var(--surface-pearl)] p-3" style={{ borderRadius: "var(--radius-lg)" }} data-testid="memory-panel-summary">
               {scopeCounts.length > 0 ? (
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {scopeCounts.map((item) => (
@@ -60,7 +60,7 @@ export function MemoryPanel({
             {injection.memory_records.length > 0 ? (
               <div className="space-y-2" data-testid="memory-panel-records">
                 {injection.memory_records.map((record) => (
-                  <div key={record.id} className="rounded-md border bg-surface p-3">
+                  <div key={record.id} className="record-card">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="min-w-0 whitespace-pre-wrap break-words text-sm font-medium text-foreground">{record.summary}</span>
                       <StatusBadge tone="neutral">{formatMemoryTypeLabel(t, record.memory_type)}</StatusBadge>
@@ -78,7 +78,8 @@ export function MemoryPanel({
             ) : (
               <div
                 data-testid="memory-panel-records-empty"
-                className="rounded-md border border-dashed bg-surface-muted/40 px-3 py-4 text-center text-xs text-muted-foreground"
+                className="border border-dashed bg-[var(--surface-pearl)] px-3 py-4 text-center text-xs text-muted-foreground"
+                style={{ borderRadius: "var(--radius-lg)" }}
               >
                 {t("memoryPanel.recordsEmpty")}
               </div>

@@ -12,17 +12,17 @@ export function MetricCard({ metric }: MetricCardProps) {
   return (
     <div
       className={cn(
-        "panel p-4 transition-colors duration-75 hover:border-border-hover",
-        metric.severity === "warning" && "border-amber-900/30",
-        metric.severity === "danger" && "border-rose-900/30"
+        "panel p-6 transition-colors duration-75 hover:border-border-hover",
+        metric.severity === "warning" && "border-border",
+        metric.severity === "danger" && "border-[var(--ink)]"
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">
+          <div className="text-[17px] font-semibold leading-[1.24] text-text">
             {metric.label}
           </div>
-          <div className="mt-0.5 text-[10px] font-[var(--font-mono)] tracking-[0.12em] uppercase text-muted-foreground">
+          <div className="mt-1 text-[14px] leading-[1.43] text-muted-foreground">
             {metric.source}
           </div>
         </div>
@@ -32,13 +32,13 @@ export function MetricCard({ metric }: MetricCardProps) {
       </div>
       <div
         className={cn(
-          "mt-3 text-[1.5rem] font-[var(--font-mono)] font-medium tracking-tight text-text",
+        "mt-6 text-[40px] font-semibold leading-[1.1] text-text",
           metric.severity === "unknown" && "text-muted"
         )}
       >
         {metric.formattedValue}
       </div>
-      <p className="mt-2 text-[12px] leading-relaxed text-muted line-clamp-2">
+      <p className="mt-3 text-[14px] leading-[1.43] text-muted line-clamp-2">
         {metric.description}
       </p>
     </div>

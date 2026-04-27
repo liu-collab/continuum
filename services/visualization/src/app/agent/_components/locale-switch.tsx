@@ -8,17 +8,22 @@ export function LocaleSwitch() {
   const { locale, setLocale, t } = useAgentI18n();
 
   return (
-    <label className="flex items-center gap-3 rounded-full border bg-white/85 px-4 py-2 text-sm text-slate-700">
-      <span className="font-semibold text-slate-900">{t("localeSwitch.label")}</span>
-      <select
-        data-testid="agent-locale-select"
-        value={locale}
-        onChange={(event) => setLocale(event.target.value as "zh-CN" | "en-US")}
-        className="bg-transparent text-sm outline-none"
-      >
-        <option value="zh-CN">{t("localeSwitch.options.zh-CN")}</option>
-        <option value="en-US">{t("localeSwitch.options.en-US")}</option>
-      </select>
-    </label>
+    <div className="flex min-h-11 items-center gap-3 rounded-[var(--radius-pill)] border border-[var(--hairline)] bg-[var(--canvas)] px-4 py-2 text-[14px] leading-[1.43] text-[var(--ink-muted-80)]">
+      <span className="font-semibold text-[var(--ink)]">{t("localeSwitch.label")}</span>
+      <div className="segment-control !p-0.5" data-testid="agent-locale-select">
+        {(["zh-CN", "en-US"] as const).map((nextLocale) => (
+          <button
+            key={nextLocale}
+            type="button"
+            onClick={() => setLocale(nextLocale)}
+            className={`segment-item !min-h-8 !px-3 !py-1 !text-[12px] ${
+              locale === nextLocale ? "segment-item-active" : ""
+            }`}
+          >
+            {t(`localeSwitch.options.${nextLocale}`)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

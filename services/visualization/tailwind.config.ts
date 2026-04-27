@@ -7,8 +7,10 @@ const config: Config = {
       colors: {
         background: "var(--bg)",
         surface: "var(--surface)",
+        "surface-muted": "var(--surface-muted)",
         "surface-hover": "var(--surface-hover)",
         "surface-active": "var(--surface-active)",
+        text: "var(--text)",
         foreground: "var(--text)",
         muted: "var(--text-secondary)",
         "muted-foreground": "var(--text-muted)",
@@ -16,12 +18,14 @@ const config: Config = {
         "card-foreground": "var(--text)",
         border: "var(--border)",
         "border-hover": "var(--border-hover)",
+        "border-strong": "var(--border-strong)",
         accent: "var(--amber)",
-        "accent-foreground": "#0c0e12",
+        "accent-foreground": "var(--canvas)",
         "accent-soft": "var(--amber-bg)",
         success: "var(--emerald)",
         warning: "var(--amber)",
-        danger: "var(--rose)"
+        danger: "var(--rose)",
+        primary: "var(--primary)"
       },
       boxShadow: {
         soft: "var(--shadow-sm)",

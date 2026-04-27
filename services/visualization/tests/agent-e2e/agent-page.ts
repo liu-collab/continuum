@@ -97,7 +97,9 @@ export class AgentPage {
   }
 
   async switchMemoryMode(value: "workspace_only" | "workspace_plus_global") {
-    await this.page.getByTestId("memory-mode-select").selectOption(value);
+    const label = value === "workspace_only" ? /仅工作区|Workspace only/i : /工作区 \+ 全局|Workspace \+ Global/i;
+    await this.page.getByTestId("memory-mode-select").click();
+    await this.page.getByRole("option", { name: label }).click();
   }
 
   async openReadmePreview() {
@@ -144,7 +146,8 @@ export class AgentPage {
   }
 
   async switchLocale(locale: "zh-CN" | "en-US") {
-    await this.page.getByTestId("agent-locale-select").selectOption(locale);
+    await this.page.getByTestId("agent-locale-select").click();
+    await this.page.getByRole("option", { name: locale === "zh-CN" ? /简体中文|Chinese/i : /English/i }).click();
   }
 
   async applyProviderModel(model: string) {

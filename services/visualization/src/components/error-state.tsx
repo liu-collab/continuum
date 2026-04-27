@@ -11,19 +11,19 @@ export function ErrorState({ title, description, testId }: ErrorStateProps) {
     <div
       data-testid={testId}
       style={{
-        border: "1px solid rgba(248,113,113,0.3)",
+        border: "1px solid var(--surface-tile-1)",
         borderRadius: "var(--radius-lg)",
-        background: "var(--rose-bg)",
-        padding: "1rem 1.25rem",
+        background: "var(--surface-tile-1)",
+        padding: "24px",
         display: "flex",
         flexDirection: "column",
-        gap: "0.375rem"
+        gap: "8px"
       }}
     >
-      <h3 style={{ fontSize: "0.875rem", fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--rose)" }}>
+      <h3 style={{ fontSize: "21px", fontWeight: 600, lineHeight: 1.19, letterSpacing: 0, color: "var(--body-on-dark)" }}>
         {title}
       </h3>
-      <p style={{ fontSize: "0.8125rem", lineHeight: "1.6", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+      <p style={{ fontSize: "17px", lineHeight: 1.47, letterSpacing: 0, color: "var(--body-muted)" }}>
         {description}
       </p>
     </div>

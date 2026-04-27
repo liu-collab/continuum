@@ -22,7 +22,6 @@ import {
 import { marked } from "marked";
 
 import { EmptyState } from "@/components/empty-state";
-import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
 
 import { useAgentI18n } from "../_i18n/provider";
@@ -68,7 +67,7 @@ export function AssistantThread({
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="flex h-full min-h-0 flex-1 flex-col">
         {turns.length === 0 ? (
-          <div className="min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,rgba(148,163,184,0.08),transparent_38%)] px-4 py-6">
+          <div className="min-h-0 flex-1 overflow-auto bg-[var(--canvas)] px-4 py-6">
             <EmptyState
               title={t("chatPanel.emptyTitle")}
             />
@@ -76,7 +75,7 @@ export function AssistantThread({
         ) : (
           <ThreadPrimitive.Viewport
             data-testid="assistant-thread-viewport"
-            className="min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top,rgba(148,163,184,0.08),transparent_38%)] px-4 py-6"
+            className="min-h-0 flex-1 overflow-auto bg-[var(--canvas)] px-4 py-6"
             autoScroll
           >
             <div className="flex w-full flex-col gap-6">
@@ -119,8 +118,8 @@ function UserMessageBubble({ message }: { message: MessageState }) {
 
   return (
     <div className="flex justify-end">
-      <MessagePrimitive.Root className="max-w-[80%] rounded-[1.5rem] bg-accent px-4 py-3 text-white shadow-sm">
-        <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/70">
+      <MessagePrimitive.Root className="max-w-[80%] bg-primary px-4 py-3 text-white" style={{ borderRadius: "var(--radius-lg)" }}>
+        <div className="text-[12px] font-medium uppercase text-white/70">
           {t("chatPanel.you")}
         </div>
         <div
@@ -157,9 +156,9 @@ function AssistantMessageBubble({
 
   return (
     <div className="flex justify-start">
-      <MessagePrimitive.Root className="w-full max-w-[92%] rounded-[1.5rem] border bg-surface px-4 py-4 shadow-sm">
+      <MessagePrimitive.Root className="w-full max-w-[92%] border bg-surface px-4 py-4" style={{ borderRadius: "var(--radius-lg)" }}>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="text-[12px] font-medium uppercase text-muted-foreground">
             {t("chatPanel.assistant")}
           </div>
           <StatusBadge tone="neutral">
@@ -173,7 +172,7 @@ function AssistantMessageBubble({
             <button
               type="button"
               onClick={() => onOpenPrompt(turnId)}
-              className="inline-flex items-center gap-1 rounded-md border bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+              className="button-pearl-capsule !min-h-8 !px-3 !py-1"
             >
               <WandSparkles className="h-3 w-3" />
               {t("chatPanel.viewPrompt")}
@@ -216,7 +215,7 @@ function AssistantMessageBubble({
         ) : null}
 
         {meta?.plan ? (
-          <div className="mt-4 rounded-2xl border bg-surface-muted/30 px-3 py-3">
+          <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
             <div className="text-xs font-medium text-foreground">
               plan · {meta.plan.status}
             </div>
@@ -232,7 +231,7 @@ function AssistantMessageBubble({
         ) : null}
 
         {meta?.evaluations.length ? (
-          <div className="mt-4 rounded-2xl border bg-surface-muted/30 px-3 py-3">
+          <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
             <div className="text-xs font-medium text-foreground">evaluation</div>
             <div className="mt-2 space-y-1">
               {meta.evaluations.slice(-4).map((item, index) => (
@@ -245,14 +244,24 @@ function AssistantMessageBubble({
         ) : null}
 
         {errorContents.length ? (
-          <div className="mt-4">
-            <ErrorState
-              title={errorContents.length === 1 ? errorContents[0]!.title : t("chatPanel.turnErrorTitle")}
-              description={errorContents.map((item) => item.description).join("；")}
-            />
-          </div>
+          <TurnInlineErrorNotice
+            title={errorContents.length === 1 ? errorContents[0]!.title : t("chatPanel.turnErrorTitle")}
+            description={errorContents.map((item) => item.description).join("；")}
+          />
         ) : null}
       </MessagePrimitive.Root>
+    </div>
+  );
+}
+
+function TurnInlineErrorNotice({ title, description }: { title: string; description: string }) {
+  return (
+    <div
+      data-testid="turn-inline-error"
+      className="mt-3 max-w-full rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--surface-pearl)] px-3 py-2 text-[12px] leading-[1.4] text-muted-foreground"
+    >
+      <div className="font-semibold text-[var(--ink-muted-80)]">{title}</div>
+      <div className="mt-0.5">{description}</div>
     </div>
   );
 }
@@ -286,7 +295,8 @@ function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, u
   return (
     <div
       data-testid={`tool-call-${props.toolCallId}`}
-      className="rounded-2xl border bg-surface-muted/40 px-3 py-3"
+      className="border bg-[var(--surface-pearl)] px-3 py-3"
+      style={{ borderRadius: "var(--radius-lg)" }}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">

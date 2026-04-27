@@ -37,7 +37,7 @@ describe("agent i18n", () => {
       </AgentI18nProvider>
     );
 
-    await user.selectOptions(screen.getByTestId("agent-locale-select"), "en-US");
+    await user.click(screen.getByRole("button", { name: "English" }));
 
     expect(screen.getByText("New session")).toBeInTheDocument();
   });

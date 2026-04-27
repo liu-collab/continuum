@@ -3,6 +3,7 @@
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 
+import { SelectField } from "@/components/select-field";
 import { StatusBadge } from "@/components/status-badge";
 
 import type { MnaAgentConfigResponse } from "../_lib/openapi-types";
@@ -10,7 +11,6 @@ import {
   EDITABLE_PROVIDER_KIND_OPTIONS,
   formatProviderKindLabel,
   isEditableProviderKind,
-  type EditableProviderKind,
   type ProviderKind
 } from "../_lib/provider-kind";
 import { useAgentI18n } from "../_i18n/provider";
@@ -159,113 +159,95 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       ];
 
   return (
-    <section className="rounded-3xl border bg-white/88 p-5 shadow-soft" data-testid="runtime-config-card">
+    <section className="panel p-5" data-testid="runtime-config-summary-card">
       <div>
-        <p className="eyebrow">{t("runtimeConfig.eyebrow")}</p>
-        <h2 className="mt-2 text-xl font-semibold text-slate-900">{t("runtimeConfig.title")}</h2>
+        <p className="section-kicker">{t("runtimeConfig.eyebrow")}</p>
+        <h2 className="mt-2 text-[21px] font-semibold leading-[1.19] text-text">{t("runtimeConfig.title")}</h2>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-slate-500">{t("runtimeConfig.providerStatus")}</span>
-            <StatusBadge tone={resolveStatusTone(dependencyStatus?.provider.status)}>
-              {dependencyStatus?.provider.status ?? "unknown"}
-            </StatusBadge>
-          </div>
-          {dependencyStatus?.provider.detail ? (
-            <p className="mt-2 text-xs leading-5 text-slate-500">{dependencyStatus.provider.detail}</p>
-          ) : null}
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-slate-500">{t("runtimeConfig.embeddingStatus")}</span>
-            <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.embeddings?.status)}>
-              {dependencyStatus?.runtime.embeddings?.status ?? "unknown"}
-            </StatusBadge>
-          </div>
-          {dependencyStatus?.runtime.embeddings?.detail ? (
-            <p className="mt-2 text-xs leading-5 text-slate-500">{dependencyStatus.runtime.embeddings.detail}</p>
-          ) : null}
-        </div>
+      <div className="mt-4 grid gap-3">
+        <StatusBlock label={t("runtimeConfig.providerStatus")} status={dependencyStatus?.provider.status ?? "unknown"} detail={dependencyStatus?.provider.detail} />
+        <StatusBlock label={t("runtimeConfig.embeddingStatus")} status={dependencyStatus?.runtime.embeddings?.status ?? "unknown"} detail={dependencyStatus?.runtime.embeddings?.detail} />
       </div>
 
-      <div className="mt-5 grid gap-6 xl:grid-cols-2">
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-          <div className="text-sm font-semibold text-slate-900">{t("runtimeConfig.embeddingTitle")}</div>
+      <div className="mt-5 grid gap-4">
+        <div className="grid gap-3">
+          <div className="text-[14px] font-semibold leading-[1.29] text-text">{t("runtimeConfig.embeddingTitle")}</div>
           <input
             value={embeddingBaseUrl}
             onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
             placeholder={t("runtimeConfig.embeddingBaseUrl")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
           <input
             value={embeddingModel}
             onChange={(event) => setEmbeddingModel(event.target.value)}
             placeholder={t("runtimeConfig.embeddingModel")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
           <input
             value={embeddingApiKey}
             onChange={(event) => setEmbeddingApiKey(event.target.value)}
             placeholder={t("runtimeConfig.embeddingApiKey")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-          <div className="text-sm font-semibold text-slate-900">{t("runtimeConfig.providerTitle")}</div>
-          <select
+        <div className="grid gap-3">
+          <div className="text-[14px] font-semibold leading-[1.29] text-text">{t("runtimeConfig.providerTitle")}</div>
+          <SelectField
             value={isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave}
-            onChange={(event) => {
-              const nextKind = event.target.value as "openai-compatible" | "anthropic" | "ollama";
+            onChange={(value) => {
+              const nextKind = value as "openai-compatible" | "anthropic" | "ollama";
               setProviderKind(nextKind);
               setProviderKindToSave(nextKind);
             }}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
-          >
-            {providerKindOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={providerKindOptions}
+          />
           <input
             value={providerModel}
             onChange={(event) => setProviderModel(event.target.value)}
             placeholder={t("runtimeConfig.providerModel")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
           <input
             value={providerBaseUrl}
             onChange={(event) => setProviderBaseUrl(event.target.value)}
             placeholder={t("runtimeConfig.providerBaseUrl")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
           <input
             value={providerApiKey}
             onChange={(event) => setProviderApiKey(event.target.value)}
             placeholder={t("runtimeConfig.providerApiKey")}
-            className="w-full rounded-2xl border bg-white px-3 py-2 text-sm text-slate-700 outline-none"
+            className="field"
           />
         </div>
       </div>
 
       {errorMessage ? (
-        <p className="mt-4 text-sm text-rose-600" data-testid="runtime-config-error">
+        <p className="notice notice-danger mt-4" data-testid="runtime-config-error">
           {errorMessage}
         </p>
       ) : null}
 
       <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-95"
-        >
+        <button type="button" onClick={handleSave} className="button-primary">
           {t("runtimeConfig.save")}
         </button>
       </div>
     </section>
+  );
+}
+
+function StatusBlock({ label, status, detail }: { label: string; status: string; detail?: string }) {
+  return (
+    <div className="record-card">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[14px] leading-[1.43] text-muted">{label}</span>
+        <StatusBadge tone={resolveStatusTone(status)}>{status}</StatusBadge>
+      </div>
+      {detail ? <p className="mt-2 text-[14px] leading-[1.43] text-muted">{detail}</p> : null}
+    </div>
   );
 }

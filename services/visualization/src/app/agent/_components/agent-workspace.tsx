@@ -74,16 +74,16 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   return (
     <>
-      <div className="flex min-h-0 flex-col overflow-visible xl:h-full xl:overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
         <div
           data-testid="agent-workspace-layout"
           className={cn(
-            "grid min-h-0 flex-1 gap-4 xl:h-full xl:grid-cols-[20rem_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:gap-6 xl:overflow-hidden"
+            "grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,0.78fr)] gap-4 overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:gap-6"
           )}
         >
           <section
             data-testid="agent-sidebar-column"
-            className={`order-2 flex ${PANEL_HEIGHT_CLASS} max-h-[32rem] flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm xl:order-1 xl:max-h-none`}
+            className={`panel order-2 flex ${PANEL_HEIGHT_CLASS} max-h-none flex-col overflow-hidden xl:order-1`}
           >
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
@@ -143,7 +143,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
           <div
             data-testid="agent-chat-column"
-            className="order-1 flex min-h-[calc(100dvh-9rem)] flex-col gap-4 xl:order-2 xl:min-h-0"
+            className="order-1 flex min-h-0 flex-col gap-4 overflow-hidden xl:order-2"
           >
             {workspace.state.replayGapDetected ? (
               <ErrorState
@@ -175,7 +175,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               onOpenSettings={() => setSettingsOpen(true)}
             />
           </div>
-
         </div>
       </div>
 
@@ -245,4 +244,3 @@ function resolveBootstrapDescription(
       return t("workspace.offlineDescription");
   }
 }
-

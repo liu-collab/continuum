@@ -13,7 +13,8 @@ test.describe("agent ui", () => {
 
     await expect(page.getByTestId(/assistant-message-/).last()).toContainText("TypeScript");
 
-    await page.getByTestId("memory-mode-select").selectOption("workspace_only");
+    await page.getByTestId("memory-mode-select").click();
+    await page.getByRole("option", { name: /仅工作区|Workspace only/i }).click();
     await page.getByTestId("agent-input").fill("我偏好什么语言？");
     await page.getByTestId("send-message").click();
 

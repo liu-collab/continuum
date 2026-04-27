@@ -34,38 +34,38 @@ export function Modal({ open, onClose, title, description, size = "md", children
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-10"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-10 backdrop-blur-[20px]"
       onClick={onClose}
     >
       <div
         onClick={(event) => event.stopPropagation()}
         className={cn(
-          "flex max-h-full w-full flex-col overflow-hidden border border-border bg-surface shadow-overlay",
-          "rounded-lg",
+          "flex max-h-full w-full flex-col overflow-hidden border border-border bg-surface",
+          "rounded-[var(--radius-lg)]",
           sizeClass[size]
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div className="min-w-0">
-            <div className="text-[15px] font-[var(--font-mono)] font-medium text-text">
+            <div className="text-[21px] font-semibold leading-tight text-text">
               {title}
             </div>
             {description ? (
-              <div className="mt-1 text-[13px] text-muted">{description}</div>
+              <div className="mt-1 text-[14px] leading-5 text-muted">{description}</div>
             ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-muted transition hover:bg-surface-hover hover:text-text"
+            className="icon-button !h-11 !w-11"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-auto px-6 py-5">{children}</div>
         {footer ? (
-          <div className="flex items-center justify-end gap-2 border-t border-border bg-surface-hover/40 px-5 py-3">
+          <div className="flex items-center justify-end gap-3 border-t border-border bg-[var(--canvas-parchment)] px-6 py-4">
             {footer}
           </div>
         ) : null}

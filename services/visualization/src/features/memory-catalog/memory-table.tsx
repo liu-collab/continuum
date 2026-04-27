@@ -24,7 +24,7 @@ const columns: Array<ColumnDef<MemoryCatalogItem>> = [
             <ArrowUpRight className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:opacity-100" />
           </Link>
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">{row.original.id}</div>
+        <div className="mt-1 text-[14px] leading-[1.43] text-muted-foreground">{row.original.visibilitySummary}</div>
       </div>
     )
   },

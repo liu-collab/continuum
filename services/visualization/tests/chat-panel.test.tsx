@@ -314,6 +314,7 @@ describe("ChatPanel", () => {
 
     expect(screen.getByText("记忆保存未完成")).toBeInTheDocument();
     expect(screen.getByText("不影响本轮回复。")).toBeInTheDocument();
+    expect(screen.getByTestId("turn-inline-error")).toHaveClass("text-[12px]");
     expect(screen.queryByText(/memory request timed out/)).not.toBeInTheDocument();
   });
 

@@ -21,10 +21,10 @@ function computeTone(health?: ServiceHealthResponse, sources?: SourceStatus[]): 
 }
 
 const dotColor: Record<HealthTone, string> = {
-  neutral: "#5c6072",
-  success: "#4ade80",
-  warning: "var(--amber)",
-  danger: "#f87171"
+  neutral: "var(--ink-muted-48)",
+  success: "var(--primary)",
+  warning: "var(--ink-muted-48)",
+  danger: "var(--ink)"
 };
 
 export function HealthModalButton(props: HealthModalButtonProps) {
@@ -36,21 +36,7 @@ export function HealthModalButton(props: HealthModalButtonProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.375rem",
-          borderRadius: "var(--radius-md)",
-          padding: "0.375rem 0.75rem",
-          fontSize: "0.8125rem",
-          fontFamily: "var(--font-mono)",
-          fontWeight: 500,
-          color: "var(--text-muted)",
-          background: "transparent",
-          border: "1px solid var(--border)",
-          cursor: "pointer",
-          transition: "all 80ms ease"
-        }}
+        className="btn-outline"
       >
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor[tone] }} />
         <HeartPulse style={{ width: 16, height: 16, opacity: 0.6 }} />

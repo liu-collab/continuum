@@ -11,25 +11,16 @@ export function DataTable<TData>({ columns, data }: DataTableProps<TData>) {
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
-    <div className="overflow-hidden border border-border" style={{ borderRadius: "var(--radius-lg)" }}>
+    <div className="panel overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full" style={{ borderCollapse: "collapse" }}>
+        <table className="min-w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    style={{
-                      padding: "0.5rem 0.875rem",
-                      textAlign: "left",
-                      fontSize: "0.625rem",
-                      fontWeight: 500,
-                      letterSpacing: "0.14em",
-                      textTransform: "uppercase",
-                      color: "var(--text-muted)",
-                      fontFamily: "var(--font-mono)"
-                    }}
+                    className="bg-[var(--surface-pearl)] px-[17px] py-3 text-left text-[14px] font-semibold leading-[1.29] text-muted-foreground"
                   >
                     {header.isPlaceholder
                       ? null
@@ -43,18 +34,12 @@ export function DataTable<TData>({ columns, data }: DataTableProps<TData>) {
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                style={{ borderBottom: "1px solid var(--border)" }}
-                className="transition-colors hover:bg-surface-hover"
+                className="border-b border-border transition-colors last:border-0 hover:bg-surface-hover"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    style={{
-                      padding: "0.625rem 0.875rem",
-                      fontSize: "0.8125rem",
-                      color: "var(--text)",
-                      fontFamily: "var(--font-mono)"
-                    }}
+                    className="px-[17px] py-[17px] text-[17px] leading-[1.47] text-text"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>

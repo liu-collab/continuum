@@ -18,13 +18,13 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
   const { formatMcpStateLabel, t } = useAgentI18n();
 
   return (
-    <div data-testid="mcp-panel" className="rounded-[1.75rem] border bg-surface">
+    <div data-testid="mcp-panel" className="panel">
       <div className="border-b px-4 py-3">
         <div className="text-sm font-medium text-foreground">{t("mcpPanel.title")}</div>
       </div>
       <div className="space-y-3 px-4 py-3">
         {servers.length === 0 ? (
-          <div className="rounded-md border border-dashed bg-surface-muted/40 px-3 py-4 text-center text-xs text-muted-foreground">
+          <div className="border border-dashed bg-surface-muted/40 px-3 py-4 text-center text-xs text-muted-foreground" style={{ borderRadius: "var(--radius-lg)" }}>
             {t("mcpPanel.empty")}
           </div>
         ) : (
@@ -32,7 +32,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
             <div
               key={server.name}
               data-testid={`mcp-server-${server.name}`}
-              className="rounded-md border bg-surface-muted/40 px-3 py-2"
+              className="record-card"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -53,14 +53,14 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
                 <button
                   type="button"
                   onClick={() => onRestart(server.name)}
-                  className="rounded-md border bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+                  className="button-pearl-capsule !min-h-8 !px-3 !py-1"
                 >
                   {t("mcpPanel.restart")}
                 </button>
                 <button
                   type="button"
                   onClick={() => onDisable(server.name)}
-                  className="rounded-md border bg-surface px-2 py-0.5 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+                  className="button-pearl-capsule !min-h-8 !px-3 !py-1"
                 >
                   {t("mcpPanel.disable")}
                 </button>
@@ -72,8 +72,8 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
           ))
         )}
         {tools.length > 0 ? (
-          <div className="rounded-md border bg-surface px-3 py-2">
-            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="record-card">
+            <div className="section-kicker">
               {t("mcpPanel.tools")}
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">

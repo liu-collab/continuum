@@ -2,7 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardTrend } from "@/lib/contracts";
-import { dashboardSeverityLabel, dashboardSeverityTone } from "@/lib/format";
+import { dashboardSeverityLabel, dashboardSeverityTone, formatMetricValue } from "@/lib/format";
 
 type TrendCardProps = { trend: DashboardTrend };
 
@@ -13,13 +13,13 @@ export function TrendCard({ trend }: TrendCardProps) {
   const max = Math.max(...numericPoints, 1);
 
   return (
-    <div className="panel p-4 transition hover:border-border-hover">
+    <div className="panel p-6 transition hover:border-border-hover">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">
+          <div className="text-[17px] font-semibold leading-[1.24] text-text">
             {trend.title}
           </div>
-          <div className="mt-0.5 text-[10px] font-[var(--font-mono)] tracking-[0.12em] uppercase text-muted-foreground">
+          <div className="mt-1 text-[14px] leading-[1.43] text-muted-foreground">
             {trend.source}
           </div>
         </div>
@@ -27,39 +27,42 @@ export function TrendCard({ trend }: TrendCardProps) {
           <StatusBadge tone={dashboardSeverityTone(trend.severity)}>
             {dashboardSeverityLabel(trend.severity)}
           </StatusBadge>
-          <span className="text-[13px] font-[var(--font-mono)] font-medium text-text">
+          <span className="text-[17px] font-semibold leading-[1.24] text-text">
             {trend.deltaFormatted}
           </span>
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-4">
+      <div className="mt-6 grid grid-cols-2 gap-6">
         <div>
-          <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.12em] text-muted-foreground">当前</div>
-          <div className="mt-0.5 text-[1.25rem] font-[var(--font-mono)] font-medium text-text">{trend.currentFormatted}</div>
+          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">当前</div>
+          <div className="mt-1 text-[28px] font-normal leading-[1.14] text-text">{trend.currentFormatted}</div>
         </div>
         <div>
-          <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.12em] text-muted-foreground">上一窗口</div>
-          <div className="mt-0.5 text-[1.25rem] font-[var(--font-mono)] font-medium text-muted">{trend.previousFormatted}</div>
+          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">上一窗口</div>
+          <div className="mt-1 text-[28px] font-normal leading-[1.14] text-muted">{trend.previousFormatted}</div>
         </div>
       </div>
-      <p className="mt-3 text-[12px] leading-relaxed text-muted line-clamp-2">{trend.summary}</p>
-      <div className="mt-4 grid grid-cols-4 items-end gap-2">
+      <p className="mt-4 text-[14px] leading-[1.43] text-muted line-clamp-2">{trend.summary}</p>
+      <div className="mt-6 grid grid-cols-4 items-end gap-3">
         {trend.points.map((point, i) => (
           <div key={`${trend.key}-${i}`} className="space-y-1.5">
             <div className="flex h-12 items-end">
               {point.value === null ? (
-                <div className="h-3 w-full border border-dashed border-border bg-transparent" />
+                <div
+                  aria-label={`${point.label}: 不可用`}
+                  className="h-3 w-full border border-dashed border-border bg-transparent"
+                />
               ) : (
                 <div
-                  className="w-full rounded-t"
+                  aria-label={`${point.label}: ${formatMetricValue(point.value, trend.unit)}`}
+                  className="w-full rounded-t-[5px] bg-foreground/80"
                   style={{
                     height: `${Math.max((point.value / max) * 100, 10)}%`,
-                    background: "linear-gradient(180deg, var(--cyan) 0%, var(--cyan-dim) 100%)"
                   }}
                 />
               )}
             </div>
-            <div className="text-center text-[10px] font-[var(--font-mono)] text-muted-foreground">{point.label}</div>
+            <div className="text-center text-[12px] leading-none text-muted-foreground">{point.label}</div>
           </div>
         ))}
       </div>

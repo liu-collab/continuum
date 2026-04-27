@@ -18,29 +18,30 @@ export function EmptyState({ title, description, testId, className, style }: Emp
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "3rem 1.5rem",
+        padding: "48px 24px",
         textAlign: "center",
-        border: "1px dashed var(--border)",
+        border: "1px solid var(--hairline)",
         borderRadius: "var(--radius-lg)",
-        background: "var(--surface)",
+        background: "var(--canvas)",
         ...style
       }}
     >
       <div style={{
-        width: 32,
-        height: 32,
+        width: 44,
+        height: 44,
         borderRadius: "50%",
-        border: "1.5px solid var(--border-hover)",
+        border: "1px solid var(--hairline)",
+        background: "var(--surface-pearl)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: "0.75rem"
+        marginBottom: "12px"
       }}>
-        <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>~</span>
+        <span style={{ color: "var(--primary)", fontSize: "17px" }}>-</span>
       </div>
-      <h3 className="text-[14px] font-[var(--font-mono)] font-medium text-text">{title}</h3>
+      <h3 className="text-[21px] font-semibold leading-tight text-text">{title}</h3>
       {description ? (
-        <p className="mt-1.5 max-w-md text-[13px] leading-relaxed text-muted">{description}</p>
+        <p className="mt-2 max-w-md text-[17px] leading-[1.47] text-muted">{description}</p>
       ) : null}
     </div>
   );

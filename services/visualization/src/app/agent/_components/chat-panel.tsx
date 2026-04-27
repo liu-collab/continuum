@@ -163,8 +163,8 @@ export function ChatPanel({
   }
 
   return (
-    <div className={`flex flex-1 ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden rounded-[1.75rem] border bg-surface shadow-sm`}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-surface-muted/30 px-5 py-4">
+    <div className={`panel flex flex-1 ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
@@ -226,7 +226,7 @@ export function ChatPanel({
           <button
             type="button"
             onClick={() => onOpenSettings?.()}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-surface text-foreground transition hover:bg-surface-muted"
+            className="icon-button !h-11 !w-11"
             aria-label={t("runtimeConfig.title")}
             title={t("runtimeConfig.title")}
           >
@@ -262,7 +262,7 @@ export function ChatPanel({
             submitDraft();
           }}
         >
-          <div className="rounded-[1.5rem] border bg-surface-muted/30 p-3 shadow-sm">
+          <div className="border bg-[var(--surface-pearl)] p-3" style={{ borderRadius: "var(--radius-lg)" }}>
             <div className="relative">
               <textarea
                 data-testid="agent-input"
@@ -271,7 +271,7 @@ export function ChatPanel({
                 placeholder={t("chatPanel.placeholder")}
                 rows={3}
                 disabled={connection !== "open"}
-                className="min-h-20 w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                  className="min-h-20 w-full resize-none border-0 bg-transparent px-1 py-1 text-[17px] leading-[1.47] text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 onKeyDown={(event) => {
                   if (showSlashMenu && event.key === "ArrowDown") {
                     event.preventDefault();
@@ -322,9 +322,10 @@ export function ChatPanel({
               {showSlashMenu ? (
                 <div
                   data-testid="slash-command-menu"
-                  className="absolute inset-x-0 bottom-full mb-3 overflow-hidden rounded-2xl border bg-surface shadow-lg"
+                  className="absolute inset-x-0 bottom-full mb-3 overflow-hidden border bg-surface"
+                  style={{ borderRadius: "var(--radius-lg)" }}
                 >
-                  <div className="border-b bg-surface-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  <div className="border-b bg-[var(--surface-pearl)] px-3 py-2 text-[12px] font-medium uppercase text-muted-foreground">
                     {t("chatPanel.slash.title")}
                   </div>
                   <div className="max-h-64 overflow-auto p-2">
@@ -337,11 +338,12 @@ export function ChatPanel({
                           event.preventDefault();
                           applySlashCommand(command.command);
                         }}
-                        className={`flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2 text-left transition ${
+                        className={`flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition ${
                           index === selectedCommandIndex
-                            ? "bg-accent/10 text-foreground"
+                            ? "bg-[var(--cyan-bg)] text-foreground"
                             : "text-muted-foreground hover:bg-surface-muted/50 hover:text-foreground"
                         }`}
+                        style={{ borderRadius: "var(--radius-sm)" }}
                       >
                         <span className="text-sm font-medium">{command.label}</span>
                         <span className="line-clamp-2 text-xs">{command.description}</span>
@@ -359,7 +361,7 @@ export function ChatPanel({
                   onClick={onAbort}
                   disabled={!isBusy}
                   data-testid="abort-turn"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-surface text-foreground transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  className="icon-button !h-11 !w-11 disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={t("chatPanel.abort")}
                   title={t("chatPanel.abort")}
                 >
@@ -369,7 +371,7 @@ export function ChatPanel({
                   type="submit"
                   disabled={!canSend || !draft.trim()}
                   data-testid="send-message"
-                  className="inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-medium text-accent-foreground transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="button-primary disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label={t("chatPanel.send")}
                   title={t("chatPanel.send")}
                 >

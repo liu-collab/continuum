@@ -107,7 +107,7 @@ export function FileTree({
   }
 
   return (
-    <div className="rounded-[1.75rem] border bg-surface">
+    <div className="panel">
       <div className="border-b px-4 py-3">
         <div className="flex flex-col gap-3">
           <div className="min-w-0">
@@ -154,7 +154,8 @@ export function FileTree({
               disabled={picking}
               data-testid="agent-file-tree-picker"
               aria-label={picking ? t("fileTree.pickFolderPendingAction") : t("fileTree.pickFolderAction")}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-[1.25rem] border border-dashed border-border-strong bg-surface-muted/30 px-4 py-5 text-center transition hover:bg-surface-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full flex-col items-center justify-center gap-2 border border-dashed border-border-strong bg-surface-muted/30 px-4 py-5 text-center transition hover:bg-surface-muted/50 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ borderRadius: "var(--radius-lg)" }}
               onClick={() => {
                 setPicking(true);
                 setRegisterError(null);
@@ -167,7 +168,7 @@ export function FileTree({
                   });
               }}
             >
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-muted-foreground shadow-sm">
+              <div className="icon-button !h-11 !w-11">
                 <FolderPlus className="h-5 w-5" />
               </div>
               <div className="text-sm font-medium text-foreground">

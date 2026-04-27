@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { SelectField } from "@/components/select-field";
 import { MemoryCatalogDetail, MemoryStatus, Scope } from "@/lib/contracts";
 
 type GovernanceAction = "confirm" | "invalidate" | "archive" | "delete";
@@ -143,26 +144,24 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
   }
 
   return (
-    <div className="rounded-lg border bg-surface p-4">
+    <div className="panel p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            治理
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <div className="section-kicker">治理</div>
+          <p className="mt-2 text-[17px] leading-[1.47] text-muted">
             填写原因后执行动作。
           </p>
         </div>
       </div>
 
       {pendingActionAt ? (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="notice notice-warning mt-3">
           已提交，读模型刷新中，10 秒后自动再刷新。
         </div>
       ) : null}
 
       <label className="mt-4 block">
-        <span className="text-xs font-medium text-muted-foreground">原因</span>
+        <span className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">原因</span>
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
@@ -173,7 +172,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       </label>
 
       <div className="mt-4">
-        <div className="text-xs font-medium text-muted-foreground">快捷动作</div>
+        <div className="section-kicker">快捷动作</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
             <button
@@ -190,10 +189,10 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="space-y-2 rounded-md border bg-surface-muted/40 p-3">
-          <div className="text-xs font-medium text-foreground">编辑</div>
+        <div className="record-card space-y-3">
+          <div className="section-kicker">编辑</div>
           <label className="block">
-            <span className="text-xs text-muted-foreground">摘要</span>
+            <span className="text-[14px] text-muted-foreground">摘要</span>
             <textarea
               value={summary}
               onChange={(event) => setSummary(event.target.value)}
@@ -203,30 +202,34 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
           </label>
           <div className="grid gap-2 md:grid-cols-2">
             <label className="block">
-              <span className="text-xs text-muted-foreground">作用域</span>
-              <select
-                value={scope}
-                onChange={(event) => setScope(event.target.value as Scope)}
-                className="field mt-1"
-              >
-                <option value="session">会话</option>
-                <option value="task">任务</option>
-                <option value="workspace">工作区</option>
-                <option value="user">平台</option>
-              </select>
+              <span className="text-[14px] text-muted-foreground">作用域</span>
+              <div className="mt-1">
+                <SelectField
+                  value={scope}
+                  onChange={(value) => setScope(value as Scope)}
+                  options={[
+                    { value: "session", label: "会话" },
+                    { value: "task", label: "任务" },
+                    { value: "workspace", label: "工作区" },
+                    { value: "user", label: "平台" }
+                  ]}
+                />
+              </div>
             </label>
             <label className="block">
-              <span className="text-xs text-muted-foreground">状态</span>
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as MemoryStatus)}
-                className="field mt-1"
-              >
-                <option value="active">生效中</option>
-                <option value="pending_confirmation">待确认</option>
-                <option value="superseded">已被替代</option>
-                <option value="archived">已归档</option>
-              </select>
+              <span className="text-[14px] text-muted-foreground">状态</span>
+              <div className="mt-1">
+                <SelectField
+                  value={status}
+                  onChange={(value) => setStatus(value as MemoryStatus)}
+                  options={[
+                    { value: "active", label: "生效中" },
+                    { value: "pending_confirmation", label: "待确认" },
+                    { value: "superseded", label: "已被替代" },
+                    { value: "archived", label: "已归档" }
+                  ]}
+                />
+              </div>
             </label>
           </div>
           <button
@@ -239,10 +242,10 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
           </button>
         </div>
 
-        <div className="space-y-2 rounded-md border bg-surface-muted/40 p-3">
-          <div className="text-xs font-medium text-foreground">恢复版本</div>
+        <div className="record-card space-y-3">
+          <div className="section-kicker">恢复版本</div>
           <label className="block">
-            <span className="text-xs text-muted-foreground">版本号</span>
+            <span className="text-[14px] text-muted-foreground">版本号</span>
             <input
               value={versionId}
               onChange={(event) => setVersionId(event.target.value)}
@@ -262,12 +265,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       </div>
 
       {message ? (
-        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+        <div className="notice mt-4">
           {message}
         </div>
       ) : null}
       {error ? (
-        <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+        <div className="notice notice-danger mt-4">
           {error}
         </div>
       ) : null}

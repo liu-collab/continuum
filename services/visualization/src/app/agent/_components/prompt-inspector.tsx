@@ -1,15 +1,10 @@
 "use client";
 
 import React from "react";
-import dynamic from "next/dynamic";
 import { X } from "lucide-react";
 
 import { useAgentI18n } from "../_i18n/provider";
 import type { MnaPromptInspectorResponse } from "../_lib/openapi-types";
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((mod) => mod.default), {
-  ssr: false
-});
 
 type PromptInspectorProps = {
   open: boolean;
@@ -38,7 +33,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-surface shadow-overlay"
+        className="panel flex max-h-full w-full max-w-5xl flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
@@ -50,27 +45,14 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
             onClick={onClose}
             aria-label={t("promptInspector.close")}
             data-testid="prompt-inspector-close"
-            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+            className="icon-button !h-11 !w-11"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="min-h-[22rem] border-r">
-            <MonacoEditor
-              language="json"
-              height="100%"
-              theme="vs-light"
-              value={JSON.stringify(payload?.messages ?? [], null, 2)}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 12
-              }}
-            />
-          </div>
-          <div className="min-h-[22rem] overflow-auto px-5 py-4">
-            <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="min-h-[22rem] border-r px-5 py-4">
+            <div className="section-kicker">
               {t("promptInspector.meta")}
             </div>
             <dl className="mt-3 space-y-3 text-sm">
@@ -89,10 +71,49 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-0.5 text-foreground">{payload?.tools.length ?? 0}</dd>
               </div>
               <div>
+                <dt className="text-xs text-muted-foreground">messages</dt>
+                <dd className="mt-0.5 text-foreground">{payload?.messages.length ?? 0}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">round</dt>
+                <dd className="mt-0.5 text-foreground">{payload?.round ?? t("promptInspector.notLoaded")}</dd>
+              </div>
+            </dl>
+
+            <div className="mt-6">
+              <div className="section-kicker">budget</div>
+              <div className="mt-3 grid gap-2 text-sm text-foreground">
+                {payload?.budget_plan ? (
+                  <>
+                    <div className="record-card px-3 py-2">
+                      total: {String(payload.budget_plan.budget.total ?? "unbounded")} / reserve: {payload.budget_plan.budget.reserve}
+                    </div>
+                    <div className="record-card px-3 py-2">
+                      fixed {payload.budget_plan.allocation.fixed} · memory {payload.budget_plan.allocation.memory} · tools {payload.budget_plan.allocation.tools}
+                    </div>
+                    <div className="record-card px-3 py-2">
+                      history {payload.budget_plan.allocation.history} · current {payload.budget_plan.allocation.current_turn}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
+                )}
+              </div>
+            </div>
+
+            <details className="mt-6 rounded-[var(--radius-lg)] border border-[var(--hairline)] bg-[var(--canvas)] p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">raw payload</summary>
+              <pre className="quiet-code mt-3">{JSON.stringify({ messages: payload?.messages ?? [], tools: payload?.tools ?? [] }, null, 2)}</pre>
+            </details>
+          </div>
+
+          <div className="min-h-[22rem] overflow-auto px-5 py-4">
+            <dl className="space-y-3 text-sm">
+              <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.finalPrompt")}</dt>
                 <dd className="mt-1 space-y-2">
                   {promptSegments.map((segment, index) => (
-                    <div key={`${segment.kind}-${segment.phase ?? "none"}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2">
+                    <div key={`${segment.kind}-${segment.phase ?? "none"}-${index}`} className="record-card px-3 py-2">
                       <div className="text-xs font-medium text-foreground">
                         {segment.kind} · {segment.priority}
                       </div>
@@ -108,30 +129,10 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">budget</dt>
-                <dd className="mt-1 space-y-2 text-xs text-foreground">
-                  {payload?.budget_plan ? (
-                    <>
-                      <div>
-                        total: {String(payload.budget_plan.budget.total ?? "unbounded")} / reserve: {payload.budget_plan.budget.reserve}
-                      </div>
-                      <div>
-                        fixed {payload.budget_plan.allocation.fixed} · memory {payload.budget_plan.allocation.memory} · tools {payload.budget_plan.allocation.tools}
-                      </div>
-                      <div>
-                        history {payload.budget_plan.allocation.history} · current {payload.budget_plan.allocation.current_turn}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">{t("promptInspector.notLoaded")}</div>
-                  )}
-                </dd>
-              </div>
-              <div>
                 <dt className="text-xs text-muted-foreground">dropped</dt>
                 <dd className="mt-1 space-y-2">
                   {dropped.map((item, index) => (
-                    <div key={`${item.source}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                    <div key={`${item.source}-${index}`} className="record-card px-3 py-2 text-xs">
                       {item.source} · {item.reason}
                       <div className="mt-1 text-muted-foreground">{item.preview}</div>
                     </div>
@@ -145,7 +146,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.phaseHits")}</dt>
                 <dd className="mt-1 space-y-2">
                   {phaseResults.map((result, index) => (
-                    <div key={`${result.phase}-${result.trace_id ?? "none"}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2">
+                    <div key={`${result.phase}-${result.trace_id ?? "none"}-${index}`} className="record-card px-3 py-2">
                       <div className="text-xs font-medium text-foreground">
                         {result.phase}
                         {result.degraded ? " · degraded" : ""}
@@ -168,11 +169,11 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-1 space-y-2">
                   {plan ? (
                     <>
-                      <div className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                      <div className="record-card px-3 py-2 text-xs">
                         {plan.status} · {plan.goal}
                       </div>
                       {plan.steps.map((step) => (
-                        <div key={step.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                        <div key={step.id} className="record-card px-3 py-2 text-xs">
                           {step.status} · {step.title}
                           {step.notes ? <div className="mt-1 text-muted-foreground">{step.notes}</div> : null}
                         </div>
@@ -187,7 +188,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dt className="text-xs text-muted-foreground">plan revisions</dt>
                 <dd className="mt-1 space-y-2">
                   {planRevisions.map((item) => (
-                    <div key={item.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                    <div key={item.id} className="record-card px-3 py-2 text-xs">
                       r{item.revision} · {item.status} · {item.goal}
                       {item.revision_reason ? (
                         <div className="mt-1 text-muted-foreground">{item.revision_reason}</div>
@@ -203,7 +204,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dt className="text-xs text-muted-foreground">evaluation</dt>
                 <dd className="mt-1 space-y-2">
                   {evaluation.map((item, index) => (
-                    <div key={`${item.scope}-${index}`} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                    <div key={`${item.scope}-${index}`} className="record-card px-3 py-2 text-xs">
                       {item.scope} · {item.decision.status} · {item.decision.reason}
                     </div>
                   ))}
@@ -216,7 +217,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dt className="text-xs text-muted-foreground">trace</dt>
                 <dd className="mt-1 space-y-2">
                   {traceSpans.map((span) => (
-                    <div key={span.id} className="rounded-md border bg-surface-muted/30 px-3 py-2 text-xs">
+                    <div key={span.id} className="record-card px-3 py-2 text-xs">
                       {span.kind} · {span.name} · {span.status}
                     </div>
                   ))}

@@ -44,14 +44,14 @@ export function SessionList({
 
   if (sessions.length === 0) {
     return (
-      <div className="rounded-md border border-dashed bg-surface-muted/40 px-3 py-5 text-center text-xs text-muted-foreground">
+      <div className="rounded-[var(--radius-lg)] border border-dashed bg-[var(--surface-pearl)] px-4 py-8 text-center text-[14px] leading-[1.43] text-muted-foreground">
         {t("sessionList.emptyTitle")}
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid gap-3">
       {sessions.map((session) => {
         const isActive = session.id === activeSessionId;
         const isEditing = editingId === session.id;
@@ -61,11 +61,11 @@ export function SessionList({
             key={session.id}
             data-testid={`session-card-${session.id}`}
             className={cn(
-              "w-full rounded-md border bg-surface p-3 text-left transition hover:border-border-strong",
-              isActive && "border-accent bg-accent-soft"
+              "w-full rounded-[var(--radius-lg)] border border-[var(--hairline)] bg-[var(--canvas)] p-4 text-left transition hover:border-[var(--primary)]",
+              isActive && "border-[var(--primary-focus)] bg-[var(--cyan-bg)]"
             )}
           >
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3">
               <div className="min-w-0">
                 {isEditing ? (
                   <form
@@ -93,10 +93,10 @@ export function SessionList({
                     onClick={() => onSelect(session.id)}
                     className="w-full text-left"
                   >
-                    <div className="truncate text-sm font-medium text-foreground">
+                    <div className="truncate text-[17px] font-semibold leading-[1.24] text-foreground">
                       {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-2 text-[14px] leading-[1.43] text-muted-foreground">
                       {t("sessionList.workspace", { id: toShortWorkspaceId(session.workspace_id) })}
                     </div>
                   </button>
@@ -113,7 +113,7 @@ export function SessionList({
                     setEditingId(session.id);
                     setDraftTitle(session.title ?? "");
                   }}
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-surface-muted hover:text-foreground"
+                  className="icon-button !h-8 !w-8 !bg-transparent text-muted-foreground hover:!bg-[var(--surface-pearl)] hover:text-foreground"
                   aria-label={t("sessionList.renameAria")}
                 >
                   <PencilLine className="h-3.5 w-3.5" />
@@ -124,7 +124,7 @@ export function SessionList({
                     event.stopPropagation();
                     onDelete(session);
                   }}
-                  className="rounded-md p-1.5 text-muted-foreground transition hover:bg-rose-50 hover:text-rose-700"
+                  className="icon-button !h-8 !w-8 !bg-transparent text-muted-foreground hover:!bg-[var(--surface-pearl)] hover:text-foreground"
                   aria-label={t("sessionList.deleteAria")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -195,7 +195,7 @@ function QuickActionLink({
       <span
         title={title}
         aria-label={title}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-surface-muted/40 text-muted-foreground opacity-50"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--surface-pearl)] text-muted-foreground opacity-50"
       >
         {icon}
       </span>
@@ -207,7 +207,7 @@ function QuickActionLink({
       href={href}
       title={title}
       aria-label={title}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-surface text-muted-foreground transition hover:text-foreground"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--canvas)] text-muted-foreground transition hover:border-[var(--primary)] hover:text-foreground"
     >
       {icon}
     </a>

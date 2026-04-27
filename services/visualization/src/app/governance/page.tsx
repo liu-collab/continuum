@@ -8,193 +8,230 @@ import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/m
 import { formatTimestamp, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
 
 function parseSearchParams(input: Record<string, string | string[] | undefined>) {
-  const v = (k: string) => { const val = input[k]; return Array.isArray(val) ? val[0] : val; };
+  const valueOf = (key: string) => {
+    const value = input[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
+
   return {
-    workspaceId: v("workspace_id"),
-    proposalType: v("proposal_type"),
-    executionStatus: v("execution_status"),
-    executionId: v("execution_id"),
-    limit: Number.parseInt(v("limit") ?? "50", 10) || 50,
+    workspaceId: valueOf("workspace_id"),
+    proposalType: valueOf("proposal_type"),
+    executionStatus: valueOf("execution_status"),
+    executionId: valueOf("execution_id"),
+    limit: Number.parseInt(valueOf("limit") ?? "50", 10) || 50,
   };
 }
-
-const mono = { fontFamily: "var(--font-mono)" } as const;
 
 export default async function GovernancePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const p = parseSearchParams(await searchParams);
-  const response = await getGovernanceHistory({ workspaceId: p.workspaceId, proposalType: p.proposalType, executionStatus: p.executionStatus, limit: p.limit });
-  const selectedId = p.executionId ?? response.items[0]?.executionId ?? null;
-  const dr = selectedId ? await getGovernanceExecutionDetail(selectedId) : { detail: null, status: response.sourceStatus };
-  const activeCount = Object.values(p).filter((v, i) => Boolean(v) && i < 4).length;
+  const params = parseSearchParams(await searchParams);
+  const response = await getGovernanceHistory({
+    workspaceId: params.workspaceId,
+    proposalType: params.proposalType,
+    executionStatus: params.executionStatus,
+    limit: params.limit
+  });
+  const selectedId = params.executionId ?? response.items[0]?.executionId ?? null;
+  const detailResponse = selectedId
+    ? await getGovernanceExecutionDetail(selectedId)
+    : { detail: null, status: response.sourceStatus };
+  const activeCount = [params.workspaceId, params.proposalType, params.executionStatus, params.executionId].filter(Boolean).length;
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <div>
-          <h1 style={{ fontSize: "1.375rem", fontWeight: 500, ...mono, color: "var(--text)", letterSpacing: "-0.01em" }}>Governance</h1>
-          <p style={{ marginTop: "0.25rem", fontSize: "0.8125rem", ...mono, color: "var(--text-muted)" }}>Auto governance proposals, model verification, and execution results.</p>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
-          <FilterModalButton activeCount={activeCount} title="Filter Governance" description="Filter by workspace, action, and execution status.">
-            <SearchForm action="/governance" initialValues={{ workspace_id: p.workspaceId, proposal_type: p.proposalType, execution_status: p.executionStatus, limit: String(p.limit) }}>
-              <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={p.workspaceId} />
-              <FormField label="Action" name="proposal_type" defaultValue={p.proposalType} options={[
-                { label: "Archive", value: "archive" }, { label: "Confirm", value: "confirm" },
-                { label: "Delete", value: "delete" }, { label: "Downgrade", value: "downgrade" },
-                { label: "Merge", value: "merge" }, { label: "Resolve conflict", value: "resolve_conflict" },
-                { label: "Summarize", value: "summarize" }
-              ]} />
-              <FormField label="Status" name="execution_status" defaultValue={p.executionStatus} options={[
-                { label: "Executed", value: "executed" }, { label: "Failed", value: "failed" },
-                { label: "Executing", value: "executing" }, { label: "Proposed", value: "proposed" },
-                { label: "Verified", value: "verified" }, { label: "Rejected", value: "rejected_by_guard" }
-              ]} />
-              <FormField label="Limit" name="limit" placeholder="50" defaultValue={String(p.limit)} />
-            </SearchForm>
-          </FilterModalButton>
-          <HealthModalButton sources={[response.sourceStatus, dr.status]} label="Gov Source" />
-        </div>
-      </div>
-
-      <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "22rem minmax(0,1fr)" }}>
-        <section style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
-          <div style={{ fontSize: "0.625rem", fontWeight: 500, ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)" }}>Recent Governance</div>
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {response.items.length > 0 ? (
-              response.items.map((item) => {
-                const href = `/governance?${new URLSearchParams({
-                  ...(p.workspaceId ? { workspace_id: p.workspaceId } : {}),
-                  ...(p.proposalType ? { proposal_type: p.proposalType } : {}),
-                  ...(p.executionStatus ? { execution_status: p.executionStatus } : {}),
-                  limit: String(p.limit), execution_id: item.executionId,
-                }).toString()}`;
-                return (
-                  <a key={item.executionId} href={href} className="panel p-3 transition hover:border-border-hover block"
-                    style={item.executionId === selectedId ? { borderColor: "var(--cyan-dim)", background: "var(--cyan-bg)" } : undefined}
-                  >
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="text-[12px] text-text truncate" style={mono}>{item.proposalTypeLabel}</div>
-                        <div className="mt-0.5 text-[10px] text-muted truncate" style={mono}>{item.executionId}</div>
-                      </div>
-                      <StatusBadge tone={governanceStatusTone(item.executionStatus)}>{item.executionStatusLabel}</StatusBadge>
-                    </div>
-                    <div className="mt-1.5 text-[11px] leading-relaxed text-muted line-clamp-2" style={mono}>{item.reasonText}</div>
-                    {item.verificationBlocked ? (
-                      <div style={{ marginTop: "0.5rem", borderRadius: "var(--radius-sm)", border: "1px solid rgba(240,168,76,0.3)", background: "var(--amber-bg)", padding: "0.25rem 0.5rem", fontSize: "0.6875rem", ...mono, color: "var(--amber)" }}>
-                        Blocked: {item.verificationBlockedReason ?? "pending review"}
-                      </div>
-                    ) : null}
-                    <div className="mt-1.5 text-[10px] text-muted-foreground" style={mono}>{formatTimestamp(item.startedAt)}</div>
-                  </a>
-                );
-              })
-            ) : (
-              <EmptyState title="No records" description={response.sourceStatus.detail ?? "No governance records for this filter."} />
-            )}
-          </div>
-        </section>
-
-        <section style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: "0.625rem", fontWeight: 500, ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)" }}>Detail</div>
-              <div className="mt-0.5 text-[15px] text-text" style={mono}>{dr.detail?.proposalTypeLabel ?? "No selection"}</div>
-              <p className="mt-0.5 text-[12px] text-muted" style={mono}>{dr.detail?.reasonText ?? "Select an execution from the list."}</p>
+    <div className="app-page">
+      <section className="tile tile-light">
+        <div className="tile-inner">
+          <div className="tile-head tile-head-row">
+            <div>
+              <div className="section-kicker">治理</div>
+              <h1 className="tile-title">记忆治理</h1>
+              <p className="tile-subtitle">
+                查看自动提案、复核决策和最终执行结果。
+              </p>
             </div>
-            {dr.detail ? <StatusBadge tone={governanceStatusTone(dr.detail.executionStatus)}>{dr.detail.executionStatusLabel}</StatusBadge> : null}
+            <div className="tile-actions">
+              <FilterModalButton activeCount={activeCount} title="筛选治理记录" description="按工作区、动作和执行状态筛选。">
+                <SearchForm action="/governance" initialValues={{
+                  workspace_id: params.workspaceId,
+                  proposal_type: params.proposalType,
+                  execution_status: params.executionStatus,
+                  limit: String(params.limit)
+                }}>
+                  <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={params.workspaceId} />
+                  <FormField label="动作" name="proposal_type" defaultValue={params.proposalType} options={[
+                    { label: "归档", value: "archive" },
+                    { label: "确认", value: "confirm" },
+                    { label: "删除", value: "delete" },
+                    { label: "降级", value: "downgrade" },
+                    { label: "合并", value: "merge" },
+                    { label: "解决冲突", value: "resolve_conflict" },
+                    { label: "摘要收敛", value: "summarize" }
+                  ]} />
+                  <FormField label="状态" name="execution_status" defaultValue={params.executionStatus} options={[
+                    { label: "执行成功", value: "executed" },
+                    { label: "执行失败", value: "failed" },
+                    { label: "执行中", value: "executing" },
+                    { label: "已提案", value: "proposed" },
+                    { label: "已复核", value: "verified" },
+                    { label: "已拦截", value: "rejected_by_guard" }
+                  ]} />
+                  <FormField label="数量" name="limit" type="number" placeholder="50" defaultValue={String(params.limit)} />
+                </SearchForm>
+              </FilterModalButton>
+              <HealthModalButton sources={[response.sourceStatus, detailResponse.status]} label="数据源" />
+            </div>
           </div>
+        </div>
+      </section>
 
-          {dr.detail ? (
-            <>
-              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-                <div className="panel p-4">
-                  <div style={{ fontSize: "0.625rem", ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.75rem" }}>Planner / Verifier</div>
-                  <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.75rem", ...mono }}>
-                    <KV label="Planner model" value={dr.detail.plannerModel} />
-                    <KV label="Planner confidence" value={String(dr.detail.plannerConfidence ?? "—")} />
-                    <KV label="Verifier required" value={dr.detail.verifierRequired ? "Yes" : "No"} />
-                    <KV label="Verifier decision" value={dr.detail.verifierDecision ?? "—"} />
-                    <KV label="Blocked" value={dr.detail.verificationBlocked ? "Yes" : "No"} />
-                    <KV label="Verifier model" value={dr.detail.verifierModel ?? "—"} />
-                    <KV label="Policy" value={dr.detail.policyVersion} />
-                  </div>
+      <section className="tile tile-parchment">
+        <div className="tile-inner">
+          <div className="master-detail-grid">
+            <aside className="panel p-5">
+              <div className="section-kicker">最近治理</div>
+              {response.items.length > 0 ? (
+                <div className="record-list mt-4">
+                  {response.items.map((item) => {
+                    const href = `/governance?${new URLSearchParams({
+                      ...(params.workspaceId ? { workspace_id: params.workspaceId } : {}),
+                      ...(params.proposalType ? { proposal_type: params.proposalType } : {}),
+                      ...(params.executionStatus ? { execution_status: params.executionStatus } : {}),
+                      limit: String(params.limit),
+                      execution_id: item.executionId,
+                    }).toString()}`;
+
+                    return (
+                      <a
+                        key={item.executionId}
+                        href={href}
+                        className={`record-link ${item.executionId === selectedId ? "record-link-active" : ""}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-[17px] font-semibold leading-[1.24] text-text">{item.proposalTypeLabel}</div>
+                            <p className="mt-2 line-clamp-2 text-[14px] leading-[1.43] text-muted">{item.reasonText}</p>
+                          </div>
+                          <StatusBadge tone={governanceStatusTone(item.executionStatus)}>{item.executionStatusLabel}</StatusBadge>
+                        </div>
+                        {item.verificationBlocked ? (
+                          <div className="notice notice-warning mt-3">
+                            阻塞：{item.verificationBlockedReason ?? "等待复核"}
+                          </div>
+                        ) : null}
+                        <div className="mt-3 text-[14px] leading-[1.43] text-muted-foreground">
+                          {formatTimestamp(item.startedAt)}
+                        </div>
+                      </a>
+                    );
+                  })}
                 </div>
-                <div className="panel p-4">
-                  <div style={{ fontSize: "0.625rem", ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.75rem" }}>Execution</div>
-                  {dr.detail.verificationBlocked ? (
-                    <div style={{ marginBottom: "0.5rem", borderRadius: "var(--radius-sm)", border: "1px solid rgba(240,168,76,0.3)", background: "var(--amber-bg)", padding: "0.375rem 0.5rem", fontSize: "0.75rem", ...mono, color: "var(--amber)" }}>
-                      Blocked: {dr.detail.verificationBlockedReason ?? "pending"}
+              ) : (
+                <EmptyState title="没有治理记录" description={response.sourceStatus.detail ?? "当前筛选条件下没有治理记录。"} />
+              )}
+            </aside>
+
+            <section className="grid gap-6">
+              {detailResponse.detail ? (
+                <>
+                  <div className="panel p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="section-kicker">详情</div>
+                        <h2 className="mt-3 text-[34px] font-semibold leading-[1.12] text-text">
+                          {detailResponse.detail.proposalTypeLabel}
+                        </h2>
+                        <p className="mt-4 text-[17px] leading-[1.47] text-muted">
+                          {detailResponse.detail.reasonText}
+                        </p>
+                      </div>
+                      <StatusBadge tone={governanceStatusTone(detailResponse.detail.executionStatus)}>
+                        {detailResponse.detail.executionStatusLabel}
+                      </StatusBadge>
                     </div>
-                  ) : null}
-                  <div style={{ display: "grid", gap: "0.25rem", fontSize: "0.75rem", ...mono }}>
-                    <KV label="Execution ID" value={dr.detail.executionId} />
-                    <KV label="Proposal ID" value={dr.detail.proposalId} />
-                    <KV label="Workspace" value={dr.detail.workspaceId} />
-                    <KV label="Started" value={formatTimestamp(dr.detail.startedAt)} />
-                    <KV label="Finished" value={formatTimestamp(dr.detail.finishedAt)} />
-                    <KV label="Result" value={dr.detail.resultSummary ?? "—"} />
-                    <KV label="Error" value={dr.detail.errorMessage ?? "—"} />
                   </div>
-                </div>
-              </div>
 
-              <div className="panel p-4">
-                <div style={{ fontSize: "0.625rem", ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Targets</div>
-                <div style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface-hover)", padding: "0.5rem 0.75rem", fontSize: "0.8125rem", ...mono, color: "var(--text-secondary)" }}>
-                  {summarizeGovernanceTarget(dr.detail.targets)}
-                </div>
-                <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.375rem" }}>
-                  {dr.detail.targets.map((t, i) => (
-                    <div key={`${t.role}-${i}`} style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--border)", padding: "0.375rem 0.625rem", fontSize: "0.75rem", ...mono }}>
-                      <span style={{ color: "var(--text)" }}>{t.role}</span>
-                      <span className="ml-2 text-muted">{t.recordId ?? t.conflictId ?? "—"}</span>
+                  <div className="detail-grid">
+                    <section className="panel p-6">
+                      <div className="section-kicker">Planner / Verifier</div>
+                      <dl className="kv-grid mt-4">
+                        <Row label="Planner model" value={detailResponse.detail.plannerModel} />
+                        <Row label="Planner confidence" value={String(detailResponse.detail.plannerConfidence ?? "未记录")} />
+                        <Row label="Verifier required" value={detailResponse.detail.verifierRequired ? "需要" : "不需要"} />
+                        <Row label="Verifier decision" value={detailResponse.detail.verifierDecision ?? "未记录"} />
+                        <Row label="Blocked" value={detailResponse.detail.verificationBlocked ? "是" : "否"} />
+                        <Row label="Verifier model" value={detailResponse.detail.verifierModel ?? "未记录"} />
+                        <Row label="Policy" value={detailResponse.detail.policyVersion} />
+                      </dl>
+                    </section>
+
+                    <section className="panel p-6">
+                      <div className="section-kicker">执行</div>
+                      {detailResponse.detail.verificationBlocked ? (
+                        <div className="notice notice-warning mt-4">
+                          阻塞：{detailResponse.detail.verificationBlockedReason ?? "等待复核"}
+                        </div>
+                      ) : null}
+                      <dl className="kv-grid mt-4">
+                        <Row label="Execution" value={detailResponse.detail.executionId} />
+                        <Row label="Proposal" value={detailResponse.detail.proposalId} />
+                        <Row label="Workspace" value={detailResponse.detail.workspaceId} />
+                        <Row label="Started" value={formatTimestamp(detailResponse.detail.startedAt)} />
+                        <Row label="Finished" value={formatTimestamp(detailResponse.detail.finishedAt)} />
+                        <Row label="Result" value={detailResponse.detail.resultSummary ?? "未记录"} />
+                        <Row label="Error" value={detailResponse.detail.errorMessage ?? "无"} />
+                      </dl>
+                    </section>
+                  </div>
+
+                  <section className="panel p-6">
+                    <div className="section-kicker">目标</div>
+                    <p className="mt-4 text-[17px] leading-[1.47] text-muted">
+                      {summarizeGovernanceTarget(detailResponse.detail.targets)}
+                    </p>
+                    <div className="record-list mt-5">
+                      {detailResponse.detail.targets.map((target, index) => (
+                        <div key={`${target.role}-${index}`} className="record-card">
+                          <Row label={target.role} value={target.recordId ?? target.conflictId ?? "未记录"} />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </section>
 
-              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-                <div className="panel p-4">
-                  <div style={{ fontSize: "0.625rem", ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Changes</div>
-                  <pre style={{
-                    overflow: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--border)",
-                    background: "var(--bg)", padding: "0.625rem 0.75rem",
-                    fontSize: "0.6875rem", lineHeight: "1.5", ...mono, color: "var(--text-secondary)"
-                  }}>
-                    {JSON.stringify(dr.detail.suggestedChanges, null, 2)}
-                  </pre>
-                </div>
-                <div className="panel p-4">
-                  <div style={{ fontSize: "0.625rem", ...mono, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Evidence</div>
-                  <pre style={{
-                    overflow: "auto", borderRadius: "var(--radius-md)", border: "1px solid var(--border)",
-                    background: "var(--bg)", padding: "0.625rem 0.75rem",
-                    fontSize: "0.6875rem", lineHeight: "1.5", ...mono, color: "var(--text-secondary)"
-                  }}>
-                    {JSON.stringify(dr.detail.evidence, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </>
-          ) : (
-            <EmptyState title="No detail" description={dr.status.detail ?? "No governance detail available."} />
-          )}
-        </section>
-      </div>
+                  <details className="panel p-6">
+                    <summary className="cursor-pointer text-[21px] font-semibold leading-[1.19] text-text">
+                      内部证据
+                    </summary>
+                    <div className="detail-grid mt-5">
+                      <div>
+                        <div className="section-kicker mb-3">建议变更</div>
+                        <pre className="quiet-code">{JSON.stringify(detailResponse.detail.suggestedChanges, null, 2)}</pre>
+                      </div>
+                      <div>
+                        <div className="section-kicker mb-3">证据</div>
+                        <pre className="quiet-code">{JSON.stringify(detailResponse.detail.evidence, null, 2)}</pre>
+                      </div>
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <EmptyState title="未选择治理记录" description={detailResponse.status.detail ?? "请选择左侧一条治理记录查看详情。"} />
+              )}
+            </section>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
 
-function KV({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", borderBottom: "1px dashed var(--border)", paddingBottom: "0.125rem" }}>
-      <span style={{ color: "var(--text-muted)", fontSize: "0.6875rem" }}>{label}</span>
-      <span style={{ color: "var(--text)", textAlign: "right" }} className="truncate">{value}</span>
+    <div className="kv-row">
+      <dt className="kv-label">{label}</dt>
+      <dd className="kv-value">{value}</dd>
     </div>
   );
 }

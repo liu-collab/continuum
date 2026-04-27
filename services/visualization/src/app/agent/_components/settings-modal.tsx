@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { Modal } from "@/components/modal";
+import { SelectField } from "@/components/select-field";
 
 import type { AgentMemoryMode, MnaAgentConfigResponse } from "../_lib/openapi-types";
 import {
@@ -121,6 +122,17 @@ function normalizeText(value: string | null | undefined) {
 
 function normalizeOptionalNumber(value: number | null | undefined) {
   return value ? String(value) : "";
+}
+
+function buildEffortOptions(t: (key: string) => string) {
+  return [
+    { value: "", label: t("runtimeConfig.effortDisabled") },
+    { value: "low", label: t("runtimeConfig.effortOptions.low") },
+    { value: "medium", label: t("runtimeConfig.effortOptions.medium") },
+    { value: "high", label: t("runtimeConfig.effortOptions.high") },
+    { value: "xhigh", label: t("runtimeConfig.effortOptions.xhigh") },
+    { value: "max", label: t("runtimeConfig.effortOptions.max") }
+  ];
 }
 
 export function SettingsModal({
@@ -574,15 +586,17 @@ export function SettingsModal({
         <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("modeSwitch.label")}</span>
-            <select
-              data-testid="memory-mode-select"
-              value={memoryMode}
-              onChange={(event) => onMemoryModeChange(event.target.value as AgentMemoryMode)}
-              className="field mt-1"
-            >
-              <option value="workspace_plus_global">{formatMemoryModeLabel("workspace_plus_global")}</option>
-              <option value="workspace_only">{formatMemoryModeLabel("workspace_only")}</option>
-            </select>
+            <div className="mt-1">
+              <SelectField
+                testId="memory-mode-select"
+                value={memoryMode}
+                onChange={(value) => onMemoryModeChange(value as AgentMemoryMode)}
+                options={[
+                  { value: "workspace_plus_global", label: formatMemoryModeLabel("workspace_plus_global") },
+                  { value: "workspace_only", label: formatMemoryModeLabel("workspace_only") }
+                ]}
+              />
+            </div>
           </label>
           <div className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("approvalModeSwitch.label")}</span>
@@ -648,15 +662,17 @@ export function SettingsModal({
           </div>
           <label className="block">
             <span className="text-xs font-medium text-muted-foreground">{t("localeSwitch.label")}</span>
-            <select
-              data-testid="agent-locale-select"
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as "zh-CN" | "en-US")}
-              className="field mt-1"
-            >
-              <option value="zh-CN">{t("localeSwitch.options.zh-CN")}</option>
-              <option value="en-US">{t("localeSwitch.options.en-US")}</option>
-            </select>
+            <div className="mt-1">
+              <SelectField
+                testId="agent-locale-select"
+                value={locale}
+                onChange={(value) => setLocale(value as "zh-CN" | "en-US")}
+                options={[
+                  { value: "zh-CN", label: t("localeSwitch.options.zh-CN") },
+                  { value: "en-US", label: t("localeSwitch.options.en-US") }
+                ]}
+              />
+            </div>
           </label>
         </div>
 
@@ -665,21 +681,15 @@ export function SettingsModal({
             <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.providerTitle")}</div>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerKind")}</span>
-              <select
+              <SelectField
                 value={isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave}
-                onChange={(event) => {
-                  const nextKind = event.target.value as EditableProviderKind;
+                onChange={(value) => {
+                  const nextKind = value as EditableProviderKind;
                   setProviderKind(nextKind);
                   setProviderKindToSave(nextKind);
                 }}
-                className="field mt-1"
-              >
-                {providerKindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                options={providerKindOptions}
+              />
             </label>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerModel")}</span>
@@ -711,18 +721,11 @@ export function SettingsModal({
             </label>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerEffort")}</span>
-              <select
+              <SelectField
                 value={providerEffort}
-                onChange={(event) => setProviderEffort(event.target.value as typeof providerEffort)}
-                className="field mt-1"
-              >
-                <option value="">{t("runtimeConfig.effortDisabled")}</option>
-                <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
-                <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
-                <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
-                <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
-                <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
-              </select>
+                onChange={(value) => setProviderEffort(value as typeof providerEffort)}
+                options={buildEffortOptions(t)}
+              />
             </label>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerMaxTokens")}</span>
@@ -772,30 +775,30 @@ export function SettingsModal({
             <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMode")}</span>
-              <select
+              <SelectField
                 value={memoryModelMode}
-                onChange={(event) => setMemoryModelMode(event.target.value as MemoryModelMode)}
-                className="field mt-1"
-                data-testid="memory-model-mode-select"
-              >
-                {canMirrorPrimaryModel ? (
-                  <option value="same_as_primary">{t("runtimeConfig.memoryLlmModeOptions.same_as_primary")}</option>
-                ) : null}
-                <option value="custom">{t("runtimeConfig.memoryLlmModeOptions.custom")}</option>
-              </select>
+                testId="memory-model-mode-select"
+                onChange={(value) => setMemoryModelMode(value as MemoryModelMode)}
+                options={[
+                  ...(canMirrorPrimaryModel
+                    ? [{ value: "same_as_primary", label: t("runtimeConfig.memoryLlmModeOptions.same_as_primary") }]
+                    : []),
+                  { value: "custom", label: t("runtimeConfig.memoryLlmModeOptions.custom") }
+                ]}
+              />
             </label>
             {memoryModelMode === "custom" ? (
               <>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
-                  <select
+                  <SelectField
                     value={memoryLlmProtocol}
-                    onChange={(event) => setMemoryLlmProtocol(event.target.value as "anthropic" | "openai-compatible")}
-                    className="field mt-1"
-                  >
-                    <option value="openai-compatible">{t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible")}</option>
-                    <option value="anthropic">{t("runtimeConfig.memoryLlmProtocolOptions.anthropic")}</option>
-                  </select>
+                    onChange={(value) => setMemoryLlmProtocol(value as "anthropic" | "openai-compatible")}
+                    options={[
+                      { value: "openai-compatible", label: t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible") },
+                      { value: "anthropic", label: t("runtimeConfig.memoryLlmProtocolOptions.anthropic") }
+                    ]}
+                  />
                 </label>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
@@ -841,18 +844,11 @@ export function SettingsModal({
               <>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
-                  <select
+                  <SelectField
                     value={memoryLlmEffort}
-                    onChange={(event) => setMemoryLlmEffort(event.target.value as typeof memoryLlmEffort)}
-                    className="field mt-1"
-                  >
-                    <option value="">{t("runtimeConfig.effortDisabled")}</option>
-                    <option value="low">{t("runtimeConfig.effortOptions.low")}</option>
-                    <option value="medium">{t("runtimeConfig.effortOptions.medium")}</option>
-                    <option value="high">{t("runtimeConfig.effortOptions.high")}</option>
-                    <option value="xhigh">{t("runtimeConfig.effortOptions.xhigh")}</option>
-                    <option value="max">{t("runtimeConfig.effortOptions.max")}</option>
-                  </select>
+                    onChange={(value) => setMemoryLlmEffort(value as typeof memoryLlmEffort)}
+                    options={buildEffortOptions(t)}
+                  />
                 </label>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
@@ -918,10 +914,10 @@ export function SettingsModal({
 
                   <label className="block">
                     <span className="text-xs text-muted-foreground">{t("runtimeConfig.mcpTransport")}</span>
-                    <select
+                    <SelectField
                       value={server.transport}
-                      onChange={(event) => {
-                        const nextTransport = event.target.value as "stdio" | "http";
+                      onChange={(value) => {
+                        const nextTransport = value as "stdio" | "http";
                         setMcpServers((current) =>
                           current.map((item, itemIndex) =>
                             itemIndex === index
@@ -935,11 +931,11 @@ export function SettingsModal({
                           ),
                         );
                       }}
-                      className="field mt-1"
-                    >
-                      <option value="http">http</option>
-                      <option value="stdio">stdio</option>
-                    </select>
+                      options={[
+                        { value: "http", label: "http" },
+                        { value: "stdio", label: "stdio" }
+                      ]}
+                    />
                   </label>
 
                   {server.transport === "http" ? (

@@ -22,7 +22,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
   );
 
   return (
-    <div data-testid="tool-console" className="rounded-lg border bg-surface">
+    <div data-testid="tool-console" className="panel">
       <div className="border-b px-4 py-3">
         <div className="text-sm font-medium text-foreground">{t("toolConsole.title")}</div>
       </div>
@@ -35,7 +35,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
               <div
                 key={call.callId}
                 data-testid={`tool-call-${call.callId}`}
-                className="rounded-md border bg-surface-muted/40 px-3 py-2 text-sm text-foreground"
+                className="record-card px-3 py-2 text-sm text-foreground"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{call.name}</span>
@@ -45,7 +45,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
                   <UntrustedBadge trustLevel={call.trustLevel} />
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{call.argsPreview}</div>
-                <div className="mt-1 rounded-md border bg-surface px-3 py-1.5 text-xs leading-5 text-foreground">
+                <div className="mt-1 border bg-surface px-3 py-1.5 text-xs leading-5 text-foreground" style={{ borderRadius: "var(--radius-sm)" }}>
                   {call.outputPreview || t("toolConsole.waiting")}
                 </div>
               </div>

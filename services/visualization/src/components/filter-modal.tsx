@@ -24,24 +24,10 @@ export function FilterModalButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.375rem",
-          borderRadius: "var(--radius-md)",
-          padding: "0.375rem 0.75rem",
-          fontSize: "0.8125rem",
-          fontFamily: "var(--font-mono)",
-          fontWeight: 500,
-          color: "var(--text-muted)",
-          background: "transparent",
-          border: "1px solid var(--border)",
-          cursor: "pointer",
-          transition: "all 80ms ease"
-        }}
+        className="btn-outline"
       >
         <SlidersHorizontal style={{ width: 16, height: 16, opacity: 0.6 }} />
-        Filters
+        筛选
         {activeCount > 0 ? (
           <span style={{
             marginLeft: "0.25rem",

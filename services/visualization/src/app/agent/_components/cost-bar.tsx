@@ -39,7 +39,7 @@ export function CostBar({ metrics, turnCount }: CostBarProps) {
   }, [metrics?.uptime_s]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border bg-surface px-3 py-1.5 text-xs">
+    <div className="flex flex-wrap items-center gap-3 border bg-surface px-3 py-1.5 text-xs" style={{ borderRadius: "var(--radius-lg)" }}>
       <Metric label={t("costBar.turns")} value={String(metrics?.turns_total ?? turnCount)} />
       <Metric label={t("costBar.providerCalls")} value={String(totalProviderCalls)} />
       <Metric label={t("costBar.providerErrors")} value={String(totalProviderErrors)} />
