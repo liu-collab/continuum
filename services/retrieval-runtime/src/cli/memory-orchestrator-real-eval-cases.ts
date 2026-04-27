@@ -110,7 +110,12 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
       maxTokens: 800,
       check: (output) => {
         const t = output as z.infer<typeof memoryIntentAnalyzerSchema>;
-        return { score: t.needs_memory === false ? 1.0 : 0.0, actual: JSON.stringify({ needs_memory: t.needs_memory, reason: t.reason }) };
+        let score = 0;
+        if (t.needs_memory === false) score += 0.6;
+        // 自包含问题不应推荐 scope 或 memory_types
+        if (!t.memory_types || t.memory_types.length === 0) score += 0.2;
+        if (!t.suggested_scopes || t.suggested_scopes.length === 0) score += 0.2;
+        return { score, actual: JSON.stringify({ needs_memory: t.needs_memory, memory_types: t.memory_types, suggested_scopes: t.suggested_scopes, reason: t.reason }) };
       },
     },
     {
@@ -283,6 +288,29 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
         return { score: t.needs_memory === false ? 1.0 : 0.0, actual: JSON.stringify({ needs_memory: t.needs_memory }) };
       },
     },
+    {
+      id: "intent-identity-edge",
+      metric: "intent_accuracy",
+      module: "intent-analyzer",
+      promptName: "MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT",
+      expected: "关于模型自身身份的问题，不应误判为需要记忆（对抗样本）",
+      systemPrompt: MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT,
+      payload: {
+        current_input: "你是 Claude 还是别的模型？你的训练数据包含哪些内容？",
+        session_context: sessionCtx("intent-11"),
+      },
+      schema: memoryIntentAnalyzerSchema,
+      maxTokens: 800,
+      check: (output) => {
+        const t = output as z.infer<typeof memoryIntentAnalyzerSchema>;
+        let score = 0;
+        // 模型身份问题是自包含的，不需要记忆
+        if (t.needs_memory === false) score += 0.7;
+        // 即使模型"知道自己的知识"，也不应触发 memory_types
+        if (!t.memory_types || t.memory_types.length === 0) score += 0.3;
+        return { score, actual: JSON.stringify({ needs_memory: t.needs_memory, memory_types: t.memory_types }) };
+      },
+    },
   ];
 }
 
@@ -315,10 +343,12 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
       check: (output) => {
         const t = output as z.infer<typeof memoryRecallSearchSchema>;
         let score = 0;
-        if (t.should_search) score += 0.5;
-        if (t.query_hint) score += 0.3;
-        if (t.reason.length > 0) score += 0.2;
-        return { score, actual: JSON.stringify({ should_search: t.should_search, query_hint: t.query_hint ?? "" }) };
+        if (t.should_search) score += 0.4;
+        if (t.query_hint) score += 0.2;
+        if (t.reason.length > 0) score += 0.1;
+        // task_id_present=true 时应请求 task scope
+        if (t.requested_scopes?.includes("task")) score += 0.3;
+        return { score, actual: JSON.stringify({ should_search: t.should_search, query_hint: t.query_hint ?? "", requested_scopes: t.requested_scopes ?? [] }) };
       },
     },
     {
@@ -483,6 +513,36 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         if (t.query_hint) score += 0.3;
         if ((t.requested_scopes ?? []).length > 0) score += 0.2;
         return { score, actual: JSON.stringify({ should_search: t.should_search, query_hint: t.query_hint ?? "", requested_scopes: t.requested_scopes ?? [] }) };
+      },
+    },
+    {
+      id: "search-threshold-edge",
+      metric: "recall_accuracy_proxy",
+      module: "recall-search-planner",
+      promptName: "MEMORY_RECALL_SEARCH_SYSTEM_PROMPT",
+      expected: "语义分恰好等于阈值时，应结合上下文判断",
+      systemPrompt: MEMORY_RECALL_SEARCH_SYSTEM_PROMPT,
+      payload: {
+        current_input: "继续上次那个。",
+        recent_context_summary: "之前有过代码讨论。",
+        phase: "before_response",
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["session", "task"],
+        requested_memory_types: ["episodic", "task_state"],
+        semantic_score: 0.72,
+        semantic_threshold: 0.72,
+        task_id_present: true,
+      },
+      schema: memoryRecallSearchSchema,
+      maxTokens: 900,
+      check: (output) => {
+        const t = output as z.infer<typeof memoryRecallSearchSchema>;
+        let score = 0;
+        // 语义分在边界上，但有 task_id 和会话上下文，应倾向于检索
+        if (t.should_search) score += 0.5;
+        if (t.query_hint) score += 0.2;
+        if (t.reason && t.reason.length > 20) score += 0.3; // 边界情况应给出详尽理由
+        return { score, actual: JSON.stringify({ should_search: t.should_search, query_hint: t.query_hint ?? "", reason_length: t.reason?.length ?? 0 }) };
       },
     },
   ];
@@ -662,7 +722,10 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
       maxTokens: 1000,
       check: (output) => {
         const t = output as z.infer<typeof memoryRecallInjectionSchema>;
-        return { score: t.should_inject === false ? 1.0 : 0.0, actual: JSON.stringify({ should_inject: t.should_inject }) };
+        let score = 0;
+        if (t.should_inject === false) score += 0.6;
+        if (!t.selected_record_ids || t.selected_record_ids.length === 0) score += 0.4;
+        return { score, actual: JSON.stringify({ should_inject: t.should_inject, selected_record_ids: t.selected_record_ids ?? [] }) };
       },
     },
     {
@@ -759,6 +822,39 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
       check: (output) => {
         const t = output as z.infer<typeof memoryRecallInjectionSchema>;
         return { score: t.should_inject === false ? 1.0 : 0.0, actual: JSON.stringify({ should_inject: t.should_inject }) };
+      },
+    },
+    {
+      id: "inject-deceptive-domain",
+      metric: "recall_accuracy_proxy",
+      module: "recall-injection-planner",
+      promptName: "MEMORY_RECALL_INJECTION_SYSTEM_PROMPT",
+      expected: "候选领域与用户问题无关时不应注入，即使置信度看上去很高",
+      systemPrompt: MEMORY_RECALL_INJECTION_SYSTEM_PROMPT,
+      payload: {
+        current_input: "帮我调一下这个 SQL 查询的性能。",
+        recent_context_summary: "用户在做数据库优化。",
+        phase: "before_response",
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["workspace", "user"],
+        requested_memory_types: ["fact_preference", "episodic"],
+        search_reason: "语义命中",
+        candidates: [
+          candidate("mem-react-style", "user", "fact_preference", "用户偏好：前端使用 TailwindCSS，不写内联样式。", 5, 0.96, 0.88, 0.85, "2026-04-22T09:00:00.000Z"),
+          candidate("mem-color", "user", "fact_preference", "用户偏好：设计稿用紫色系。", 4, 0.92, 0.82, 0.79, "2026-04-20T08:00:00.000Z"),
+        ],
+        semantic_score: 0.35,
+        semantic_threshold: 0.72,
+        task_id_present: false,
+      },
+      schema: memoryRecallInjectionSchema,
+      maxTokens: 1000,
+      check: (output) => {
+        const t = output as z.infer<typeof memoryRecallInjectionSchema>;
+        let score = 0;
+        if (t.should_inject === false) score += 0.5;
+        if (!t.selected_record_ids || t.selected_record_ids.length === 0) score += 0.5;
+        return { score, actual: JSON.stringify({ should_inject: t.should_inject, selected_record_ids: t.selected_record_ids ?? [] }) };
       },
     },
   ];
@@ -952,6 +1048,32 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
         if (t.candidates.length >= 3) score += 0.3;
         if (t.candidates.every((c) => c.candidate_type === "fact_preference")) score += 0.2;
         return { score, actual: JSON.stringify({ count: t.candidates.length, types: t.candidates.map((c) => c.candidate_type) }) };
+      },
+    },
+    {
+      id: "extract-contradictory-prefs",
+      metric: "writeback_extraction_accuracy",
+      module: "writeback-extractor",
+      promptName: "MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT",
+      expected: "用户在一轮中给出矛盾偏好时，应以最新表达为准",
+      systemPrompt: MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
+      payload: {
+        current_input: "算了还是不用 tab 了，之前说的空格缩进继续。",
+        assistant_output: "好的，继续使用 4 空格缩进。",
+        tool_results_summary: "",
+        task_id: null,
+      },
+      schema: memoryWritebackExtractionSchema,
+      maxTokens: 600,
+      check: (output) => {
+        const t = output as z.infer<typeof memoryWritebackExtractionSchema>;
+        const ws = t.candidates.find((c) => c.candidate_type === "fact_preference" && c.scope === "user");
+        let score = 0;
+        if (ws) score += 0.4;
+        if (ws && ws.summary.includes("空格") && !ws.summary.includes("tab")) score += 0.4;
+        // 不应提取瞬时矛盾，只记录最终结论
+        if (t.candidates.length <= 2) score += 0.2;
+        return { score, actual: JSON.stringify(t.candidates.map((c) => ({ type: c.candidate_type, scope: c.scope, summary: c.summary }))) };
       },
     },
   ];

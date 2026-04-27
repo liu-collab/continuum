@@ -6,12 +6,39 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
 import { callMemoryLlm, parseMemoryLlmJsonPayload } from "../memory-orchestrator/llm-client.js";
+import { parseArgs, readLastIntegerArg, readLastStringArg } from "../shared/args.js";
 import { buildEvalCases } from "./memory-orchestrator-real-eval-cases.js";
 
 export const DEFAULT_MODEL = "gpt-5.3-codex-spark";
 export const DEFAULT_OUTPUT_BASE = path.resolve("docs", "memory-orchestrator-real-llm-eval");
 export const DEFAULT_MANAGED_CONFIG_PATH = path.join(os.homedir(), ".continuum", "managed", "mna", "config.json");
-export const PASS_THRESHOLD = 0.6;
+/**
+ * 按指标区分的通过阈值。
+ * 不同指标的评分特性不同：
+ * - governance_correctness_proxy / writeback_refine_accuracy：多为二元 0/1，阈值设高
+ * - writeback_extraction_accuracy / low_quality_intercept_rate：部分二元部分连续
+ * - intent_accuracy / recall_accuracy_proxy：混合评分，阈值适中
+ * - 其余指标：默认 0.6
+ */
+export const METRIC_PASS_THRESHOLDS: Record<string, number> = {
+  intent_accuracy: 0.60,
+  recall_accuracy_proxy: 0.60,
+  writeback_extraction_accuracy: 0.65,
+  writeback_refine_accuracy: 0.70,
+  low_quality_intercept_rate: 0.65,
+  governance_plan_accuracy: 0.65,
+  governance_correctness_proxy: 0.70,
+  relation_discovery_accuracy: 0.60,
+  recommendation_acceptance_proxy: 0.60,
+  knowledge_extraction_accuracy: 0.60,
+  effectiveness_adjustment_direction_proxy: 0.60,
+};
+
+export function getPassThreshold(metric: string): number {
+  return METRIC_PASS_THRESHOLDS[metric] ?? 0.6;
+}
+
+export const PASS_THRESHOLD = 0.6; // 保留默认值做向后兼容
 
 export type Protocol = "anthropic" | "openai-compatible";
 
@@ -99,64 +126,45 @@ type BaselineFile = {
   }>;
 };
 
-function parseInteger(value: string | undefined): number | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 export function parseCliArgs(argv: string[]): CliArgs {
+  const parsed = parseArgs(argv).options;
+
   const args: CliArgs = {};
+  const baseUrl = readLastStringArg(parsed["base-url"]);
+  const apiKey = readLastStringArg(parsed["api-key"]);
+  const model = readLastStringArg(parsed.model);
+  const protocol = readLastStringArg(parsed.protocol);
+  const timeoutMs = readLastIntegerArg(parsed["timeout-ms"]);
+  const outputBase = readLastStringArg(parsed["output-base"]);
+  const configPath = readLastStringArg(parsed["config-path"]);
+  const concurrency = readLastIntegerArg(parsed.concurrency);
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const key = argv[index];
-    const value = argv[index + 1];
-    if (!key?.startsWith("--")) {
-      continue;
-    }
-
-    switch (key) {
-      case "--base-url":
-        args.baseUrl = value;
-        index += 1;
-        break;
-      case "--api-key":
-        args.apiKey = value;
-        index += 1;
-        break;
-      case "--model":
-        args.model = value;
-        index += 1;
-        break;
-      case "--protocol":
-        args.protocol = value === "anthropic" ? "anthropic" : "openai-compatible";
-        index += 1;
-        break;
-      case "--timeout-ms":
-        args.timeoutMs = parseInteger(value);
-        index += 1;
-        break;
-      case "--output-base":
-        args.outputBase = value;
-        index += 1;
-        break;
-      case "--config-path":
-        args.configPath = value;
-        index += 1;
-        break;
-      case "--update-baseline":
-        args.updateBaseline = true;
-        break;
-      case "--concurrency":
-        args.concurrency = parseInteger(value);
-        index += 1;
-        break;
-      default:
-        break;
-    }
+  if (baseUrl !== undefined) {
+    args.baseUrl = baseUrl;
+  }
+  if (apiKey !== undefined) {
+    args.apiKey = apiKey;
+  }
+  if (model !== undefined) {
+    args.model = model;
+  }
+  if (protocol !== undefined) {
+    args.protocol = protocol === "anthropic" ? "anthropic" : "openai-compatible";
+  }
+  if (timeoutMs !== undefined) {
+    args.timeoutMs = timeoutMs;
+  }
+  if (outputBase !== undefined) {
+    args.outputBase = outputBase;
+  }
+  if (configPath !== undefined) {
+    args.configPath = configPath;
+  }
+  if (parsed["update-baseline"] === true) {
+    args.updateBaseline = true;
+  }
+  if (concurrency !== undefined) {
+    args.concurrency = concurrency;
   }
 
   return args;
@@ -222,7 +230,8 @@ export async function runCase(
     const parsed = evalCase.schema.parse(parseMemoryLlmJsonPayload(rawOutput));
     const checked = evalCase.check(parsed);
     const score = clampScore(checked.score);
-    const pass = score >= PASS_THRESHOLD;
+    const threshold = getPassThreshold(evalCase.metric);
+    const pass = score >= threshold;
 
     return {
       id: evalCase.id,
@@ -388,7 +397,7 @@ function buildMarkdownReport(
   lines.push(`- 协议：\`${config.protocol}\``);
   lines.push(`- 端点：\`${config.baseUrl}\``);
   lines.push(`- 超时：\`${config.timeoutMs}\`（毫秒）`);
-  lines.push(`- 通过阈值：\`score >= ${PASS_THRESHOLD}\``);
+  lines.push(`- 通过阈值：按指标区分（默认 score >= 0.6，最高 governance_correctness_proxy = 0.7）`);
   lines.push(`- 总用例数：\`${results.length}\``);
   lines.push("");
 
@@ -408,11 +417,12 @@ function buildMarkdownReport(
 
   lines.push("## 指标汇总");
   lines.push("");
-  lines.push("| 指标 | 通过数 | 总数 | 通过率 | 平均分 | 基线对比 | 网络错误 | 结构错误 | 逻辑错误 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| 指标 | 通过数 | 总数 | 阈值 | 通过率 | 平均分 | 基线对比 | 网络错误 | 结构错误 | 逻辑错误 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of summary) {
+    const threshold = getPassThreshold(item.metric);
     lines.push(
-      `| ${item.metric} | ${item.passed} | ${item.total} | ${(item.rate * 100).toFixed(1)}% | ${item.avgScore.toFixed(3)} | ${formatDelta(item.rateDelta)} | ${item.errorCounts.network} | ${item.errorCounts.schema} | ${item.errorCounts.logic} |`,
+      `| ${item.metric} | ${item.passed} | ${item.total} | ${threshold} | ${(item.rate * 100).toFixed(1)}% | ${item.avgScore.toFixed(3)} | ${formatDelta(item.rateDelta)} | ${item.errorCounts.network} | ${item.errorCounts.schema} | ${item.errorCounts.logic} |`,
     );
   }
   lines.push("");
