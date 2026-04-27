@@ -18,6 +18,7 @@ const memoryNativeAgentDir = path.join(repoRoot, "services", "memory-native-agen
 const vendorDir = path.join(packageDir, "vendor");
 const vendorStageDir = path.join(packageDir, "vendor-stage");
 const visualizationBuildDir = path.join(visualizationDir, ".next");
+const skipVisualization = process.argv.includes("--skip-visualization");
 
 async function copyEntries(sourceDir, targetDir, entries) {
   await mkdir(targetDir, { recursive: true });
@@ -181,11 +182,55 @@ async function stopRunningVendorProcesses() {
   });
 }
 
+function filterSkippedEntries(plan) {
+  if (!skipVisualization) {
+    return plan;
+  }
+
+  const skippedEntries = ["visualization"];
+  const changedEntries = plan.changedEntries.filter((entry) => !skippedEntries.includes(entry));
+  const buildServices = plan.buildServices.filter((entry) => !skippedEntries.includes(entry));
+  const nextEntries = { ...plan.nextState.vendor.entries };
+  const nextBuilds = { ...plan.nextState.vendor.builds };
+
+  for (const entry of skippedEntries) {
+    if (plan.currentState.vendor.entries[entry]) {
+      nextEntries[entry] = plan.currentState.vendor.entries[entry];
+    } else {
+      delete nextEntries[entry];
+    }
+
+    if (plan.currentState.vendor.builds[entry]) {
+      nextBuilds[entry] = plan.currentState.vendor.builds[entry];
+    } else {
+      delete nextBuilds[entry];
+    }
+  }
+
+  return {
+    ...plan,
+    changedEntries,
+    buildServices,
+    needsRefresh: changedEntries.length > 0,
+    nextState: {
+      ...plan.nextState,
+      vendor: {
+        entries: nextEntries,
+        builds: nextBuilds,
+      },
+    },
+  };
+}
+
 async function main() {
-  const plan = await planVendorBuild(packageDir);
+  const plan = filterSkippedEntries(await planVendorBuild(packageDir));
 
   if (!plan.needsRefresh) {
-    console.log("vendor 已是最新，跳过 prepare:vendor。");
+    console.log(
+      skipVisualization
+        ? "vendor 已是最新，跳过 prepare:vendor；--ui-dev 下 visualization 由 next dev 直接读取源码。"
+        : "vendor 已是最新，跳过 prepare:vendor。",
+    );
     return;
   }
 

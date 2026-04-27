@@ -68,6 +68,35 @@ function spawnCommand(commandName, args, options = {}) {
   });
 }
 
+function hasBooleanOption(args, name) {
+  return args.some((arg) => arg === `--${name}` || arg === `--${name}=true`);
+}
+
+async function isHealthy(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function managedBackendIsHealthy() {
+  const storageUrl = process.env.STORAGE_API_BASE_URL ?? "http://127.0.0.1:3001";
+  const runtimeUrl = process.env.RUNTIME_API_BASE_URL ?? "http://127.0.0.1:3002";
+  const [storageHealthy, runtimeHealthy] = await Promise.all([
+    isHealthy(`${storageUrl}/health`, 1_500),
+    isHealthy(`${runtimeUrl}/healthz`, 1_500),
+  ]);
+
+  return storageHealthy && runtimeHealthy;
+}
+
 async function ensureCliBuilt() {
   const plan = await planCliBuild(cliRoot);
   if (!plan.needsBuild) {
@@ -83,8 +112,8 @@ async function ensureCliBuilt() {
   await writeBuildState(plan.nextState);
 }
 
-async function prepareLatestVendor() {
-  const exitCode = await spawnCommand(npmCommand(), ["run", "prepare:vendor"], { cwd: cliRoot });
+async function prepareLatestVendor(args = []) {
+  const exitCode = await spawnCommand(npmCommand(), ["run", "prepare:vendor", ...args], { cwd: cliRoot });
   if (exitCode !== 0) {
     throw new Error("continuum-cli prepare:vendor 失败。");
   }
@@ -165,11 +194,19 @@ async function run() {
 
   try {
     if (command === "start") {
-      const vendorPlan = await planVendorBuild(cliRoot);
-      if (vendorPlan.needsRefresh) {
-        await prepareLatestVendor();
+      if (hasBooleanOption(passthroughArgs, "ui-dev")) {
+        if (await managedBackendIsHealthy()) {
+          console.log("--ui-dev 检测到后端已健康，跳过 vendor 刷新。");
+        } else {
+          await prepareLatestVendor(["--", "--skip-visualization"]);
+        }
       } else {
-        console.log("vendor 已是最新，跳过 prepare:vendor。");
+        const vendorPlan = await planVendorBuild(cliRoot);
+        if (vendorPlan.needsRefresh) {
+          await prepareLatestVendor();
+        } else {
+          console.log("vendor 已是最新，跳过 prepare:vendor。");
+        }
       }
     }
 

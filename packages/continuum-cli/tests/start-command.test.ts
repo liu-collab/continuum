@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.hoisted(() => vi.fn());
 const fetchJsonMock = vi.hoisted(() => vi.fn());
@@ -16,7 +16,9 @@ const startManagedMnaMock = vi.hoisted(() => vi.fn());
 const stopLegacyContinuumProcessesMock = vi.hoisted(() => vi.fn());
 const cpMock = vi.hoisted(() => vi.fn());
 const mkdirMock = vi.hoisted(() => vi.fn());
+const openMock = vi.hoisted(() => vi.fn());
 const rmMock = vi.hoisted(() => vi.fn());
+const writeFileMock = vi.hoisted(() => vi.fn());
 const planVendorBuildMock = vi.hoisted(() => vi.fn());
 const planStackImageBuildMock = vi.hoisted(() => vi.fn());
 const writeBuildStateMock = vi.hoisted(() => vi.fn());
@@ -63,7 +65,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     ...actual,
     cp: cpMock,
     mkdir: mkdirMock,
+    open: openMock,
     rm: rmMock,
+    writeFile: writeFileMock,
   };
 });
 
@@ -137,6 +141,13 @@ function mockSuccessfulSpawn() {
 }
 
 describe("runStartCommand", () => {
+  beforeEach(() => {
+    openMock.mockResolvedValue({
+      fd: 1,
+      close: vi.fn(async () => undefined),
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     spawnMock.mockReset();
@@ -155,7 +166,9 @@ describe("runStartCommand", () => {
     stopLegacyContinuumProcessesMock.mockReset();
     cpMock.mockReset();
     mkdirMock.mockReset();
+    openMock.mockReset();
     rmMock.mockReset();
+    writeFileMock.mockReset();
     planVendorBuildMock.mockReset();
     planStackImageBuildMock.mockReset();
     writeBuildStateMock.mockReset();
@@ -810,30 +823,106 @@ describe("runStartCommand", () => {
   it("starts visualization in local dev mode when ui-dev is enabled", async () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
+    readManagedStateMock
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54330,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54330,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54330,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [],
+      });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    fetchJsonMock.mockImplementation(async (url: string) => {
+      if (
+        url === "http://127.0.0.1:3001/health"
+        || url === "http://127.0.0.1:3002/healthz"
+        || url === "http://127.0.0.1:3003/api/health/readiness"
+      ) {
+        return { ok: true, body: {} };
+      }
+
+      return { ok: false, error: "unexpected url" };
+    });
+
+    await runStartCommand({ "ui-dev": true }, import.meta.url);
+
+    const dockerRun = spawnMock.mock.calls.find((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return command === "cmd" && args.includes("docker") && args.includes("run");
+    });
+    const uiDevSpawn = spawnMock.mock.calls.find((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      const options = call[2] as { cwd?: string; env?: Record<string, string> } | undefined;
+      return (command === "cmd.exe" || command === "npm.cmd")
+        && options?.cwd?.includes("services\\visualization");
+    });
+
+    expect(stopLegacyContinuumProcessesMock).not.toHaveBeenCalled();
+    expect(startManagedMnaMock).not.toHaveBeenCalled();
+    expect(planVendorBuildMock).not.toHaveBeenCalled();
+    expect(planStackImageBuildMock).not.toHaveBeenCalled();
+    expect(dockerRun).toBeUndefined();
+    expect(uiDevSpawn).toBeDefined();
+    expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
+      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54330/continuum",
+      STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
+      STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
+    });
+    expect(fetchJsonMock).toHaveBeenCalledWith("http://127.0.0.1:3003/api/health/readiness", 1_500);
+    expect(writeManagedStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        services: expect.arrayContaining([
+          expect.objectContaining({
+            name: "visualization-dev",
+            url: "http://127.0.0.1:3003",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("starts backend services and local visualization dev when ui-dev is enabled and backend is down", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
     readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
     writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock
       .mockResolvedValueOnce({
-        version: 2,
-        image: {
-          hash: "image-hash",
-        },
+        version: 1,
         services: [],
       })
-      .mockResolvedValueOnce({
-        version: 2,
-        image: {
-          hash: "image-hash",
-        },
-        services: [],
-      })
-      .mockResolvedValueOnce({
-        version: 2,
-        image: {
-          hash: "image-hash",
-        },
+      .mockResolvedValue({
+        version: 1,
         services: [],
       });
     writeManagedStateMock.mockResolvedValue(undefined);
@@ -869,7 +958,7 @@ describe("runStartCommand", () => {
       needsRefresh: false,
     });
     planStackImageBuildMock.mockResolvedValue({
-      needsBuild: false,
+      needsBuild: true,
       nextState: {
         version: 2,
         image: {
@@ -881,7 +970,18 @@ describe("runStartCommand", () => {
         },
       },
     });
-    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    fetchJsonMock.mockImplementation(async (url: string) => {
+      const matchingCalls = fetchJsonMock.mock.calls.filter((call) => call[0] === url).length;
+      if (url === "http://127.0.0.1:3001/health" || url === "http://127.0.0.1:3002/healthz") {
+        return matchingCalls === 1 ? { ok: false, error: "not started" } : { ok: true, body: {} };
+      }
+
+      if (url === "http://127.0.0.1:3003/api/health/readiness") {
+        return { ok: true, body: {} };
+      }
+
+      return { ok: false, error: "unexpected url" };
+    });
     startManagedMnaMock.mockResolvedValue({
       url: "http://127.0.0.1:4193",
       tokenPath: "C:/tmp/.continuum/managed/mna/token.txt",
@@ -891,6 +991,11 @@ describe("runStartCommand", () => {
 
     await runStartCommand({ "ui-dev": true }, import.meta.url);
 
+    const spawnCommands = spawnMock.mock.calls.map((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return [command, ...args].join(" ");
+    });
     const dockerRun = spawnMock.mock.calls.find((call) => {
       const command = call[0];
       const args = Array.isArray(call[1]) ? call[1] : [];
@@ -898,30 +1003,19 @@ describe("runStartCommand", () => {
     });
     const uiDevSpawn = spawnMock.mock.calls.find((call) => {
       const command = call[0];
-      const args = Array.isArray(call[1]) ? call[1] : [];
-      const options = call[2] as { cwd?: string; env?: Record<string, string> } | undefined;
-      return (command === "cmd.exe" || command === "npm.cmd")
-        && options?.cwd?.includes("services\\visualization");
+      const options = call[2] as { cwd?: string } | undefined;
+      return command === "cmd.exe" && options?.cwd?.includes("services\\visualization");
     });
 
+    expect(stopLegacyContinuumProcessesMock).toHaveBeenCalled();
+    expect(planVendorBuildMock).toHaveBeenCalled();
+    expect(planStackImageBuildMock).toHaveBeenCalled();
+    expect(spawnCommands.some((command) => command.includes("docker build -t continuum-local-ui-dev:latest"))).toBe(true);
+    expect(spawnCommands.some((command) => command.includes("services\\visualization") && command.includes("npm run build"))).toBe(false);
+    expect(dockerRun?.[1]).toContain("CONTINUUM_DISABLE_STACK_VISUALIZATION=1");
     expect(dockerRun?.[1]).not.toContain("127.0.0.1:3003:3003");
+    expect(startManagedMnaMock).toHaveBeenCalled();
     expect(uiDevSpawn).toBeDefined();
-    expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
-      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54330/continuum",
-      STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
-      STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
-    });
-    expect(fetchJsonMock).toHaveBeenCalledWith("http://127.0.0.1:3003/api/health/readiness", 1_500);
-    expect(writeManagedStateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        services: expect.arrayContaining([
-          expect.objectContaining({
-            name: "visualization-dev",
-            url: "http://127.0.0.1:3003",
-          }),
-        ]),
-      }),
-    );
   });
 
   it("falls back to the next available managed postgres port when default is unavailable", async () => {
@@ -956,5 +1050,155 @@ describe("runStartCommand", () => {
     await expect(
       resolveManagedPostgresPort({ "postgres-port": "55432" }, "127.0.0.1", probePort),
     ).rejects.toThrow(/postgres 端口不可用/);
+  });
+
+  it("reuses healthy backend services and only restarts local visualization when ui-dev is enabled", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54329,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [
+          {
+            name: "visualization-dev",
+            pid: 111,
+            logPath: "C:/tmp/.continuum/logs/visualization-dev.log",
+            url: "http://127.0.0.1:3003",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54329,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [
+          {
+            name: "visualization-dev",
+            pid: 111,
+            logPath: "C:/tmp/.continuum/logs/visualization-dev.log",
+            url: "http://127.0.0.1:3003",
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54329,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "continuum-stack",
+          port: 54329,
+          database: "continuum",
+          username: "continuum",
+        },
+        services: [
+          {
+            name: "memory-native-agent",
+            pid: 222,
+            logPath: "C:/tmp/.continuum/logs/mna.log",
+            url: "http://127.0.0.1:4193",
+          },
+        ],
+      });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    writeFileMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    fetchJsonMock.mockImplementation(async (url: string) => {
+      if (
+        url === "http://127.0.0.1:3001/health"
+        || url === "http://127.0.0.1:3002/healthz"
+        || url === "http://127.0.0.1:3003/api/health/readiness"
+      ) {
+        return { ok: true, body: {} };
+      }
+      return { ok: false, error: "unexpected url" };
+    });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.continuum/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.continuum/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({ "ui-dev": true }, import.meta.url);
+
+    const spawnCommands = spawnMock.mock.calls.map((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return [command, ...args].join(" ");
+    });
+    const uiDevSpawn = spawnMock.mock.calls.find((call) => {
+      const command = call[0];
+      const options = call[2] as { cwd?: string; env?: Record<string, string> } | undefined;
+      return command === "cmd.exe" && options?.cwd?.includes("services\\visualization");
+    });
+
+    expect(stopLegacyContinuumProcessesMock).not.toHaveBeenCalled();
+    expect(planStackImageBuildMock).not.toHaveBeenCalled();
+    expect(spawnCommands.some((command) => command.includes("docker run"))).toBe(false);
+    expect(spawnCommands.some((command) => command.includes("docker build"))).toBe(false);
+    expect(spawnCommands.some((command) => command.includes("npm run build"))).toBe(false);
+    expect(rmMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("services\\visualization\\.next"),
+      expect.anything(),
+    );
+    expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
+      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54329/continuum",
+      STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
+      STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
+    });
   });
 });

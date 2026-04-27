@@ -109,16 +109,18 @@ async function main() {
       HOST: "0.0.0.0",
     },
   });
-  const visualization = startProcess(process.execPath, ["/opt/continuum/visualization-standalone/server.js"], {
-    cwd: "/opt/continuum/visualization-standalone",
-    env: {
-      ...sharedEnv,
-      PORT: "3003",
-      HOSTNAME: "0.0.0.0",
-    },
-  });
+  const visualization = process.env.CONTINUUM_DISABLE_STACK_VISUALIZATION === "1"
+    ? null
+    : startProcess(process.execPath, ["/opt/continuum/visualization-standalone/server.js"], {
+        cwd: "/opt/continuum/visualization-standalone",
+        env: {
+          ...sharedEnv,
+          PORT: "3003",
+          HOSTNAME: "0.0.0.0",
+        },
+      });
 
-  for (const child of [storage, worker, runtime, visualization]) {
+  for (const child of [storage, worker, runtime, visualization].filter(Boolean)) {
     child.on("exit", () => {
       stopAll();
       postgres.kill("SIGTERM");

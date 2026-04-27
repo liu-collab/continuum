@@ -1,13 +1,13 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, open, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
+import type { ChildProcess, StdioOptions } from "node:child_process";
 
 import {
   DEFAULT_RUNTIME_URL,
   DEFAULT_STORAGE_URL,
-  DEFAULT_UI_URL,
   fetchJson,
   openBrowser,
   packageRootFromImportMeta,
@@ -35,7 +35,6 @@ import {
 } from "./embedding-config.js";
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
-  continuumManagedEmbeddingConfigPath,
   continuumManagedMemoryLlmConfigPath,
   readManagedEmbeddingConfig,
   readManagedMemoryLlmConfig,
@@ -52,6 +51,9 @@ const LOOPBACK_BIND_HOST = "127.0.0.1";
 const WILDCARD_BIND_HOST = "0.0.0.0";
 const POSTGRES_PORT_SCAN_LIMIT = 20;
 const UI_DEV_SERVICE_NAME = "visualization-dev";
+const UI_DEV_STACK_IMAGE = "continuum-local-ui-dev:latest";
+const DEFAULT_UI_DEV_PORT = 3003;
+const UI_DEV_PORT_SCAN_LIMIT = 20;
 
 async function runForeground(command: string, args: string[], cwd?: string) {
   await new Promise<void>((resolve, reject) => {
@@ -179,6 +181,75 @@ async function waitForHealthy(url: string, timeoutMs: number) {
   throw new Error(`服务未在预期时间内就绪: ${url}`);
 }
 
+async function isHealthy(url: string, timeoutMs: number) {
+  const result = await fetchJson(url, timeoutMs);
+  return result.ok;
+}
+
+async function managedBackendIsHealthy(storageUrl: string, runtimeUrl: string) {
+  const [storageHealthy, runtimeHealthy] = await Promise.all([
+    isHealthy(`${storageUrl}/health`, 1_500),
+    isHealthy(`${runtimeUrl}/healthz`, 1_500),
+  ]);
+
+  return storageHealthy && runtimeHealthy;
+}
+
+function parsePort(rawValue: string | boolean | undefined, optionName: string) {
+  if (typeof rawValue !== "string") {
+    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
+    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
+  }
+
+  return parsed;
+}
+
+function buildUiDevReadModelDsn(
+  options: Record<string, string | boolean>,
+  managedState: { postgres?: { port: number } },
+  accessibleHost: string,
+) {
+  if (process.env.STORAGE_READ_MODEL_DSN) {
+    return process.env.STORAGE_READ_MODEL_DSN;
+  }
+
+  const postgresPort =
+    typeof options["postgres-port"] === "string"
+      ? parsePort(options["postgres-port"], "--postgres-port")
+      : managedState.postgres?.port ?? DEFAULT_MANAGED_POSTGRES_PORT;
+
+  return `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
+}
+
+function resolveUiDevMna(
+  options: Record<string, string | boolean>,
+  managedState: { services: ManagedServiceRecord[] },
+  accessibleHost: string,
+) {
+  const managedMna = managedState.services.find((service) => service.name === "memory-native-agent");
+  const mnaHome =
+    typeof options["mna-home"] === "string"
+      ? options["mna-home"]
+      : path.join(continuumManagedDir(), "mna");
+
+  return {
+    url:
+      typeof options["mna-url"] === "string"
+        ? options["mna-url"]
+        : managedMna?.url ?? `http://${accessibleHost}:${DEFAULT_MNA_PORT}`,
+    tokenPath:
+      typeof options["mna-token-path"] === "string"
+        ? options["mna-token-path"]
+        : typeof options["mna-home"] === "string"
+          ? path.join(mnaHome, "token.txt")
+          : managedMna?.tokenPath ?? path.join(mnaHome, "token.txt"),
+  };
+}
+
 async function waitForTcpAvailable(host: string, port: number, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs;
 
@@ -193,6 +264,23 @@ async function waitForTcpAvailable(host: string, port: number, timeoutMs: number
 
   throw new Error(
     `visualization dev 端口仍被占用: ${host}:${port}。旧的 --ui-dev 进程可能没有退出，请先运行 npm run stop，或手动结束占用 3003 的进程后重试。`,
+  );
+}
+
+async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_DEV_PORT) {
+  for (let offset = 0; offset <= UI_DEV_PORT_SCAN_LIMIT; offset += 1) {
+    const candidate = preferredPort + offset;
+    if (await isTcpPortAvailable(host, candidate)) {
+      if (candidate !== preferredPort) {
+        process.stdout.write(`默认 visualization dev 端口 ${preferredPort} 不可用，自动切换到 ${candidate}。\n`);
+      }
+
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `未找到可用的 visualization dev 端口。已尝试 ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}。`,
   );
 }
 
@@ -345,7 +433,7 @@ async function cleanupManagedStackContainer() {
   }
 }
 
-async function prepareStackContext(packageRoot: string) {
+async function prepareStackContext(packageRoot: string, includeVisualization = true) {
   const stageDir = path.join(continuumHomeDir(), STAGE_DIR_NAME);
   await rm(stageDir, { recursive: true, force: true });
   await mkdir(stageDir, { recursive: true });
@@ -356,17 +444,22 @@ async function prepareStackContext(packageRoot: string) {
   await cp(vendorPath(packageRoot, "runtime"), path.join(stageDir, "runtime"), {
     recursive: true,
   });
-  await cp(vendorPath(packageRoot, "visualization", "standalone"), path.join(stageDir, "visualization"), {
-    recursive: true,
-  });
+  const visualizationTarget = path.join(stageDir, "visualization");
+  if (includeVisualization) {
+    await cp(vendorPath(packageRoot, "visualization", "standalone"), visualizationTarget, {
+      recursive: true,
+    });
+  } else {
+    await mkdir(visualizationTarget, { recursive: true });
+  }
   await cp(vendorPath(packageRoot, "stack", "Dockerfile"), path.join(stageDir, "Dockerfile"));
   await cp(vendorPath(packageRoot, "stack", "entrypoint.mjs"), path.join(stageDir, "entrypoint.mjs"));
 
   return stageDir;
 }
 
-async function buildStackImage(stageDir: string) {
-  await runForeground("docker", ["build", "-t", DEFAULT_MANAGED_STACK_IMAGE, stageDir]);
+async function buildStackImage(stageDir: string, imageName = DEFAULT_MANAGED_STACK_IMAGE) {
+  await runForeground("docker", ["build", "-t", imageName, stageDir]);
 }
 
 async function copyVisualizationVendorBundle(packageRoot: string) {
@@ -507,9 +600,8 @@ async function startManagedVisualizationDevServer(options: {
   await mkdir(continuumLogsDir(), { recursive: true });
 
   const logPath = path.join(continuumLogsDir(), "visualization-dev.log");
-  const port = "3003";
+  const port = String(await resolveUiDevPort(options.bindHost));
   const uiUrl = `http://${options.publicHost}:${port}`;
-  await waitForTcpAvailable(options.bindHost, Number(port), 10_000);
   const childEnv = {
     ...process.env,
     NODE_ENV: "development",
@@ -522,7 +614,10 @@ async function startManagedVisualizationDevServer(options: {
     MNA_INTERNAL_BASE_URL: options.mnaUrl,
     MNA_TOKEN_PATH: options.mnaTokenPath,
   };
-  const child =
+  const stdoutHandle = await open(logPath, "a");
+  const stderrHandle = await open(logPath, "a");
+  const stdio: StdioOptions = ["ignore", stdoutHandle.fd, stderrHandle.fd];
+  const child: ChildProcess =
     process.platform === "win32"
       ? spawn(
           "cmd.exe",
@@ -543,7 +638,7 @@ async function startManagedVisualizationDevServer(options: {
             cwd: visualizationDir,
             detached: true,
             windowsHide: true,
-            stdio: "ignore",
+            stdio,
             env: childEnv,
           },
         )
@@ -554,11 +649,13 @@ async function startManagedVisualizationDevServer(options: {
             cwd: visualizationDir,
             detached: true,
             windowsHide: true,
-            stdio: "ignore",
+            stdio,
             env: childEnv,
           },
         );
   child.unref();
+  await stdoutHandle.close();
+  await stderrHandle.close();
 
   const exitPromise = new Promise<number | null>((resolve) => {
     child.once("exit", (code) => resolve(code));
@@ -597,6 +694,7 @@ async function startStackContainer(
   embeddingConfigPath: string,
   memoryLlmConfigPath: string,
   publishVisualizationPort: boolean,
+  imageName = DEFAULT_MANAGED_STACK_IMAGE,
 ) {
   const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const managedDir = continuumManagedDir();
@@ -662,9 +760,11 @@ async function startStackContainer(
 
   if (publishVisualizationPort) {
     dockerArgs.push("-p", `${bindHost}:3003:3003`);
+  } else {
+    dockerArgs.push("-e", "CONTINUUM_DISABLE_STACK_VISUALIZATION=1");
   }
 
-  dockerArgs.push(DEFAULT_MANAGED_STACK_IMAGE);
+  dockerArgs.push(imageName);
 
   await runForeground("docker", dockerArgs);
 }
@@ -674,22 +774,54 @@ export async function runStartCommand(
   importMetaUrl: string,
 ) {
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
-  const buildState = await loadBuildStateHelpers(packageRoot);
   const bindHost = normalizeBindHost(options["bind-host"]);
-  const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const accessibleHost = resolveAccessibleHost(bindHost);
   const uiDev = options["ui-dev"] === true || options["ui-dev"] === "true";
+  const initialManagedState = await readManagedState();
   const open = options.open === true || options.open === "true";
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;
+  const uiDevBackendHealthy = uiDev
+    ? await managedBackendIsHealthy(storageUrl, runtimeUrl)
+    : false;
+
+  if (uiDev && uiDevBackendHealthy) {
+    const mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
+    const devServer = await startManagedVisualizationDevServer({
+      packageRoot,
+      bindHost,
+      publicHost: accessibleHost,
+      readModelDsn: buildUiDevReadModelDsn(options, initialManagedState, accessibleHost),
+      runtimeUrl,
+      storageUrl,
+      mnaUrl: mna.url,
+      mnaTokenPath: mna.tokenPath,
+    });
+
+    process.stdout.write("Continuum visualization dev 已启动。\n");
+    process.stdout.write("backend: 复用现有 storage/runtime，未重启其他服务。\n");
+    process.stdout.write(`bind-host: ${bindHost}\n`);
+    process.stdout.write(`storage: ${storageUrl}\n`);
+    process.stdout.write(`runtime: ${runtimeUrl}\n`);
+    process.stdout.write(`visualization: ${devServer.url} (dev)\n`);
+    process.stdout.write(`log: ${devServer.logPath}\n`);
+
+    if (open) {
+      await openBrowser(devServer.url);
+    }
+
+    return;
+  }
+
+  const buildState = await loadBuildStateHelpers(packageRoot);
+  const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const readModelDsn =
     process.env.STORAGE_READ_MODEL_DSN
     ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
   const stackMemoryLlmConfigPath = "/opt/continuum/managed/memory-llm-config.json";
   const localMemoryLlmConfigPath = continuumManagedMemoryLlmConfigPath();
-  const writebackLlmConfigPath = "/opt/continuum/managed/writeback-llm-config.json";
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
   const existingMemoryLlmConfig = await readManagedMemoryLlmConfig();
   const existingWritebackLlmConfig = await readManagedWritebackLlmConfig();
@@ -714,20 +846,24 @@ export async function runStartCommand(
   await ensureDockerDaemonReady();
   await stopLegacyContinuumProcesses();
   await stopLegacyPostgresContainer();
-  if (!uiDev) {
-    await stopManagedVisualizationDevServer().catch(() => undefined);
-  }
+  await stopManagedVisualizationDevServer().catch(() => undefined);
 
-  const vendorRefresh = await refreshVisualizationVendor(packageRoot, buildState);
+  const vendorRefresh = uiDev
+    ? { refreshed: false, visualizationNeedsBuild: false }
+    : await refreshVisualizationVendor(packageRoot, buildState);
   const mnaVendorRefresh = await refreshMemoryNativeAgentVendor(packageRoot, buildState);
+  let stackImageName = DEFAULT_MANAGED_STACK_IMAGE;
 
   const stackImagePlan = await buildState.planStackImageBuild(packageRoot);
   if (stackImagePlan.needsBuild) {
-    const stageDir = await prepareStackContext(packageRoot);
-    await buildStackImage(stageDir);
-    await buildState.writeBuildState(stackImagePlan.nextState);
+    stackImageName = uiDev ? UI_DEV_STACK_IMAGE : DEFAULT_MANAGED_STACK_IMAGE;
+    const stageDir = await prepareStackContext(packageRoot, !uiDev);
+    await buildStackImage(stageDir, stackImageName);
+    if (!uiDev) {
+      await buildState.writeBuildState(stackImagePlan.nextState);
+    }
   } else {
-    process.stdout.write(`docker image 已是最新，跳过 build: ${DEFAULT_MANAGED_STACK_IMAGE}\n`);
+    process.stdout.write(`docker image 已是最新，跳过 build: ${stackImageName}\n`);
     if (vendorRefresh.refreshed) {
       process.stdout.write("visualization 已刷新，沿用现有 stack image。\n");
     }
@@ -736,10 +872,13 @@ export async function runStartCommand(
     }
   }
 
-  // Remove old container only after successful build
+  // Remove old container only after successful build.
   await cleanupManagedStackContainer().catch(() => undefined);
 
   try {
+    let startedVisualizationUrl = uiUrl;
+    let startedVisualizationLogPath: string | null = null;
+
     await startStackContainer(
       postgresPort,
       bindHost,
@@ -747,6 +886,7 @@ export async function runStartCommand(
       embeddingConfigPath,
       stackMemoryLlmConfigPath,
       !uiDev,
+      stackImageName,
     );
 
     await waitForHealthy(`${storageUrl}/health`, 120_000);
@@ -760,7 +900,7 @@ export async function runStartCommand(
       importMetaUrl,
     );
     if (uiDev) {
-      await startManagedVisualizationDevServer({
+      const devServer = await startManagedVisualizationDevServer({
         packageRoot,
         bindHost,
         publicHost: accessibleHost,
@@ -770,6 +910,8 @@ export async function runStartCommand(
         mnaUrl: mna.url,
         mnaTokenPath: mna.tokenPath,
       });
+      startedVisualizationUrl = devServer.url;
+      startedVisualizationLogPath = devServer.logPath;
     } else {
       await waitForHealthy(`${uiUrl}/api/health/readiness`, 120_000);
     }
@@ -793,7 +935,10 @@ export async function runStartCommand(
     process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
     process.stdout.write(`storage: ${storageUrl}\n`);
     process.stdout.write(`runtime: ${runtimeUrl}\n`);
-    process.stdout.write(`visualization: ${uiUrl}${uiDev ? " (dev)" : ""}\n`);
+    process.stdout.write(`visualization: ${startedVisualizationUrl}${uiDev ? " (dev)" : ""}\n`);
+    if (startedVisualizationLogPath) {
+      process.stdout.write(`visualization log: ${startedVisualizationLogPath}\n`);
+    }
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
     if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
       process.stdout.write(
@@ -804,7 +949,7 @@ export async function runStartCommand(
     }
 
     if (open) {
-      await openBrowser(uiUrl);
+      await openBrowser(startedVisualizationUrl);
     }
   } catch (error) {
     const cleaned = await cleanupManagedStackContainer().catch(() => false);
