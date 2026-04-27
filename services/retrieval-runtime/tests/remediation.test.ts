@@ -89,6 +89,7 @@ const config: AppConfig = {
   HOST: "127.0.0.1",
   PORT: 3002,
   LOG_LEVEL: "info",
+  LOG_SAMPLE_RATE: 1,
   DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
   READ_MODEL_SCHEMA: "storage_shared_v1",
   READ_MODEL_TABLE: "memory_read_model_v1",
@@ -97,6 +98,8 @@ const config: AppConfig = {
   EMBEDDING_BASE_URL: "http://localhost:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
+  EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+  EMBEDDING_CACHE_MAX_ENTRIES: 1000,
   MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
   MEMORY_LLM_PROTOCOL: "openai-compatible",
   MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -748,6 +751,23 @@ describe("retrieval-runtime remediation", () => {
     expect(rendered).not.toContain("__RUNTIME_SCHEMA_IDENT__");
   });
 
+  it("renders recent injection migration sql with schema placeholders replaced", async () => {
+    const template = await readFile(
+      path.resolve(
+        "C:/workspace/work/agent-memory/services/retrieval-runtime/migrations/0006_runtime_recent_injections.sql",
+      ),
+      "utf8",
+    );
+
+    const rendered = renderMigrationTemplate(template, {
+      RUNTIME_SCHEMA: "runtime_private",
+    });
+
+    expect(rendered).toContain('"runtime_private".runtime_recent_injections');
+    expect(rendered).toContain("PRIMARY KEY (session_id, record_id)");
+    expect(rendered).not.toContain("__RUNTIME_SCHEMA_IDENT__");
+  });
+
   it("supports observe runs pagination in memory repository", async () => {
     const repository = new InMemoryRuntimeRepository();
 
@@ -804,6 +824,41 @@ describe("retrieval-runtime remediation", () => {
     expect(query.semantic_query_text.length).toBeLessThanOrEqual(1024);
     expect(query.semantic_query_text).toContain("结尾意图");
     expect(query.semantic_query_text).toContain("最新摘要");
+  });
+
+  it("expands assistant-name recall queries and keeps the wider candidate pool", () => {
+    const query = buildRetrievalQuery(
+      {
+        host: "memory_native_agent",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        phase: "before_response",
+        current_input: "你叫什么？",
+        memory_mode: "workspace_plus_global",
+      },
+      {
+        hit: true,
+        trigger_type: "history_reference",
+        trigger_reason: "当前输入明确引用了历史上下文或既有偏好。",
+        requested_memory_types: ["fact_preference"],
+        memory_mode: "workspace_plus_global",
+        requested_scopes: ["user"],
+        scope_reason: "回应前可综合使用工作区、任务、会话和全局用户记忆。",
+        importance_threshold: 3,
+        cooldown_applied: false,
+        candidate_limit: 6,
+      },
+      {
+        ...config,
+        QUERY_CANDIDATE_LIMIT: 30,
+        RECALL_LLM_CANDIDATE_LIMIT: 12,
+        PACKET_RECORD_LIMIT: 10,
+      },
+    );
+
+    expect(query.candidate_limit).toBe(30);
+    expect(query.semantic_query_text).toContain("用户希望助手以后叫");
   });
 
   it("degrades semantic fallback explicitly when trigger-stage dependencies fail", async () => {

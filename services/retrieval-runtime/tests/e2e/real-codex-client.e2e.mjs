@@ -1,32 +1,46 @@
 #!/usr/bin/env node
 
 /**
- * 真实 Codex 客户端 E2E 验收脚本
+ * 真实 Codex 客户端 E2E 验收脚本（平台强制注入版）
  *
- * Codex 的真实接入方式是通过 MCP server 配置。
- * 本脚本的流程：
- * 1. 启动一个 HTTP 录制服务器（模拟 runtime）
- * 2. 用 codex mcp add 注册 memory-mcp-server.mjs（环境变量指向录制服务器）
- * 3. 用 codex exec 执行一次对话，提示它调用 memory_dependency_status 工具
- * 4. 验证录制服务器收到 MCP 工具调用触发的 runtime 请求
- * 5. 用 codex mcp remove 清理
+ * 链路：
+ *   平台先调用 retrieval-runtime prepare-context
+ *     → 记录平台侧 memory_delivery 事实
+ *     → 将长期记忆上下文和用户输入一起传给真实 Codex CLI
+ *     → 查询 observe/runs，确认 runtime 侧检索/注入轨迹
  *
- * 前提：
- * - 本机已安装 codex CLI
- * - OpenAI API 可用
+ * 验收通过条件：
+ *   1. 平台侧确认已把强制注入上下文写入 Codex 输入
+ *   2. runtime observe/runs 观测到该 session 的检索/注入轨迹
  *
- * 用法：
- *   cd services/retrieval-runtime
- *   node tests/e2e/real-codex-client.e2e.mjs
+ * 注意：这里不再要求 Codex 主动调用 memory_search，也不依赖 Codex 最终回答来证明它收到了记忆。
  */
 
-import { spawn, execSync } from "node:child_process";
-import { writeFileSync, unlinkSync } from "node:fs";
-import http from "node:http";
-import path from "node:path";
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import process from "node:process";
 
-const MCP_SERVER_NAME = "memory-e2e-test";
+import {
+  checkRuntimeReachable,
+  fetchRuntimeRuns,
+  assertRuntimeInjectionTrace,
+  parseCodexJsonOutput,
+  TEST_PROMPT_CN,
+  printSection,
+  printPass,
+  printWarn,
+  printFail,
+  printDetail,
+} from "./real-host-eval-utils.mjs";
+
+const RUNTIME_BASE_URL =
+  process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
+const SESSION_ID = randomUUID();
+const WORKSPACE_ID =
+  process.env.MEMORY_WORKSPACE_ID ?? "550e8400-e29b-41d4-a716-446655440000";
+const USER_ID =
+  process.env.MEMORY_USER_ID ?? "550e8400-e29b-41d4-a716-446655440001";
+const MEMORY_MODE = process.env.MEMORY_MODE ?? "workspace_plus_global";
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,180 +66,128 @@ function checkCodexCli() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// HTTP 录制服务器
-// ---------------------------------------------------------------------------
-
-function startRecordingServer() {
-  const records = [];
-
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-    });
-    req.on("end", () => {
-      let parsed = null;
-      try {
-        parsed = JSON.parse(body);
-      } catch {
-        /* ignore */
-      }
-
-      records.push({
-        method: req.method,
-        url: req.url,
-        body: parsed,
-        timestamp: new Date().toISOString(),
-      });
-
-      res.setHeader("content-type", "application/json");
-
-      if (req.url?.includes("session-start-context")) {
-        res.end(
-          JSON.stringify({
-            additional_context: "Codex MCP E2E session started",
-            trace_id: "codex-mcp-trace-001",
-            dependency_status: {},
-          }),
-        );
-      } else if (req.url?.includes("prepare-context")) {
-        res.end(
-          JSON.stringify({
-            trigger: true,
-            trigger_reason: "codex_mcp_e2e",
-            trace_id: "codex-mcp-trace-002",
-            injection_block: {
-              injection_reason: "Codex MCP E2E",
-              memory_summary: "E2E 录制服务器",
-            },
-            memory_packet_ids: [],
-          }),
-        );
-      } else if (req.url?.includes("finalize-turn")) {
-        res.end(
-          JSON.stringify({
-            trace_id: "codex-mcp-trace-003",
-            writeback_submitted: false,
-            candidate_count: 0,
-            write_back_candidates: [],
-          }),
-        );
-      } else if (req.url?.includes("healthz") || req.url?.includes("readyz")) {
-        res.end(JSON.stringify({ version: "recording", liveness: "ok" }));
-      } else {
-        res.end(JSON.stringify({ ok: true }));
-      }
-    });
+async function runtimePost(pathName, body) {
+  const response = await fetch(new URL(pathName, RUNTIME_BASE_URL), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
 
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      const port = typeof addr === "object" && addr ? addr.port : 0;
-      resolve({
-        server,
-        records,
-        baseUrl: `http://127.0.0.1:${port}`,
-        port,
-      });
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
-// codex mcp add / remove
-// ---------------------------------------------------------------------------
-
-function runCmd(args) {
-  const cmd = process.platform === "win32" ? "codex.cmd" : "codex";
+  const text = await response.text();
+  let payload;
   try {
-    const result = execSync(`${cmd} ${args}`, {
-      encoding: "utf-8",
-      timeout: 15_000,
-      shell: process.platform === "win32",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { ok: true, output: result.trim() };
-  } catch (error) {
-    return {
-      ok: false,
-      output: error.stderr?.toString() || error.message,
-    };
-  }
-}
-
-function parseMcpList(output) {
-  const lines = output.split(/\r?\n/);
-  const servers = [];
-
-  for (const line of lines) {
-    if (!line.trim() || line.startsWith("Name ") || line.startsWith("----")) {
-      continue;
-    }
-
-    const parts = line.trim().split(/\s{2,}/);
-    if (parts.length >= 2) {
-      const [name, commandOrUrl] = parts;
-      servers.push({
-        name,
-        commandOrUrl,
-        isHttp: /^https?:\/\//i.test(commandOrUrl),
-      });
-    }
+    payload = JSON.parse(text);
+  } catch {
+    payload = text;
   }
 
-  return servers;
-}
-
-function removeMcpServerByName(name) {
-  return runCmd(`mcp remove ${name}`);
-}
-
-function restoreHttpMcpServers(servers) {
-  const results = [];
-
-  for (const server of servers) {
-    const restore = runCmd(
-      `mcp add ${server.name} --url ${server.commandOrUrl}`,
+  if (!response.ok) {
+    throw new Error(
+      `runtime ${pathName} returned ${response.status}: ${JSON.stringify(payload).slice(0, 500)}`,
     );
-    results.push({ name: server.name, ...restore });
   }
 
-  return results;
+  return payload;
 }
 
-function addMcpServer(runtimeBaseUrl) {
-  const mcpScript = path
-    .resolve(
-      process.cwd(),
-      "host-adapters/memory-codex-adapter/mcp/memory-mcp-server.mjs",
-    )
-    .replace(/\\/g, "/");
-
-  const result = runCmd(
-    `mcp add ${MCP_SERVER_NAME} --env MEMORY_RUNTIME_BASE_URL=${runtimeBaseUrl} -- node "${mcpScript}"`,
-  );
-  return result;
+async function prepareCodexMemoryContext() {
+  return runtimePost("/v1/runtime/prepare-context", {
+    host: "codex_app_server",
+    workspace_id: WORKSPACE_ID,
+    user_id: USER_ID,
+    session_id: SESSION_ID,
+    phase: "before_response",
+    current_input: TEST_PROMPT_CN,
+    memory_mode: MEMORY_MODE,
+  });
 }
 
-function removeMcpServer() {
-  return runCmd(`mcp remove ${MCP_SERVER_NAME}`);
+function injectionRecordIds(result) {
+  const records = result?.injection_block?.memory_records;
+  if (!Array.isArray(records)) {
+    return [];
+  }
+  return records.map((record) => record?.id).filter((id) => typeof id === "string");
 }
 
-function listMcpServers() {
-  return runCmd("mcp list");
+function buildCodexPreparedMemoryBlock(result) {
+  if (!result || typeof result !== "object" || !result.trigger) {
+    return "【长期记忆】无相关历史记忆，请直接回答。";
+  }
+
+  const injection = result.injection_block;
+  if (
+    injection &&
+    Array.isArray(injection.memory_records) &&
+    injection.memory_records.length > 0
+  ) {
+    const lines = [
+      "【长期记忆】以下信息仅在与当前问题直接相关时使用，请优先转化为答案中的约束、默认值或步骤，不要逐条转述：",
+    ];
+    if (injection.injection_reason) {
+      lines.push(`命中原因：${injection.injection_reason}`);
+    }
+    if (injection.memory_summary) {
+      lines.push(`可直接采用的上下文：${injection.memory_summary}`);
+    }
+    lines.push("可用事实：");
+    for (const record of injection.memory_records) {
+      const scope = record.scope ?? "";
+      const type = record.memory_type ?? record.type ?? "";
+      const summary = record.summary ?? record.content ?? JSON.stringify(record);
+      lines.push(`- 记忆[${type}${scope ? "/" + scope : ""}]：${summary}`);
+    }
+    lines.push(
+      "使用要求：如果这些记忆能帮助回答，就直接体现在最终答案里；不要单独开一段复述记忆，也不要说你看到了记忆。",
+    );
+    return lines.join("\n");
+  }
+
+  return "【长期记忆】无相关历史记忆，请直接回答。";
 }
 
-// ---------------------------------------------------------------------------
-// codex exec — prompt via stdin to avoid shell word-splitting
-// ---------------------------------------------------------------------------
+function buildCodexForcedPrompt(prepareResult) {
+  return [
+    "你会先收到一段已经准备好的长期记忆上下文。",
+    "回答时优先使用这段已提供的上下文来判断是否存在相关历史信息。",
+    "只有当上下文给出可用事实时，才将其中对当前问题直接有用的信息自然融入回答。",
+    "不要解释长期记忆上下文的来源，不要输出 MCP、tool、memory_search 等排查信息。",
+    "最终只保留对用户有用的答案内容。",
+    "",
+    buildCodexPreparedMemoryBlock(prepareResult),
+    "",
+    "用户问题：",
+    TEST_PROMPT_CN,
+  ].join("\n");
+}
+
+function buildMemoryDeliveryFact(prepareResult, promptText) {
+  const recordIds = injectionRecordIds(prepareResult);
+  return {
+    method: "platform_prepare_context_stdin",
+    attempted: true,
+    prepared: true,
+    host_context_delivered: Boolean(promptText),
+    memory_delivered: recordIds.length > 0,
+    trace_id: typeof prepareResult?.trace_id === "string" ? prepareResult.trace_id : null,
+    trigger: Boolean(prepareResult?.trigger),
+    trigger_reason:
+      typeof prepareResult?.trigger_reason === "string"
+        ? prepareResult.trigger_reason
+        : null,
+    injected_count: recordIds.length,
+    record_ids: recordIds,
+    memory_packet_ids: Array.isArray(prepareResult?.memory_packet_ids)
+      ? prepareResult.memory_packet_ids
+      : [],
+    content_chars: promptText.length,
+    content_sha256: createHash("sha256").update(promptText).digest("hex"),
+  };
+}
 
 function runCodexExec(prompt) {
   return new Promise((resolve) => {
     const cmd = process.platform === "win32" ? "codex.cmd" : "codex";
-
-    // Pass prompt via stdin ("-" tells codex exec to read from stdin)
     const args = [
       "exec",
       "--skip-git-repo-check",
@@ -236,13 +198,19 @@ function runCodexExec(prompt) {
 
     const child = spawn(cmd, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: {
+        ...process.env,
+        MEMORY_RUNTIME_BASE_URL: RUNTIME_BASE_URL,
+        MEMORY_WORKSPACE_ID: WORKSPACE_ID,
+        MEMORY_USER_ID: USER_ID,
+        MEMORY_SESSION_ID: SESSION_ID,
+        MEMORY_MODE,
+      },
       stdio: ["pipe", "pipe", "pipe"],
       shell: process.platform === "win32",
-      timeout: 90_000,
+      timeout: 120_000,
     });
 
-    // Feed prompt via stdin then close
     child.stdin.write(prompt);
     child.stdin.end();
 
@@ -267,262 +235,125 @@ function runCodexExec(prompt) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
+async function waitForRuntimeTrace(sessionId, maxWaitMs = 5000) {
+  const step = 500;
+  let waited = 0;
+  while (waited < maxWaitMs) {
+    await delay(step);
+    waited += step;
+    try {
+      const runs = await fetchRuntimeRuns(RUNTIME_BASE_URL, sessionId);
+      if (runs.turns && runs.turns.length > 0) {
+        return runs;
+      }
+    } catch {
+      /* continue waiting */
+    }
+  }
+  return null;
+}
 
 async function main() {
-  console.log("=== 真实 Codex 客户端 E2E 验收（MCP 链路） ===\n");
+  printSection("真实 Codex 客户端 E2E 平台强制注入验收");
+  console.log(`  runtime:    ${RUNTIME_BASE_URL}`);
+  console.log(`  session_id: ${SESSION_ID}`);
+  console.log(`  prompt:     ${TEST_PROMPT_CN}`);
 
-  // 1. 检查 codex CLI
+  printSection("步骤 1 — 检查 Codex CLI");
   const version = await checkCodexCli();
   if (!version) {
-    console.error("✗ codex CLI 未安装或不可用");
+    printFail("codex CLI 未安装或不可用，跳过验收");
     process.exitCode = 1;
     return;
   }
-  console.log("✓ Codex CLI:", version);
+  printPass(`Codex CLI: ${version}`);
 
-  const existingMcpServers = parseMcpList(listMcpServers().output || "");
-  const httpMcpServers = existingMcpServers.filter(
-    (server) => server.isHttp && server.name !== MCP_SERVER_NAME,
-  );
-
-  if (httpMcpServers.length > 0) {
-    console.log(
-      "⚠ 检测到可能干扰 rmcp 的 HTTP MCP servers:",
-      httpMcpServers.map((server) => server.name).join(", "),
+  printSection("步骤 2 — 检查 retrieval-runtime 可达性");
+  const runtimeOk = await checkRuntimeReachable(RUNTIME_BASE_URL);
+  if (!runtimeOk) {
+    printFail(
+      `retrieval-runtime 不可达（${RUNTIME_BASE_URL}）\n  请先启动 runtime 再运行此脚本`,
     );
-    for (const server of httpMcpServers) {
-      const remove = removeMcpServerByName(server.name);
-      if (remove.ok) {
-        console.log(`✓ 已临时移除干扰 MCP server: ${server.name}`);
-      } else {
-        console.warn(`⚠ 临时移除失败: ${server.name}: ${remove.output}`);
-      }
-    }
-  }
-
-  // 2. 启动录制服务器
-  const recording = await startRecordingServer();
-  console.log("✓ 录制服务器监听:", recording.baseUrl);
-
-  const debugLogPath = path.resolve(process.cwd(), "mcp-debug.log");
-  try {
-    unlinkSync(debugLogPath);
-  } catch {
-    /* ignore */
-  }
-
-  // 3. 注册 MCP server
-  const addResult = addMcpServer(recording.baseUrl);
-  if (!addResult.ok) {
-    console.error("✗ codex mcp add 失败:", addResult.output);
-    recording.server.close();
     process.exitCode = 1;
     return;
   }
-  console.log("✓ MCP server 已注册:", MCP_SERVER_NAME);
+  printPass(`runtime 可达: ${RUNTIME_BASE_URL}`);
 
-  // 验证注册成功
-  const listResult = listMcpServers();
-  if (listResult.output?.includes(MCP_SERVER_NAME)) {
-    console.log("✓ codex mcp list 确认已注册");
-  }
-
+  printSection("步骤 3 — 平台侧准备并强制注入记忆上下文");
+  let prepareResult;
+  let forcedPrompt;
+  let memoryDelivery;
   try {
-    // 4. 用 codex exec 触发 MCP 工具调用
-    const prompt =
-      "Use the MCP tool memory_dependency_status from the memory-e2e-test server now. Do not search the repository. Do not run shell commands unless MCP tools are unavailable. Return the raw dependency status result.";
-
-    console.log("\n  正在执行 codex exec ...");
-    console.log(
-      "  （让 Codex 调用 memory MCP 工具，触发向录制服务器的请求）\n",
-    );
-
-    const result = await runCodexExec(prompt);
-    console.log("  codex 退出码:", result.exitCode);
-
-    // 解析 JSONL 输出
-    const lines = result.stdout
-      .split("\n")
-      .filter((line) => line.trim())
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-
-    const mcpCalls = lines.filter(
-      (event) =>
-        event?.item?.type === "mcp_tool_call" ||
-        event?.type === "item.completed",
-    );
-
-    if (mcpCalls.length > 0) {
-      console.log("  检测到 MCP 工具调用事件:", mcpCalls.length, "个");
-    }
-
-    const commandExecutions = lines.filter(
-      (event) => event?.item?.type === "command_execution",
-    );
-    if (commandExecutions.length > 0) {
-      console.log("  检测到 shell 命令调用:", commandExecutions.length, "个");
-    }
-
-    // 查看 agent 输出
-    const agentMessages = lines.filter(
-      (event) => event?.item?.type === "agent_message",
-    );
-    if (agentMessages.length > 0) {
-      const text = agentMessages[agentMessages.length - 1]?.item?.text || "";
-      console.log("  agent 回答 (截取):", text.slice(0, 300));
-    }
-
-    if (result.stderr.trim()) {
-      console.log("  stderr (截取):", result.stderr.slice(0, 300));
-    }
-
-    // 等一下让异步请求完成
-    await delay(2000);
-
-    // 5. 分析录制的请求
-    console.log("\n  录制服务器收到的请求:");
-    console.log("  总计:", recording.records.length, "个请求");
-
-    const healthChecks = recording.records.filter(
-      (r) => r.url?.includes("healthz") || r.url?.includes("readyz"),
-    );
-    const sessionStarts = recording.records.filter((r) =>
-      r.url?.includes("session-start"),
-    );
-    const prepareContexts = recording.records.filter((r) =>
-      r.url?.includes("prepare-context"),
-    );
-    const finalizeTurns = recording.records.filter((r) =>
-      r.url?.includes("finalize-turn"),
-    );
-    const otherRequests = recording.records.filter(
-      (r) =>
-        !r.url?.includes("healthz") &&
-        !r.url?.includes("readyz") &&
-        !r.url?.includes("session-start") &&
-        !r.url?.includes("prepare-context") &&
-        !r.url?.includes("finalize-turn"),
-    );
-
-    console.log(`  - healthz/readyz:        ${healthChecks.length} 个`);
-    console.log(`  - session-start-context: ${sessionStarts.length} 个`);
-    console.log(`  - prepare-context:       ${prepareContexts.length} 个`);
-    console.log(`  - finalize-turn:         ${finalizeTurns.length} 个`);
-    console.log(`  - 其他请求:              ${otherRequests.length} 个`);
-
-    if (otherRequests.length > 0) {
-      for (const r of otherRequests) {
-        console.log(`    → ${r.method} ${r.url}`);
-      }
-    }
-
-    // 显示所有非 healthz 请求的 URL
-    const runtimeRequests = recording.records.filter(
-      (r) => !r.url?.includes("healthz") && !r.url?.includes("readyz"),
-    );
-    if (runtimeRequests.length > 0) {
-      console.log("\n  runtime 请求明细:");
-      for (const r of runtimeRequests) {
-        console.log(`    ${r.method} ${r.url}`);
-        if (r.body) {
-          console.log(`      body: ${JSON.stringify(r.body).slice(0, 200)}`);
-        }
-      }
-    }
-
-    // 6. 判断结果
-    const anyRuntimeRequest = recording.records.some(
-      (r) => !r.url?.includes("healthz") && !r.url?.includes("readyz"),
-    );
-    const shellCalledMcpServer = commandExecutions.some((event) =>
-      String(event?.item?.command || "").includes("memory-mcp-server.mjs"),
-    );
-
-    if (anyRuntimeRequest) {
-      console.log(
-        "\n✓ 真实 Codex 客户端成功通过 MCP server 向 runtime 发送了请求！",
-      );
-
-      if (sessionStarts.length > 0 || prepareContexts.length > 0) {
-        console.log("✓ 观察到 session-start 或 prepare-context 请求");
-      }
-
-      const codexHost = runtimeRequests.find(
-        (r) => r.body?.host === "codex_app_server",
-      );
-      if (codexHost) {
-        console.log("✓ host 字段正确: codex_app_server");
-      }
-    } else if (shellCalledMcpServer) {
-      console.log(
-        "\n⚠ Codex 未通过内建 MCP 调用，但通过 shell 直接调用了 MCP server",
-      );
-      console.log(
-        "  这说明真实 Codex 客户端已参与，并且能访问 memory-mcp-server.mjs",
-      );
-      console.log("  但这次没有形成可记录的 runtime HTTP 请求");
-    } else if (recording.records.length > 0) {
-      console.log(
-        "\n⚠ Codex 通过 MCP 连接了录制服务器（healthz），但未发出 runtime 请求",
-      );
-      console.log("  可能原因：Codex 没有选择调用 memory 工具");
-      console.log("  这不代表 MCP 链路断开，只是模型没有在本次对话中调用工具");
-      console.log("  MCP server 注册和连接本身已通过验证 ✓");
-    } else {
-      console.error("\n✗ 录制服务器未收到任何请求");
-      console.error("  可能原因：");
-      console.error("  - MCP server 未被 Codex 正确加载");
-      console.error("  - API 不可用");
-      process.exitCode = 1;
-    }
-  } finally {
-    // 清理 MCP server 注册
-    const removeResult = removeMcpServer();
-    if (removeResult.ok) {
-      console.log("\n✓ MCP server 已清理:", MCP_SERVER_NAME);
-    } else {
-      console.warn(
-        "\n⚠ MCP server 清理失败（可手动运行 codex mcp remove " +
-          MCP_SERVER_NAME +
-          "）:",
-        removeResult.output,
-      );
-    }
-
-    const restoreResults = restoreHttpMcpServers(httpMcpServers);
-    for (const restore of restoreResults) {
-      if (restore.ok) {
-        console.log(`✓ 已恢复 HTTP MCP server: ${restore.name}`);
-      } else {
-        console.warn(
-          `⚠ 恢复 HTTP MCP server 失败: ${restore.name}: ${restore.output}`,
-        );
-      }
-    }
-
-    recording.server.close();
+    prepareResult = await prepareCodexMemoryContext();
+    forcedPrompt = buildCodexForcedPrompt(prepareResult);
+    memoryDelivery = buildMemoryDeliveryFact(prepareResult, forcedPrompt);
+    printPass("平台已生成 Codex 强制注入上下文");
+    printDetail("memory_delivery", memoryDelivery);
+  } catch (error) {
+    printFail(`prepare-context 失败: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+    return;
   }
 
-  console.log("\n=== 验收结束 ===");
+  printSection("步骤 4 — 运行真实 Codex 会话");
+  const result = await runCodexExec(forcedPrompt);
+  console.log(`  codex 退出码: ${result.exitCode}`);
+  if (result.stderr.trim()) {
+    console.log(`  stderr (截取): ${result.stderr.slice(0, 400)}`);
+  }
+
+  printSection("步骤 5 — 解析 Codex 输出（仅用于调试，不作为注入送达证明）");
+  const parsed = parseCodexJsonOutput(result.stdout);
+  console.log(`  解析到事件数: ${parsed.events.length}`);
+  console.log(`  文本片段数:   ${parsed.texts.length}`);
+  console.log(`  MCP 调用数:   ${parsed.mcpCalls.length}`);
+  const answer = parsed.combined;
+  if (answer.trim()) {
+    printDetail("Codex 最终回答（截取）", answer.slice(0, 600));
+  } else if (result.stdout.trim()) {
+    printDetail("raw stdout（截取）", result.stdout.slice(0, 500));
+  }
+
+  printSection("步骤 6 — 读取 runtime 注入轨迹");
+  const runs = await waitForRuntimeTrace(SESSION_ID);
+  let runtimeTraceOk = false;
+  if (!runs) {
+    printWarn(
+      `runtime observe/runs 未查到 session_id=${SESSION_ID} 的记录（等待超时）`,
+    );
+  } else {
+    const traceAssert = assertRuntimeInjectionTrace(runs, SESSION_ID);
+    runtimeTraceOk = traceAssert.pass;
+    if (traceAssert.pass) {
+      printPass("runtime 观测到检索/注入轨迹");
+    } else {
+      printWarn(`runtime 轨迹断言: ${traceAssert.reason}`);
+    }
+    printDetail("轨迹统计", traceAssert.detail);
+  }
+
+  printSection("验收结论");
+  const platformDeliveryOk =
+    memoryDelivery.host_context_delivered && memoryDelivery.memory_delivered;
+  if (platformDeliveryOk && runtimeTraceOk) {
+    printPass("通过：平台侧已强制交付记忆上下文 + runtime 观测到注入轨迹");
+  } else {
+    if (!memoryDelivery.host_context_delivered) {
+      printWarn("平台侧未确认注入上下文交付");
+    }
+    if (!memoryDelivery.memory_delivered) {
+      printWarn("平台侧未确认交付了具体记忆记录");
+    }
+    if (!runtimeTraceOk) {
+      printWarn("runtime 未观测到完整检索/注入轨迹");
+    }
+    process.exitCode = 1;
+  }
+
+  printSection("验收结束");
 }
 
 void main().catch((error) => {
   console.error("验收脚本异常:", error);
-  // 确保清理
-  try {
-    removeMcpServer();
-  } catch {
-    /* ignore */
-  }
   process.exitCode = 1;
 });

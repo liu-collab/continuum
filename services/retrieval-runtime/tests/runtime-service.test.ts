@@ -1,4 +1,4 @@
-import pino from "pino";
+import pino, { type Logger } from "pino";
 import { describe, expect, it } from "vitest";
 
 import type { AppConfig } from "../src/config.js";
@@ -6,6 +6,7 @@ import { createApp } from "../src/app.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { ConflictAppError } from "../src/errors.js";
 import { InjectionEngine } from "../src/injection/injection-engine.js";
+import { createLogger } from "../src/logger.js";
 import { createMemoryOrchestrator } from "../src/memory-orchestrator/index.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
@@ -59,6 +60,7 @@ const baseConfig: AppConfig = {
   HOST: "127.0.0.1",
   PORT: 3002,
   LOG_LEVEL: "info",
+  LOG_SAMPLE_RATE: 1,
   DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
   READ_MODEL_SCHEMA: "storage_shared_v1",
   READ_MODEL_TABLE: "memory_read_model_v1",
@@ -67,6 +69,8 @@ const baseConfig: AppConfig = {
   EMBEDDING_BASE_URL: "http://localhost:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
+  EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+  EMBEDDING_CACHE_MAX_ENTRIES: 1000,
   MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
   MEMORY_LLM_PROTOCOL: "openai-compatible",
   MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -555,9 +559,10 @@ function createRuntime(overrides?: {
   intentAnalyzer?: IntentAnalyzer;
   readModelRepository?: InMemoryReadModelRepository;
   config?: Partial<AppConfig>;
+  logger?: Logger;
 }) {
   const repository = new InMemoryRuntimeRepository();
-  const logger = pino({ enabled: false });
+  const logger = overrides?.logger ?? pino({ enabled: false });
   const dependencyGuard = new DependencyGuard(repository, logger);
   const readModelRepository =
     overrides?.readModelRepository ?? new InMemoryReadModelRepository(overrides?.records ?? sampleRecords);
@@ -613,6 +618,18 @@ function createRuntime(overrides?: {
   );
 
   return { service, repository, storageClient };
+}
+
+function createMemoryDestination() {
+  const lines: string[] = [];
+  return {
+    destination: {
+      write(message: string) {
+        lines.push(...message.split("\n").filter(Boolean));
+      },
+    },
+    lines,
+  };
 }
 
 describe("retrieval-runtime service", () => {
@@ -738,6 +755,79 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block?.memory_summary).toContain("偏好与任务状态");
   });
 
+  it("recalls assistant naming preference even when older high-importance preferences exist", async () => {
+    const oldPreferences: CandidateMemory[] = Array.from({ length: 12 }, (_, index) => ({
+      id: `old-pref-${index}`,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: null,
+      task_id: null,
+      memory_type: "fact_preference",
+      scope: "user",
+      summary: `用户纠正后的长期偏好：旧偏好 ${index}`,
+      details: null,
+      source: { turn_id: `old-${index}` },
+      importance: 5,
+      confidence: 0.96,
+      status: "active",
+      updated_at: `2026-04-20T10:${String(index).padStart(2, "0")}:00.000Z`,
+      last_confirmed_at: null,
+      summary_embedding: [1, 0, 0],
+      embedding_status: "ok",
+    }));
+    const namingPreference: CandidateMemory = {
+      id: "assistant-name-pref",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: null,
+      task_id: null,
+      memory_type: "fact_preference",
+      scope: "user",
+      summary: "用户希望助手以后叫贾维斯",
+      details: null,
+      source: { turn_id: "naming-pref" },
+      importance: 4,
+      confidence: 0.98,
+      status: "active",
+      updated_at: "2026-04-24T06:03:56.097Z",
+      last_confirmed_at: null,
+      embedding_status: "pending",
+    };
+    const { service } = createRuntime({
+      records: [...oldPreferences, namingPreference],
+      embeddingsClient: new StubEmbeddingsClient([0, 1, 0]),
+      intentAnalyzer: new StubIntentAnalyzer({
+        needs_memory: false,
+        memory_types: ["fact_preference", "task_state", "episodic"],
+        urgency: "optional",
+        confidence: 0.98,
+        reason: "用户在询问当前助手身份，不依赖先前上下文或长期记忆。",
+        suggested_scopes: ["session"],
+      }),
+      config: {
+        QUERY_CANDIDATE_LIMIT: 13,
+        RECALL_LLM_CANDIDATE_LIMIT: 6,
+        INJECTION_RECORD_LIMIT: 2,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "你叫什么？",
+      memory_mode: "workspace_plus_global",
+    });
+
+    const recalledNamingPreference = response.memory_packet?.records.find((record) => record.id === "assistant-name-pref");
+    expect(response.trigger).toBe(true);
+    expect(recalledNamingPreference?.fallback_semantic_score).toBeGreaterThan(0);
+    expect(response.memory_packet?.records[0]?.id).toBe("assistant-name-pref");
+    expect(response.injection_block?.memory_records.some((record) => record.id === "assistant-name-pref")).toBe(true);
+  });
+
   it("uses current context before static importance when selecting read model candidates", async () => {
     const oldPreferences: CandidateMemory[] = Array.from({ length: 12 }, (_, index) => ({
       id: `old-static-pref-${index}`,
@@ -809,6 +899,58 @@ describe("retrieval-runtime service", () => {
     expect(response.memory_packet?.records.map((record) => record.id)).toContain("assistant-name-context-pref");
     expect(response.memory_packet?.records[0]?.id).toBe("assistant-name-context-pref");
     expect(response.injection_block?.memory_records.some((record) => record.id === "assistant-name-context-pref")).toBe(true);
+  });
+
+  it("uses memory llm timeout for recall injection planning", async () => {
+    const slowPlanner: LlmRecallPlanner = {
+      async planSearch() {
+        return {
+          should_search: true,
+          reason: "需要查找用户偏好。",
+          requested_scopes: ["user"],
+          requested_memory_types: ["fact_preference"],
+          importance_threshold: 3,
+          candidate_limit: 6,
+        };
+      },
+      async planInjection() {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        return {
+          should_inject: true,
+          reason: "命中用户偏好。",
+          selected_record_ids: ["mem-preference"],
+          memory_summary: "用户偏好：默认用中文，回答尽量简短直接。",
+          requested_scopes: ["user"],
+          requested_memory_types: ["fact_preference"],
+          importance_threshold: 3,
+        };
+      },
+      async healthCheck() {
+        return undefined;
+      },
+    };
+    const { service, repository } = createRuntime({
+      llmRecallPlanner: slowPlanner,
+      config: {
+        EMBEDDING_TIMEOUT_MS: 5,
+        MEMORY_LLM_TIMEOUT_MS: 100,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "按之前的偏好继续。",
+    });
+
+    const runs = await repository.getRuns();
+    const injectionPlan = runs.memory_plan_runs.find((run) => run.plan_kind === "memory_injection_plan");
+    expect(response.injection_block?.memory_records.map((record) => record.id)).toContain("mem-preference");
+    expect(injectionPlan?.result_state).toBe("planned");
   });
 
   it("records memory intent plan when intent analyzer is configured", async () => {
@@ -1866,6 +2008,34 @@ describe("retrieval-runtime service", () => {
     expect(dependencies.memory_llm.status).toBe("healthy");
   });
 
+  it("keeps recall planner context while checking memory llm health", async () => {
+    const { service } = createRuntime({
+      llmRecallPlanner: new StubLlmRecallPlanner({
+        should_search: false,
+        reason: "health check",
+        requested_scopes: ["workspace"],
+        requested_memory_types: ["fact_preference"],
+        importance_threshold: 3,
+      }, {
+        should_inject: false,
+        reason: "health check",
+        selected_record_ids: [],
+        memory_summary: "",
+        requested_scopes: ["workspace"],
+        requested_memory_types: ["fact_preference"],
+        importance_threshold: 3,
+      }),
+    });
+
+    const response = await service.checkMemoryLlm();
+
+    expect(response).toMatchObject({
+      name: "memory_llm",
+      status: "healthy",
+      detail: "memory llm request completed",
+    });
+  });
+
   it("returns not configured style status when memory llm is missing", async () => {
     const { service } = createRuntime();
 
@@ -2003,19 +2173,20 @@ describe("retrieval-runtime service", () => {
   });
 
   it("uses configured llm extraction before falling back to rules", async () => {
+    const llmExtractor = new SpyLlmExtractor({
+      candidates: [
+        {
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用中文输出",
+          importance: 5,
+          confidence: 0.92,
+          write_reason: "user preference confirmed in this turn",
+        },
+      ],
+    });
     const { service } = createRuntime({
-      llmExtractor: new StubLlmExtractor({
-        candidates: [
-          {
-            candidate_type: "fact_preference",
-            scope: "user",
-            summary: "默认用中文输出",
-            importance: 5,
-            confidence: 0.92,
-            write_reason: "user preference confirmed in this turn",
-          },
-        ],
-      }),
+      llmExtractor,
     });
 
     const response = await service.finalizeTurn({
@@ -2027,10 +2198,44 @@ describe("retrieval-runtime service", () => {
       assistant_output: "收到，我会统一改成中文输出。",
     });
 
+    expect(llmExtractor.callCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(0);
     expect(response.write_back_candidates).toHaveLength(1);
     expect(response.write_back_candidates[0]?.source.source_type).toBe("memory_llm");
     expect(response.write_back_candidates[0]?.summary).toBe("默认用中文输出");
     expect(response.write_back_candidates[0]?.scope).toBe("user");
+  });
+
+  it("lets llm extraction write back a naming preference when rules produce no candidates", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "fact_preference",
+            scope: "user",
+            summary: "用户希望助手以后叫自己贾维斯",
+            importance: 5,
+            confidence: 0.94,
+            write_reason: "user specified a durable naming preference for future turns",
+          },
+        ],
+      }),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "你以后就叫贾维斯",
+      assistant_output: "好，以后你可以叫我贾维斯。",
+    });
+
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.source.source_type).toBe("memory_llm");
+    expect(response.write_back_candidates[0]?.summary).toBe("用户希望助手以后叫自己贾维斯");
+    expect(response.write_back_candidates[0]?.scope).toBe("user");
+    expect(response.filtered_reasons).toContain("no_stable_preference_detected");
   });
 
   it("falls back to rules when llm extraction fails", async () => {
@@ -2953,6 +3158,73 @@ describe("retrieval-runtime service", () => {
     expect(storageClient.callCount).toBe(1);
   });
 
+  it("reports finalize idempotency cache stats in runtime metrics", async () => {
+    const storageClient = new StubStorageClient();
+    const { service } = createRuntime({
+      storageClient,
+    });
+
+    const request = {
+      host: "claude_code_plugin" as const,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-idempotent-metrics",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    };
+
+    await service.finalizeTurn(request);
+    await service.finalizeTurn(request);
+
+    const metrics = await service.getMetrics();
+
+    expect(metrics.finalize_idempotency_cache).toMatchObject({
+      enabled: true,
+      entries: 1,
+      max_entries: baseConfig.FINALIZE_IDEMPOTENCY_MAX_ENTRIES,
+      ttl_ms: baseConfig.FINALIZE_IDEMPOTENCY_TTL_MS,
+      hits: 1,
+      misses: 1,
+    });
+    expect(metrics.finalize_idempotency_cache?.hit_rate).toBe(0.5);
+  });
+
+  it("clears finalize idempotency cache through runtime cache clear api", async () => {
+    const storageClient = new StubStorageClient();
+    const { service } = createRuntime({
+      storageClient,
+    });
+
+    const request = {
+      host: "claude_code_plugin" as const,
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-idempotent-clear",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 后续都用中文。",
+    };
+
+    await service.finalizeTurn(request);
+
+    const cleared = await service.clearCaches({
+      embedding_cache: false,
+      finalize_idempotency_cache: true,
+    });
+
+    expect(cleared.cleared).toEqual(["finalize_idempotency_cache"]);
+    expect(cleared.finalize_idempotency_cache).toMatchObject({
+      enabled: true,
+      entries: 0,
+      hits: 0,
+      misses: 0,
+    });
+
+    await service.finalizeTurn(request);
+    expect(storageClient.callCount).toBe(2);
+  });
+
   it("reuses persisted finalize response across service instances before calling llm extraction again", async () => {
     const llmExtractor = new SpyLlmExtractor({
       candidates: [
@@ -3017,6 +3289,7 @@ describe("retrieval-runtime service", () => {
     };
 
     const first = await firstService.finalizeTurn(request);
+    expect(llmExtractor.callCount).toBe(1);
     expect(llmExtractor.refineCallCount).toBe(1);
 
     const secondService = new RetrievalRuntimeService(
@@ -3050,6 +3323,7 @@ describe("retrieval-runtime service", () => {
     const second = await secondService.finalizeTurn(request);
 
     expect(second).toEqual(first);
+    expect(llmExtractor.callCount).toBe(1);
     expect(llmExtractor.refineCallCount).toBe(1);
   });
 
@@ -3163,6 +3437,60 @@ describe("retrieval-runtime service", () => {
     });
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();
     expect(finalizeResponse.json().write_back_candidates.length).toBeGreaterThan(0);
+  });
+
+  it("adds request and trace context to runtime logs", async () => {
+    const { destination, lines } = createMemoryDestination();
+    const logger = createLogger({ ...baseConfig, LOG_LEVEL: "debug", LOG_SAMPLE_RATE: 1 }, { destination });
+    const { service } = createRuntime({ logger });
+    const app = createApp(service);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/runtime/prepare-context?debug=true",
+      headers: {
+        "x-request-id": "req-log-context",
+      },
+      payload: {
+        host: "claude_code_plugin",
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        task_id: ids.task,
+        turn_id: "log-context-turn",
+        phase: "before_response",
+        current_input: "上次定过的接口结构这轮继续沿用。",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const logEntries = lines.map((line) => JSON.parse(line) as {
+      msg: string;
+      request_id?: string;
+      http_method?: string;
+      http_path?: string;
+      trace_id?: string;
+      session_id?: string;
+      turn_id?: string;
+      candidate_count?: number;
+      duration_ms?: number;
+    });
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({
+        msg: "query engine ranked candidates",
+        request_id: "req-log-context",
+        http_method: "POST",
+        http_path: "/v1/runtime/prepare-context",
+        session_id: ids.session,
+        turn_id: "log-context-turn",
+        trace_id: response.json().trace_id,
+        candidate_count: expect.any(Number),
+        duration_ms: expect.any(Number),
+      }),
+    );
+
+    await app.close();
   });
 
   it("returns structured injection data from session start context", async () => {

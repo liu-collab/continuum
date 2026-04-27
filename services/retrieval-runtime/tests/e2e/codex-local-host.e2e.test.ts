@@ -45,6 +45,7 @@ const config: AppConfig = {
   HOST: "127.0.0.1",
   PORT: 0,
   LOG_LEVEL: "info",
+  LOG_SAMPLE_RATE: 1,
   DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
   READ_MODEL_SCHEMA: "storage_shared_v1",
   READ_MODEL_TABLE: "memory_read_model_v1",
@@ -53,6 +54,8 @@ const config: AppConfig = {
   EMBEDDING_BASE_URL: "http://localhost:8090/v1",
   EMBEDDING_MODEL: "text-embedding-3-small",
   EMBEDDING_API_KEY: "test-key",
+  EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+  EMBEDDING_CACHE_MAX_ENTRIES: 1000,
   MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
   MEMORY_LLM_PROTOCOL: "openai-compatible",
   MEMORY_LLM_TIMEOUT_MS: 15_000,
@@ -374,25 +377,32 @@ describe("Codex 本地宿主链路", () => {
         const message = JSON.parse(String(data));
         upstreamMessages.push(message);
 
-        if (message.method === "conversation/start") {
+        if (message.method === "turn/start") {
           socket.send(
             JSON.stringify({
               jsonrpc: "2.0",
               id: message.id,
               result: {
-                conversationId: "conv-local-001",
+                turn: { id: "turn-local-001" },
               },
             }),
           );
-          return;
-        }
-
-        if (message.method === "conversation/respond") {
           socket.send(
             JSON.stringify({
               jsonrpc: "2.0",
-              method: "conversation/item",
+              method: "turn/started",
               params: {
+                threadId: message.params?.threadId,
+                turn: { id: "turn-local-001" },
+              },
+            }),
+          );
+          socket.send(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              method: "item/completed",
+              params: {
+                turnId: "turn-local-001",
                 item: {
                   type: "agentMessage",
                   text: "本地 Codex 宿主链路验证通过。",
@@ -403,9 +413,9 @@ describe("Codex 本地宿主链路", () => {
           socket.send(
             JSON.stringify({
               jsonrpc: "2.0",
-              id: message.id,
-              result: {
-                done: true,
+              method: "turn/completed",
+              params: {
+                turn: { id: "turn-local-001" },
               },
             }),
           );
@@ -450,7 +460,7 @@ describe("Codex 本地宿主链路", () => {
       JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "conversation/start",
+        method: "turn/start",
         params: {
           cwd: process.cwd(),
           threadId: "thread-local-001",
@@ -461,34 +471,24 @@ describe("Codex 本地宿主链路", () => {
 
     const startResponse = await readJsonRpc(client);
     expect(startResponse.id).toBe(1);
-
-    client.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "conversation/respond",
-        params: {
-          threadId: "thread-local-001",
-          turnId: "turn-local-001",
-          input: [{ type: "text", text: "继续说明记忆注入情况" }],
-        },
-      }),
-    );
-
-    const injectedMessage = await readJsonRpc(client);
-    expect(injectedMessage.method).toBeDefined();
-
-    const respondDone = await readJsonRpc(client);
-    expect(respondDone.id).toBe(2);
+    const started = await readJsonRpc(client);
+    expect(started.method).toBe("turn/started");
+    const itemCompleted = await readJsonRpc(client);
+    expect(itemCompleted.method).toBe("item/completed");
+    const turnCompleted = await readJsonRpc(client);
+    expect(turnCompleted.method).toBe("turn/completed");
 
     expect(
-      upstreamMessages.some(
-        (message) => message.method === "conversation/start",
-      ),
+      upstreamMessages.some((message) => message.method === "turn/start"),
     ).toBe(true);
     expect(
       upstreamMessages.some(
-        (message) => message.method === "conversation/respond",
+        (message) =>
+          message.method === "thread/inject_items" &&
+          message.params?.items?.[0]?.role === "developer" &&
+          String(message.params.items[0].content?.[0]?.text ?? "").includes(
+            "【长期记忆】",
+          ),
       ),
     ).toBe(true);
 

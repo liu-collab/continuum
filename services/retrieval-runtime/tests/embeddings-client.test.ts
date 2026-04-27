@@ -5,8 +5,47 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../src/config.js";
-import { HttpEmbeddingsClient } from "../src/query/embeddings-client.js";
+import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
+import { CachedEmbeddingsClient, HttpEmbeddingsClient } from "../src/query/embeddings-client.js";
 import { hasCompleteRuntimeWritebackLlmConfig, resolveRuntimeWritebackLlmConfig } from "../src/writeback-llm-config.js";
+
+const cacheConfig = {
+  EMBEDDING_BASE_URL: "https://api.openai.com/v1",
+  EMBEDDING_MODEL: "text-embedding-3-small",
+  EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+  EMBEDDING_CACHE_MAX_ENTRIES: 1000,
+};
+
+class SpyEmbeddingsClient implements EmbeddingsClient {
+  public callCount = 0;
+  private readonly pending: Array<() => void> = [];
+
+  constructor(private readonly vector: number[] = [0.1, 0.2, 0.3]) {}
+
+  async embedText(): Promise<number[]> {
+    this.callCount += 1;
+    if (this.pending.length > 0) {
+      await new Promise<void>((resolve) => {
+        this.pending.push(resolve);
+      });
+    }
+    return [...this.vector];
+  }
+
+  async embedTextAfterRelease(): Promise<number[]> {
+    this.callCount += 1;
+    await new Promise<void>((resolve) => {
+      this.pending.push(resolve);
+    });
+    return [...this.vector];
+  }
+
+  releaseAll() {
+    for (const resolve of this.pending.splice(0)) {
+      resolve();
+    }
+  }
+}
 
 describe("retrieval-runtime embeddings client", () => {
   const originalFetch = globalThis.fetch;
@@ -33,6 +72,7 @@ describe("retrieval-runtime embeddings client", () => {
       HOST: "127.0.0.1",
       PORT: 3002,
       LOG_LEVEL: "info",
+      LOG_SAMPLE_RATE: 1,
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
       READ_MODEL_SCHEMA: "storage_shared_v1",
       READ_MODEL_TABLE: "memory_read_model_v1",
@@ -41,6 +81,8 @@ describe("retrieval-runtime embeddings client", () => {
       EMBEDDING_BASE_URL: "https://api.openai.com/v1",
       EMBEDDING_MODEL: "text-embedding-3-small",
       EMBEDDING_API_KEY: "test-key",
+      EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+      EMBEDDING_CACHE_MAX_ENTRIES: 1000,
       MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
       MEMORY_LLM_PROTOCOL: "openai-compatible",
       MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -132,12 +174,15 @@ describe("retrieval-runtime embeddings client", () => {
       HOST: "127.0.0.1",
       PORT: 3002,
       LOG_LEVEL: "info",
+      LOG_SAMPLE_RATE: 1,
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
       READ_MODEL_SCHEMA: "storage_shared_v1",
       READ_MODEL_TABLE: "memory_read_model_v1",
       RUNTIME_SCHEMA: "runtime_private",
       STORAGE_WRITEBACK_URL: "http://localhost:3001",
       EMBEDDING_MODEL: "text-embedding-3-small",
+      EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+      EMBEDDING_CACHE_MAX_ENTRIES: 1000,
       MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
       MEMORY_LLM_PROTOCOL: "openai-compatible",
       MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -234,12 +279,15 @@ describe("retrieval-runtime embeddings client", () => {
         HOST: "127.0.0.1",
         PORT: 3002,
         LOG_LEVEL: "info",
+        LOG_SAMPLE_RATE: 1,
         DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
         READ_MODEL_SCHEMA: "storage_shared_v1",
         READ_MODEL_TABLE: "memory_read_model_v1",
         RUNTIME_SCHEMA: "runtime_private",
         STORAGE_WRITEBACK_URL: "http://localhost:3001",
         EMBEDDING_MODEL: "text-embedding-3-small",
+        EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+        EMBEDDING_CACHE_MAX_ENTRIES: 1000,
         CONTINUUM_EMBEDDING_CONFIG_PATH: configPath,
         MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
         MEMORY_LLM_PROTOCOL: "openai-compatible",
@@ -347,5 +395,84 @@ describe("retrieval-runtime embeddings client", () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("caches normalized embedding requests and returns defensive copies", async () => {
+    const inner = new SpyEmbeddingsClient([0.4, 0.5, 0.6]);
+    const client = new CachedEmbeddingsClient(inner, cacheConfig);
+
+    const first = await client.embedText(" hello\nworld ");
+    first[0] = 9;
+    const second = await client.embedText("hello world");
+
+    expect(second).toEqual([0.4, 0.5, 0.6]);
+    expect(inner.callCount).toBe(1);
+    expect(client.stats()).toMatchObject({
+      enabled: true,
+      entries: 1,
+      hits: 1,
+      misses: 1,
+      max_entries: 1000,
+      ttl_ms: 5 * 60 * 1000,
+    });
+  });
+
+  it("deduplicates concurrent embedding requests for the same normalized input", async () => {
+    const inner = new SpyEmbeddingsClient([0.7, 0.8, 0.9]);
+    inner.embedText = inner.embedTextAfterRelease.bind(inner);
+    const client = new CachedEmbeddingsClient(inner, cacheConfig);
+
+    const first = client.embedText("same query");
+    const second = client.embedText("same   query");
+
+    expect(inner.callCount).toBe(1);
+    inner.releaseAll();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [0.7, 0.8, 0.9],
+      [0.7, 0.8, 0.9],
+    ]);
+    expect(client.stats()).toMatchObject({
+      hits: 1,
+      misses: 1,
+      entries: 1,
+    });
+  });
+
+  it("bypasses cache when embedding cache limits are disabled", async () => {
+    const inner = new SpyEmbeddingsClient([0.1, 0.2, 0.3]);
+    const client = new CachedEmbeddingsClient(inner, {
+      ...cacheConfig,
+      EMBEDDING_CACHE_TTL_MS: 0,
+    });
+
+    await client.embedText("hello");
+    await client.embedText("hello");
+
+    expect(inner.callCount).toBe(2);
+    expect(client.stats()).toMatchObject({
+      enabled: false,
+      entries: 0,
+      hits: 0,
+      misses: 2,
+    });
+  });
+
+  it("keeps embedding cache keys separate across active embedding models", async () => {
+    const inner = new SpyEmbeddingsClient([0.1, 0.2, 0.3]);
+    const firstClient = new CachedEmbeddingsClient(inner, {
+      ...cacheConfig,
+      EMBEDDING_MODEL: "text-embedding-3-small",
+    });
+    const secondClient = new CachedEmbeddingsClient(inner, {
+      ...cacheConfig,
+      EMBEDDING_MODEL: "text-embedding-3-large",
+    });
+
+    await firstClient.embedText("hello");
+    await firstClient.embedText("hello");
+    await secondClient.embedText("hello");
+
+    expect(inner.callCount).toBe(2);
   });
 });

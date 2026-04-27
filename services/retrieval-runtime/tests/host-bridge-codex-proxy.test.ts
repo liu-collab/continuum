@@ -104,17 +104,71 @@ function extractToolSummary(item: any): string | null {
   return null;
 }
 
-function buildInjectionItems(injectionBlock: any): any[] {
-  if (!injectionBlock) return [];
-  const text = [injectionBlock.injection_reason, injectionBlock.memory_summary]
-    .filter((v: any) => typeof v === "string" && v.trim())
-    .join("\n");
-  if (!text) return [];
+function buildPreparedMemoryText(result: any): string {
+  if (!result || typeof result !== "object") {
+    return "【长期记忆】无相关历史记忆，请直接回答。";
+  }
+
+  const injection = result.injection_block;
+  if (
+    injection &&
+    Array.isArray(injection.memory_records) &&
+    injection.memory_records.length > 0
+  ) {
+    const lines = [
+      "【长期记忆】以下信息仅在与当前问题直接相关时使用，请优先转化为答案中的约束、默认值或步骤，不要逐条转述：",
+    ];
+    if (injection.injection_reason) {
+      lines.push(`命中原因：${injection.injection_reason}`);
+    }
+    if (injection.memory_summary) {
+      lines.push(`可直接采用的上下文：${injection.memory_summary}`);
+    }
+    lines.push("可用事实：");
+    for (const record of injection.memory_records) {
+      const scope = record.scope ?? "";
+      const type = record.memory_type ?? record.type ?? "";
+      const summary =
+        record.summary ?? record.content ?? JSON.stringify(record);
+      lines.push(`- 记忆[${type}${scope ? "/" + scope : ""}]：${summary}`);
+    }
+    lines.push(
+      "使用要求：如果这些记忆能帮助回答，就直接体现在最终答案里；不要单独开一段复述记忆，也不要说你看到了记忆。",
+    );
+    return lines.join("\n");
+  }
+
+  if (!result.trigger) {
+    return "【长期记忆】无相关历史记忆，请直接回答。";
+  }
+
+  const packet = result.memory_packet;
+  const records = Array.isArray(packet?.records)
+    ? packet.records
+    : Array.isArray(packet?.memory_records)
+      ? packet.memory_records
+      : [];
+  if (records.length > 0) {
+    return [
+      "【长期记忆】以下信息仅在与当前问题直接相关时使用，请直接吸收到答案内容中：",
+      ...records.map(
+        (record: any) =>
+          `- 记忆：${record.summary ?? record.content ?? JSON.stringify(record)}`,
+      ),
+      "使用要求：只保留对当前回答必要的信息，不要复述这段上下文。",
+    ].join("\n");
+  }
+
+  return "【长期记忆】无相关历史记忆，请直接回答。";
+}
+
+function buildDeveloperInjectionItems(text: string): any[] {
+  if (!text.trim()) return [];
   return [
     {
       type: "message",
       role: "developer",
-      content: [{ type: "input_text", text }],
+      content: [{ type: "input_text", text: text.trim() }],
     },
   ];
 }
@@ -273,28 +327,42 @@ describe("Codex proxy bridge (memory-codex-proxy.mjs)", () => {
     });
   });
 
-  describe("buildInjectionItems", () => {
-    it("builds developer message from injection block", () => {
-      const block = {
-        injection_reason: "记忆注入",
-        memory_summary: "用户偏好：中文输出",
+  describe("buildPreparedMemoryText", () => {
+    it("formats full prepared memory facts for forced injection", () => {
+      const prepared = {
+        trigger: true,
+        injection_block: {
+          injection_reason: "记忆注入",
+          memory_summary: "用户偏好：中文输出",
+          memory_records: [
+            {
+              id: "mem-1",
+              memory_type: "fact_preference",
+              scope: "user",
+              summary: "用户偏好：中文输出",
+            },
+          ],
+        },
       };
-      const items = buildInjectionItems(block);
+      const text = buildPreparedMemoryText(prepared);
+      const items = buildDeveloperInjectionItems(text);
       expect(items).toHaveLength(1);
       expect(items[0].role).toBe("developer");
-      expect(items[0].content[0].text).toContain("记忆注入");
-      expect(items[0].content[0].text).toContain("中文输出");
+      expect(items[0].content[0].text).toContain("命中原因：记忆注入");
+      expect(items[0].content[0].text).toContain(
+        "记忆[fact_preference/user]：用户偏好：中文输出",
+      );
     });
 
-    it("returns empty array for null injection block", () => {
-      expect(buildInjectionItems(null)).toEqual([]);
-      expect(buildInjectionItems(undefined)).toEqual([]);
+    it("returns a no-memory block for null prepared result", () => {
+      expect(buildPreparedMemoryText(null)).toContain("无相关历史记忆");
+      expect(buildPreparedMemoryText(undefined)).toContain("无相关历史记忆");
     });
 
-    it("returns empty array when both fields are empty", () => {
-      expect(
-        buildInjectionItems({ injection_reason: "", memory_summary: "" }),
-      ).toEqual([]);
+    it("returns a no-memory block when trigger is false", () => {
+      expect(buildPreparedMemoryText({ trigger: false })).toContain(
+        "无相关历史记忆",
+      );
     });
   });
 
