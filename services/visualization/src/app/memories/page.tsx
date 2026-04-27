@@ -1,5 +1,4 @@
 import Link from "next/link";
-
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -24,31 +23,30 @@ export default async function MemoriesPage({
   const params = await searchParams;
   const filters = parseMemoryCatalogFilters(params);
   const response = await getMemoryCatalog(filters);
-  const emptyState = describeCatalogEmptyState(response);
-  const quickViews = buildMemoryCatalogQuickViews(filters);
-  const filterHints = describeCatalogFilterHints(filters);
-
-  const activeFilterCount = Object.values(filters).filter((value) => Boolean(value)).length;
+  const es = describeCatalogEmptyState(response);
+  const views = buildMemoryCatalogQuickViews(filters);
+  const hints = describeCatalogFilterHints(filters);
+  const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">记忆</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            共 {response.total} 条
-            <span className="ml-2 text-xs">· {memoryViewModeLabel(filters.memoryViewMode)}</span>
+          <h1 style={{ fontSize: "1.375rem", fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--text)", letterSpacing: "-0.01em" }}>
+            Memories
+          </h1>
+          <p style={{ marginTop: "0.25rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+            {response.total.toLocaleString()} records
+            <span style={{ marginLeft: "0.5rem", fontSize: "0.6875rem" }}>· {memoryViewModeLabel(filters.memoryViewMode)}</span>
             {response.pendingConfirmationCount > 0 ? (
-              <span className="ml-2 text-xs text-amber-700">· 待确认 {response.pendingConfirmationCount} 条</span>
+              <span style={{ marginLeft: "0.5rem", fontSize: "0.6875rem", color: "var(--amber)" }}>
+                · {response.pendingConfirmationCount} pending
+              </span>
             ) : null}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterModalButton
-            activeCount={activeFilterCount}
-            title="筛选记忆"
-            description="按工作区、任务、类型、作用域、状态与更新时间过滤。"
-          >
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+          <FilterModalButton activeCount={activeCount} title="Filter Memories" description="Filter by workspace, task, type, scope, status, or date.">
             <SearchForm
               action="/memories"
               initialValues={{
@@ -64,116 +62,86 @@ export default async function MemoriesPage({
                 updated_to: filters.updatedTo
               }}
             >
-              <FormField label="工作区" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
-              <FormField label="任务" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
-              <FormField label="会话" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-              <FormField label="来源引用" name="source_ref" placeholder="turn id / source ref" defaultValue={filters.sourceRef} />
-              <FormField
-                label="视图模式"
-                name="memory_view_mode"
-                defaultValue={filters.memoryViewMode}
-                options={[
-                  { label: "工作区 + 全局", value: "workspace_plus_global" },
-                  { label: "仅工作区", value: "workspace_only" }
-                ]}
-              />
-              <FormField
-                label="记忆类型"
-                name="memory_type"
-                defaultValue={filters.memoryType}
-                options={[
-                  { label: "事实与偏好", value: "fact_preference" },
-                  { label: "任务状态", value: "task_state" },
-                  { label: "情景记忆", value: "episodic" }
-                ]}
-              />
-              <FormField
-                label="作用域"
-                name="scope"
-                defaultValue={filters.scope}
-                options={[
-                  { label: "会话", value: "session" },
-                  { label: "任务", value: "task" },
-                  { label: "平台", value: "user" },
-                  { label: "工作区", value: "workspace" }
-                ]}
-              />
-              <FormField
-                label="状态"
-                name="status"
-                defaultValue={filters.status}
-                options={[
-                  { label: "生效中", value: "active" },
-                  { label: "待确认", value: "pending_confirmation" },
-                  { label: "已被替代", value: "superseded" },
-                  { label: "已归档", value: "archived" },
-                  { label: "已删除", value: "deleted" }
-                ]}
-              />
-              <FormField label="起始更新时间" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
-              <FormField label="结束更新时间" name="updated_to" type="date" defaultValue={filters.updatedTo} />
+              <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
+              <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
+              <FormField label="Session" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+              <FormField label="Source Ref" name="source_ref" placeholder="source ref" defaultValue={filters.sourceRef} />
+              <FormField label="View" name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
+                { label: "Workspace + Global", value: "workspace_plus_global" },
+                { label: "Workspace Only", value: "workspace_only" }
+              ]} />
+              <FormField label="Type" name="memory_type" defaultValue={filters.memoryType} options={[
+                { label: "Fact / Preference", value: "fact_preference" },
+                { label: "Task State", value: "task_state" },
+                { label: "Episodic", value: "episodic" }
+              ]} />
+              <FormField label="Scope" name="scope" defaultValue={filters.scope} options={[
+                { label: "Session", value: "session" },
+                { label: "Task", value: "task" },
+                { label: "Global", value: "user" },
+                { label: "Workspace", value: "workspace" }
+              ]} />
+              <FormField label="Status" name="status" defaultValue={filters.status} options={[
+                { label: "Active", value: "active" },
+                { label: "Pending", value: "pending_confirmation" },
+                { label: "Superseded", value: "superseded" },
+                { label: "Archived", value: "archived" },
+                { label: "Deleted", value: "deleted" }
+              ]} />
+              <FormField label="Updated From" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
+              <FormField label="Updated To" name="updated_to" type="date" defaultValue={filters.updatedTo} />
             </SearchForm>
           </FilterModalButton>
-          <HealthModalButton sources={[response.sourceStatus]} label="数据源" />
+          <HealthModalButton sources={[response.sourceStatus]} label="Source" />
         </div>
       </div>
 
-      <section className="rounded-lg border bg-surface p-4">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <section className="panel p-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
           <div>
-            <h2 className="text-sm font-medium text-foreground">快捷视图</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              不用手动改查询参数，直接切到常用的记忆视图。
-            </p>
+            <h2 className="text-[13px] font-[var(--font-mono)] font-medium text-text">Quick Views</h2>
+            <p className="mt-0.5 text-[11px] font-[var(--font-mono)] text-muted">Switch between common memory views without manual filtering.</p>
           </div>
-          {filterHints.length > 0 ? (
-            <div className="text-xs text-amber-700">
-              {filterHints.join(" ")}
-            </div>
-          ) : null}
+          {hints.length > 0 ? <div className="text-[11px] font-[var(--font-mono)] text-amber">{hints.join(" ")}</div> : null}
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {quickViews.map((view) => (
+        <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+          {views.map((view) => (
             <Link
               key={view.key}
               href={view.href}
-              className={`rounded-lg border px-4 py-3 text-left transition hover:border-border-strong ${
-                view.active ? "border-accent bg-accent-soft" : "bg-surface"
-              }`}
+              style={{
+                borderRadius: "var(--radius-md)",
+                border: view.active ? "1px solid var(--amber-dim)" : "1px solid var(--border)",
+                background: view.active ? "var(--amber-bg)" : "var(--surface)",
+                padding: "0.75rem 0.875rem",
+                transition: "all 80ms ease",
+                textAlign: "left"
+              }}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-foreground">{view.label}</span>
-                {view.active ? <StatusBadge tone="success">当前</StatusBadge> : null}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <span className="text-[12px] font-[var(--font-mono)] font-medium text-text">{view.label}</span>
+                {view.active ? <StatusBadge tone="success">active</StatusBadge> : null}
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{view.description}</p>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted">{view.description}</p>
             </Link>
           ))}
         </div>
       </section>
 
       {response.viewWarnings.length > 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div style={{ border: "1px solid rgba(240,168,76,0.3)", borderRadius: "var(--radius-lg)", background: "var(--amber-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
           {response.viewWarnings.join(" ")}
         </div>
       ) : null}
-
       {response.pendingConfirmationCount > 0 && filters.status !== "pending_confirmation" ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          当前有 {response.pendingConfirmationCount} 条待确认记忆。可以直接切到“待确认队列”集中处理。
+        <div style={{ border: "1px solid rgba(240,168,76,0.3)", borderRadius: "var(--radius-lg)", background: "var(--amber-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
+          {response.pendingConfirmationCount} pending confirmation(s). Switch to the pending queue to review.
         </div>
       ) : null}
 
       <div>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <StatusBadge
-            tone={
-              response.sourceStatus.status === "healthy"
-                ? "success"
-                : response.sourceStatus.status === "partial"
-                  ? "warning"
-                  : "danger"
-            }
-          >
+        <div style={{ marginBottom: "0.5rem", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+          <StatusBadge tone={response.sourceStatus.status === "healthy" ? "success" : response.sourceStatus.status === "partial" ? "warning" : "danger"}>
             {response.sourceStatus.label}: {response.sourceStatus.status}
           </StatusBadge>
           <span>{response.viewSummary}</span>
@@ -181,7 +149,7 @@ export default async function MemoriesPage({
         {response.items.length > 0 ? (
           <MemoryTable items={response.items} />
         ) : (
-          <EmptyState title={emptyState.title} description={emptyState.description} />
+          <EmptyState title={es.title} description={es.description} />
         )}
       </div>
     </div>

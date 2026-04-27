@@ -1,5 +1,4 @@
 import React from "react";
-
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard } from "@/components/metric-card";
 import { HealthModalButton } from "@/components/health-modal";
@@ -12,8 +11,7 @@ import {
   dashboardSeverityLabel,
   dashboardSeverityTone,
   formatTimestamp,
-  sourceStatusLabel,
-  sourceStatusTone
+  sourceStatusLabel
 } from "@/lib/format";
 import { parseDashboardWindow } from "@/lib/query-params";
 
@@ -25,18 +23,10 @@ const windows = [
   { label: "24h", value: "24h" }
 ];
 
-function sourceTone(status: SourceStatus["status"]): "success" | "warning" | "danger" {
-  return sourceStatusTone(status);
-}
-
 function sourceSummary(source: SourceStatus) {
   if (source.detail) return source.detail;
   if (source.lastError) return source.lastError;
-  if (source.status === "healthy") return "最近检查正常。";
-  if (source.status === "partial") return "数据源部分可用，部分指标可能缺失。";
-  if (source.status === "misconfigured") return "配置异常，检查连接地址或凭据。";
-  if (source.status === "timeout") return "最近检查超时，当前指标可能延迟更新。";
-  return "当前数据源状态异常，部分指标可能不可用。";
+  return "Last check passed.";
 }
 
 export default async function DashboardPage({
@@ -47,178 +37,139 @@ export default async function DashboardPage({
   const params = await searchParams;
   const window = parseDashboardWindow(params);
   const [response, health] = await Promise.all([getDashboard(window), getSourceHealth()]);
-  const degradedSources = response.sourceStatus.filter((source) => source.status !== "healthy");
-  const partialSources = degradedSources.filter((source) => source.status === "partial");
-  const unavailableSources = degradedSources.filter((source) => source.status !== "partial");
+  const degraded = response.sourceStatus.filter((s) => s.status !== "healthy");
+  const partial = degraded.filter((s) => s.status === "partial");
+  const unavailable = degraded.filter((s) => s.status !== "partial");
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">看板</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            运行时与存储指标，按时间窗聚合。
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex items-center rounded-md border bg-surface p-0.5">
-            {windows.map((item) => (
-              <a
-                key={item.value}
-                href={`/dashboard?window=${item.value}`}
-                className={`rounded px-3 py-1 text-xs font-medium transition ${
-                  item.value === window
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {item.label}
-              </a>
-            ))}
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div>
+            <h1 style={{ fontSize: "1.375rem", fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--text)", letterSpacing: "-0.01em" }}>
+              Dashboard
+            </h1>
+            <p style={{ marginTop: "0.25rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+              Runtime & storage metrics · window: {window}
+            </p>
           </div>
-          <HealthModalButton health={health} />
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{
+              display: "inline-flex",
+              alignItems: "center",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              padding: "0.125rem"
+            }}>
+              {windows.map((w) => (
+                <a
+                  key={w.value}
+                  href={`/dashboard?window=${w.value}`}
+                  style={{
+                    borderRadius: "var(--radius-sm)",
+                    padding: "0.25rem 0.625rem",
+                    fontSize: "0.75rem",
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 500,
+                    color: w.value === window ? "var(--bg)" : "var(--text-muted)",
+                    background: w.value === window ? "var(--amber)" : "transparent",
+                    transition: "all 80ms ease"
+                  }}
+                >
+                  {w.label}
+                </a>
+              ))}
+            </div>
+            <HealthModalButton health={health} />
+          </div>
         </div>
       </div>
 
-      <div className="rounded-lg border bg-surface px-5 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">{response.diagnosis.title}</div>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">{response.diagnosis.summary}</p>
-          </div>
-          <StatusBadge tone={dashboardSeverityTone(response.diagnosis.severity)}>
-            {dashboardSeverityLabel(response.diagnosis.severity)} · {response.trendWindow}
-          </StatusBadge>
+      <div className="panel p-4" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">{response.diagnosis.title}</div>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted">{response.diagnosis.summary}</p>
         </div>
+        <StatusBadge tone={dashboardSeverityTone(response.diagnosis.severity)}>
+          {dashboardSeverityLabel(response.diagnosis.severity)} · {response.trendWindow}
+        </StatusBadge>
       </div>
 
-      {unavailableSources.length > 0 ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          当前有 {unavailableSources.length} 个数据源不可用或已超时，部分指标可能无法计算。
-          {` ${unavailableSources.map((source) => source.label).join("、")}。`}
+      {unavailable.length > 0 ? (
+        <div style={{ border: "1px solid rgba(248,113,113,0.3)", borderRadius: "var(--radius-lg)", background: "var(--rose-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--rose)" }}>
+          {unavailable.length} source(s) unavailable: {unavailable.map((s) => s.label).join(", ")}
+        </div>
+      ) : null}
+      {partial.length > 0 ? (
+        <div style={{ border: "1px solid rgba(240,168,76,0.3)", borderRadius: "var(--radius-lg)", background: "var(--amber-bg)", padding: "0.625rem 0.875rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--amber)" }}>
+          {partial.length} source(s) degraded: {partial.map((s) => s.label).join(", ")}
         </div>
       ) : null}
 
-      {partialSources.length > 0 ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          当前有 {partialSources.length} 个数据源只返回了部分结果，页面已按现有数据继续展示。
-          {` ${partialSources.map((source) => source.label).join("、")}。`}
-        </div>
-      ) : null}
-
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_24rem]">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <section style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "minmax(0,1fr) 22rem" }}>
+        <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
           {response.diagnosisCards.length > 0 ? (
-            response.diagnosisCards.map((card) => (
-              <DiagnosisCard key={card.key} card={card} />
-            ))
+            response.diagnosisCards.map((card) => <DiagnosisCard key={card.key} card={card} />)
           ) : (
-            <EmptyState
-              title="暂无诊断项"
-              description="当前窗口还没有足够的诊断信号。"
-              testId="dashboard-diagnosis-empty"
-              className="md:col-span-2 xl:col-span-3"
-            />
+            <EmptyState title="No diagnosis" description="Insufficient data for the selected window." style={{ gridColumn: "1 / -1" }} />
           )}
         </div>
-        <div className="rounded-lg border bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-medium text-foreground">数据源状态</div>
-            <HealthModalButton sources={response.sourceStatus} label="详情" />
+        <div className="panel p-4">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+            <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">Sources</div>
+            <HealthModalButton sources={response.sourceStatus} label="Details" />
           </div>
-          <div className="mt-3 space-y-2">
+          <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
             {response.sourceStatus.length > 0 ? (
               response.sourceStatus.map((source) => (
-                <div key={source.name} className="rounded-md border bg-surface-muted/40 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-foreground">{source.label}</div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{source.name}</div>
+                <div key={source.name} style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface-hover)", padding: "0.625rem 0.75rem" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="text-[12px] font-[var(--font-mono)] font-medium text-text truncate">{source.label}</div>
+                      <div className="mt-0.5 text-[10px] font-[var(--font-mono)] text-muted truncate">{source.name}</div>
                     </div>
-                    <StatusBadge tone={sourceTone(source.status)}>{sourceStatusLabel(source.status)}</StatusBadge>
+                    <StatusBadge tone={source.status === "healthy" ? "success" : source.status === "partial" ? "warning" : "danger"}>
+                      {sourceStatusLabel(source.status)}
+                    </StatusBadge>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                    {sourceSummary(source)}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    <span>检查 {formatTimestamp(source.lastCheckedAt || source.checkedAt)}</span>
-                    <span>响应 {source.responseTimeMs === null ? "不可用" : `${source.responseTimeMs} ms`}</span>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-muted line-clamp-2">{sourceSummary(source)}</p>
+                  <div className="mt-1.5 flex gap-x-3 text-[10px] font-[var(--font-mono)] text-muted-foreground">
+                    <span>Checked {formatTimestamp(source.lastCheckedAt || source.checkedAt)}</span>
+                    <span>Lat {source.responseTimeMs === null ? "—" : `${source.responseTimeMs}ms`}</span>
                   </div>
                 </div>
               ))
             ) : (
-              <EmptyState
-                title="暂无数据源状态"
-                description="当前窗口还没有返回 runtime 或 storage 的健康状态。"
-                testId="dashboard-source-empty"
-              />
+              <EmptyState title="No sources" description="No health data returned." />
             )}
           </div>
         </div>
       </section>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            retrieval-runtime
+      {[
+        ["Retrieval Runtime", response.retrievalMetrics],
+        ["Storage", response.storageMetrics]
+      ].map(([label, metrics]) => (
+        <section key={label} style={{ display: "grid", gap: "0.5rem" }}>
+          <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
+          <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+            {metrics.length > 0 ? (
+              metrics.map((m) => <MetricCard key={m.key} metric={m} />)
+            ) : (
+              <EmptyState title={`No ${label.toLowerCase()} metrics`} description="No data for the selected window." style={{ gridColumn: "1 / -1" }} />
+            )}
           </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {response.retrievalMetrics.length > 0 ? (
-            response.retrievalMetrics.map((metric) => (
-              <MetricCard key={metric.key} metric={metric} />
-            ))
-          ) : (
-            <EmptyState
-              title="暂无 runtime 指标"
-              description="当前窗口还没有 retrieval-runtime 指标。"
-              testId="dashboard-runtime-empty"
-              className="md:col-span-2 xl:col-span-4"
-            />
-          )}
-        </div>
-      </section>
+        </section>
+      ))}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            storage
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {response.storageMetrics.length > 0 ? (
-            response.storageMetrics.map((metric) => (
-              <MetricCard key={metric.key} metric={metric} />
-            ))
-          ) : (
-            <EmptyState
-              title="暂无 storage 指标"
-              description="当前窗口还没有 storage 指标。"
-              testId="dashboard-storage-empty"
-              className="md:col-span-2 xl:col-span-4"
-            />
-          )}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            趋势
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">Trends</div>
+        <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
           {response.trends.length > 0 ? (
-            response.trends.map((trend) => (
-              <TrendCard key={trend.key} trend={trend} />
-            ))
+            response.trends.map((t) => <TrendCard key={t.key} trend={t} />)
           ) : (
-            <EmptyState
-              title="暂无趋势"
-              description="当前窗口还没有足够的数据点生成趋势。"
-              testId="dashboard-trends-empty"
-              className="md:col-span-2"
-            />
+            <EmptyState title="No trends" description="Not enough data points for trend calculation." style={{ gridColumn: "1 / -1" }} />
           )}
         </div>
       </section>
@@ -228,19 +179,15 @@ export default async function DashboardPage({
 
 function DiagnosisCard({ card }: { card: DashboardDiagnosisCard }) {
   return (
-    <div className="rounded-lg border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-foreground">{card.title}</div>
-          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            {card.source}
-          </div>
+    <div className="panel p-4">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">{card.title}</div>
+          <div className="mt-0.5 text-[10px] font-[var(--font-mono)] tracking-[0.12em] uppercase text-muted-foreground">{card.source}</div>
         </div>
-        <StatusBadge tone={dashboardSeverityTone(card.severity)}>
-          {dashboardSeverityLabel(card.severity)}
-        </StatusBadge>
+        <StatusBadge tone={dashboardSeverityTone(card.severity)}>{dashboardSeverityLabel(card.severity)}</StatusBadge>
       </div>
-      <p className="mt-3 text-xs leading-5 text-muted-foreground">{card.summary}</p>
+      <p className="mt-2.5 text-[12px] leading-relaxed text-muted">{card.summary}</p>
     </div>
   );
 }

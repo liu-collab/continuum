@@ -5,30 +5,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
+        background: "var(--bg)",
         surface: "var(--surface)",
-        "surface-muted": "var(--surface-muted)",
-        foreground: "var(--foreground)",
-        muted: "var(--muted)",
-        "muted-foreground": "var(--muted-foreground)",
-        card: "var(--card)",
-        "card-foreground": "var(--card-foreground)",
+        "surface-hover": "var(--surface-hover)",
+        "surface-active": "var(--surface-active)",
+        foreground: "var(--text)",
+        muted: "var(--text-secondary)",
+        "muted-foreground": "var(--text-muted)",
+        card: "var(--surface)",
+        "card-foreground": "var(--text)",
         border: "var(--border)",
-        "border-strong": "var(--border-strong)",
-        accent: "var(--accent)",
-        "accent-foreground": "var(--accent-foreground)",
-        "accent-soft": "var(--accent-soft)",
-        success: "var(--success)",
-        warning: "var(--warning)",
-        danger: "var(--danger)"
+        "border-hover": "var(--border-hover)",
+        accent: "var(--amber)",
+        "accent-foreground": "#0c0e12",
+        "accent-soft": "var(--amber-bg)",
+        success: "var(--emerald)",
+        warning: "var(--amber)",
+        danger: "var(--rose)"
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(24, 24, 27, 0.04), 0 1px 3px rgba(24, 24, 27, 0.06)",
-        overlay: "0 10px 40px rgba(24, 24, 27, 0.18)"
+        soft: "var(--shadow-sm)",
+        overlay: "var(--shadow-lg)"
       },
       borderRadius: {
-        lg: "0.625rem",
-        xl: "0.75rem"
+        lg: "var(--radius-lg)",
+        xl: "0.625rem"
       }
     }
   },

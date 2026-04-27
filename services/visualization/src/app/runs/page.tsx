@@ -1,7 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
 import React from "react";
-
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -14,20 +13,9 @@ import { formatTimestamp, memoryViewModeLabel } from "@/lib/format";
 import { parseRunTraceFilters } from "@/lib/query-params";
 
 function sectionStatusTone(value: string) {
-  if (["completed", "submitted", "injected", "healthy", "ready"].includes(value)) {
-    return "success";
-  }
-
-  if (
-    ["rejected", "degraded", "empty", "no_candidates", "trimmed_to_zero", "partial"].includes(value)
-  ) {
-    return "warning";
-  }
-
-  if (["failed", "unavailable", "timeout"].includes(value)) {
-    return "danger";
-  }
-
+  if (["completed","submitted","injected","healthy","ready"].includes(value)) return "success";
+  if (["rejected","degraded","empty","no_candidates","trimmed_to_zero","partial"].includes(value)) return "warning";
+  if (["failed","unavailable","timeout"].includes(value)) return "danger";
   return "neutral";
 }
 
@@ -39,91 +27,76 @@ export default async function RunsPage({
   const params = await searchParams;
   const filters = parseRunTraceFilters(params);
   const [response, health] = await Promise.all([getRunTrace(filters), getSourceHealth()]);
-  const emptyState = describeRunTraceEmptyState(response);
-  const activeFilterCount = Object.values(filters).filter((value) => Boolean(value)).length;
+  const es = describeRunTraceEmptyState(response);
+  const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">运行</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            单轮的触发 / 召回 / 注入 / 写回。
+          <h1 style={{ fontSize: "1.375rem", fontWeight: 500, fontFamily: "var(--font-mono)", color: "var(--text)", letterSpacing: "-0.01em" }}>
+            Runs
+          </h1>
+          <p style={{ marginTop: "0.25rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+            Per-turn trigger / recall / inject / writeback traces.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterModalButton
-            activeCount={activeFilterCount}
-            title="筛选运行"
-            description="按 turn / session / trace id 过滤。"
-          >
-            <SearchForm
-              action="/runs"
-              initialValues={{
-                turn_id: filters.turnId,
-                session_id: filters.sessionId,
-                trace_id: filters.traceId
-              }}
-            >
-              <FormField label="Turn id" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
-              <FormField label="Session id" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-              <FormField label="Trace id" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem" }}>
+          <FilterModalButton activeCount={activeCount} title="Filter Runs" description="Search by turn, session, or trace id.">
+            <SearchForm action="/runs" initialValues={{ turn_id: filters.turnId, session_id: filters.sessionId, trace_id: filters.traceId }}>
+              <FormField label="Turn ID" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
+              <FormField label="Session ID" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
+              <FormField label="Trace ID" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
             </SearchForm>
           </FilterModalButton>
           <HealthModalButton health={health} />
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <section className="space-y-2">
-          <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            最近运行
-          </div>
-          <div className="space-y-2">
+      <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "20rem minmax(0,1fr)" }}>
+        <section style={{ display: "grid", gap: "0.5rem", alignContent: "start" }}>
+          <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">Recent Runs</div>
+          <div style={{ display: "grid", gap: "0.5rem" }}>
             {response.items.length > 0 ? (
               response.items.map((item) => (
                 <Link
                   key={item.traceId}
                   href={`/runs?trace_id=${encodeURIComponent(item.traceId)}` as Route}
-                  className="block rounded-lg border bg-surface p-3 transition hover:border-border-strong"
+                  className="panel p-3 transition hover:border-border-hover block"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-foreground">{item.turnId}</div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{item.traceId}</div>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="text-[12px] font-[var(--font-mono)] font-medium text-text truncate">{item.turnId}</div>
+                      <div className="mt-0.5 text-[10px] font-[var(--font-mono)] text-muted truncate">{item.traceId}</div>
                     </div>
-                    <StatusBadge tone={item.degraded ? "warning" : "success"}>
-                      {item.degraded ? "降级" : "健康"}
-                    </StatusBadge>
+                    <StatusBadge tone={item.degraded ? "warning" : "success"}>{item.degraded ? "deg" : "ok"}</StatusBadge>
                   </div>
-                  <div className="mt-2 text-xs leading-5 text-muted-foreground line-clamp-2">{item.summary}</div>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <div className="mt-1.5 text-[11px] leading-relaxed text-muted line-clamp-2">{item.summary}</div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-[var(--font-mono)] text-muted-foreground">
                     <span>{item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "—"}</span>
                     <span>{item.triggerLabel}</span>
                     <span>{item.recallOutcome}</span>
-                    <span>注入 {item.injectedCount}</span>
-                    <span>写回 {item.writeBackStatus}</span>
+                    <span>inj {item.injectedCount}</span>
+                    <span>wb {item.writeBackStatus}</span>
                   </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">{formatTimestamp(item.createdAt)}</div>
+                  <div className="mt-1 text-[10px] font-[var(--font-mono)] text-muted-foreground">{formatTimestamp(item.createdAt)}</div>
                 </Link>
               ))
             ) : (
-              <EmptyState title={emptyState.title} description={emptyState.description} />
+              <EmptyState title={es.title} description={es.description} />
             )}
           </div>
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                当前轨迹
+        <section style={{ display: "grid", gap: "0.75rem", alignContent: "start" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">Selected Trace</div>
+              <div className="mt-0.5 text-[15px] font-[var(--font-mono)] font-medium text-text">
+                {response.selectedTurn?.turn.turnId ?? "No turn selected"}
               </div>
-              <div className="mt-1 text-base font-semibold text-foreground">
-                {response.selectedTurn?.turn.turnId ?? "未选择 turn"}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {response.selectedTurn?.narrative.explanation ?? emptyState.description}
+              <p className="mt-0.5 text-[12px] font-[var(--font-mono)] text-muted">
+                {response.selectedTurn?.narrative.explanation ?? es.description}
               </p>
             </div>
             {response.selectedTurn ? (
@@ -135,71 +108,59 @@ export default async function RunsPage({
 
           {response.selectedTurn ? (
             <>
-              <div className="rounded-lg border bg-surface p-4">
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Turn
+              <div className="panel p-4">
+                <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground">Turn</div>
+                <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.375rem", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>
+                  <KV label="Trace ID" value={response.selectedTurn.turn.traceId} />
+                  <KV label="Turn ID" value={response.selectedTurn.turn.turnId} />
+                  <KV label="Phase" value={response.selectedTurn.turn.phase ?? "—"} />
+                  <KV label="Host" value={response.selectedTurn.turn.host ?? "—"} />
+                  <KV label="Session" value={response.selectedTurn.turn.sessionId ?? "—"} />
+                  <KV label="Workspace" value={response.selectedTurn.turn.workspaceId ?? "—"} />
+                  <KV label="Task" value={response.selectedTurn.turn.taskId ?? "—"} />
+                  <KV label="Thread" value={response.selectedTurn.turn.threadId ?? "—"} />
+                  <KV label="Created" value={formatTimestamp(response.selectedTurn.turn.createdAt)} />
                 </div>
-                <dl className="mt-3 grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
-                  <Row label="Trace id" value={response.selectedTurn.turn.traceId} />
-                  <Row label="Turn id" value={response.selectedTurn.turn.turnId} />
-                  <Row label="Phase" value={response.selectedTurn.turn.phase ?? "—"} />
-                  <Row label="Host" value={response.selectedTurn.turn.host ?? "—"} />
-                  <Row label="Session" value={response.selectedTurn.turn.sessionId ?? "—"} />
-                  <Row label="Workspace" value={response.selectedTurn.turn.workspaceId ?? "—"} />
-                  <Row label="Task" value={response.selectedTurn.turn.taskId ?? "—"} />
-                  <Row label="Thread" value={response.selectedTurn.turn.threadId ?? "—"} />
-                  <Row label="创建" value={formatTimestamp(response.selectedTurn.turn.createdAt)} />
-                </dl>
-                <div className="mt-3 space-y-2 border-t pt-3 text-sm">
+                <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border)", display: "grid", gap: "0.5rem", fontSize: "0.8125rem", fontFamily: "var(--font-mono)" }}>
                   <div>
-                    <div className="text-xs text-muted-foreground">输入</div>
-                    <div className="mt-0.5 text-foreground">{response.selectedTurn.turn.inputSummary ?? "—"}</div>
+                    <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-0.5">Input</div>
+                    <div className="text-text">{response.selectedTurn.turn.inputSummary ?? "—"}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">输出</div>
-                    <div className="mt-0.5 text-foreground">
-                      {response.selectedTurn.turn.assistantOutputSummary ?? "—"}
-                    </div>
+                    <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mb-0.5">Output</div>
+                    <div className="text-text">{response.selectedTurn.turn.assistantOutputSummary ?? "—"}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div style={{ display: "grid", gap: "0.5rem" }}>
                 {response.selectedTurn.phaseNarratives.map((phase) => (
-                  <div key={phase.key} className="rounded-lg border bg-surface p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="text-sm font-medium text-foreground">{phase.title}</div>
+                  <div key={phase.key} className="panel p-4">
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                      <div className="text-[13px] font-[var(--font-mono)] font-medium text-text">{phase.title}</div>
                       <StatusBadge tone="neutral">{phase.key}</StatusBadge>
                     </div>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{phase.summary}</p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-muted">{phase.summary}</p>
                     {phase.details.length > 0 ? (
-                      <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {phase.details.map((detail, index) => (
-                          <li key={`${phase.key}-${index}`}>· {detail}</li>
-                        ))}
+                      <ul style={{ marginTop: "0.5rem", display: "grid", gap: "0.125rem", fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+                        {phase.details.map((d, i) => <li key={i}>· {d}</li>)}
                       </ul>
                     ) : null}
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-lg border bg-surface p-4">
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  依赖快照
-                </div>
-                <div className="mt-3 grid gap-2 md:grid-cols-3">
-                  {response.selectedTurn.dependencyStatus.map((dependency) => (
-                    <div key={dependency.name} className="rounded-md border bg-surface-muted/40 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-sm font-medium text-foreground">{dependency.label}</div>
-                        <StatusBadge tone={sectionStatusTone(dependency.status)}>{dependency.status}</StatusBadge>
+              <div className="panel p-4">
+                <div className="text-[10px] font-[var(--font-mono)] uppercase tracking-[0.16em] text-muted-foreground mb-3">Dependencies</div>
+                <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
+                  {response.selectedTurn.dependencyStatus.map((dep) => (
+                    <div key={dep.name} style={{ borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface-hover)", padding: "0.625rem 0.75rem" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                        <div className="text-[12px] font-[var(--font-mono)] font-medium text-text">{dep.label}</div>
+                        <StatusBadge tone={sectionStatusTone(dep.status)}>{dep.status}</StatusBadge>
                       </div>
-                      <div className="mt-1 text-xs leading-5 text-muted-foreground line-clamp-2">
-                        {dependency.detail}
-                      </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        {formatTimestamp(dependency.checkedAt)}
-                      </div>
+                      <div className="mt-0.5 text-[11px] leading-relaxed text-muted line-clamp-2">{dep.detail}</div>
+                      <div className="mt-0.5 text-[10px] font-[var(--font-mono)] text-muted-foreground">{formatTimestamp(dep.checkedAt)}</div>
                     </div>
                   ))}
                 </div>
@@ -212,11 +173,11 @@ export default async function RunsPage({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function KV({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 border-b border-dashed py-1 last:border-0">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="truncate text-right text-sm text-foreground">{value}</dd>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", borderBottom: "1px dashed var(--border)", paddingBottom: "0.25rem" }}>
+      <span style={{ color: "var(--text-muted)", fontSize: "0.6875rem" }}>{label}</span>
+      <span style={{ color: "var(--text)", textAlign: "right" }} className="truncate">{value}</span>
     </div>
   );
 }

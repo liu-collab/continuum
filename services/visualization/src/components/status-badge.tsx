@@ -1,20 +1,28 @@
+"use client";
+
 import React, { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type StatusBadgeProps = {
   tone: "neutral" | "success" | "warning" | "danger";
   children: ReactNode;
+  className?: string;
 };
 
-export function StatusBadge({ tone, children }: StatusBadgeProps) {
+const styles: Record<StatusBadgeProps["tone"], string> = {
+  neutral: "bg-surface-hover text-muted border border-border",
+  success: "bg-emerald-bg text-emerald border border-emerald-900/30",
+  warning: "bg-amber-bg text-amber border border-amber-900/30",
+  danger: "bg-rose-bg text-rose border border-rose-900/30"
+};
+
+export function StatusBadge({ tone, children, className }: StatusBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
-        tone === "neutral" && "bg-surface-muted text-muted-foreground",
-        tone === "success" && "bg-emerald-50 text-emerald-700",
-        tone === "warning" && "bg-amber-50 text-amber-700",
-        tone === "danger" && "bg-rose-50 text-rose-700"
+        "inline-flex items-center rounded-[3px] px-1.5 py-0.5 text-[11px] font-[var(--font-mono)] font-medium",
+        styles[tone],
+        className
       )}
     >
       {children}

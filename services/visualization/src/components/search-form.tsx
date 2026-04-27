@@ -11,62 +11,74 @@ type SearchFormProps = {
   onSubmitted?(): void;
 };
 
+const btnStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.25rem",
+  borderRadius: "var(--radius-md)",
+  padding: "0.375rem 0.75rem",
+  fontSize: "0.8125rem",
+  fontFamily: "var(--font-mono)",
+  fontWeight: 500,
+  cursor: "pointer",
+  transition: "all 80ms ease",
+  border: "1px solid var(--border)",
+  background: "transparent",
+  color: "var(--text-secondary)"
+};
+
 export function SearchForm({ action, initialValues = {}, children, onSubmitted }: SearchFormProps) {
   const router = useRouter();
   const [formState, setFormState] = useState<Record<string, string>>(
     Object.fromEntries(
-      Object.entries(initialValues).map(([key, value]) => [key, value ?? ""])
+      Object.entries(initialValues).map(([k, v]) => [k, v ?? ""])
     )
   );
 
   function updateValue(name: string, value: string) {
-    setFormState((current) => ({
-      ...current,
-      [name]: value
-    }));
+    setFormState((cur) => ({ ...cur, [name]: value }));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = new URLSearchParams();
-
-    for (const [key, value] of Object.entries(formState)) {
-      if (value.trim().length > 0) {
-        query.set(key, value.trim());
-      }
+    for (const [k, v] of Object.entries(formState)) {
+      if (v.trim().length > 0) query.set(k, v.trim());
     }
-
     router.push((query.toString() ? `${action}?${query.toString()}` : action) as Route);
     onSubmitted?.();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form onSubmit={handleSubmit} style={{ display: "grid", gap: "1rem" }}>
       <div
-        className="grid gap-3 sm:grid-cols-2"
+        style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
         onChange={(event) => {
-          const target = event.target as HTMLInputElement | HTMLSelectElement;
-
-          if (target.name) {
-            updateValue(target.name, target.value);
-          }
+          const t = event.target as HTMLInputElement | HTMLSelectElement;
+          if (t.name) updateValue(t.name, t.value);
         }}
       >
         {children}
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
         <button
           type="button"
-          onClick={() => {
-            router.push(action);
-            onSubmitted?.();
-          }}
-          className="btn-outline"
+          onClick={() => { router.push(action); onSubmitted?.(); }}
+          style={btnStyle}
         >
-          清空
+          Clear
         </button>
-        <button type="submit" className="btn-primary">
-          应用
+        <button
+          type="submit"
+          style={{
+            ...btnStyle,
+            background: "var(--amber)",
+            color: "var(--bg)",
+            border: "none"
+          }}
+        >
+          Apply
         </button>
       </div>
     </form>

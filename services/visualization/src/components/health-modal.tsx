@@ -2,7 +2,6 @@
 
 import { HeartPulse } from "lucide-react";
 import { useState } from "react";
-
 import { Modal } from "@/components/modal";
 import { SourceHealthPanel } from "@/components/source-health-panel";
 import type { ServiceHealthResponse, SourceStatus } from "@/lib/contracts";
@@ -13,50 +12,52 @@ type HealthModalButtonProps =
 
 type HealthTone = "neutral" | "success" | "warning" | "danger";
 
-function healthTone(health: ServiceHealthResponse | undefined, sources: SourceStatus[] | undefined) {
-  if (health) {
-    if (health.readiness.status === "ready") return "success";
-    return "warning";
-  }
-  if (!sources || sources.length === 0) {
-    return "neutral";
-  }
-  if (sources?.some((item) => ["unavailable", "timeout", "misconfigured"].includes(item.status))) {
-    return "danger";
-  }
-  if (sources?.some((item) => item.status === "partial")) return "warning";
+function computeTone(health?: ServiceHealthResponse, sources?: SourceStatus[]): HealthTone {
+  if (health) return health.readiness.status === "ready" ? "success" : "warning";
+  if (!sources?.length) return "neutral";
+  if (sources.some((s) => ["unavailable","timeout","misconfigured"].includes(s.status))) return "danger";
+  if (sources.some((s) => s.status === "partial")) return "warning";
   return "success";
 }
 
-const toneDot: Record<HealthTone, string> = {
-  neutral: "bg-zinc-400",
-  success: "bg-emerald-500",
-  warning: "bg-amber-500",
-  danger: "bg-rose-500"
+const dotColor: Record<HealthTone, string> = {
+  neutral: "#5c6072",
+  success: "#4ade80",
+  warning: "#f0a84c",
+  danger: "#f87171"
 };
 
 export function HealthModalButton(props: HealthModalButtonProps) {
   const [open, setOpen] = useState(false);
-  const tone = healthTone(props.health, props.sources);
+  const tone = computeTone(props.health, props.sources);
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="btn-outline">
-        <span className={`h-2 w-2 rounded-full ${toneDot[tone]}`} />
-        <HeartPulse className="h-4 w-4" />
-        {props.label ?? "健康"}
-      </button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={props.label ?? "服务与依赖健康"}
-        size="xl"
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          borderRadius: "var(--radius-md)",
+          padding: "0.375rem 0.75rem",
+          fontSize: "0.8125rem",
+          fontFamily: "var(--font-mono)",
+          fontWeight: 500,
+          color: "var(--text-muted)",
+          background: "transparent",
+          border: "1px solid var(--border)",
+          cursor: "pointer",
+          transition: "all 80ms ease"
+        }}
       >
-        {props.health ? (
-          <SourceHealthPanel health={props.health} />
-        ) : (
-          <SourceHealthPanel sources={props.sources!} />
-        )}
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor[tone] }} />
+        <HeartPulse style={{ width: 16, height: 16, opacity: 0.6 }} />
+        {props.label ?? "Status"}
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Service Health" size="xl">
+        {props.health ? <SourceHealthPanel health={props.health} /> : <SourceHealthPanel sources={props.sources!} />}
       </Modal>
     </>
   );
