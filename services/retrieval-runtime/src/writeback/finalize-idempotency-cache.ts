@@ -1,64 +1,56 @@
 import type { AppConfig } from "../config.js";
-import type { FinalizeTurnResponse } from "../shared/types.js";
-
-interface CacheEntry {
-  response: FinalizeTurnResponse;
-  expires_at: number;
-}
+import { SmallCache } from "../shared/small-cache.js";
+import type { FinalizeIdempotencyCacheStats, FinalizeTurnResponse } from "../shared/types.js";
 
 export class FinalizeIdempotencyCache {
-  private readonly entries = new Map<string, CacheEntry>();
+  private readonly cache: SmallCache<string, FinalizeTurnResponse>;
+  private hits = 0;
+  private misses = 0;
 
   constructor(
     private readonly config: AppConfig,
-  ) {}
+  ) {
+    this.cache = new SmallCache({
+      ttlMs: config.FINALIZE_IDEMPOTENCY_TTL_MS,
+      maxEntries: config.FINALIZE_IDEMPOTENCY_MAX_ENTRIES,
+    });
+  }
 
   async get(key: string): Promise<FinalizeTurnResponse | null> {
-    const entry = this.entries.get(key);
-    if (!entry) {
-      return null;
+    const cached = this.cache.get(key);
+    if (cached) {
+      this.hits += 1;
+      return cached;
     }
 
-    if (entry.expires_at <= Date.now()) {
-      this.entries.delete(key);
-      return null;
-    }
-
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry.response;
+    this.misses += 1;
+    return null;
   }
 
   async set(key: string, response: FinalizeTurnResponse): Promise<void> {
-    this.pruneExpired();
-    this.entries.delete(key);
-    this.entries.set(key, {
-      response,
-      expires_at: Date.now() + this.config.FINALIZE_IDEMPOTENCY_TTL_MS,
-    });
-    this.enforceMaxEntries();
+    this.cache.set(key, response);
   }
 
-  private pruneExpired() {
-    const now = Date.now();
-    for (const [key, entry] of this.entries.entries()) {
-      if (entry.expires_at <= now) {
-        this.entries.delete(key);
-      }
-    }
+  clear(): void {
+    this.cache.clear();
+    this.hits = 0;
+    this.misses = 0;
+  }
+
+  stats(): FinalizeIdempotencyCacheStats {
+    const total = this.hits + this.misses;
+    return {
+      enabled: true,
+      entries: this.cache.size(),
+      max_entries: this.config.FINALIZE_IDEMPOTENCY_MAX_ENTRIES,
+      ttl_ms: this.config.FINALIZE_IDEMPOTENCY_TTL_MS,
+      hits: this.hits,
+      misses: this.misses,
+      hit_rate: total === 0 ? 0 : this.hits / total,
+    };
   }
 
   ttlMs(): number {
     return this.config.FINALIZE_IDEMPOTENCY_TTL_MS;
-  }
-
-  private enforceMaxEntries() {
-    while (this.entries.size > this.config.FINALIZE_IDEMPOTENCY_MAX_ENTRIES) {
-      const oldestKey = this.entries.keys().next().value;
-      if (!oldestKey) {
-        return;
-      }
-      this.entries.delete(oldestKey);
-    }
   }
 }

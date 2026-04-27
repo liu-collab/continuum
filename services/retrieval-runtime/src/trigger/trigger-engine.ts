@@ -1,10 +1,23 @@
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { IntentAnalyzer, RecallSearchPlanner } from "../memory-orchestrator/index.js";
+import type {
+  IntentAnalyzer,
+  RecallSearchPlanner,
+} from "../memory-orchestrator/index.js";
 import type { EmbeddingsClient } from "../query/embeddings-client.js";
 import type { ReadModelRepository } from "../query/read-model-repository.js";
-import { phaseTriggerReason, runtimeMessages, scopePlanReason } from "../shared/messages.js";
-import type { MemoryMode, MemoryType, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
+import {
+  phaseTriggerReason,
+  runtimeMessages,
+  scopePlanReason,
+} from "../shared/messages.js";
+import type {
+  MemoryMode,
+  MemoryType,
+  ScopeType,
+  TriggerContext,
+  TriggerDecision,
+} from "../shared/types.js";
 import type { Logger } from "pino";
 import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
 
@@ -39,7 +52,10 @@ function scopePlanByPhase(
   switch (phase) {
     case "session_start":
       return {
-        scopes: memoryMode === "workspace_plus_global" ? ["workspace", "user"] : ["workspace"],
+        scopes:
+          memoryMode === "workspace_plus_global"
+            ? ["workspace", "user"]
+            : ["workspace"],
         reason: scopePlanReason(phase, memoryMode, hasTask),
       };
     case "task_start":
@@ -76,6 +92,28 @@ function shouldSkipForShortInput(text: string): boolean {
   return normalized.length < 8 && !matchesHistoryReference(normalized);
 }
 
+function hasPreferenceOrTaskStateSignal(text: string): boolean {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  const signalPatterns = [
+    /按(之前|先前|上次|原来|原先|原来的)?(约定|要求|风格|习惯|规则|偏好)/,
+    /(继续|接着|延续)(推进|做|写|改|处理|上次|之前)/,
+    /默认(用|按照|保持)/,
+    /风格(要求|约定|保持|来)/,
+    /偏好/,
+    /继续(这个|这个任务|这个方案|这个方向|这个模块)/,
+    /下一步(怎么做|做什么|是什么)/,
+    /按照?(之前|上次)的(方案|计划|约定|结论|方向)/,
+    /按(边界|约束|规则)来/,
+    /会话存储|记忆面板|权限网关/,
+  ];
+
+  return signalPatterns.some((pattern) => pattern.test(normalized));
+}
+
 export class TriggerEngine {
   constructor(
     private readonly config: AppConfig,
@@ -89,7 +127,11 @@ export class TriggerEngine {
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
     const memoryMode = context.memory_mode ?? "workspace_plus_global";
-    const scopePlan = scopePlanByPhase(context.phase, Boolean(context.task_id), memoryMode);
+    const scopePlan = scopePlanByPhase(
+      context.phase,
+      Boolean(context.task_id),
+      memoryMode,
+    );
 
     if (context.phase === "after_response") {
       return {
@@ -141,7 +183,8 @@ export class TriggerEngine {
               ? intentResult.value.memory_types
               : requestedMemoryTypes,
           requestedScopes:
-            intentResult.value.suggested_scopes && intentResult.value.suggested_scopes.length > 0
+            intentResult.value.suggested_scopes &&
+            intentResult.value.suggested_scopes.length > 0
               ? dedupeScopes(intentResult.value.suggested_scopes)
               : scopePlan.scopes,
           reason: intentResult.value.reason,
@@ -157,7 +200,8 @@ export class TriggerEngine {
           confidence: 0,
           needsMemory: true,
           degraded: true,
-          degradationReason: intentResult.error?.code ?? "memory_llm_unavailable",
+          degradationReason:
+            intentResult.error?.code ?? "memory_llm_unavailable",
         };
       }
     }
@@ -176,6 +220,27 @@ export class TriggerEngine {
             intent_plan_degradation_reason: intentDecision.degradationReason,
           }
         : base;
+    const preservePreferenceRecall =
+      context.phase === "before_response" &&
+      intentDecision?.needsMemory === false &&
+      hasPreferenceOrTaskStateSignal(context.current_input);
+    const intentScopesForSearch = preservePreferenceRecall
+      ? scopePlan.scopes
+      : intentDecision?.needsMemory === false
+        ? scopePlan.scopes
+        : (intentDecision?.requestedScopes ?? scopePlan.scopes);
+    const intentTypesForSearch = preservePreferenceRecall
+      ? [
+          ...new Set([
+            "fact_preference" as const,
+            "task_state" as const,
+            ...requestedMemoryTypes,
+            ...(intentDecision?.requestedMemoryTypes ?? []),
+          ]),
+        ]
+      : intentDecision?.needsMemory === false
+        ? requestedMemoryTypes
+        : (intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes);
 
     if (context.phase !== "before_response") {
       return {
@@ -199,9 +264,9 @@ export class TriggerEngine {
         hit: true,
         trigger_type: "history_reference",
         trigger_reason: runtimeMessages.historyReferenceReason,
-        requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
+        requested_memory_types: intentTypesForSearch,
         memory_mode: memoryMode,
-        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+        requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
@@ -216,8 +281,8 @@ export class TriggerEngine {
           this.recallSearchPlanner!.plan({
             context,
             memory_mode: memoryMode,
-            requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
-            requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
+            requested_scopes: intentScopesForSearch,
+            requested_memory_types: intentTypesForSearch,
             semantic_score: undefined,
             semantic_threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
           }),
@@ -231,7 +296,7 @@ export class TriggerEngine {
             trigger_reason: llmDecision.value.reason,
             requested_memory_types: [],
             memory_mode: memoryMode,
-            requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+            requested_scopes: intentScopesForSearch,
             scope_reason: scopePlan.reason,
             importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
             cooldown_applied: false,
@@ -253,19 +318,20 @@ export class TriggerEngine {
         return {
           hit: true,
           trigger_type: "llm_recall_judge",
-          trigger_reason: llmDecision.value.reason || runtimeMessages.llmCandidateScanReason,
-          requested_memory_types:
-            llmDecision.value.requested_memory_types?.length
-              ? llmDecision.value.requested_memory_types
-              : intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
+          trigger_reason:
+            llmDecision.value.reason || runtimeMessages.llmCandidateScanReason,
+          requested_memory_types: llmDecision.value.requested_memory_types
+            ?.length
+            ? llmDecision.value.requested_memory_types
+            : intentTypesForSearch,
           memory_mode: memoryMode,
-          requested_scopes:
-            llmDecision.value.requested_scopes?.length
-              ? dedupeScopes(llmDecision.value.requested_scopes)
-              : intentDecision?.requestedScopes ?? scopePlan.scopes,
+          requested_scopes: llmDecision.value.requested_scopes?.length
+            ? dedupeScopes(llmDecision.value.requested_scopes)
+            : intentScopesForSearch,
           scope_reason: scopePlan.reason,
           importance_threshold:
-            llmDecision.value.importance_threshold ?? this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+            llmDecision.value.importance_threshold ??
+            this.config.IMPORTANCE_THRESHOLD_DEFAULT,
           cooldown_applied: false,
           query_hint: llmDecision.value.query_hint,
           candidate_limit: llmDecision.value.candidate_limit,
@@ -296,8 +362,8 @@ export class TriggerEngine {
         ...(await this.semanticFallbackDecision(
           context,
           memoryMode,
-          intentDecision?.requestedScopes ?? scopePlan.scopes,
-          intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
+          intentScopesForSearch,
+          intentTypesForSearch,
           scopePlan.reason,
         )),
         intent_reason: intentDecision?.reason,
@@ -310,7 +376,8 @@ export class TriggerEngine {
         intent_plan_degradation_reason: intentDecision?.degradationReason,
         search_plan_attempted: true,
         search_plan_degraded: true,
-        search_plan_degradation_reason: llmDecision.error?.code ?? "memory_llm_unavailable",
+        search_plan_degradation_reason:
+          llmDecision.error?.code ?? "memory_llm_unavailable",
       };
     }
 
@@ -321,14 +388,18 @@ export class TriggerEngine {
         trigger_reason: runtimeMessages.shortInputSkipReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
-        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+        requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
       });
     }
 
-    const semanticScore = await this.semanticFallbackScore(context, memoryMode, scopePlan.scopes);
+    const semanticScore = await this.semanticFallbackScore(
+      context,
+      memoryMode,
+      scopePlan.scopes,
+    );
     if (semanticScore.degraded) {
       return withIntent({
         hit: false,
@@ -336,7 +407,7 @@ export class TriggerEngine {
         trigger_reason: runtimeMessages.semanticDegradedReason,
         requested_memory_types: [],
         memory_mode: memoryMode,
-        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+        requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
         cooldown_applied: false,
@@ -352,9 +423,9 @@ export class TriggerEngine {
         hit: true,
         trigger_type: "semantic_fallback",
         trigger_reason: runtimeMessages.semanticFallbackReason,
-        requested_memory_types: intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes,
+        requested_memory_types: intentTypesForSearch,
         memory_mode: memoryMode,
-        requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+        requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
         importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
         cooldown_applied: false,
@@ -368,7 +439,7 @@ export class TriggerEngine {
       trigger_reason: runtimeMessages.noTriggerReason,
       requested_memory_types: [],
       memory_mode: memoryMode,
-      requested_scopes: intentDecision?.requestedScopes ?? scopePlan.scopes,
+      requested_scopes: intentScopesForSearch,
       scope_reason: scopePlan.reason,
       importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
       cooldown_applied: false,
@@ -397,7 +468,11 @@ export class TriggerEngine {
       };
     }
 
-    const semanticScore = await this.semanticFallbackScore(context, memoryMode, requestedScopes);
+    const semanticScore = await this.semanticFallbackScore(
+      context,
+      memoryMode,
+      requestedScopes,
+    );
     if (semanticScore.degraded) {
       return {
         hit: false,
@@ -457,7 +532,11 @@ export class TriggerEngine {
   }> {
     const queryText = normalizeText(context.current_input);
     if (!queryText) {
-      return { score: 0, threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD, degraded: false };
+      return {
+        score: 0,
+        threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        degraded: false,
+      };
     }
 
     const embeddingResult = await this.dependencyGuard.run(
@@ -511,7 +590,11 @@ export class TriggerEngine {
     const samples = sampleResult.value ?? [];
 
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) {
-      return { score: 0, threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD, degraded: false };
+      return {
+        score: 0,
+        threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        degraded: false,
+      };
     }
 
     let best = 0;
@@ -540,7 +623,10 @@ export class TriggerEngine {
     }
 
     const sortedScores = scores.sort((left, right) => right - left);
-    const median = sortedScores.length === 0 ? 0 : sortedScores[Math.floor(sortedScores.length / 2)] ?? 0;
+    const median =
+      sortedScores.length === 0
+        ? 0
+        : (sortedScores[Math.floor(sortedScores.length / 2)] ?? 0);
     const threshold = Math.max(
       median + SEMANTIC_TRIGGER_MEDIAN_DELTA,
       this.config.SEMANTIC_TRIGGER_THRESHOLD * SEMANTIC_TRIGGER_FLOOR_RATIO,

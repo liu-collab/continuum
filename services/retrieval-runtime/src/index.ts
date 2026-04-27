@@ -16,7 +16,7 @@ import { HttpMemoryWritebackPlanner } from "./memory-orchestrator/writeback/plan
 import { FallbackRuntimeRepository } from "./observability/fallback-runtime-repository.js";
 import { InMemoryRuntimeRepository } from "./observability/in-memory-runtime-repository.js";
 import { PostgresRuntimeRepository } from "./observability/postgres-runtime-repository.js";
-import { HttpEmbeddingsClient } from "./query/embeddings-client.js";
+import { CachedEmbeddingsClient, HttpEmbeddingsClient } from "./query/embeddings-client.js";
 import { PostgresReadModelRepository } from "./query/postgres-read-model-repository.js";
 import { QueryEngine } from "./query/query-engine.js";
 import { RetrievalRuntimeService } from "./runtime-service.js";
@@ -44,7 +44,7 @@ async function main() {
   await repository.initialize?.();
   const dependencyGuard = new DependencyGuard(repository, logger);
   const readModelRepository = new PostgresReadModelRepository(config);
-  const embeddingsClient = new HttpEmbeddingsClient(config);
+  const embeddingsClient = new CachedEmbeddingsClient(new HttpEmbeddingsClient(config), config);
   const storageClient = new HttpStorageWritebackClient(config);
   const activeWritebackLlmConfig = resolveRuntimeWritebackLlmConfig(config);
   const writebackPlanner = hasCompleteRuntimeWritebackLlmConfig(config)

@@ -461,6 +461,32 @@ export interface ObserveRunsResponse {
   dependency_status: DependencyStatusSnapshot;
 }
 
+export interface EmbeddingCacheStats {
+  enabled: boolean;
+  entries: number;
+  max_entries: number;
+  ttl_ms: number;
+  hits: number;
+  misses: number;
+  hit_rate: number;
+}
+
+export interface FinalizeIdempotencyCacheStats {
+  enabled: boolean;
+  entries: number;
+  max_entries: number;
+  ttl_ms: number;
+  hits: number;
+  misses: number;
+  hit_rate: number;
+}
+
+export interface CacheClearResponse {
+  cleared: string[];
+  embedding_cache?: EmbeddingCacheStats;
+  finalize_idempotency_cache?: FinalizeIdempotencyCacheStats;
+}
+
 export interface ObserveMetricsResponse {
   trigger_rate: number;
   recall_hit_rate: number;
@@ -476,6 +502,8 @@ export interface ObserveMetricsResponse {
   outbox_pending_count: number;
   outbox_dead_letter_count: number;
   outbox_submit_latency_ms: number;
+  embedding_cache?: EmbeddingCacheStats;
+  finalize_idempotency_cache?: FinalizeIdempotencyCacheStats;
 }
 
 export interface MemoryRecordSnapshot {

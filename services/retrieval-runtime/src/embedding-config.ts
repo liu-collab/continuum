@@ -1,4 +1,10 @@
-import fs from "node:fs";
+import {
+  type ConfigFieldReaders,
+  type ConfigSourceFieldMap,
+  normalizeHttpConfigUrl,
+  readLayeredMappedJsonConfigFields,
+  readOptionalConfigString,
+} from "./config-file.js";
 
 type EmbeddingConfigSource = {
   EMBEDDING_BASE_URL?: string;
@@ -13,63 +19,25 @@ export type RuntimeEmbeddingConfig = {
   apiKey?: string;
 };
 
-function readNonEmpty(value: string | undefined) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
+const embeddingConfigReaders: ConfigFieldReaders<RuntimeEmbeddingConfig> = {
+  baseUrl: normalizeHttpConfigUrl,
+  model: readOptionalConfigString,
+  apiKey: readOptionalConfigString,
+};
 
-function normalizeUrl(value: string | undefined) {
-  if (!value) {
-    return undefined;
-  }
-
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return undefined;
-    }
-    return parsed.toString().replace(/\/+$/, "");
-  } catch {
-    return undefined;
-  }
-}
-
-function readManagedEmbeddingConfig(filePath: string | undefined): RuntimeEmbeddingConfig {
-  if (!filePath || !fs.existsSync(filePath)) {
-    return {};
-  }
-
-  try {
-    const payload = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
-      baseUrl?: string;
-      model?: string;
-      apiKey?: string;
-    };
-
-    const baseUrl = normalizeUrl(readNonEmpty(payload.baseUrl));
-    const model = readNonEmpty(payload.model);
-    const apiKey = readNonEmpty(payload.apiKey);
-
-    return {
-      ...(baseUrl ? { baseUrl } : {}),
-      ...(model ? { model } : {}),
-      ...(apiKey ? { apiKey } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
+const embeddingConfigFieldMap: ConfigSourceFieldMap<RuntimeEmbeddingConfig, EmbeddingConfigSource> = {
+  baseUrl: "EMBEDDING_BASE_URL",
+  model: "EMBEDDING_MODEL",
+  apiKey: "EMBEDDING_API_KEY",
+};
 
 export function resolveRuntimeEmbeddingConfig(source: EmbeddingConfigSource): RuntimeEmbeddingConfig {
-  const envBaseUrl = normalizeUrl(readNonEmpty(source.EMBEDDING_BASE_URL));
-  const envModel = readNonEmpty(source.EMBEDDING_MODEL);
-  const envApiKey = readNonEmpty(source.EMBEDDING_API_KEY);
-
-  return {
-    ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
-    ...(envModel ? { model: envModel } : {}),
-    ...(envApiKey ? { apiKey: envApiKey } : {}),
-    ...readManagedEmbeddingConfig(readNonEmpty(source.CONTINUUM_EMBEDDING_CONFIG_PATH)),
-  };
+  return readLayeredMappedJsonConfigFields<RuntimeEmbeddingConfig, EmbeddingConfigSource>(
+    source,
+    embeddingConfigFieldMap,
+    source.CONTINUUM_EMBEDDING_CONFIG_PATH,
+    embeddingConfigReaders,
+  );
 }
 
 export function hasCompleteRuntimeEmbeddingConfig(source: EmbeddingConfigSource) {

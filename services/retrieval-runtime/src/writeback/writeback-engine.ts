@@ -6,7 +6,7 @@ import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { QualityAssessor, WritebackPlanner } from "../memory-orchestrator/index.js";
 import type { FinalizeTurnInput, MemoryType, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
-import { jaccardOverlap, normalizeText } from "../shared/utils.js";
+import { jaccardOverlap, normalizeText, tokenizeForOverlap } from "../shared/utils.js";
 import type {
   LlmExtractionCandidate,
   LlmRefineItem,
@@ -88,6 +88,7 @@ const STABLE_PREFERENCE_HINTS = [
 ];
 
 const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
+const MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION = "memory-writeback-extract-v1";
 const MEMORY_WRITEBACK_SCHEMA_VERSION = "memory-writeback-schema-v1";
 function summarizeObservationText(value: string, maxLength = 220) {
   const normalized = normalizeText(value);
@@ -318,6 +319,28 @@ function uniqueCandidates(candidates: WriteBackCandidate[]): WriteBackCandidate[
   });
 }
 
+function hasSufficientInputOverlap(summary: string, sourceText: string, threshold: number): boolean {
+  if (threshold <= 0 || jaccardOverlap(summary, sourceText) >= threshold) {
+    return true;
+  }
+
+  const summaryTokens = new Set(tokenizeForOverlap(summary));
+  const sourceTokens = new Set(tokenizeForOverlap(sourceText));
+  if (summaryTokens.size === 0 || sourceTokens.size === 0) {
+    return false;
+  }
+
+  let intersection = 0;
+  for (const token of summaryTokens) {
+    if (sourceTokens.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const containment = intersection / Math.min(summaryTokens.size, sourceTokens.size);
+  return containment >= threshold;
+}
+
 function withOriginTrace(
   draft: CandidateDraft,
   input: FinalizeTurnInput,
@@ -385,40 +408,42 @@ export class WritebackEngine {
     }
 
     try {
-      const refined = await this.writebackPlanner.refine({
+      const extracted = await this.writebackPlanner.extract({
         current_input: input.current_input,
         assistant_output: input.assistant_output,
         tool_results_summary: input.tool_results_summary,
         task_id: input.task_id,
-        rule_candidates: ruleResult.drafts.map((draft, index) => toRuleDigest(draft, index)),
       });
-      const merged = this.applyRefineResult(input, ruleResult.drafts, refined);
+      const llmDrafts = extracted.candidates.map((candidate) => this.toDraftFromLlm(input, candidate));
+      const refineResult = await this.refineRuleCandidates(input, ruleResult.drafts);
+      const allDrafts = [...llmDrafts, ...refineResult.drafts];
       const result = await this.applyQualityAssessment(
         input,
         this.postProcess(
           input,
-          merged.drafts,
-          [...ruleResult.filtered_reasons, ...merged.filtered_reasons],
+          allDrafts,
+          [...ruleResult.filtered_reasons, ...refineResult.filtered_reasons],
         ),
       );
       return {
         ...result,
         plan_observation: {
           input_summary: summarizeObservationText(
-            `current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}`,
+            `current_input=${input.current_input}; llm_candidates=${extracted.candidates.length}; rule_candidates=${ruleResult.drafts.length}`,
           ),
           output_summary: summarizeObservationText(
             `candidates=${result.candidates.length}; filtered=${result.filtered_count}; reasons=${result.filtered_reasons.join(",")}`,
           ),
-          prompt_version: MEMORY_WRITEBACK_PROMPT_VERSION,
+          prompt_version: MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION,
           schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
-          degraded: false,
+          degraded: refineResult.degraded,
+          degradation_reason: refineResult.degradation_reason,
           result_state: result.candidates.length > 0 ? "planned" : "skipped",
           duration_ms: Date.now() - startedAt,
         },
       };
     } catch (error) {
-      this.logger?.warn?.({ err: error }, "memory llm refine failed, using rule output");
+      this.logger?.warn?.({ err: error }, "memory llm extraction failed, using rule output");
       const result = await this.applyQualityAssessment(
         input,
         this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons),
@@ -446,6 +471,42 @@ export class WritebackEngine {
   private extractByRules(input: FinalizeTurnInput): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
     const rules = this.runRulesOnly(input);
     return this.postProcess(input, rules.drafts, rules.filtered_reasons);
+  }
+
+  private async refineRuleCandidates(
+    input: FinalizeTurnInput,
+    ruleDrafts: CandidateDraft[],
+  ): Promise<{ drafts: CandidateDraft[]; filtered_reasons: string[]; degraded: boolean; degradation_reason?: string }> {
+    if (!this.writebackPlanner || ruleDrafts.length === 0) {
+      return {
+        drafts: ruleDrafts,
+        filtered_reasons: [],
+        degraded: false,
+      };
+    }
+
+    try {
+      const refined = await this.writebackPlanner.refine({
+        current_input: input.current_input,
+        assistant_output: input.assistant_output,
+        tool_results_summary: input.tool_results_summary,
+        task_id: input.task_id,
+        rule_candidates: ruleDrafts.map((draft, index) => toRuleDigest(draft, index)),
+      });
+      return {
+        ...this.applyRefineResult(input, ruleDrafts, refined),
+        degraded: false,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "memory_llm_refine_unavailable";
+      this.logger?.warn?.({ err: error }, "memory llm refine failed, keeping extracted and rule output");
+      return {
+        drafts: ruleDrafts,
+        filtered_reasons: [`llm_refine_failed:${reason}`],
+        degraded: true,
+        degradation_reason: reason,
+      };
+    }
   }
 
   private runRulesOnly(input: FinalizeTurnInput): { drafts: CandidateDraft[]; filtered_reasons: string[] } {
@@ -590,11 +651,12 @@ export class WritebackEngine {
 
         const extractionMethod = candidate.source.extraction_method;
         if (extractionMethod === "llm") {
-          const overlap = jaccardOverlap(
+          const hasInputOverlap = hasSufficientInputOverlap(
             candidate.summary,
             [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" "),
+            this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD,
           );
-          if (overlap < this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD) {
+          if (!hasInputOverlap) {
             filteredReasons.push(`low_input_overlap:${candidate.candidate_type}`);
             return false;
           }

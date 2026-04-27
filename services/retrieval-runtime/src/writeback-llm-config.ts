@@ -1,4 +1,11 @@
-import fs from "node:fs";
+import {
+  type ConfigFieldReaders,
+  type ConfigSourceFieldMap,
+  normalizeHttpConfigUrl,
+  readLayeredMappedJsonConfigFields,
+  readOptionalConfigString,
+  readOptionalConfigPositiveInteger,
+} from "./config-file.js";
 
 type WritebackLlmConfigSource = {
   MEMORY_LLM_BASE_URL?: string;
@@ -23,49 +30,13 @@ export type RuntimeWritebackLlmConfig = {
   maxTokens?: number | null;
 };
 
-function readNonEmpty(value: string | undefined) {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function normalizeUrl(value: string | undefined) {
-  if (!value) {
+function normalizeProtocol(value: unknown): RuntimeWritebackLlmProtocol | undefined {
+  const configValue = readOptionalConfigString(value);
+  if (!configValue) {
     return undefined;
   }
 
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return undefined;
-    }
-    return parsed.toString().replace(/\/+$/, "");
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeTimeout(value: number | string | undefined) {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return Math.trunc(value);
-  }
-
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return undefined;
-  }
-
-  return Math.trunc(parsed);
-}
-
-function normalizeProtocol(value: string | undefined): RuntimeWritebackLlmProtocol | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const normalized = value.trim().toLowerCase();
+  const normalized = configValue.toLowerCase();
   if (normalized === "anthropic" || normalized === "openai-compatible") {
     return normalized;
   }
@@ -73,12 +44,13 @@ function normalizeProtocol(value: string | undefined): RuntimeWritebackLlmProtoc
   return undefined;
 }
 
-function normalizeEffort(value: string | undefined): RuntimeWritebackLlmConfig["effort"] | undefined {
-  if (!value) {
+function normalizeEffort(value: unknown): RuntimeWritebackLlmConfig["effort"] | undefined {
+  const configValue = readOptionalConfigString(value);
+  if (!configValue) {
     return undefined;
   }
 
-  const normalized = value.trim().toLowerCase();
+  const normalized = configValue.toLowerCase();
   if (
     normalized === "low"
     || normalized === "medium"
@@ -92,65 +64,38 @@ function normalizeEffort(value: string | undefined): RuntimeWritebackLlmConfig["
   return undefined;
 }
 
-function readManagedWritebackLlmConfig(filePath: string | undefined): RuntimeWritebackLlmConfig {
-  if (!filePath || !fs.existsSync(filePath)) {
-    return {};
-  }
+const writebackLlmConfigReaders: ConfigFieldReaders<RuntimeWritebackLlmConfig> = {
+  baseUrl: normalizeHttpConfigUrl,
+  model: readOptionalConfigString,
+  apiKey: readOptionalConfigString,
+  timeoutMs: readOptionalConfigPositiveInteger,
+  protocol: normalizeProtocol,
+  effort: (value) => value === null ? null : normalizeEffort(value),
+  maxTokens: (value) => value === null ? null : readOptionalConfigPositiveInteger(value),
+};
 
-  try {
-    const payload = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
-      baseUrl?: string;
-      model?: string;
-      apiKey?: string;
-      timeoutMs?: number | string;
-      protocol?: string;
-      effort?: string | null;
-      maxTokens?: number | string | null;
-    };
-
-    const baseUrl = normalizeUrl(readNonEmpty(payload.baseUrl));
-    const model = readNonEmpty(payload.model);
-    const apiKey = readNonEmpty(payload.apiKey);
-    const timeoutMs = normalizeTimeout(payload.timeoutMs);
-    const protocol = normalizeProtocol(readNonEmpty(payload.protocol));
-    const effort = payload.effort === null ? null : normalizeEffort(readNonEmpty(payload.effort ?? undefined));
-    const maxTokens = payload.maxTokens === null ? null : normalizeTimeout(payload.maxTokens ?? undefined);
-
-    return {
-      ...(baseUrl ? { baseUrl } : {}),
-      ...(model ? { model } : {}),
-      ...(apiKey ? { apiKey } : {}),
-      ...(timeoutMs ? { timeoutMs } : {}),
-      ...(protocol ? { protocol } : {}),
-      ...(effort !== undefined ? { effort } : {}),
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
+const writebackLlmConfigFieldMap: ConfigSourceFieldMap<
+  RuntimeWritebackLlmConfig,
+  WritebackLlmConfigSource
+> = {
+  baseUrl: "MEMORY_LLM_BASE_URL",
+  model: "MEMORY_LLM_MODEL",
+  apiKey: "MEMORY_LLM_API_KEY",
+  timeoutMs: "MEMORY_LLM_TIMEOUT_MS",
+  protocol: "MEMORY_LLM_PROTOCOL",
+  effort: "MEMORY_LLM_EFFORT",
+  maxTokens: "MEMORY_LLM_MAX_TOKENS",
+};
 
 export function resolveRuntimeWritebackLlmConfig(
   source: WritebackLlmConfigSource,
 ): RuntimeWritebackLlmConfig {
-  const envBaseUrl = normalizeUrl(readNonEmpty(source.MEMORY_LLM_BASE_URL));
-  const envModel = readNonEmpty(source.MEMORY_LLM_MODEL);
-  const envApiKey = readNonEmpty(source.MEMORY_LLM_API_KEY);
-  const envTimeoutMs = normalizeTimeout(source.MEMORY_LLM_TIMEOUT_MS);
-  const envProtocol = normalizeProtocol(readNonEmpty(source.MEMORY_LLM_PROTOCOL));
-  const envEffort = normalizeEffort(readNonEmpty(source.MEMORY_LLM_EFFORT));
-  const envMaxTokens = normalizeTimeout(source.MEMORY_LLM_MAX_TOKENS);
-
-  return {
-    ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
-    ...(envModel ? { model: envModel } : {}),
-    ...(envApiKey ? { apiKey: envApiKey } : {}),
-    ...(envTimeoutMs ? { timeoutMs: envTimeoutMs } : {}),
-    ...(envProtocol ? { protocol: envProtocol } : {}),
-    ...(envEffort ? { effort: envEffort } : {}),
-    ...(envMaxTokens ? { maxTokens: envMaxTokens } : {}),
-    ...readManagedWritebackLlmConfig(readNonEmpty(source.CONTINUUM_MEMORY_LLM_CONFIG_PATH)),
-  };
+  return readLayeredMappedJsonConfigFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(
+    source,
+    writebackLlmConfigFieldMap,
+    source.CONTINUUM_MEMORY_LLM_CONFIG_PATH,
+    writebackLlmConfigReaders,
+  );
 }
 
 export function hasCompleteRuntimeWritebackLlmConfig(source: WritebackLlmConfigSource) {

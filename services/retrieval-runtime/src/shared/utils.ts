@@ -33,6 +33,17 @@ export function normalizeText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
+// Keep Unicode letters and digits, but normalize accents and separators into a stable slug.
+export function slugify(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/\p{Mark}+/gu, "")
+    .toLowerCase()
+    .replace(/['\u2018\u2019]+/gu, "")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function truncateFromTail(text: string | undefined, maxLength: number): string {
   const normalized = normalizeText(text ?? "");
   if (normalized.length <= maxLength) {

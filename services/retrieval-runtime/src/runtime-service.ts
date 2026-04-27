@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import type { AppConfig } from "./config.js";
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
 import { buildMemoryPacket } from "./injection/packet-builder.js";
+import { updateLogContext } from "./logger.js";
 import type {
   MemoryOrchestrator,
   RecallEffectivenessInputMemory,
@@ -15,6 +16,7 @@ import { nowIso } from "./shared/utils.js";
 import { matchesHistoryReference } from "./shared/utils.js";
 import type {
   CandidateMemory,
+  CacheClearResponse,
   DependencyStatus,
   DependencyStatusSnapshot,
   FinalizeIdempotencyRecord,
@@ -36,7 +38,7 @@ import type {
   TriggerContext,
   WriteProjectionStatusSnapshot,
 } from "./shared/types.js";
-import type { EmbeddingsClient } from "./query/embeddings-client.js";
+import type { EmbeddingCacheProvider, EmbeddingsClient } from "./query/embeddings-client.js";
 import { applyOpenConflictPenalty, compareRankedCandidates } from "./query/query-engine.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
@@ -193,6 +195,13 @@ function shouldEnqueueUrgentMaintenance(input: {
   return null;
 }
 
+function hasEmbeddingCacheProvider(client: EmbeddingsClient): client is EmbeddingsClient & EmbeddingCacheProvider {
+  return (
+    typeof (client as Partial<EmbeddingCacheProvider>).stats === "function" &&
+    typeof (client as Partial<EmbeddingCacheProvider>).clear === "function"
+  );
+}
+
 async function resolveTraceId(
   repository: RuntimeRepository,
   input: {
@@ -233,6 +242,7 @@ export class RetrievalRuntimeService {
   private readonly logger: Logger;
   private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache;
   private readonly embeddingTimeoutMs: number;
+  private readonly memoryLlmTimeoutMs: number;
   private readonly memoryOrchestrator?: MemoryOrchestrator;
   private readonly maintenanceWorker?: WritebackMaintenanceWorker;
   private readonly storageClient?: StorageWritebackClient;
@@ -312,6 +322,7 @@ export class RetrievalRuntimeService {
         | undefined;
       this.embeddingTimeoutMs =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number" ? embeddingTimeoutMsOrMemoryOrchestrator : 800;
+      this.memoryLlmTimeoutMs = configOrTriggerEngine.MEMORY_LLM_TIMEOUT_MS;
       this.memoryOrchestrator =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
           ? memoryOrchestratorOrMaintenanceWorker as MemoryOrchestrator | undefined
@@ -341,6 +352,7 @@ export class RetrievalRuntimeService {
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? finalizeIdempotencyCacheOrEmbeddingTimeoutMs
         : 800;
+    this.memoryLlmTimeoutMs = this.embeddingTimeoutMs;
     this.memoryOrchestrator =
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? embeddingTimeoutMsOrMemoryOrchestrator as MemoryOrchestrator | undefined
@@ -423,6 +435,7 @@ export class RetrievalRuntimeService {
       turn_id: normalizedContext.turn_id,
       phase: normalizedContext.phase,
     });
+    updateLogContext({ trace_id: traceId });
     const turnStartedAt = Date.now();
     await this.repository.recordTurn({
       trace_id: traceId,
@@ -602,7 +615,7 @@ export class RetrievalRuntimeService {
       const injectionPlanStartedAt = Date.now();
       const planResult = await this.dependencyGuard.run(
         "memory_llm",
-        this.embeddingTimeoutMs,
+        this.memoryLlmTimeoutMs,
         () =>
           recallInjectionPlanner.plan({
             context: normalizedContext,
@@ -827,11 +840,13 @@ export class RetrievalRuntimeService {
     const finalizeCacheKey = buildFinalizeCacheKey(normalizedInput);
     const cached = await this.finalizeIdempotencyCache?.get(finalizeCacheKey);
     if (cached) {
+      updateLogContext({ trace_id: cached.trace_id });
       return cached;
     }
     const persisted = await this.repository.findFinalizeIdempotencyRecord(finalizeCacheKey);
     if (persisted) {
       await this.finalizeIdempotencyCache?.set(finalizeCacheKey, persisted.response);
+      updateLogContext({ trace_id: persisted.response.trace_id });
       return persisted.response;
     }
     const traceId = await resolveTraceId(this.repository, {
@@ -839,6 +854,7 @@ export class RetrievalRuntimeService {
       turn_id: normalizedInput.turn_id,
       phase: "after_response",
     });
+    updateLogContext({ trace_id: traceId });
     const startedAt = Date.now();
 
     await this.repository.recordTurn({
@@ -1053,10 +1069,7 @@ export class RetrievalRuntimeService {
   }
 
   async checkMemoryLlm(): Promise<DependencyStatus> {
-    const healthCheck =
-      this.memoryOrchestrator?.recall?.search?.healthCheck
-      ?? this.memoryOrchestrator?.recall?.injection?.healthCheck
-      ?? this.memoryOrchestrator?.writeback?.healthCheck;
+    const healthCheck = this.resolveMemoryLlmHealthCheck();
     if (!healthCheck) {
       const status: DependencyStatus = {
         name: "memory_llm",
@@ -1095,12 +1108,69 @@ export class RetrievalRuntimeService {
     }
   }
 
+  private resolveMemoryLlmHealthCheck(): (() => Promise<void> | undefined) | undefined {
+    const recallSearch = this.memoryOrchestrator?.recall?.search;
+    if (recallSearch?.healthCheck) {
+      return () => recallSearch.healthCheck?.();
+    }
+
+    const recallInjection = this.memoryOrchestrator?.recall?.injection;
+    if (recallInjection?.healthCheck) {
+      return () => recallInjection.healthCheck?.();
+    }
+
+    const writeback = this.memoryOrchestrator?.writeback;
+    if (writeback?.healthCheck) {
+      return () => writeback.healthCheck?.();
+    }
+
+    return undefined;
+  }
+
   async getRuns(filters?: ObserveRunsFilters) {
     return this.repository.getRuns(filters);
   }
 
   async getMetrics() {
-    return this.repository.getMetrics();
+    const metrics = await this.repository.getMetrics();
+    return {
+      ...metrics,
+      ...(hasEmbeddingCacheProvider(this.embeddingsClient)
+        ? { embedding_cache: this.embeddingsClient.stats() }
+        : {}),
+      ...(this.finalizeIdempotencyCache
+        ? { finalize_idempotency_cache: this.finalizeIdempotencyCache.stats() }
+        : {}),
+    };
+  }
+
+  async clearCaches(input?: {
+    embedding_cache?: boolean;
+    finalize_idempotency_cache?: boolean;
+  }): Promise<CacheClearResponse> {
+    const clearEmbeddingCache = input?.embedding_cache ?? true;
+    const clearFinalizeIdempotencyCache = input?.finalize_idempotency_cache ?? true;
+    const cleared: string[] = [];
+
+    if (clearEmbeddingCache && hasEmbeddingCacheProvider(this.embeddingsClient)) {
+      this.embeddingsClient.clear();
+      cleared.push("embedding_cache");
+    }
+
+    if (clearFinalizeIdempotencyCache && this.finalizeIdempotencyCache) {
+      this.finalizeIdempotencyCache.clear();
+      cleared.push("finalize_idempotency_cache");
+    }
+
+    return {
+      cleared,
+      ...(hasEmbeddingCacheProvider(this.embeddingsClient)
+        ? { embedding_cache: this.embeddingsClient.stats() }
+        : {}),
+      ...(this.finalizeIdempotencyCache
+        ? { finalize_idempotency_cache: this.finalizeIdempotencyCache.stats() }
+        : {}),
+    };
   }
 
   private queryResultCanBePlanned(candidates: CandidateMemory[]) {
@@ -1311,7 +1381,7 @@ export class RetrievalRuntimeService {
 
     const planResult = await this.dependencyGuard.run(
       "memory_llm",
-      this.embeddingTimeoutMs,
+      this.memoryLlmTimeoutMs,
       () =>
         recommender.recommend({
           current_context: {
@@ -1628,7 +1698,7 @@ export class RetrievalRuntimeService {
     const startedAt = Date.now();
     const planResult = await this.dependencyGuard.run(
       "memory_llm",
-      this.embeddingTimeoutMs,
+      this.memoryLlmTimeoutMs,
       () =>
         evaluator.evaluate({
           injected_memories: context.memories,

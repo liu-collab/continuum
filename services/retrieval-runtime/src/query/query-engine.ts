@@ -277,9 +277,9 @@ export class QueryEngine {
 
     this.logger.debug(
       {
-        trace: context.turn_id,
-        candidateCount: ranked.length,
-        durationMs: Date.now() - startedAt,
+        turn_id: context.turn_id,
+        candidate_count: ranked.length,
+        duration_ms: Date.now() - startedAt,
       },
       "query engine ranked candidates",
     );
