@@ -62,6 +62,7 @@
 | `PORT` | `3002` | 否 | HTTP 监听端口 |
 | `HOST` | `0.0.0.0` | 否 | HTTP 监听地址 |
 | `LOG_LEVEL` | `info` | 否 | 日志级别 |
+| `LOG_SAMPLE_RATE` | `1` | 否 | 低等级日志采样率，范围 `0` 到 `1` |
 | `DATABASE_URL` | - | 是 | PostgreSQL 连接串 |
 | `READ_MODEL_SCHEMA` | `storage_shared_v1` | 否 | 共享读模型 schema |
 | `READ_MODEL_TABLE` | `memory_read_model_v1` | 否 | 共享读模型表名 |

@@ -25,7 +25,7 @@
 - `status` 要同时看 `storage`、`retrieval-runtime`、`visualization`、数据库
 - `ui` 要优先连接已经运行中的可视化页面，必要时再启动包内产物
 - `claude install` 要安装宿主插件
-- `codex` 要编排 `runtime + mcp + codex`
+- `codex` 要编排 `runtime + codex proxy + codex`，记忆由平台强制注入，不依赖 Codex 主动调用 MCP
 
 如果继续把这些命令放在某一个服务包里，就会产生两个问题：
 

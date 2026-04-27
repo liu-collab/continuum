@@ -22,3 +22,6 @@ output/imagegen/
 .mna
 .tocodex
 AGENTS.md
+design
+services/retrieval-runtime/docs/real-user-experience-eval/
+services/retrieval-runtime/docs/real-user-experience-host-eval*/

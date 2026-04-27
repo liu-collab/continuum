@@ -209,8 +209,8 @@ continuum codex use
 
 说明：
 
-- `install` 会把记忆 `MCP server` 注册到 `Codex`
-- `codex` 或 `codex use` 会用桥接方式启动已经接好 Continuum 的 `Codex`
+- `install` 只保留为兼容入口；Codex 现在不需要注册记忆 `MCP server`
+- `codex` 或 `codex use` 会用桥接方式启动已经接好 Continuum 的 `Codex`，记忆由平台强制注入
 
 #### `Claude Code`
 
@@ -288,8 +288,8 @@ claude --plugin-dir "<plugin-dir>"
 | `continuum mna token` | 输出 `MNA token` |
 | `continuum claude install` | 安装 `Claude plugin` |
 | `continuum claude uninstall` | 卸载 `Claude plugin` |
-| `continuum codex install` | 安装 `Codex MCP server` |
-| `continuum codex uninstall` | 卸载 `Codex MCP server` |
+| `continuum codex install` | Codex 强制注入入口说明，不注册 MCP |
+| `continuum codex uninstall` | 清理历史 `Codex MCP server` 注册 |
 | `continuum codex use` | 用桥接方式启动 `Codex` |
 | `continuum codex` | 等价于 `continuum codex use` |
 | `continuum runtime` | 直接启动打包后的 `retrieval-runtime` |
@@ -358,7 +358,7 @@ claude --plugin-dir "<plugin-dir>"
 |---|---|
 | `continuum claude install` | `--plugin-dir`、`--package`、`--force` |
 | `continuum claude uninstall` | `--plugin-dir` |
-| `continuum codex install` | `--runtime-url`、`--codex-home`、`--server-name`、`--force` |
+| `continuum codex install` | `--runtime-url`、`--codex-home` |
 | `continuum codex uninstall` | `--codex-home`、`--server-name` |
 | `continuum codex` / `continuum codex use` | `--runtime-url`、`--client-command`、`--app-server-command`、`--ensure-runtime`、`--codex-home` |
 
@@ -384,9 +384,13 @@ claude --plugin-dir "<plugin-dir>"
 | `npm run migrate` | 执行迁移 |
 | `npm run build` | 构建 |
 | `npm run start` | 启动构建产物 |
-| `npm run test` | 跑测试 |
+| `npm run test` | 跑普通单测 |
+| `npm run test:e2e` | 跑宿主桥接 E2E |
 | `npm run test:memory-orchestrator-eval` | 跑真实评估测试 |
+| `npm run test:real-user-experience` | 跑真实用户体验样本测试 |
 | `npm run eval:memory-orchestrator-real` | 跑真实评估 CLI |
+| `npm run eval:real-user-experience` | 跑真实用户体验 A/B 评测 |
+| `npm run eval:real-user-experience:host` | 跑真实宿主用户体验 A/B 评测 |
 
 #### `memory-native-agent`
 
@@ -616,6 +620,72 @@ skills:
 locale:
 ```
 
+一个工作区 `.mna/config.yaml` 示例：
+
+```yaml
+runtime:
+  base_url: http://127.0.0.1:3002
+  request_timeout_ms: 30000
+  finalize_timeout_ms: 10000
+
+provider:
+  kind: openai-compatible
+  model: gpt-4.1-mini
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  temperature: 0.2
+
+memory:
+  mode: workspace_plus_global
+  user_id: null
+
+mcp:
+  servers:
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+      request_timeout_ms: 30000
+      reconnect_on_failure: true
+
+tools:
+  approval_mode: confirm
+  max_output_chars: 8192
+  shell_exec:
+    enabled: true
+    timeout_ms: 30000
+    deny_patterns:
+      - git reset --hard
+
+cli:
+  system_prompt_file: null
+
+context:
+  max_tokens: null
+  reserve_tokens: 4096
+  compaction_strategy: truncate
+
+planning:
+  plan_mode: advisory
+
+logging:
+  level: info
+  format: json
+
+streaming:
+  flush_chars: 32
+  flush_interval_ms: 30
+
+skills:
+  enabled: true
+  auto_discovery: true
+  discovery_paths:
+    - .mna/skills
+    - .claude/skills
+
+locale: zh-CN
+```
+
 #### `runtime`
 
 - `runtime.base_url`
@@ -790,6 +860,7 @@ my-skill/
 | `HOST` | `0.0.0.0` | 监听地址 |
 | `PORT` | `3002` | 端口 |
 | `LOG_LEVEL` | `info` | 日志级别 |
+| `LOG_SAMPLE_RATE` | `1` | 低等级日志采样率，范围 `0` 到 `1` |
 | `READ_MODEL_SCHEMA` | `storage_shared_v1` | 共享读模型 schema |
 | `READ_MODEL_TABLE` | `memory_read_model_v1` | 共享读模型表 |
 | `RUNTIME_SCHEMA` | `runtime_private` | runtime 私有 schema |
@@ -902,7 +973,7 @@ my-skill/
 
 `Codex` 侧主要有两层配置：
 
-1. `Codex MCP server` 安装信息
+1. 平台强制注入启动入口
 2. 桥接启动时的运行参数
 
 安装：
@@ -914,8 +985,6 @@ continuum codex install --runtime-url http://127.0.0.1:3002
 可选项：
 
 - `--codex-home`
-- `--server-name`
-- `--force`
 
 使用：
 
@@ -927,7 +996,7 @@ continuum codex --runtime-url http://127.0.0.1:3002
 
 - `MEMORY_RUNTIME_BASE_URL`
 - `MEMORY_RUNTIME_START_COMMAND`
-- `MEMORY_MCP_COMMAND`
+- `MEMORY_MCP_COMMAND`：Codex 默认值为 `off`，主链路走平台强制注入；只有调试 MCP server 时才需要显式打开
 - `MEMORY_CODEX_CLIENT_COMMAND`
 - `CODEX_APP_SERVER_COMMAND`
 
