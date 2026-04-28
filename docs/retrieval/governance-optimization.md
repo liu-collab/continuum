@@ -53,6 +53,8 @@ private buildLifecycleActions(
 
 ## 优化二：Evolution Planner 产出经过 Quality Assess
 
+**状态：已完成**
+
 ### 问题
 
 `planEvolution` 直接将 LLM 产出的候选写入存储，跳过了 writeback 管线中的 Quality Assess：

@@ -28,6 +28,8 @@ import type {
   ConflictStatus,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
+  SubmittedWriteBackJob,
+  WriteBackCandidate,
   WriteProjectionStatusSnapshot,
 } from "../src/shared/types.js";
 import type { EvolutionPlanner, RelationDiscoverer } from "../src/memory-orchestrator/types.js";
@@ -281,17 +283,44 @@ class StubRelationDiscoverer implements RelationDiscoverer {
 }
 
 class StubEvolutionPlanner implements EvolutionPlanner {
+  constructor(private readonly confidence = 0.9) {}
+
   async plan(input: { source_records: MemoryRecordSnapshot[] }) {
     return {
       evolution_type: "knowledge_extraction" as const,
       source_records: input.source_records.map((record) => record.id),
       extracted_knowledge: {
         pattern: "用户长期偏好：默认中文输出",
-        confidence: 0.9,
+        confidence: this.confidence,
         evidence_count: input.source_records.length,
         suggested_scope: "workspace" as const,
         suggested_importance: 4,
       },
+    };
+  }
+}
+
+class StubWritebackEngine {
+  public candidates: WriteBackCandidate[] = [];
+  public filteredReasons: string[] = [];
+
+  constructor(private readonly storage: RecordingStorageClient) {}
+
+  async assessAndSubmitCandidates(candidates: WriteBackCandidate[]) {
+    const accepted = candidates.filter((candidate) => {
+      if (candidate.confidence < 0.7) {
+        this.filteredReasons.push(`quality_blocked:${candidate.candidate_type}`);
+        return false;
+      }
+      return true;
+    });
+    this.candidates.push(...accepted);
+    const submittedJobs = accepted.length > 0 ? await this.storage.submitCandidates(accepted) : [];
+    return {
+      ok: true as const,
+      submitted_jobs: submittedJobs as SubmittedWriteBackJob[],
+      candidates: accepted,
+      filtered_reasons: this.filteredReasons,
     };
   }
 }
@@ -576,6 +605,7 @@ describe("WritebackMaintenanceWorker", () => {
     const seed = makeRecord("seed-evo", "默认中文输出，回答尽量简短直接", 4);
     const related = makeRecord("rel-evo", "回答尽量简短直接，默认中文输出", 4);
     const storage = new RecordingStorageClient([seed], [related]);
+    const writebackEngine = new StubWritebackEngine(storage);
     const planner = new StubPlanner(() => ({ actions: [] }));
     const repository = new InMemoryRuntimeRepository();
     const logger = pino({ enabled: false });
@@ -590,6 +620,7 @@ describe("WritebackMaintenanceWorker", () => {
       logger,
       undefined,
       new StubEvolutionPlanner(),
+      writebackEngine,
     );
 
     await worker.runOnce({ workspaceId, forced: true });
@@ -597,6 +628,34 @@ describe("WritebackMaintenanceWorker", () => {
     expect(storage.writebackCandidates).toHaveLength(1);
     const candidates = storage.writebackCandidates[0] as Array<{ summary: string }>;
     expect(candidates[0]?.summary).toBe("用户长期偏好：默认中文输出");
+  });
+
+  it("filters low quality evolved knowledge before storage submission", async () => {
+    const seed = makeRecord("seed-evo-low", "默认中文输出，回答尽量简短直接", 4);
+    const related = makeRecord("rel-evo-low", "回答尽量简短直接，默认中文输出", 4);
+    const storage = new RecordingStorageClient([seed], [related]);
+    const writebackEngine = new StubWritebackEngine(storage);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig(),
+      logger,
+      undefined,
+      new StubEvolutionPlanner(0.4),
+      writebackEngine,
+    );
+
+    await worker.runOnce({ workspaceId, forced: true });
+
+    expect(writebackEngine.filteredReasons).toEqual(["quality_blocked:episodic"]);
+    expect(storage.writebackCandidates).toHaveLength(0);
   });
 
   it("rejects concurrent manual runs for the same workspace", async () => {

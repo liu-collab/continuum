@@ -165,17 +165,6 @@ async function main() {
     : undefined;
   const finalizeIdempotencyCache = new FinalizeIdempotencyCache(config);
   const outboxFlusher = new WritebackOutboxFlusher(repository, storageClient, config, logger);
-  const maintenanceWorker = new WritebackMaintenanceWorker(
-    repository,
-    storageClient,
-    maintenancePlanner,
-    governanceVerifier,
-    dependencyGuard,
-    config,
-    logger,
-    relationDiscoverer,
-    evolutionPlanner,
-  );
   const crossReferenceEngine = new EmbeddingCrossReferenceEngine(
     embeddingsClient,
     {
@@ -201,6 +190,27 @@ async function main() {
     governanceVerifier,
     evolutionPlanner,
   });
+  const writebackEngine = new WritebackEngine(
+    config,
+    storageClient,
+    dependencyGuard,
+    memoryOrchestrator?.writeback,
+    memoryOrchestrator?.quality,
+    logger,
+    crossReferenceEngine,
+  );
+  const maintenanceWorker = new WritebackMaintenanceWorker(
+    repository,
+    storageClient,
+    maintenancePlanner,
+    governanceVerifier,
+    dependencyGuard,
+    config,
+    logger,
+    relationDiscoverer,
+    evolutionPlanner,
+    writebackEngine,
+  );
 
   const runtimeService = new RetrievalRuntimeService(
     config,
@@ -216,15 +226,7 @@ async function main() {
     new QueryEngine(config, readModelRepository, embeddingsClient, dependencyGuard, logger),
     embeddingsClient,
     new InjectionEngine(config),
-    new WritebackEngine(
-      config,
-      storageClient,
-      dependencyGuard,
-      memoryOrchestrator?.writeback,
-      memoryOrchestrator?.quality,
-      logger,
-      crossReferenceEngine,
-    ),
+    writebackEngine,
     repository,
     dependencyGuard,
     logger,

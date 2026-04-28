@@ -24,6 +24,7 @@ import type {
 } from "../shared/types.js";
 import { jaccardOverlap, nowIso } from "../shared/utils.js";
 import type { StorageWritebackClient } from "./storage-client.js";
+import type { WritebackEngine } from "./writeback-engine.js";
 
 const GOVERNANCE_PLAN_PROMPT_VERSION = "memory-governance-plan-v1";
 const GOVERNANCE_PLAN_SCHEMA_VERSION = "memory-governance-schema-v1";
@@ -87,6 +88,7 @@ export class WritebackMaintenanceWorker {
     private readonly logger: Logger,
     private readonly relationDiscoverer?: RelationDiscoverer,
     private readonly evolutionPlanner?: EvolutionPlanner,
+    private readonly writebackEngine?: Pick<WritebackEngine, "assessAndSubmitCandidates">,
   ) {}
 
   start(): void {
@@ -504,38 +506,46 @@ export class WritebackMaintenanceWorker {
 
     const evolutionPlan = planResult.value;
 
-    if (evolutionPlan.extracted_knowledge) {
+    if (evolutionPlan.extracted_knowledge && this.writebackEngine) {
       const knowledge = evolutionPlan.extracted_knowledge;
       const candidate_type = knowledge.suggested_scope === "user" ? "fact_preference" : "episodic";
-      await this.runStorage((signal) =>
-        this.storageClient.submitCandidates(
-          [
-            {
-              workspace_id: workspaceId,
-              user_id: knowledge.suggested_scope === "user" ? sourceRecords[0]?.user_id ?? null : null,
-              task_id: null,
-              session_id: null,
-              candidate_type,
-              scope: knowledge.suggested_scope,
-              summary: knowledge.pattern,
-              details: {
-                evolution_type: evolutionPlan.evolution_type,
-                evidence_count: knowledge.evidence_count,
-                source_record_ids: evolutionPlan.source_records,
-              },
-              importance: knowledge.suggested_importance,
-              confidence: knowledge.confidence,
-              write_reason: `memory evolution ${evolutionPlan.evolution_type}`,
-              source: {
-                source_type: "memory_evolution",
-                source_ref: traceId,
-                service_name: "retrieval-runtime",
-              },
-              idempotency_key: `${traceId}:${evolutionPlan.evolution_type}:${knowledge.pattern}`,
+      await this.writebackEngine.assessAndSubmitCandidates(
+        [
+          {
+            workspace_id: workspaceId,
+            user_id: knowledge.suggested_scope === "user" ? sourceRecords[0]?.user_id ?? null : null,
+            task_id: null,
+            session_id: null,
+            candidate_type,
+            scope: knowledge.suggested_scope,
+            summary: knowledge.pattern,
+            details: {
+              evolution_type: evolutionPlan.evolution_type,
+              evidence_count: knowledge.evidence_count,
+              source_record_ids: evolutionPlan.source_records,
             },
-          ],
-          signal,
-        ),
+            importance: knowledge.suggested_importance,
+            confidence: knowledge.confidence,
+            write_reason: `memory evolution ${evolutionPlan.evolution_type}`,
+            source: {
+              source_type: "memory_evolution",
+              source_ref: traceId,
+              service_name: "retrieval-runtime",
+              extraction_method: "llm",
+            },
+            idempotency_key: `${traceId}:${evolutionPlan.evolution_type}:${knowledge.pattern}`,
+          },
+        ],
+        {
+          host: "memory_native_agent",
+          workspace_id: workspaceId,
+          user_id: this.config.WRITEBACK_MAINTENANCE_ACTOR_ID,
+          session_id: `maintenance:${workspaceId}`,
+          current_input: `governance maintenance evolution for workspace ${workspaceId}`,
+          assistant_output: knowledge.pattern,
+          turn_id: traceId,
+          memory_mode: "workspace_plus_global",
+        },
       );
     }
 

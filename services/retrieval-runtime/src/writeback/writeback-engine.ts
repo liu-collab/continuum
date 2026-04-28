@@ -1031,6 +1031,43 @@ export class WritebackEngine {
     };
   }
 
+  async assessAndSubmitCandidates(
+    candidates: WriteBackCandidate[],
+    input: FinalizeTurnInput,
+  ): Promise<
+    | { ok: true; submitted_jobs: SubmittedWriteBackJob[]; candidates: WriteBackCandidate[]; filtered_reasons: string[] }
+    | {
+        ok: false;
+        submitted_jobs: SubmittedWriteBackJob[];
+        candidates: WriteBackCandidate[];
+        filtered_reasons: string[];
+        degradation_reason: string;
+      }
+  > {
+    const assessed = await this.applyQualityAssessment(input, {
+      candidates,
+      filtered_count: 0,
+      filtered_reasons: [],
+      scope_reasons: [],
+    });
+    const submitted = await this.submitCandidates(assessed.candidates);
+
+    return submitted.ok
+      ? {
+          ok: true,
+          submitted_jobs: submitted.submitted_jobs,
+          candidates: assessed.candidates,
+          filtered_reasons: assessed.filtered_reasons,
+        }
+      : {
+          ok: false,
+          submitted_jobs: submitted.submitted_jobs,
+          candidates: assessed.candidates,
+          filtered_reasons: assessed.filtered_reasons,
+          degradation_reason: submitted.degradation_reason,
+        };
+  }
+
   async patchRecord(
     recordId: string,
     payload: Parameters<StorageWritebackClient["patchRecord"]>[1],
