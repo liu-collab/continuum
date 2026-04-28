@@ -266,6 +266,15 @@ function buildDeveloperInjectionItems(text) {
   ];
 }
 
+const CODEX_MEMORY_USAGE_INSTRUCTIONS = [
+  "你会先收到一段平台已经准备好的长期记忆上下文。",
+  "回答时优先使用这段已提供的上下文来判断是否存在相关历史信息。",
+  "只有当上下文给出可用事实时，才将其中对当前问题直接有用的信息自然融入回答。",
+  "当上下文明确无相关历史记忆，或上下文准备失败时，直接按普通问题正常回答。",
+  "不要解释长期记忆上下文的来源，不要输出 MCP、tool、memory_search 等排查信息。",
+  "最终只保留对用户有用的答案内容。",
+].join("\n");
+
 function memoryRecordIdsFromResult(result) {
   const records = result?.injection_block?.memory_records;
   if (!Array.isArray(records)) {
@@ -447,7 +456,7 @@ function startServer() {
 
       state.turnRequestById.set(request.id ?? `turn-start-${Date.now()}`, turnState);
 
-      const injectionTexts = [];
+      const injectionTexts = [CODEX_MEMORY_USAGE_INSTRUCTIONS];
       const deliveryPrepareResults = [];
       if (!state.initializedThreadIds.has(threadId)) {
         try {
