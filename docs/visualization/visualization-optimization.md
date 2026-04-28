@@ -414,6 +414,8 @@ export function createCache<T>(ttlMs: number) {
 
 ## 优化九：共享组件拆分 `"use client"` 标记
 
+**状态：已完成**
+
 ### 问题
 
 `src/components/` 下 12 个文件全部标记 `"use client"`，包括 `EmptyState`、`ErrorState`、`FormField`、`BrandMark` 这些纯展示组件。它们被打进客户端 bundle，增加 JS 体积。

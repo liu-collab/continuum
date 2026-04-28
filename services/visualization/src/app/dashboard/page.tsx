@@ -168,7 +168,7 @@ export default async function DashboardPage({
           {response.retrievalMetrics.length > 0 ? (
             <div className="stat-grid">
               {response.retrievalMetrics.map((metric) => (
-                <MetricCard key={metric.key} metric={metric} />
+                <MetricCard key={metric.key} metric={metric} locale={locale} />
               ))}
             </div>
           ) : (
@@ -190,7 +190,7 @@ export default async function DashboardPage({
           {response.storageMetrics.length > 0 ? (
             <div className="stat-grid">
               {response.storageMetrics.map((metric) => (
-                <MetricCard key={metric.key} metric={metric} />
+                <MetricCard key={metric.key} metric={metric} locale={locale} />
               ))}
             </div>
           ) : (
@@ -212,7 +212,7 @@ export default async function DashboardPage({
           {response.trends.length > 0 ? (
             <div className="utility-grid">
               {response.trends.map((trend) => (
-                <TrendCard key={trend.key} trend={trend} />
+                <TrendCard key={trend.key} trend={trend} locale={locale} />
               ))}
             </div>
           ) : (

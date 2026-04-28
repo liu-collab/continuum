@@ -153,7 +153,7 @@ export default async function MemoriesPage({
             </StatusBadge>
           </div>
           {response.items.length > 0 ? (
-            <MemoryTable items={response.items} />
+            <MemoryTable items={response.items} locale={locale} />
           ) : (
             <EmptyState title={emptyState.title} description={emptyState.description} />
           )}

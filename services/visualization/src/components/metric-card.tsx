@@ -1,18 +1,18 @@
-"use client";
-
 import React from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardMetric } from "@/lib/contracts";
 import { dashboardSeverityTone } from "@/lib/format";
-import { useAppI18n } from "@/lib/i18n/client";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 
 type MetricCardProps = {
   metric: DashboardMetric;
+  locale?: AppLocale;
+  severityLabel?: string;
 };
 
-export function MetricCard({ metric }: MetricCardProps) {
-  const { t } = useAppI18n();
+export function MetricCard({ metric, locale = DEFAULT_APP_LOCALE, severityLabel }: MetricCardProps) {
+  const label = severityLabel ?? createTranslator(locale)(`enums.severity.${metric.severity}`);
 
   return (
     <div
@@ -32,7 +32,7 @@ export function MetricCard({ metric }: MetricCardProps) {
           </div>
         </div>
         <StatusBadge tone={dashboardSeverityTone(metric.severity)}>
-          {t(`enums.severity.${metric.severity}`)}
+          {label}
         </StatusBadge>
       </div>
       <div
