@@ -147,6 +147,9 @@ interface PendingResidentRefreshState {
   jobIds: string[];
 }
 
+const MAX_RESIDENT_REFRESH_ATTEMPTS = 5;
+const RESIDENT_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
+
 export class AgentRunner {
   private readonly conversation = new Conversation();
   private readonly sessionId: string;
@@ -155,6 +158,9 @@ export class AgentRunner {
   private residentMemory: InjectionBlock | null = null;
   private residentMemoryDirty = false;
   private pendingResidentRefresh: PendingResidentRefreshState | null = null;
+  private residentRefreshAttempts = 0;
+  private residentRefreshCooldownUntil: number | null = null;
+  private residentMemoryStaleWarningEmitted = false;
   private readonly activeAbortControllers = new Map<string, AbortController>();
   private readonly tracer = new RuntimeTracer();
   private storeWarningEmitted = false;
@@ -860,20 +866,52 @@ export class AgentRunner {
   }
 
   private async refreshResidentMemory(): Promise<void> {
+    if (this.residentRefreshCooldownUntil && Date.now() < this.residentRefreshCooldownUntil) {
+      return;
+    }
+
     const projectionReady = await this.isResidentMemoryProjectionReady();
     if (!projectionReady) {
+      this.noteResidentRefreshMiss();
       return;
     }
 
     const result = await this.safeSessionStart();
     if (!result) {
       this.residentMemoryDirty = true;
+      this.noteResidentRefreshMiss();
       return;
     }
     const injection = result?.injection_block ? toInjectionBlock("session_start", result.injection_block) : null;
     this.residentMemory = injection ? toResidentInjectionBlock(injection) : null;
     this.residentMemoryDirty = false;
     this.pendingResidentRefresh = null;
+    this.residentRefreshAttempts = 0;
+    this.residentRefreshCooldownUntil = null;
+    this.residentMemoryStaleWarningEmitted = false;
+  }
+
+  private noteResidentRefreshMiss(): void {
+    this.residentMemoryDirty = true;
+    this.residentRefreshAttempts += 1;
+
+    if (this.residentRefreshAttempts < MAX_RESIDENT_REFRESH_ATTEMPTS) {
+      return;
+    }
+
+    this.residentRefreshAttempts = 0;
+    this.residentRefreshCooldownUntil = Date.now() + RESIDENT_REFRESH_COOLDOWN_MS;
+    if (this.residentMemoryStaleWarningEmitted) {
+      return;
+    }
+
+    this.residentMemoryStaleWarningEmitted = true;
+    this.deps.io.emitError(
+      "session",
+      Object.assign(new Error("resident memory refresh is stale"), {
+        code: "resident_memory_stale",
+      }),
+    );
   }
 
   private async isResidentMemoryProjectionReady(): Promise<boolean> {

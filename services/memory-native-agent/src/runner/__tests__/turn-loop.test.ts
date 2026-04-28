@@ -4,6 +4,7 @@ import { MemoryBadRequestError, MemoryTimeoutError, MemoryUnavailableError } fro
 import {
   classifyMemoryWritebackError,
   classifyMemoryWritebackResult,
+  shouldFinalizeTurn,
   summarizeToolResults,
 } from "../writeback-decider.js";
 import { Conversation } from "../conversation.js";
@@ -53,6 +54,13 @@ describe("turn loop helpers", () => {
         memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
       },
     })).toBe("storage_write_failed");
+  });
+
+  it("finalizes only turns with durable writeback signals", () => {
+    expect(shouldFinalizeTurn("好的", "收到")).toBe(false);
+    expect(shouldFinalizeTurn("记住默认用中文回复", "已记住，后续会默认用中文回复。")).toBe(true);
+    expect(shouldFinalizeTurn("下一步继续修复登录接口", "已确认下一步处理登录接口修复。")).toBe(true);
+    expect(shouldFinalizeTurn("以后不用 tab，用 4 空格", "好的，后续会按 4 空格缩进。")).toBe(true);
   });
 
   it("wraps tool output with trust boundary tags", () => {

@@ -796,7 +796,7 @@ describe("AgentRunner", () => {
     expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-tool-loop", "stop");
   });
 
-  it("only finalizes turns when both user input and assistant output are present", async () => {
+  it("only finalizes turns when user input and assistant output contain writeback signals", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();
     const finalizeTurn = memoryClient.finalizeTurn;
@@ -856,12 +856,12 @@ describe("AgentRunner", () => {
     });
 
     await secondRunner.start();
-    await secondRunner.submit("继续", "turn-with-output");
+    await secondRunner.submit("记住默认用中文回复", "turn-with-output");
 
     expect(finalizeTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         turn_id: "turn-with-output",
-        current_input: "继续",
+        current_input: "记住默认用中文回复",
         assistant_output: "hello",
       }),
     );
@@ -1951,6 +1951,92 @@ describe("AgentRunner", () => {
       job_ids: ["550e8400-e29b-41d4-a716-446655440010"],
     });
     expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits one stale warning and cools down repeated resident refresh misses", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-1",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "550e8400-e29b-41d4-a716-446655440002",
+          candidate_type: "fact_preference",
+          scope: "user",
+          summary: "默认用英文回答",
+          details: {},
+          importance: 5,
+          confidence: 0.95,
+          write_reason: "updated preference",
+          source: {
+            source_type: "memory_llm",
+            source_ref: "turn-1",
+            service_name: "retrieval-runtime",
+          },
+          idempotency_key: "resident-update",
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: "默认用英文回答",
+          job_id: "550e8400-e29b-41d4-a716-446655440030",
+          status: "accepted_async",
+        },
+      ],
+      memory_mode: "workspace_plus_global" as const,
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: true,
+      degraded: false,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "healthy", detail: "", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "ok" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("记住默认用英文回答", "turn-stale-seed");
+    await Promise.resolve();
+
+    for (let index = 0; index < 6; index += 1) {
+      await runner.submit("继续当前任务", `turn-stale-${index}`);
+      await Promise.resolve();
+    }
+
+    expect(memoryClient.getWriteProjectionStatuses).toHaveBeenCalledTimes(5);
+    expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(1);
+    expect(io.emitError.mock.calls.filter((call) => call[1]?.code === "resident_memory_stale")).toHaveLength(1);
   });
 
   it("refreshes resident memory after write projection becomes ready", async () => {
