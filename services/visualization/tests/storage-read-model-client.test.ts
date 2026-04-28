@@ -24,7 +24,12 @@ vi.mock("@/lib/env", () => ({
   })
 }));
 
-import { getReadModelPoolStats, queryCatalogView } from "@/lib/server/storage-read-model-client";
+import {
+  fetchMemoryById,
+  getReadModelPoolStats,
+  queryCatalogView,
+  StorageReadModelUnavailableError
+} from "@/lib/server/storage-read-model-client";
 
 describe("storage read model catalog view", () => {
   beforeEach(() => {
@@ -247,5 +252,23 @@ describe("storage read model catalog view", () => {
     const thirdCallParams = queryMock.mock.calls[2]?.[1] as unknown[];
     expect(firstCallParams).toContain("turn-123");
     expect(thirdCallParams).toContain("turn-123");
+  });
+
+  it("returns null when a memory record is not found", async () => {
+    queryMock.mockResolvedValueOnce({ rows: [] });
+
+    await expect(fetchMemoryById("missing-memory")).resolves.toBeNull();
+  });
+
+  it("throws an explicit read model error when memory detail lookup fails", async () => {
+    const cause = new Error("database unavailable");
+    queryMock.mockRejectedValue(cause);
+
+    await expect(fetchMemoryById("memory-1")).rejects.toMatchObject({
+      name: "StorageReadModelUnavailableError",
+      recordId: "memory-1",
+      cause
+    });
+    await expect(fetchMemoryById("memory-1")).rejects.toBeInstanceOf(StorageReadModelUnavailableError);
   });
 });

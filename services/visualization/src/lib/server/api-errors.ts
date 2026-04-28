@@ -13,6 +13,21 @@ export function jsonApiError(code: string, message: string, status: number) {
   );
 }
 
+export function logApiError(scope: string, error: unknown) {
+  console.error(`[api] ${scope}:`, error);
+}
+
+export function jsonLoggedApiError(
+  scope: string,
+  error: unknown,
+  code: string,
+  message: string,
+  status: number
+) {
+  logApiError(scope, error);
+  return jsonApiError(code, message, status);
+}
+
 export function zodApiError(error: ZodError) {
   return jsonApiError(
     "validation_failed",

@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 
 import { MemoryRestoreVersionRequestSchema } from "@/lib/contracts";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
+import { jsonLoggedApiError, zodApiError } from "@/lib/server/api-errors";
 import { restoreMemoryVersion } from "@/lib/server/storage-governance-client";
 
 export async function POST(
@@ -22,6 +22,12 @@ export async function POST(
       return zodApiError(error);
     }
 
-    return jsonApiError("memory_restore_failed", t("service.apiErrors.memoryRestoreFailed"), 500);
+    return jsonLoggedApiError(
+      "POST /api/memories/[id]/restore-version",
+      error,
+      "memory_restore_failed",
+      t("service.apiErrors.memoryRestoreFailed"),
+      500
+    );
   }
 }

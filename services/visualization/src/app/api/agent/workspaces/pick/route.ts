@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getAppConfig } from "@/lib/env";
 import { createTranslator, type AppLocale } from "@/lib/i18n/messages";
 import { getRequestLocale } from "@/lib/i18n/server";
-import { jsonApiError } from "@/lib/server/api-errors";
+import { jsonApiError, jsonLoggedApiError, logApiError } from "@/lib/server/api-errors";
 import { pickWorkspaceDirectory } from "@/lib/server/workspace-picker";
 
 export async function POST() {
@@ -34,7 +34,9 @@ export async function POST() {
       );
     }
 
-    return jsonApiError(
+    return jsonLoggedApiError(
+      "POST /api/agent/workspaces/pick",
+      error,
       "workspace_picker_failed",
       error instanceof Error ? error.message : t("service.workspacePicker.failed"),
       500,
@@ -93,7 +95,8 @@ async function tryProxyToManagedMna(locale: AppLocale) {
     }
 
     return NextResponse.json(payload);
-  } catch {
+  } catch (error) {
+    logApiError("POST /api/agent/workspaces/pick proxy", error);
     return null;
   }
 }

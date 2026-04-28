@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 
 import { MemoryEditRequestSchema } from "@/lib/contracts";
 import { getServerTranslator } from "@/lib/i18n/server";
-import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
+import { jsonLoggedApiError, zodApiError } from "@/lib/server/api-errors";
 import { editMemory } from "@/lib/server/storage-governance-client";
 
 export async function PATCH(
@@ -22,6 +22,12 @@ export async function PATCH(
       return zodApiError(error);
     }
 
-    return jsonApiError("memory_edit_failed", t("service.apiErrors.memoryEditFailed"), 500);
+    return jsonLoggedApiError(
+      "PATCH /api/memories/[id]",
+      error,
+      "memory_edit_failed",
+      t("service.apiErrors.memoryEditFailed"),
+      500
+    );
   }
 }

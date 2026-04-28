@@ -109,6 +109,8 @@ const t = createTranslator(locale, "agent");
 
 ## 优化三：错误处理显式化，停止静默吞咽
 
+**状态：已完成**
+
 ### 问题
 
 `fetchMemoryById` 对所有异常返回 `null`，"记录不存在"和"数据库挂了"对外表现相同。所有 API routes 的 catch 丢弃原始错误对象。

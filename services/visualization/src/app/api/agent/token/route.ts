@@ -6,6 +6,7 @@ import * as fs from "node:fs/promises";
 import { getAppConfig } from "@/lib/env";
 import { AgentTokenBootstrapResponse } from "@/lib/contracts";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { logApiError } from "@/lib/server/api-errors";
 
 const TOKEN_READ_TIMEOUT_MS = 100;
 
@@ -122,6 +123,7 @@ export async function GET() {
       });
     }
 
+    logApiError("GET /api/agent/token", error);
     return json({
       status: "token_invalid",
       token: null,

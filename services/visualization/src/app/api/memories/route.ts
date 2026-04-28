@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { getMemoryCatalog } from "@/features/memory-catalog/service";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
-import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
+import { jsonLoggedApiError, zodApiError } from "@/lib/server/api-errors";
 
 export async function GET(request: NextRequest) {
   const { t } = await getServerTranslator();
@@ -18,6 +18,12 @@ export async function GET(request: NextRequest) {
       return zodApiError(error);
     }
 
-    return jsonApiError("memory_catalog_failed", t("service.apiErrors.memoryCatalogFailed"), 500);
+    return jsonLoggedApiError(
+      "GET /api/memories",
+      error,
+      "memory_catalog_failed",
+      t("service.apiErrors.memoryCatalogFailed"),
+      500
+    );
   }
 }

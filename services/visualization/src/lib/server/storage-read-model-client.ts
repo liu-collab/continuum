@@ -58,6 +58,18 @@ declare global {
   var __AGENT_MEMORY_VIZ_PG_POOL_LOGGED__: boolean | undefined;
 }
 
+export class StorageReadModelUnavailableError extends Error {
+  readonly recordId: string;
+  override readonly cause: unknown;
+
+  constructor(message: string, options: { recordId: string; cause: unknown }) {
+    super(message);
+    this.name = "StorageReadModelUnavailableError";
+    this.recordId = options.recordId;
+    this.cause = options.cause;
+  }
+}
+
 function getPool() {
   const { values } = getAppConfig();
 
@@ -509,8 +521,18 @@ export async function fetchMemoryById(id: string): Promise<ReadModelRow | null> 
   const pool = getPool();
   const { values, issues } = getAppConfig();
 
-  if (issues.length > 0 || !pool || !values.STORAGE_READ_MODEL_DSN) {
-    return null;
+  if (issues.length > 0) {
+    throw new StorageReadModelUnavailableError("failed to fetch memory by id", {
+      recordId: id,
+      cause: new Error(issues.join(" "))
+    });
+  }
+
+  if (!pool || !values.STORAGE_READ_MODEL_DSN) {
+    throw new StorageReadModelUnavailableError("failed to fetch memory by id", {
+      recordId: id,
+      cause: new Error("missing STORAGE_READ_MODEL_DSN")
+    });
   }
 
   try {
@@ -544,8 +566,11 @@ export async function fetchMemoryById(id: string): Promise<ReadModelRow | null> 
     }
 
     return result.rows[0] ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    throw new StorageReadModelUnavailableError("failed to fetch memory by id", {
+      recordId: id,
+      cause: error
+    });
   }
 }
 
