@@ -410,12 +410,12 @@ describe("job worker", () => {
             delete_reason: "replaced by newer state",
           },
           planner: {
-            model: "writeback_llm",
+            model: "memory_llm",
             confidence: 0.95,
           },
           verifier: {
             required: true,
-            model: "writeback_llm",
+            model: "memory_llm",
             decision: "approve",
             confidence: 0.91,
           },

@@ -879,7 +879,7 @@ describe("storage api", () => {
               seed_record_ids: [stored!.id],
             },
             planner: {
-              model: "writeback_llm",
+              model: "memory_llm",
               confidence: 0.91,
             },
             verifier: {
@@ -1041,12 +1041,12 @@ describe("storage api", () => {
             reason_text: "delete obsolete task state",
             evidence: {},
             planner: {
-              model: "writeback_llm",
+              model: "memory_llm",
               confidence: 0.95,
             },
             verifier: {
               required: true,
-              model: "writeback_llm",
+              model: "memory_llm",
               decision: "approve",
               confidence: 0.92,
             },

@@ -49,7 +49,7 @@ const envSchema = z.object({
   RECALL_LLM_JUDGE_ENABLED: booleanCoerceSchema.default(true),
   RECALL_LLM_JUDGE_MAX_TOKENS: z.coerce.number().int().positive().default(10000),
   RECALL_LLM_CANDIDATE_LIMIT: z.coerce.number().int().positive().max(50).default(12),
-  WRITEBACK_LLM_REFINE_MAX_TOKENS: z.coerce.number().int().positive().default(800),
+  MEMORY_LLM_REFINE_MAX_TOKENS: z.coerce.number().int().positive().default(800),
   WRITEBACK_REFINE_ENABLED: booleanCoerceSchema.default(true),
   WRITEBACK_MAX_CANDIDATES: z.coerce.number().int().positive().max(5).default(3),
   WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: z.coerce.number().int().positive().default(5000),

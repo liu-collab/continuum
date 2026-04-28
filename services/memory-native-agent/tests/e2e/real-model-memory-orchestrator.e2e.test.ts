@@ -522,7 +522,7 @@ async function createRealE2eStack(): Promise<RunningStack> {
     RECALL_LLM_JUDGE_ENABLED: true,
     RECALL_LLM_JUDGE_MAX_TOKENS: 1_000,
     RECALL_LLM_CANDIDATE_LIMIT: 12,
-    WRITEBACK_LLM_REFINE_MAX_TOKENS: 800,
+    MEMORY_LLM_REFINE_MAX_TOKENS: 800,
     WRITEBACK_REFINE_ENABLED: true,
     WRITEBACK_MAX_CANDIDATES: 3,
     WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5_000,
@@ -597,12 +597,12 @@ async function createRealE2eStack(): Promise<RunningStack> {
   const writebackPlanner = new promptModules.HttpMemoryWritebackPlanner({
     ...memoryLlmConfig,
     MEMORY_LLM_MAX_TOKENS: runtimeConfig.MEMORY_LLM_MAX_TOKENS,
-    WRITEBACK_LLM_REFINE_MAX_TOKENS: runtimeConfig.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+    MEMORY_LLM_REFINE_MAX_TOKENS: runtimeConfig.MEMORY_LLM_REFINE_MAX_TOKENS,
     WRITEBACK_MAX_CANDIDATES: runtimeConfig.WRITEBACK_MAX_CANDIDATES,
   });
   const qualityAssessor = new promptModules.HttpMemoryQualityAssessor({
     ...memoryLlmConfig,
-    WRITEBACK_LLM_REFINE_MAX_TOKENS: runtimeConfig.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+    MEMORY_LLM_REFINE_MAX_TOKENS: runtimeConfig.MEMORY_LLM_REFINE_MAX_TOKENS,
   });
   const relationDiscoverer = new promptModules.HttpMemoryRelationDiscoverer({
     ...memoryLlmConfig,

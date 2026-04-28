@@ -149,7 +149,7 @@ async function main() {
         MEMORY_LLM_PROTOCOL: activeWritebackLlmConfig.protocol ?? config.MEMORY_LLM_PROTOCOL,
         MEMORY_LLM_TIMEOUT_MS: activeWritebackLlmConfig.timeoutMs ?? config.MEMORY_LLM_TIMEOUT_MS,
         MEMORY_LLM_EFFORT: activeWritebackLlmConfig.effort ?? config.MEMORY_LLM_EFFORT,
-        WRITEBACK_LLM_REFINE_MAX_TOKENS: config.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+        MEMORY_LLM_REFINE_MAX_TOKENS: config.MEMORY_LLM_REFINE_MAX_TOKENS,
       })
     : undefined;
   const governanceVerifier = hasCompleteRuntimeWritebackLlmConfig(config)

@@ -12,7 +12,7 @@ const navigation = [
   { href: "/memories" as Route, label: "记忆" },
   { href: "/runs" as Route, label: "轨迹" },
   { href: "/governance" as Route, label: "治理" },
-  { href: "/docs" as Route, label: "文档" }
+  { href: "/docs/configuration" as Route, label: "文档" }
 ];
 
 export const metadata: Metadata = {

@@ -227,37 +227,6 @@ node bin/continuum-runtime.mjs
 - 查询或写回失败时，返回显式 `degraded`（降级）结果
 - 不直接读取 `storage` 私有写表
 - 本地缓存只做加速，不改变原有语义结果；缓存键会带上影响结果的输入维度
-
-## 配置迁移脚本
-
-如果本地或部署环境里还保留旧的 `WRITEBACK_LLM_*` 配置，可以用脚本迁移到新的 `MEMORY_LLM_*` 配置。脚本会原地更新文件；只检查不写入时使用 `--check`。
-
-```bash
-npm run build
-npm run migrate:memory-llm-config -- --check path/to/.env
-npm run migrate:memory-llm-config -- path/to/.env
-```
-
-脚本调用时，`npm run` 后面的 `--` 会继续透传给实际脚本。比如要检查部署环境文件，但先不落盘修改，可以这样调用：
-
-```bash
-npm run build
-npm run migrate:memory-llm-config -- --check .env deploy/.env.production
-```
-
-例如，只检查当前服务目录下的 `.env`，不写入修改：
-
-```bash
-npm run build
-npm run migrate:memory-llm-config -- --check .env
-```
-
-也可以直接调用脚本，参数格式保持一致：
-
-```bash
-npm run build
-node scripts/migrate-memory-llm-config.mjs --check path/to/.env
-node scripts/migrate-memory-llm-config.mjs path/to/.env
 ```
 
 例如，直接检查多个环境变量文件，不写入修改：

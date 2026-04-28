@@ -9,7 +9,7 @@ import type {
 } from "../types.js";
 
 type QualityAssessorConfig = MemoryLlmConfig &
-  Pick<AppConfig, "WRITEBACK_LLM_REFINE_MAX_TOKENS">;
+  Pick<AppConfig, "MEMORY_LLM_REFINE_MAX_TOKENS">;
 
 export class HttpMemoryQualityAssessor implements QualityAssessor {
   constructor(private readonly config: QualityAssessorConfig) {}
@@ -60,7 +60,7 @@ export class HttpMemoryQualityAssessor implements QualityAssessor {
         })),
         turn_context: input.turn_context,
       },
-      this.config.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+      this.config.MEMORY_LLM_REFINE_MAX_TOKENS,
     );
 
     const parsed = memoryQualityAssessmentResultSchema.safeParse(parseMemoryLlmJsonPayload(text));

@@ -27,7 +27,6 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "migrate": "tsx src/db/migrate.ts",
-    "migrate:memory-llm-config": "node scripts/migrate-memory-llm-config.mjs",
     "start": "node dist/src/index.js",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -9,7 +9,7 @@ import type {
 } from "../types.js";
 
 type RecallEffectivenessEvaluatorConfig = MemoryLlmConfig &
-  Pick<AppConfig, "WRITEBACK_LLM_REFINE_MAX_TOKENS">;
+  Pick<AppConfig, "MEMORY_LLM_REFINE_MAX_TOKENS">;
 
 export class HttpMemoryRecallEffectivenessEvaluator implements RecallEffectivenessEvaluator {
   constructor(private readonly config: RecallEffectivenessEvaluatorConfig) {}
@@ -40,7 +40,7 @@ export class HttpMemoryRecallEffectivenessEvaluator implements RecallEffectivene
         tool_behavior_summary: input.tool_behavior_summary ?? null,
         user_feedback: input.user_feedback ?? null,
       },
-      this.config.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+      this.config.MEMORY_LLM_REFINE_MAX_TOKENS,
     );
 
     const parsed = memoryEffectivenessEvaluationResultSchema.safeParse(parseMemoryLlmJsonPayload(text));

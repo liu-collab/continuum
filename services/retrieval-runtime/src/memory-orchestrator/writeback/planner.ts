@@ -11,7 +11,7 @@ import {
 import type { WritebackExtractionResult, WritebackPlanner, WritebackRefineInput, WritebackRefineResult } from "../types.js";
 
 type WritebackPlannerConfig = MemoryLlmConfig &
-  Pick<AppConfig, "MEMORY_LLM_MAX_TOKENS" | "WRITEBACK_LLM_REFINE_MAX_TOKENS" | "WRITEBACK_MAX_CANDIDATES">;
+  Pick<AppConfig, "MEMORY_LLM_MAX_TOKENS" | "MEMORY_LLM_REFINE_MAX_TOKENS" | "WRITEBACK_MAX_CANDIDATES">;
 
 export class HttpMemoryWritebackPlanner implements WritebackPlanner {
   constructor(private readonly config: WritebackPlannerConfig) {}
@@ -77,7 +77,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
         task_id: input.task_id ?? null,
         rule_candidates: input.rule_candidates,
       },
-      this.config.WRITEBACK_LLM_REFINE_MAX_TOKENS,
+      this.config.MEMORY_LLM_REFINE_MAX_TOKENS,
     );
     const parsed = memoryWritebackRefineSchema.safeParse(parseMemoryLlmJsonPayload(text));
 
