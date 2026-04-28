@@ -218,6 +218,12 @@ const zhCommon = {
           archive: "归档",
           delete: "删除"
         },
+        confirmAction: {
+          title: "确认{action}",
+          description: "这个动作会修改当前记忆状态。确认后将提交治理请求并刷新读模型。",
+          confirm: "确认执行",
+          cancel: "取消"
+        },
         errors: {
           requestFailed: "请求失败。",
           reasonRequiredAction: "请先填写原因，再执行治理动作。",

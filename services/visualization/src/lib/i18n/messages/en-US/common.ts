@@ -218,6 +218,12 @@ const enCommon = {
           archive: "Archive",
           delete: "Delete"
         },
+        confirmAction: {
+          title: "Confirm {action}",
+          description: "This action changes the current memory state. Confirm to submit the governance request and refresh the read model.",
+          confirm: "Confirm",
+          cancel: "Cancel"
+        },
         errors: {
           requestFailed: "Request failed.",
           reasonRequiredAction: "Enter a reason before running a governance action.",

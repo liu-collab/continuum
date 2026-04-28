@@ -1,13 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import React from "react";
 import { useState, useTransition } from "react";
 
+import { ConfirmAction } from "@/components/confirm-action";
 import { SelectField } from "@/components/select-field";
 import { MemoryCatalogDetail, MemoryStatus, Scope } from "@/lib/contracts";
 import { useAppI18n } from "@/lib/i18n/client";
 
 type GovernanceAction = "confirm" | "invalidate" | "archive" | "delete";
+const destructiveActions = new Set<GovernanceAction>(["invalidate", "archive", "delete"]);
 
 type GovernancePanelProps = {
   detail: MemoryCatalogDetail;
@@ -176,15 +179,34 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         <div className="section-kicker">{t("memories.governancePanel.quickActions")}</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
-            <button
-              key={action}
-              type="button"
-              disabled={isPending}
-              onClick={() => void submitAction(action)}
-              className="btn-outline"
-            >
-              {t(`memories.governancePanel.actions.${action}`)}
-            </button>
+            destructiveActions.has(action) ? (
+              <ConfirmAction
+                key={action}
+                disabled={isPending}
+                title={t("memories.governancePanel.confirmAction.title", {
+                  action: t(`memories.governancePanel.actions.${action}`)
+                })}
+                description={t("memories.governancePanel.confirmAction.description", {
+                  action: t(`memories.governancePanel.actions.${action}`)
+                })}
+                confirmLabel={t("memories.governancePanel.confirmAction.confirm")}
+                cancelLabel={t("memories.governancePanel.confirmAction.cancel")}
+                onConfirm={() => submitAction(action)}
+                variant={action === "delete" ? "destructive" : "default"}
+                testId={`memory-governance-${action}`}
+                trigger={t(`memories.governancePanel.actions.${action}`)}
+              />
+            ) : (
+              <button
+                key={action}
+                type="button"
+                disabled={isPending}
+                onClick={() => void submitAction(action)}
+                className="btn-outline"
+              >
+                {t(`memories.governancePanel.actions.${action}`)}
+              </button>
+            )
           ))}
         </div>
       </div>

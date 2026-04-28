@@ -608,3 +608,71 @@ runtime 启动时从配置文件加载，`PUT` 后热更新（MaintenanceWorker 
 - 不再需要手动复制 UUID 去搜索
 
 ---
+
+### 优化十三：删除操作增加确认对话框
+
+**状态：已完成**
+
+### 问题
+
+GovernancePanel 中 archive、delete、invalidate 三个按钮点击即执行，无二次确认。"删除记忆"是不可逆的破坏性操作。
+
+### 方案
+
+抽取共享 `ConfirmAction` 组件：
+
+```tsx
+// src/components/confirm-action.tsx
+"use client";
+import { useState, useTransition } from "react";
+
+export function ConfirmAction({
+  trigger,
+  title,
+  description,
+  onConfirm,
+  variant = "default",
+}: {
+  trigger: React.ReactNode;
+  title: string;
+  description: string;
+  onConfirm: () => Promise<void>;
+  variant?: "default" | "destructive";
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className={variant === "destructive" ? "text-destructive" : ""}>
+        {trigger}
+      </button>
+      {open && (
+        <dialog open className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
+          <div className="modal-content">
+            <h3>{title}</h3>
+            <p>{description}</p>
+            <div className="modal-actions">
+              <button onClick={() => setOpen(false)} disabled={pending}>取消</button>
+              <button
+                className={variant === "destructive" ? "btn-destructive" : "btn-primary"}
+                disabled={pending}
+                onClick={() => startTransition(async () => { await onConfirm(); setOpen(false); })}
+              >
+                {pending ? "执行中..." : "确认"}
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
+    </>
+  );
+}
+```
+
+### 效果
+
+- 破坏性操作有二次确认，防止误触
+- `ConfirmAction` 可复用于其他页面的类似场景
+
+---
