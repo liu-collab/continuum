@@ -21,6 +21,7 @@ export class HttpMemoryRecallEffectivenessEvaluator implements RecallEffectivene
       {
         injected_memories: [],
         assistant_output: "health check",
+        tool_behavior_summary: null,
         user_feedback: null,
       },
       64,
@@ -36,6 +37,7 @@ export class HttpMemoryRecallEffectivenessEvaluator implements RecallEffectivene
       {
         injected_memories: input.injected_memories,
         assistant_output: input.assistant_output,
+        tool_behavior_summary: input.tool_behavior_summary ?? null,
         user_feedback: input.user_feedback ?? null,
       },
       this.config.WRITEBACK_LLM_REFINE_MAX_TOKENS,

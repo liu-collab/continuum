@@ -1678,7 +1678,7 @@ export class RetrievalRuntimeService {
   }
 
   private async evaluateRecallEffectivenessIfNeeded(
-    input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "assistant_output">,
+    input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "assistant_output" | "tool_results_summary">,
     traceId: string,
   ): Promise<void> {
     const evaluator = this.memoryOrchestrator?.recall?.effectiveness;
@@ -1704,6 +1704,7 @@ export class RetrievalRuntimeService {
         evaluator.evaluate({
           injected_memories: context.memories,
           assistant_output: input.assistant_output,
+          tool_behavior_summary: buildToolBehaviorSummary(input.tool_results_summary),
         }),
     );
 
@@ -2108,4 +2109,35 @@ function reorderSelectedCandidates(
   }
 
   return candidates.slice(0, Math.min(3, candidates.length));
+}
+
+function buildToolBehaviorSummary(toolResultsSummary?: string): string | undefined {
+  const normalized = summarizeText(toolResultsSummary, 1_000);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const indicators = new Set<string>();
+  const patterns = [
+    /(?:indentation|indent|spaces|space|tab|format)\s*[:=]\s*[\w:-]+/gi,
+    /(?:language|lang|locale)\s*[:=]\s*[\w-]+/gi,
+    /(?:import|require|from)\s+['"][^'"]+['"]/gi,
+    /(?:created|updated|modified|wrote|formatted|installed|deployed)\s+[^;\n]+/gi,
+    /(?:缩进|空格|制表符|格式化|语言|中文|英文|导入|安装|部署)[^;\n。.!]*/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of normalized.matchAll(pattern)) {
+      const value = match[0]?.trim();
+      if (value) {
+        indicators.add(value);
+      }
+    }
+  }
+
+  if (indicators.size === 0) {
+    return undefined;
+  }
+
+  return `工具行为摘要: ${[...indicators].slice(0, 8).join("; ")}`;
 }

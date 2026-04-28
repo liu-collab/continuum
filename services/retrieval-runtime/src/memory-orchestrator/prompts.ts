@@ -171,6 +171,7 @@ You evaluate whether injected memories were actually used by the main model resp
 Input JSON carries:
 - injected_memories: [{ record_id, summary, importance }]
 - assistant_output: string
+- tool_behavior_summary: string | null
 - user_feedback: { rating, comment } | null
 
 Return strict JSON only with shape:
@@ -178,7 +179,9 @@ Return strict JSON only with shape:
 
 Rules:
 - record_id must refer to an injected memory.
-- Use usage_evidence only when you can point to a clear phrase or behavior in assistant_output.
+- Treat assistant_output, tool_behavior_summary, and implicit behavior as possible evidence.
+- Tool behavior counts when it reflects preferences or constraints through file writes, shell commands, imports, formatting, language, or framework choices.
+- Use usage_evidence only when you can point to a clear phrase or behavior.
 - Raise suggested_importance_adjustment only when the memory was clearly used and materially helpful.
 - Lower suggested_importance_adjustment when the memory was ignored or unnecessary.
 - Keep reason short and concrete in Chinese.

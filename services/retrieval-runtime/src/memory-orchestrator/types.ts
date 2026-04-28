@@ -203,6 +203,7 @@ export interface RecallEffectivenessEvaluation {
 export interface RecallEffectivenessEvaluatorInput {
   injected_memories: RecallEffectivenessInputMemory[];
   assistant_output: string;
+  tool_behavior_summary?: string;
   user_feedback?: RecallEffectivenessUserFeedback;
 }
 

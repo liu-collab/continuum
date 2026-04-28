@@ -456,6 +456,11 @@ class StubQualityAssessor implements QualityAssessor {
 
 class StubRecallEffectivenessEvaluator implements RecallEffectivenessEvaluator {
   public callCount = 0;
+  public lastInput: {
+    injected_memories: Array<{ record_id: string }>;
+    assistant_output?: string;
+    tool_behavior_summary?: string;
+  } | null = null;
 
   constructor(
     private readonly suggestedAdjustment = 1,
@@ -463,8 +468,11 @@ class StubRecallEffectivenessEvaluator implements RecallEffectivenessEvaluator {
 
   async evaluate(input: {
     injected_memories: Array<{ record_id: string }>;
+    assistant_output?: string;
+    tool_behavior_summary?: string;
   }) {
     this.callCount += 1;
+    this.lastInput = input;
     return {
       evaluations: input.injected_memories.map((memory) => ({
         record_id: memory.record_id,
@@ -2554,10 +2562,12 @@ describe("retrieval-runtime service", () => {
       turn_id: "effectiveness-turn-1",
       current_input: "照旧，按之前定的方式继续。",
       assistant_output: "收到，我会继续按之前的中文输出偏好和当前任务状态处理。",
+      tool_results_summary: "fs_write path=src/app.ts indentation=spaces:4 language=zh import \"zod\"",
     });
 
     const runs = await repository.getRuns({ trace_id: prepared.trace_id });
     expect(evaluator.callCount).toBe(1);
+    expect(evaluator.lastInput?.tool_behavior_summary).toContain("indentation=spaces:4");
     expect(runs.memory_plan_runs.some((run) => run.plan_kind === "memory_effectiveness_plan")).toBe(true);
   });
 
