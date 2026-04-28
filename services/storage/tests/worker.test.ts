@@ -436,7 +436,7 @@ describe("job worker", () => {
     expect(metrics.governance_verifier_approved_count).toBe(1);
     expect(metrics.governance_execution_count).toBe(2);
     expect(metrics.governance_execution_success_count).toBe(1);
-    expect(metrics.governance_execution_failure_count).toBe(1);
+    expect(metrics.governance_execution_failure_count).toBe(0);
     expect(metrics.governance_soft_delete_count).toBe(2);
     expect(metrics.governance_retry_count).toBe(1);
   });
@@ -769,6 +769,112 @@ describe("job worker", () => {
     await workerRun;
 
     expect(events).toEqual(["cycle:start", "cycle:finish", "database:close"]);
+  });
+
+  it("backs off after failed cycles and recovers delay after success", async () => {
+    const delays: number[] = [];
+    const logs: Array<{ level: string; payload: unknown; message: string }> = [];
+    let attempts = 0;
+
+    await runWorker({
+      service: {
+        async processWriteJobs() {
+          attempts += 1;
+          if (attempts <= 2) {
+            throw new Error(`failure-${attempts}`);
+          }
+          if (attempts >= 4) {
+            throw new Error("stop after recovery check");
+          }
+          return 1;
+        },
+      },
+      database: {
+        async close() {
+          return undefined;
+        },
+      },
+      logger: {
+        info() {
+          return undefined;
+        },
+        error(payload: unknown, message: string) {
+          logs.push({ level: "error", payload, message });
+        },
+        warn(payload: unknown, message: string) {
+          logs.push({ level: "warn", payload, message });
+        },
+        fatal(payload: unknown, message: string) {
+          logs.push({ level: "fatal", payload, message });
+        },
+      } as never,
+      pollIntervalMs: 5,
+      delay: async (ms) => {
+        delays.push(ms);
+        if (delays.length >= 3) {
+          throw new Error("stop test worker");
+        }
+      },
+      onSignal() {
+        return undefined;
+      },
+    }).catch((error) => {
+      if (!(error instanceof Error) || error.message !== "stop test worker") {
+        throw error;
+      }
+    });
+
+    expect(delays).toEqual([1000, 2000, 5]);
+    expect(logs.filter((log) => log.level === "warn")).toHaveLength(2);
+  });
+
+  it("stops after too many consecutive failures", async () => {
+    const delays: number[] = [];
+    const logs: Array<{ level: string; payload: unknown; message: string }> = [];
+    let attempts = 0;
+    let closed = false;
+
+    await runWorker({
+      service: {
+        async processWriteJobs() {
+          attempts += 1;
+          throw new Error("database unavailable");
+        },
+      },
+      database: {
+        async close() {
+          closed = true;
+        },
+      },
+      logger: {
+        info() {
+          return undefined;
+        },
+        error(payload: unknown, message: string) {
+          logs.push({ level: "error", payload, message });
+        },
+        warn(payload: unknown, message: string) {
+          logs.push({ level: "warn", payload, message });
+        },
+        fatal(payload: unknown, message: string) {
+          logs.push({ level: "fatal", payload, message });
+        },
+      } as never,
+      pollIntervalMs: 5,
+      delay: async (ms) => {
+        delays.push(ms);
+      },
+      onSignal() {
+        return undefined;
+      },
+    });
+
+    expect(attempts).toBe(10);
+    expect(delays).toHaveLength(9);
+    expect(delays.at(0)).toBe(1000);
+    expect(delays.at(-1)).toBe(60_000);
+    expect(logs.some((log) => log.level === "fatal")).toBe(true);
+    expect(closed).toBe(true);
   });
 });
 
