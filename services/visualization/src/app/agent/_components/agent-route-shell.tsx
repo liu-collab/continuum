@@ -1,13 +1,7 @@
-"use client";
-
-import { usePathname } from "next/navigation";
+import React from "react";
 
 import { AgentWorkspace } from "./agent-workspace";
 
-export function AgentRouteShell() {
-  const pathname = usePathname();
-  const segments = pathname.split("/").filter(Boolean);
-  const sessionId = segments[0] === "agent" ? segments[1] : undefined;
-
+export function AgentRouteShell({ sessionId }: { sessionId?: string }) {
   return <AgentWorkspace sessionId={sessionId} />;
 }

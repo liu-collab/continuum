@@ -447,6 +447,8 @@ export function createCache<T>(ttlMs: number) {
 
 ## 优化十：`AgentRouteShell` 用 route params 替代 `usePathname()` 解析
 
+**状态：已完成**
+
 ### 问题
 
 ```typescript
