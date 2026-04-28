@@ -190,7 +190,7 @@ describe("memory catalog service", () => {
     expect(detail?.scopeExplanation).toContain("平台级记忆");
     expect(detail?.originWorkspaceId).toBe("ws-origin");
     expect(detail?.detailsFormatted).toContain('"subject": "user"');
-    expect(detail?.sourceFormatted).toBe("user_input / turn-1 / retrieval-runtime");
+    expect(detail?.sourceFormatted).toBe("user_input / 来源 turn-1 / retrieval-runtime");
     expect(detail?.sourceTurnId).toBe("turn-1");
     expect(detail?.sourceExcerpt).toContain("concise");
     expect(detail?.extractionBasis).toContain("stable preference");
@@ -363,7 +363,7 @@ describe("memory catalog service", () => {
       pageSize: 20
     });
 
-    expect(response.viewSummary).toContain("session-1");
+    expect(response.viewSummary).toContain("当前会话 session-1");
   });
 
   it("exposes a visible quick view for global user memory", () => {
@@ -429,7 +429,7 @@ describe("memory catalog service", () => {
       pageSize: 20
     });
 
-    expect(hints.join(" ")).toContain("session_id");
+    expect(hints.join(" ")).toContain("会话筛选");
     expect(hints.join(" ")).toContain("全局记忆");
   });
 
@@ -471,7 +471,7 @@ describe("memory catalog service", () => {
     });
 
     expect(hints.join(" ")).toContain("平台级记忆");
-    expect(hints.join(" ")).toContain("workspace_id");
+    expect(hints.join(" ")).toContain("工作区筛选");
   });
 
   it("returns governance history response from storage governance client", async () => {
@@ -487,4 +487,3 @@ describe("memory catalog service", () => {
     expect(response.sourceStatus.status).toBe("healthy");
   });
 });
-

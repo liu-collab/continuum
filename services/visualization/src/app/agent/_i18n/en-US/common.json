@@ -46,7 +46,7 @@
     "emptyTitle": "No conversation yet",
     "emptyDescription": "After the first message, this view will show the injection banner, phase trace, streamed assistant output, and tool logs.",
     "loadEarlier": "Load earlier messages ({count} more turns)",
-    "turnLabel": "turn {id}",
+    "turnLabel": "Turn {index}",
     "injectionReady": "Injection ready",
     "phaseDegradedSkip": "{phase} degraded skip",
     "viewPrompt": "View prompt",
@@ -184,7 +184,7 @@
   "sessionList": {
     "emptyTitle": "No session yet. Once you send the first message, recent sessions will stay here.",
     "defaultTitle": "Session {id}",
-    "workspace": "Workspace: {id}",
+    "workspace": "Workspace: {label}",
     "active": "Active",
     "closed": "Closed",
     "renameAria": "Rename session",
@@ -197,6 +197,8 @@
     "selectedWorkspace": "Current file-tree workspace: {label}",
     "selectedFolderLabel": "Selected folder",
     "workspaceIdLabel": "ID",
+    "workspacePathLabel": "Path",
+    "workspaceDebugIdLabel": "Debug ID",
     "uploadHint": "Pick a folder and its contents will render below immediately.",
     "clearFolderAction": "Remove current folder",
     "pickFolderAction": "Pick folder",
@@ -215,7 +217,7 @@
     "description": "Inspect tool status, output previews, and trust labels for every call.",
     "emptyTitle": "No tool calls yet",
     "emptyDescription": "When the agent triggers file, shell, or MCP tools, execution logs will show up here.",
-    "turnLabel": "turn {id}",
+    "turnLabel": "Turn {index}",
     "waiting": "Waiting for tool output..."
   },
   "memoryPanel": {
@@ -366,6 +368,7 @@
     "close": "Close Prompt Inspector",
     "meta": "Meta",
     "turn": "Turn",
+    "trace": "Debug ID",
     "provider": "Provider",
     "tools": "Tools",
     "notLoaded": "Not loaded",

@@ -9,7 +9,7 @@ import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
 import { getSourceHealth } from "@/features/source-health/service";
-import { formatTimestamp, memoryViewModeLabel } from "@/lib/format";
+import { formatDebugReference, formatRunTraceTitle, formatTimestamp, memoryViewModeLabel } from "@/lib/format";
 import { parseRunTraceFilters } from "@/lib/query-params";
 
 function sectionStatusTone(value: string) {
@@ -43,11 +43,11 @@ export default async function RunsPage({
               </p>
             </div>
             <div className="tile-actions">
-              <FilterModalButton activeCount={activeCount} title="筛选轨迹" description="按 turn、session 或 trace 定位一条运行轨迹。">
+              <FilterModalButton activeCount={activeCount} title="筛选轨迹" description="按轮次、会话或调试标识定位一条运行轨迹。">
                 <SearchForm action="/runs" initialValues={{ turn_id: filters.turnId, session_id: filters.sessionId, trace_id: filters.traceId }}>
-                  <FormField label="Turn id" name="turn_id" placeholder="turn id" defaultValue={filters.turnId} />
-                  <FormField label="Session id" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-                  <FormField label="Trace id" name="trace_id" placeholder="trace id" defaultValue={filters.traceId} />
+                  <FormField label="轮次" name="turn_id" placeholder="轮次标识" defaultValue={filters.turnId} />
+                  <FormField label="会话" name="session_id" placeholder="会话标识" defaultValue={filters.sessionId} />
+                  <FormField label="调试标识" name="trace_id" placeholder="trace 标识" defaultValue={filters.traceId} />
                 </SearchForm>
               </FilterModalButton>
               <HealthModalButton health={health} />
@@ -71,7 +71,9 @@ export default async function RunsPage({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="truncate text-[17px] font-semibold leading-[1.24] text-text">{item.turnId}</div>
+                          <div className="truncate text-[17px] font-semibold leading-[1.24] text-text" title={item.turnId}>
+                            {formatRunTraceTitle(item.createdAt)}
+                          </div>
                           <div className="mt-1 text-[14px] leading-[1.43] text-muted">
                             {item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "未记录记忆模式"}
                           </div>
@@ -102,7 +104,7 @@ export default async function RunsPage({
                       <div className="min-w-0">
                         <div className="section-kicker">选中轨迹</div>
                         <h2 className="mt-3 break-all text-[34px] font-semibold leading-[1.12] text-text">
-                          {response.selectedTurn.turn.turnId}
+                          {formatRunTraceTitle(response.selectedTurn.turn.createdAt)}
                         </h2>
                         <p className="mt-4 text-[17px] leading-[1.47] text-muted">
                           {response.selectedTurn.narrative.explanation}
@@ -113,7 +115,8 @@ export default async function RunsPage({
                       </StatusBadge>
                     </div>
                     <dl className="kv-grid mt-6">
-                      <Row label="Trace" value={response.selectedTurn.turn.traceId} />
+                      <Row label="调试标识" value={formatDebugReference(response.selectedTurn.turn.traceId)} />
+                      <Row label="轮次" value={formatDebugReference(response.selectedTurn.turn.turnId)} />
                       <Row label="阶段" value={response.selectedTurn.turn.phase ?? "未记录"} />
                       <Row label="宿主" value={response.selectedTurn.turn.host ?? "未记录"} />
                       <Row label="创建" value={formatTimestamp(response.selectedTurn.turn.createdAt)} />

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { SessionList } from "@/app/agent/_components/session-list";
 import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
-import type { MnaSessionSummary } from "@/app/agent/_lib/openapi-types";
+import type { MnaSessionSummary, MnaWorkspaceSummary } from "@/app/agent/_lib/openapi-types";
 
 const sessions: MnaSessionSummary[] = [
   {
@@ -32,6 +32,16 @@ const sessions: MnaSessionSummary[] = [
   }
 ];
 
+const workspaces: MnaWorkspaceSummary[] = [
+  {
+    workspace_id: "workspace-1",
+    short_id: "workspace",
+    cwd: "C:/workspace/repo",
+    label: "repo",
+    is_current: true
+  }
+];
+
 function renderSessionList(props?: Partial<React.ComponentProps<typeof SessionList>>) {
   const onSelect = vi.fn();
   const onRename = vi.fn();
@@ -41,6 +51,7 @@ function renderSessionList(props?: Partial<React.ComponentProps<typeof SessionLi
     <AgentI18nProvider defaultLocale="zh-CN">
       <SessionList
         sessions={sessions}
+        workspaces={workspaces}
         activeSessionId="session-1"
         onSelect={onSelect}
         onRename={onRename}
@@ -90,18 +101,42 @@ describe("session list", () => {
     expect(onSelect).toHaveBeenCalledWith("session-2");
   });
 
-  it("shows workspace short id instead of the full workspace id", () => {
+  it("shows workspace folder instead of the full workspace id", () => {
     renderSessionList({
       sessions: [
         {
           ...sessions[0],
           workspace_id: "550e8400-e29b-41d4-a716-446655440000"
         }
+      ],
+      workspaces: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          short_id: "550e8400",
+          cwd: "C:/workspace/customer-api",
+          label: "customer-api",
+          is_current: true
+        }
       ]
     });
 
-    expect(screen.getByText("工作区：550e8400")).toBeInTheDocument();
+    expect(screen.getByText("工作区：customer-api")).toBeInTheDocument();
     expect(screen.queryByText("工作区：550e8400-e29b-41d4-a716-446655440000")).not.toBeInTheDocument();
+  });
+
+  it("uses created time for untitled session titles", () => {
+    renderSessionList({
+      sessions: [
+        {
+          ...sessions[0],
+          title: null,
+          created_at: "2026-04-19T08:30:00.000Z"
+        }
+      ]
+    });
+
+    expect(screen.getByText(/会话 · /)).toBeInTheDocument();
+    expect(screen.queryByText("会话 session-1")).not.toBeInTheDocument();
   });
 
   it("renders current-turn quick actions inside the active session card", () => {

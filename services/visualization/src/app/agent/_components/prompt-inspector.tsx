@@ -3,6 +3,8 @@
 import React from "react";
 import { X } from "lucide-react";
 
+import { formatDebugReference } from "@/lib/format";
+
 import { useAgentI18n } from "../_i18n/provider";
 import type { MnaPromptInspectorResponse } from "../_lib/openapi-types";
 
@@ -61,7 +63,9 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
             <dl className="mt-3 space-y-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.turn")}</dt>
-                <dd className="mt-0.5 text-foreground">{payload?.turn_id ?? t("promptInspector.notLoaded")}</dd>
+                <dd className="mt-0.5 text-foreground" title={payload?.turn_id}>
+                  {payload?.turn_id ? formatDebugReference(payload.turn_id) : t("promptInspector.notLoaded")}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.provider")}</dt>
@@ -160,7 +164,9 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                         {result.degraded ? " · degraded" : ""}
                       </div>
                       {result.trace_id ? (
-                        <div className="mt-0.5 text-[11px] text-muted-foreground">trace: {result.trace_id}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground" title={result.trace_id}>
+                          {t("promptInspector.trace")}: {formatDebugReference(result.trace_id)}
+                        </div>
                       ) : null}
                       <div className="mt-1 text-xs leading-5 text-foreground">
                         {result.injection_summary?.trim() || t("promptInspector.noInjection")}

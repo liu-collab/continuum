@@ -318,7 +318,7 @@ describe("run trace narrative", () => {
       dependencyStatus: []
     });
 
-    expect(narratives.some((item) => item.title === "Turn / task_start")).toBe(true);
+    expect(narratives.some((item) => item.title === "轮次 / task_start")).toBe(true);
     expect(narratives.some((item) => item.title === "Recall / before_response")).toBe(true);
     expect(narratives.some((item) => item.title === "Plan / before_response")).toBe(true);
   });

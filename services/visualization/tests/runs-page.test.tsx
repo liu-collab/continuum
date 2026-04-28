@@ -10,7 +10,7 @@ const { getRunTraceMock, getSourceHealthMock } = vi.hoisted(() => ({
 vi.mock("@/features/run-trace/service", () => ({
   describeRunTraceEmptyState: vi.fn(() => ({
     title: "当前筛选条件下没有找到轨迹",
-    description: "运行时观测接口可访问，但没有返回对应 turn id 或 trace id 的轨迹。"
+    description: "运行时观测接口可访问，但没有返回对应轮次或调试标识的轨迹。"
   })),
   getRunTrace: getRunTraceMock
 }));
@@ -92,7 +92,7 @@ describe("runs page", () => {
     });
     render(element);
 
-    expect(screen.getByText("turn-a").closest("a")).toHaveAttribute(
+    expect(screen.getByText("最近运行摘要").closest("a")).toHaveAttribute(
       "href",
       "/runs?trace_id=a048c6c0-900a-443e-9d34-d8db2981c2bf"
     );

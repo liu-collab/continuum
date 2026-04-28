@@ -101,6 +101,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             <div className="min-h-0 flex-1 overflow-auto p-3">
               <SessionList
                 sessions={workspace.state.sessionList}
+                workspaces={workspace.workspaceList}
                 activeSessionId={workspace.state.sessionId}
                 activeSessionMemoriesHref={currentTurnMemoriesHref}
                 activeSessionRunsHref={currentTurnRunsHref}

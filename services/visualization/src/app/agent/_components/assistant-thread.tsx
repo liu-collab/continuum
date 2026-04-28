@@ -62,6 +62,16 @@ export function AssistantThread({
   );
   const runtime = useExternalStoreRuntime(store);
   const { t } = useAgentI18n();
+  const turnLabels = useMemo(
+    () =>
+      new Map(
+        turns.map((turn, index) => [
+          turn.turnId,
+          t("chatPanel.turnLabel", { index: hiddenTurnCount + index + 1 })
+        ])
+      ),
+    [hiddenTurnCount, t, turns]
+  );
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -98,7 +108,7 @@ export function AssistantThread({
                   message.role === "user" ? (
                     <UserMessageBubble message={message} />
                   ) : (
-                    <AssistantMessageBubble message={message} onOpenPrompt={onOpenPrompt} />
+                    <AssistantMessageBubble message={message} turnLabels={turnLabels} onOpenPrompt={onOpenPrompt} />
                   )
                 }
               </ThreadPrimitive.Messages>
@@ -143,9 +153,11 @@ function UserMessageBubble({ message }: { message: MessageState }) {
 
 function AssistantMessageBubble({
   message,
+  turnLabels,
   onOpenPrompt
 }: {
   message: MessageState;
+  turnLabels: Map<string, string>;
   onOpenPrompt(turnId: string): void;
 }) {
   const { formatAgentError, formatFinishReasonLabel, formatPhaseLabel, t } = useAgentI18n();
@@ -162,7 +174,7 @@ function AssistantMessageBubble({
             {t("chatPanel.assistant")}
           </div>
           <StatusBadge tone="neutral">
-            {t("chatPanel.turnLabel", { id: turnId.slice(0, 8) })}
+            <span title={turnId}>{turnLabels.get(turnId) ?? t("chatPanel.turnLabel", { index: 1 })}</span>
           </StatusBadge>
           {meta?.injection ? <StatusBadge tone="success">{t("chatPanel.injectionReady")}</StatusBadge> : null}
           {meta?.finishReason ? (

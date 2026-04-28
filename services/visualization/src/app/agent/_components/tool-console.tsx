@@ -14,10 +14,11 @@ type ToolConsoleProps = {
 
 export function ToolConsole({ turns }: ToolConsoleProps) {
   const { t } = useAgentI18n();
-  const calls = turns.flatMap((turn) =>
+  const calls = turns.flatMap((turn, turnIndex) =>
     turn.toolCalls.map((call) => ({
       ...call,
-      turnId: turn.turnId
+      turnId: turn.turnId,
+      turnIndex
     }))
   );
 
@@ -39,8 +40,8 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{call.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("toolConsole.turnLabel", { id: call.turnId.slice(0, 8) })}
+                  <span className="text-xs text-muted-foreground" title={call.turnId}>
+                    {t("toolConsole.turnLabel", { index: call.turnIndex + 1 })}
                   </span>
                   <UntrustedBadge trustLevel={call.trustLevel} />
                 </div>

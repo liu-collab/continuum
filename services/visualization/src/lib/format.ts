@@ -38,6 +38,48 @@ export function formatLastSuccess(value: string | null | undefined) {
   return formatDistanceToNow(date, { addSuffix: true });
 }
 
+export function formatShortIdentifier(value: string | null | undefined, length = 8) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "未记录";
+  }
+
+  if (trimmed.length <= 24) {
+    return trimmed;
+  }
+
+  return trimmed.slice(0, length).toLowerCase();
+}
+
+export function formatWorkspaceReference(value: string | null | undefined) {
+  return value ? `工作区 ${formatShortIdentifier(value)}` : "未记录工作区";
+}
+
+export function formatSessionReference(value: string | null | undefined) {
+  return value ? `会话 ${formatShortIdentifier(value)}` : "未记录会话";
+}
+
+export function formatSourceReference(value: string | null | undefined) {
+  return value ? `来源 ${formatShortIdentifier(value)}` : "未记录来源";
+}
+
+export function formatDebugReference(value: string | null | undefined) {
+  return value ? formatShortIdentifier(value) : "未记录";
+}
+
+export function formatRunTraceTitle(createdAt: string | null | undefined) {
+  if (!createdAt) {
+    return "运行轨迹 · 未记录时间";
+  }
+
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) {
+    return "运行轨迹";
+  }
+
+  return `运行轨迹 · ${format(date, "yyyy-MM-dd HH:mm:ss")}`;
+}
+
 export function formatMetricValue(value: number | null, unit: DashboardMetric["unit"]) {
   if (value === null || Number.isNaN(value)) {
     return "不可用";
@@ -107,7 +149,7 @@ export function scopeLabel(value: Scope) {
 export function scopeExplanation(value: Scope, originWorkspaceId?: string | null) {
   if (value === "user") {
     return originWorkspaceId
-      ? `这是平台级记忆。它会在不同工作区之间共享显示。来源工作区：${originWorkspaceId}。`
+      ? `这是平台级记忆。它会在不同工作区之间共享显示。来源${formatWorkspaceReference(originWorkspaceId)}。`
       : "这是平台级记忆。它会在不同工作区之间共享显示。";
   }
 
@@ -141,7 +183,7 @@ export function visibilitySummary(
     return memoryViewMode === "workspace_only"
       ? "当前是仅工作区模式，所以这条平台级记忆会被隐藏。"
       : originWorkspaceId
-        ? `当前视图包含平台级记忆，所以它会显示。来源工作区：${originWorkspaceId}。`
+        ? `当前视图包含平台级记忆，所以它会显示。来源${formatWorkspaceReference(originWorkspaceId)}。`
         : "当前视图包含平台级记忆，所以它会显示。";
   }
 

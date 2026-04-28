@@ -371,7 +371,7 @@ export async function queryCatalogView(
 
   if (!filters.workspaceId && !globalOnlyView) {
     warnings.push(
-      "当前缺少 workspace_id，无法正确解析工作区、任务和会话级别的记录。"
+      "当前缺少工作区筛选，无法正确解析工作区、任务和会话级别的记录。"
     );
   }
 

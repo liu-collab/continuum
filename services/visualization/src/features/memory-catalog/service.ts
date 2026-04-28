@@ -17,7 +17,10 @@ import {
   memoryViewModeExplanation,
   scopeExplanation,
   scopeLabel,
-  visibilitySummary
+  visibilitySummary,
+  formatSessionReference,
+  formatSourceReference,
+  formatWorkspaceReference
 } from "@/lib/format";
 import { toMemoryCatalogQuery } from "@/lib/query-params";
 import {
@@ -76,12 +79,12 @@ function toCatalogItem(
     importance: row.importance,
     confidence: row.confidence,
     originWorkspaceId,
-    originWorkspaceLabel: originWorkspaceId ? `来源工作区 ${originWorkspaceId}` : "未记录来源工作区",
+    originWorkspaceLabel: originWorkspaceId ? `来源${formatWorkspaceReference(originWorkspaceId)}` : "未记录来源工作区",
     visibilitySummary: visibilitySummary(scope, filters.memoryViewMode, originWorkspaceId),
     sourceType: source.sourceType,
     sourceRef: source.sourceRef,
     sourceServiceName: source.sourceServiceName,
-    sourceSummary: [source.sourceType ?? "未知来源", source.sourceRef ?? "未记录来源引用"].join(
+    sourceSummary: [source.sourceType ?? "未知来源", formatSourceReference(source.sourceRef)].join(
       " · "
     ),
     lastConfirmedAt: row.last_confirmed_at,
@@ -94,17 +97,17 @@ function buildViewSummary(filters: MemoryCatalogFilters) {
 
   if (filters.memoryViewMode === "workspace_only") {
     return filters.workspaceId
-      ? `${base} 当前工作区：${filters.workspaceId}${filters.sessionId ? `，会话：${filters.sessionId}` : ""}${filters.sourceRef ? `，来源引用：${filters.sourceRef}` : ""}。`
-      : `${base} 当前缺少 workspace_id，所以只能依赖显式筛选条件进一步收窄结果。`;
+      ? `${base} 当前${formatWorkspaceReference(filters.workspaceId)}${filters.sessionId ? `，${formatSessionReference(filters.sessionId)}` : ""}${filters.sourceRef ? `，${formatSourceReference(filters.sourceRef)}` : ""}。`
+      : `${base} 当前缺少工作区筛选，所以只能依赖显式筛选条件进一步收窄结果。`;
   }
 
   if (filters.scope === "user" || isImplicitGlobalView(filters)) {
-    return `${base} 当前正在查看平台级记忆，不需要 workspace_id。`;
+    return `${base} 当前正在查看平台级记忆，不需要工作区筛选。`;
   }
 
   return filters.workspaceId
-    ? `${base} 当前工作区：${filters.workspaceId}。${filters.sessionId ? `当前会话：${filters.sessionId}。` : ""}${filters.sourceRef ? `当前来源引用：${filters.sourceRef}。` : ""}`
-    : `${base} 当前缺少 workspace_id，所以页面结果可能不完整。`;
+    ? `${base} 当前${formatWorkspaceReference(filters.workspaceId)}。${filters.sessionId ? `当前${formatSessionReference(filters.sessionId)}。` : ""}${filters.sourceRef ? `当前${formatSourceReference(filters.sourceRef)}。` : ""}`
+    : `${base} 当前缺少工作区筛选，所以页面结果可能不完整。`;
 }
 
 function buildQuickViewHref(filters: MemoryCatalogFilters) {
@@ -171,7 +174,7 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       filters,
       "global-user",
       "全局记忆",
-      "直接查看平台级偏好和长期事实，不受 session_id 限制。",
+      "直接查看平台级偏好和长期事实，不受会话限制。",
       {
         workspaceId: filters.workspaceId,
         memoryViewMode: "workspace_plus_global",
@@ -241,7 +244,7 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
         filters,
         "clear-session",
         "去掉会话限制",
-        "保留当前工作区，但不再用 session_id 限制结果，避免把全局记忆筛掉。",
+        "保留当前工作区，但不再用会话限制结果，避免把全局记忆筛掉。",
         {
           workspaceId: filters.workspaceId,
           memoryViewMode: filters.workspaceId ? "workspace_plus_global" : "workspace_plus_global",
@@ -258,14 +261,14 @@ export function describeCatalogFilterHints(filters: MemoryCatalogFilters) {
   const hints: string[] = [];
 
   if (filters.sessionId) {
-    hints.push("当前带了 session_id，只会稳定命中会话级记录。平台级记忆通常没有 session_id，所以想看全局偏好时请直接点“全局记忆”。");
+    hints.push("当前带了会话筛选，只会稳定命中会话级记录。平台级记忆通常不绑定会话，所以想看全局偏好时请直接点“全局记忆”。");
   }
 
   if (!filters.workspaceId) {
     if (filters.scope === "user" || isImplicitGlobalView(filters)) {
-      hints.push("当前正在查看平台级记忆，不需要 workspace_id。");
+      hints.push("当前正在查看平台级记忆，不需要工作区筛选。");
     } else {
-      hints.push("当前没有 workspace_id，页面只能稳定展示平台级记忆。要看工作区、任务或会话记忆，请补充 workspace_id。");
+      hints.push("当前没有工作区筛选，页面只能稳定展示平台级记忆。要看工作区、任务或会话记忆，请补充工作区。");
     }
   }
 
@@ -349,7 +352,11 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     pageSize: 1
   };
   const base = toCatalogItem(record, filters);
-  const sourceParts = [base.sourceType, base.sourceRef, base.sourceServiceName].filter(Boolean);
+  const sourceParts = [
+    base.sourceType,
+    base.sourceRef ? formatSourceReference(base.sourceRef) : null,
+    base.sourceServiceName
+  ].filter(Boolean);
   const governanceResult = await fetchGovernanceExecutions({
     workspaceId: record.workspace_id ?? undefined,
     proposalType: undefined,

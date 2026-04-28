@@ -57,10 +57,10 @@ export default async function MemoriesPage({
                     updated_to: filters.updatedTo
                   }}
                 >
-                  <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={filters.workspaceId} />
-                  <FormField label="Task" name="task_id" placeholder="task id" defaultValue={filters.taskId} />
-                  <FormField label="Session" name="session_id" placeholder="session id" defaultValue={filters.sessionId} />
-                  <FormField label="Source Ref" name="source_ref" placeholder="source ref" defaultValue={filters.sourceRef} />
+                  <FormField label="工作区" name="workspace_id" placeholder="工作区文件夹或标识" defaultValue={filters.workspaceId} />
+                  <FormField label="任务" name="task_id" placeholder="任务标识" defaultValue={filters.taskId} />
+                  <FormField label="会话" name="session_id" placeholder="会话标识" defaultValue={filters.sessionId} />
+                  <FormField label="来源" name="source_ref" placeholder="来源轮次或引用" defaultValue={filters.sourceRef} />
                   <FormField label="视图" name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
                     { label: "工作区 + 平台", value: "workspace_plus_global" },
                     { label: "仅工作区", value: "workspace_only" }

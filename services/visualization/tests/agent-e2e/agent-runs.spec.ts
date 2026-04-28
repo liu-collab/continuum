@@ -15,7 +15,6 @@ test.describe("agent trace binding", () => {
     const latestRun = await waitForLatestRunTrace();
     expect(latestRun.traceId).toBeTruthy();
     const traceId = latestRun.traceId ?? "";
-    let turnId = latestRun.turnId ?? "";
 
     await expect
       .poll(async () => {
@@ -31,15 +30,14 @@ test.describe("agent trace binding", () => {
             };
           } | null;
         };
-        turnId = payload.selectedTurn?.turn?.turnId ?? turnId;
         return payload.selectedTurn?.turn?.traceId ?? null;
       })
       .toBe(traceId);
 
     await agent.openRunsPageForTrace(traceId);
     await expect(page.getByRole("heading", { name: "运行轨迹", exact: true })).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Trace id" })).toHaveValue(traceId);
-    await expect(page.getByRole("heading", { name: turnId, exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "调试标识" })).toHaveValue(traceId);
+    await expect(page.getByRole("heading", { name: /运行轨迹 · / })).toBeVisible();
 
     await page.goto("/memories");
     await expect(page.getByRole("heading", { name: "记忆目录", exact: true })).toBeVisible();

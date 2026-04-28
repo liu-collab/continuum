@@ -46,7 +46,7 @@
     "emptyTitle": "还没有对话",
     "emptyDescription": "输入第一条消息后，这里会展示注入横幅、phase 轨迹、assistant 流式输出和工具调用日志。",
     "loadEarlier": "加载更早消息（还有 {count} 轮）",
-    "turnLabel": "轮次 {id}",
+    "turnLabel": "第 {index} 轮",
     "injectionReady": "注入已就绪",
     "phaseDegradedSkip": "{phase} 已降级跳过",
     "viewPrompt": "查看 prompt",
@@ -184,7 +184,7 @@
   "sessionList": {
     "emptyTitle": "还没有会话。发送第一条消息后，这里会保留最近会话。",
     "defaultTitle": "会话 {id}",
-    "workspace": "工作区：{id}",
+    "workspace": "工作区：{label}",
     "active": "活跃",
     "closed": "已关闭",
     "renameAria": "重命名会话",
@@ -197,6 +197,8 @@
     "selectedWorkspace": "当前文件树工作区：{label}",
     "selectedFolderLabel": "已选文件夹",
     "workspaceIdLabel": "ID",
+    "workspacePathLabel": "路径",
+    "workspaceDebugIdLabel": "调试 ID",
     "uploadHint": "点击选择文件夹，下面会直接展开当前文件夹内容。",
     "clearFolderAction": "移除当前文件夹",
     "pickFolderAction": "选择文件夹",
@@ -215,7 +217,7 @@
     "description": "查看每次工具调用的状态、输出摘要和信任等级。",
     "emptyTitle": "还没有工具调用",
     "emptyDescription": "当 agent 触发文件、shell 或 MCP 工具时，这里会显示执行日志。",
-    "turnLabel": "轮次 {id}",
+    "turnLabel": "第 {index} 轮",
     "waiting": "等待工具返回..."
   },
   "memoryPanel": {
@@ -366,6 +368,7 @@
     "close": "关闭 Prompt Inspector",
     "meta": "元信息",
     "turn": "轮次",
+    "trace": "调试标识",
     "provider": "提供方",
     "tools": "工具数",
     "notLoaded": "未加载",

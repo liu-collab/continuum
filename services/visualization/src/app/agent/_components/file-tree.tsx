@@ -7,30 +7,8 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "../_i18n/provider";
+import { getWorkspaceDebugId, getWorkspaceFolderLabel, getWorkspacePathLabel } from "../_lib/display";
 import type { MnaFileTreeEntry, MnaWorkspaceSummary } from "../_lib/openapi-types";
-
-function getWorkspaceDisplayId(workspace: Pick<MnaWorkspaceSummary, "workspace_id" | "short_id">) {
-  if (workspace.short_id && workspace.short_id.length > 0) {
-    return workspace.short_id;
-  }
-
-  const normalized = workspace.workspace_id.replace(/[^a-zA-Z0-9]/g, "");
-  if (normalized.length >= 8) {
-    return normalized.slice(0, 8).toLowerCase();
-  }
-
-  return workspace.workspace_id.slice(0, 8).toLowerCase();
-}
-
-function getWorkspaceDisplayName(cwd: string | null) {
-  if (!cwd) {
-    return "";
-  }
-
-  const normalized = cwd.replace(/[\\/]+$/, "");
-  const segments = normalized.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? normalized;
-}
 
 type FileTreeProps = {
   path: string;
@@ -64,8 +42,9 @@ export function FileTree({
     ? workspaces.find((item) => item.workspace_id === selectedWorkspaceId) ?? null
     : null;
   const selectedWorkspacePath = selectedWorkspace?.cwd ?? null;
-  const selectedWorkspaceDisplayId = selectedWorkspace ? getWorkspaceDisplayId(selectedWorkspace) : null;
-  const selectedWorkspaceDisplayName = getWorkspaceDisplayName(selectedWorkspacePath);
+  const selectedWorkspaceDebugId = selectedWorkspace ? getWorkspaceDebugId(selectedWorkspace) : null;
+  const selectedWorkspaceDisplayName = getWorkspaceFolderLabel(selectedWorkspace);
+  const selectedWorkspaceDisplayPath = getWorkspacePathLabel(selectedWorkspace);
 
   useEffect(() => {
     setOpenError(null);
@@ -129,8 +108,9 @@ export function FileTree({
                   <div
                     data-testid="selected-workspace-id"
                     className="mt-1 text-xs text-muted-foreground"
+                    title={selectedWorkspaceDebugId ? `${t("fileTree.workspaceDebugIdLabel")}: ${selectedWorkspaceDebugId}` : undefined}
                   >
-                    {t("fileTree.workspaceIdLabel")}: {selectedWorkspaceDisplayId}
+                    {t("fileTree.workspacePathLabel")}: {selectedWorkspaceDisplayPath}
                   </div>
                 </div>
                 <button

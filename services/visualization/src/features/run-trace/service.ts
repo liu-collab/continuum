@@ -1,7 +1,7 @@
 import "server-only";
 
 import { RunTraceFilters, RunTracePhaseNarrative, RunTraceResponse, Scope } from "@/lib/contracts";
-import { memoryModeSummary, scopeExplanation, scopeLabel } from "@/lib/format";
+import { formatSessionReference, formatSourceReference, memoryModeSummary, scopeExplanation, scopeLabel } from "@/lib/format";
 import { toRunTraceQuery } from "@/lib/query-params";
 import {
   RuntimeDependencyRecord,
@@ -287,10 +287,10 @@ function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
     return [
       {
         key: "turn" as const,
-        title: `Turn / ${phase.phase}`,
-        summary: `Turn ${turn.turnId ?? turn.traceId} 运行在 ${phase.phase}。`,
+        title: `轮次 / ${phase.phase}`,
+        summary: `${formatSourceReference(turn.turnId ?? turn.traceId)} 运行在 ${phase.phase}。`,
         details: [
-          `Session：${turn.sessionId ?? "未记录"}`,
+          formatSessionReference(turn.sessionId),
           `当前输入：${turn.currentInput ?? "未记录"}`,
           `助手输出：${turn.assistantOutput ?? "未记录"}`
         ]
@@ -611,16 +611,15 @@ export function describeRunTraceEmptyState(response: RunTraceResponse) {
     return {
       title: "当前筛选条件下没有找到轨迹",
       description:
-        "运行时观测接口可访问，但没有返回对应 turn id 或 trace id 的轨迹。"
+        "运行时观测接口可访问，但没有返回对应轮次或调试标识的轨迹。"
     };
   }
 
   return {
-    title: "请输入 turn id 或 trace id 查看轨迹",
+    title: "请输入轮次或调试标识查看轨迹",
     description:
-      "下方仍然可以列出最近轨迹，但主详情视图仍然由 turn id 或 trace id 驱动。"
+      "下方仍然可以列出最近轨迹，但主详情视图仍然由轮次或调试标识驱动。"
   };
 }
 
 export { summarizeScopes, buildPhaseNarratives, formatScopeList, scopeExplanation };
-

@@ -8,19 +8,18 @@ import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "../_i18n/provider";
-import type { MnaSessionSummary } from "../_lib/openapi-types";
-
-function toShortWorkspaceId(workspaceId: string) {
-  const normalized = workspaceId.replace(/[^a-zA-Z0-9]/g, "");
-  if (normalized.length >= 8) {
-    return normalized.slice(0, 8).toLowerCase();
-  }
-
-  return workspaceId.slice(0, 8).toLowerCase();
-}
+import {
+  formatSessionTimeTitle,
+  getShortIdentifier,
+  getWorkspaceDebugId,
+  getWorkspaceFolderLabel,
+  getWorkspacePathLabel
+} from "../_lib/display";
+import type { AgentLocale, MnaSessionSummary, MnaWorkspaceSummary } from "../_lib/openapi-types";
 
 type SessionListProps = {
   sessions: MnaSessionSummary[];
+  workspaces?: MnaWorkspaceSummary[];
   activeSessionId: string | null;
   activeSessionMemoriesHref?: string | null;
   activeSessionRunsHref?: string | null;
@@ -31,6 +30,7 @@ type SessionListProps = {
 
 export function SessionList({
   sessions,
+  workspaces = [],
   activeSessionId,
   activeSessionMemoriesHref,
   activeSessionRunsHref,
@@ -40,7 +40,7 @@ export function SessionList({
 }: SessionListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
-  const { formatMemoryModeLabel, formatSessionTitle, t } = useAgentI18n();
+  const { formatMemoryModeLabel, locale, t } = useAgentI18n();
 
   if (sessions.length === 0) {
     return (
@@ -55,6 +55,11 @@ export function SessionList({
       {sessions.map((session) => {
         const isActive = session.id === activeSessionId;
         const isEditing = editingId === session.id;
+        const workspace = workspaces.find((item) => item.workspace_id === session.workspace_id) ?? null;
+        const workspaceLabel = getSessionWorkspaceLabel(locale, session, workspace);
+        const workspaceTitle = workspace
+          ? `${getWorkspacePathLabel(workspace)} · ${t("fileTree.workspaceDebugIdLabel")}: ${getWorkspaceDebugId(workspace)}`
+          : session.workspace_id;
 
         return (
           <div
@@ -94,10 +99,10 @@ export function SessionList({
                     className="w-full text-left"
                   >
                     <div className="truncate text-[17px] font-semibold leading-[1.24] text-foreground">
-                      {session.title ?? formatSessionTitle(session.id.slice(0, 8))}
+                      {session.title ?? formatFallbackSessionTitle(locale, session)}
                     </div>
-                    <div className="mt-2 text-[14px] leading-[1.43] text-muted-foreground">
-                      {t("sessionList.workspace", { id: toShortWorkspaceId(session.workspace_id) })}
+                    <div className="mt-2 truncate text-[14px] leading-[1.43] text-muted-foreground" title={workspaceTitle}>
+                      {t("sessionList.workspace", { label: workspaceLabel })}
                     </div>
                   </button>
                 )}
@@ -179,6 +184,26 @@ export function SessionList({
       })}
     </div>
   );
+}
+
+function getSessionWorkspaceLabel(locale: AgentLocale, session: MnaSessionSummary, workspace: MnaWorkspaceSummary | null) {
+  const folderLabel = getWorkspaceFolderLabel(workspace);
+  if (folderLabel) {
+    return folderLabel;
+  }
+
+  return locale === "en-US"
+    ? `Unknown workspace ${getShortIdentifier(session.workspace_id)}`
+    : `未知工作区 ${getShortIdentifier(session.workspace_id)}`;
+}
+
+function formatFallbackSessionTitle(locale: AgentLocale, session: MnaSessionSummary) {
+  const formattedTime = formatSessionTimeTitle(locale, session.created_at);
+  if (formattedTime) {
+    return locale === "en-US" ? `Session · ${formattedTime}` : `会话 · ${formattedTime}`;
+  }
+
+  return locale === "en-US" ? "Untitled session" : "未命名会话";
 }
 
 function QuickActionLink({

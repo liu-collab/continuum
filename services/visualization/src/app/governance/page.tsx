@@ -5,7 +5,7 @@ import { HealthModalButton } from "@/components/health-modal";
 import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/memory-catalog/service";
-import { formatTimestamp, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
+import { formatDebugReference, formatTimestamp, formatWorkspaceReference, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
 
 function parseSearchParams(input: Record<string, string | string[] | undefined>) {
   const valueOf = (key: string) => {
@@ -60,7 +60,7 @@ export default async function GovernancePage({
                   execution_status: params.executionStatus,
                   limit: String(params.limit)
                 }}>
-                  <FormField label="Workspace" name="workspace_id" placeholder="workspace id" defaultValue={params.workspaceId} />
+                  <FormField label="工作区" name="workspace_id" placeholder="工作区文件夹或标识" defaultValue={params.workspaceId} />
                   <FormField label="动作" name="proposal_type" defaultValue={params.proposalType} options={[
                     { label: "归档", value: "archive" },
                     { label: "确认", value: "confirm" },
@@ -155,15 +155,15 @@ export default async function GovernancePage({
 
                   <div className="detail-grid">
                     <section className="panel p-6">
-                      <div className="section-kicker">Planner / Verifier</div>
+                      <div className="section-kicker">规划与复核</div>
                       <dl className="kv-grid mt-4">
-                        <Row label="Planner model" value={detailResponse.detail.plannerModel} />
-                        <Row label="Planner confidence" value={String(detailResponse.detail.plannerConfidence ?? "未记录")} />
-                        <Row label="Verifier required" value={detailResponse.detail.verifierRequired ? "需要" : "不需要"} />
-                        <Row label="Verifier decision" value={detailResponse.detail.verifierDecision ?? "未记录"} />
-                        <Row label="Blocked" value={detailResponse.detail.verificationBlocked ? "是" : "否"} />
-                        <Row label="Verifier model" value={detailResponse.detail.verifierModel ?? "未记录"} />
-                        <Row label="Policy" value={detailResponse.detail.policyVersion} />
+                        <Row label="规划模型" value={detailResponse.detail.plannerModel} />
+                        <Row label="规划置信度" value={String(detailResponse.detail.plannerConfidence ?? "未记录")} />
+                        <Row label="需要复核" value={detailResponse.detail.verifierRequired ? "需要" : "不需要"} />
+                        <Row label="复核结论" value={detailResponse.detail.verifierDecision ?? "未记录"} />
+                        <Row label="已阻塞" value={detailResponse.detail.verificationBlocked ? "是" : "否"} />
+                        <Row label="复核模型" value={detailResponse.detail.verifierModel ?? "未记录"} />
+                        <Row label="策略版本" value={detailResponse.detail.policyVersion} />
                       </dl>
                     </section>
 
@@ -175,13 +175,13 @@ export default async function GovernancePage({
                         </div>
                       ) : null}
                       <dl className="kv-grid mt-4">
-                        <Row label="Execution" value={detailResponse.detail.executionId} />
-                        <Row label="Proposal" value={detailResponse.detail.proposalId} />
-                        <Row label="Workspace" value={detailResponse.detail.workspaceId} />
-                        <Row label="Started" value={formatTimestamp(detailResponse.detail.startedAt)} />
-                        <Row label="Finished" value={formatTimestamp(detailResponse.detail.finishedAt)} />
-                        <Row label="Result" value={detailResponse.detail.resultSummary ?? "未记录"} />
-                        <Row label="Error" value={detailResponse.detail.errorMessage ?? "无"} />
+                        <Row label="执行记录" value={formatDebugReference(detailResponse.detail.executionId)} />
+                        <Row label="提案记录" value={formatDebugReference(detailResponse.detail.proposalId)} />
+                        <Row label="工作区" value={formatWorkspaceReference(detailResponse.detail.workspaceId)} />
+                        <Row label="开始时间" value={formatTimestamp(detailResponse.detail.startedAt)} />
+                        <Row label="完成时间" value={formatTimestamp(detailResponse.detail.finishedAt)} />
+                        <Row label="结果" value={detailResponse.detail.resultSummary ?? "未记录"} />
+                        <Row label="错误" value={detailResponse.detail.errorMessage ?? "无"} />
                       </dl>
                     </section>
                   </div>
@@ -194,7 +194,7 @@ export default async function GovernancePage({
                     <div className="record-list mt-5">
                       {detailResponse.detail.targets.map((target, index) => (
                         <div key={`${target.role}-${index}`} className="record-card">
-                          <Row label={target.role} value={target.recordId ?? target.conflictId ?? "未记录"} />
+                          <Row label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId)} />
                         </div>
                       ))}
                     </div>

@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { GovernancePanel } from "@/features/memory-catalog/governance-panel";
 import { getMemoryDetail } from "@/features/memory-catalog/service";
 import {
+  formatDebugReference,
   formatTimestamp,
   governanceStatusTone,
 } from "@/lib/format";
@@ -75,7 +76,7 @@ export default async function MemoryDetailPage({
               <dl className="kv-grid mt-4">
                 <Row label="类型" value={detail.memoryTypeLabel} />
                 <Row label="作用域" value={detail.scopeLabel} />
-                <Row label="来源工作区" value={detail.originWorkspaceLabel} />
+                <Row label="来源文件夹/工作区" value={detail.originWorkspaceLabel} />
                 <Row label="重要度" value={detail.importance != null ? String(detail.importance) : "未记录"} />
                 <Row label="置信度" value={detail.confidence != null ? String(detail.confidence) : "未记录"} />
                 <Row label="最近确认" value={formatTimestamp(detail.lastConfirmedAt)} />
@@ -98,9 +99,9 @@ export default async function MemoryDetailPage({
               <dl className="kv-grid">
                 <Row label="摘要" value={detail.sourceFormatted} />
                 <Row label="类型" value={detail.sourceType ?? "未记录"} />
-                <Row label="引用" value={detail.sourceRef ?? "未记录"} />
+                <Row label="来源" value={formatDebugReference(detail.sourceRef)} />
                 <Row label="服务" value={detail.sourceServiceName ?? "未记录"} />
-                <Row label="来源轮次" value={detail.sourceTurnId ?? "未记录"} />
+                <Row label="来源轮次" value={formatDebugReference(detail.sourceTurnId)} />
                 <Row label="提取依据" value={detail.extractionBasis ?? "未记录"} />
               </dl>
             </section>
