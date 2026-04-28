@@ -38,5 +38,6 @@ describe("filter modal button", () => {
     await user.click(screen.getByRole("button", { name: "应用" }));
 
     expect(push).toHaveBeenCalledWith("/memories?workspace_id=ws-1");
+    expect(screen.getByTestId("search-form-pending")).toHaveTextContent("正在加载结果");
   });
 });

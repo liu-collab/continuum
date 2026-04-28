@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
 import { HealthModalButton } from "@/components/health-modal";
+import { NavigationPendingProvider, PendingContentBoundary, PendingLink } from "@/components/pending-link";
+import { SkeletonBlock } from "@/components/page-skeleton";
 import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
@@ -61,16 +63,20 @@ export default async function RunsPage({
 
       <section className="tile tile-parchment">
         <div className="tile-inner">
+          <NavigationPendingProvider>
           <div className="master-detail-grid">
             <aside className="panel p-5">
               <div className="section-kicker">{t("runs.recentKicker")}</div>
               {response.items.length > 0 ? (
                 <div className="record-list mt-4">
                   {response.items.map((item) => (
-                    <Link
+                    <PendingLink
                       key={item.traceId}
                       href={`/runs?trace_id=${encodeURIComponent(item.traceId)}` as Route}
                       scroll={false}
+                      pendingKey="runs-detail"
+                      pendingLabel={t("runs.loadingDetail")}
+                      testId={`run-trace-link-${item.traceId}`}
                       className={`record-link ${selectedTurn?.turn.traceId === item.traceId ? "record-link-active" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -92,7 +98,7 @@ export default async function RunsPage({
                         <span>{t("runs.injectedCount", { count: item.injectedCount })}</span>
                         <span>{formatTimestamp(item.createdAt, locale)}</span>
                       </div>
-                    </Link>
+                    </PendingLink>
                   ))}
                 </div>
               ) : (
@@ -100,7 +106,12 @@ export default async function RunsPage({
               )}
             </aside>
 
-            <section className="grid gap-6">
+            <PendingContentBoundary
+              pendingKey="runs-detail"
+              className="grid gap-6"
+              testId="run-detail-boundary"
+              fallback={<RunDetailSkeleton label={t("runs.loadingDetail")} />}
+            >
               {selectedTurn ? (
                 <>
                   <div className="panel p-6">
@@ -182,11 +193,27 @@ export default async function RunsPage({
               ) : (
                 <EmptyState title={t("runs.notSelectedTitle")} description={emptyState.description} />
               )}
-            </section>
+            </PendingContentBoundary>
           </div>
+          </NavigationPendingProvider>
         </div>
       </section>
     </div>
+  );
+}
+
+function RunDetailSkeleton({ label }: { label: string }) {
+  return (
+    <>
+      <div className="notice notice-info flex items-center gap-2" role="status" data-testid="run-detail-pending">
+        {label}
+      </div>
+      <SkeletonBlock className="h-48" />
+      <div className="detail-grid">
+        <SkeletonBlock className="h-36" />
+        <SkeletonBlock className="h-36" />
+      </div>
+    </>
   );
 }
 

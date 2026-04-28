@@ -41,6 +41,7 @@ const zhCommon = {
       current: "当前",
       retryLater: "稍后再试。",
       requestFailedStatus: "请求失败，状态码 {status}。",
+      loadingResults: "正在加载结果...",
       switchToDark: "切换到深色模式",
       switchToLight: "切换到浅色模式"
     },
@@ -121,7 +122,8 @@ const zhCommon = {
       reload: "重新加载",
       loadFailedTitle: "看板加载失败",
       loadFailedDescription: "当前无法读取看板数据，请检查 runtime / storage 数据源状态后重试。",
-      loadingSubtitle: "正在读取运行时与存储指标。"
+      loadingSubtitle: "正在读取运行时与存储指标。",
+      loadingWindow: "正在切换时间窗口..."
     },
     memories: {
       kicker: "记忆库",
@@ -250,6 +252,7 @@ const zhCommon = {
       filterDescription: "按轮次、会话或调试标识定位一条运行轨迹。",
       recentKicker: "最近轨迹",
       selectedKicker: "选中轨迹",
+      loadingDetail: "正在加载轨迹详情...",
       dependencies: "依赖",
       notSelectedTitle: "未选择轨迹",
       degraded: "降级",

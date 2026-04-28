@@ -710,3 +710,24 @@ setTimeout(() => startTransition(() => refresh()), 10_000);
 - 可以手动提前刷新，不用死等
 
 ---
+
+### 优化十五：筛选和页面切换增加 loading 过渡
+
+**状态：已完成**
+
+### 问题
+
+- FilterModal 提交后 `router.push`，页面静默刷新无过渡
+- Runs 页点击侧栏 trace 后 detail 面板保持旧内容，无加载指示
+- Dashboard 时间窗口切换触发整页刷新无反馈
+
+### 方案
+
+利用 `useTransition` 的 pending 状态显示浅层 loading bar；Runs 页 detail 面板提取为客户端组件，切换 traceId 时显示骨架屏。
+
+### 效果
+
+- 用户触发操作后有即时反馈，不会误以为页面卡死
+- 加载态用骨架屏占位，避免布局跳动
+
+---

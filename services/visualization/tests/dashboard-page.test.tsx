@@ -19,6 +19,28 @@ vi.mock("@/components/health-modal", () => ({
   HealthModalButton: ({ label }: { label?: string }) => <button type="button">{label ?? "健康"}</button>
 }));
 
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    onClick,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    href: string;
+  }) => (
+    <a
+      href={href}
+      onClick={(event) => {
+        onClick?.(event);
+        event.preventDefault();
+      }}
+      {...props}
+    >
+      {children}
+    </a>
+  )
+}));
+
 import DashboardPage from "@/app/dashboard/page";
 import DashboardError from "@/app/dashboard/error";
 import DashboardLoading from "@/app/dashboard/loading";
@@ -150,6 +172,10 @@ describe("dashboard page", () => {
     expect(screen.getByText("Runtime observe API")).toBeInTheDocument();
     expect(screen.getByText("Storage observe API")).toBeInTheDocument();
     expect(screen.getByText("storage observe api unavailable")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("dashboard-window-15m"));
+
+    expect(screen.getByTestId("dashboard-window-pending")).toHaveTextContent("正在切换时间窗口");
   });
 
   it("renders degraded and partial source banners", async () => {

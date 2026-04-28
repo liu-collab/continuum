@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const { getRunTraceMock, getSourceHealthMock } = vi.hoisted(() => ({
@@ -28,12 +28,21 @@ vi.mock("next/link", () => ({
     children,
     href,
     scroll,
+    onClick,
     ...props
   }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
     href: string;
     scroll?: boolean;
   }) => (
-    <a href={href} data-scroll={String(scroll)} {...props}>
+    <a
+      href={href}
+      data-scroll={String(scroll)}
+      onClick={(event) => {
+        onClick?.(event);
+        event.preventDefault();
+      }}
+      {...props}
+    >
       {children}
     </a>
   )
@@ -113,6 +122,10 @@ describe("runs page", () => {
       "/runs?trace_id=a048c6c0-900a-443e-9d34-d8db2981c2bf"
     );
     expect(screen.getByText("最近运行摘要").closest("a")).toHaveAttribute("data-scroll", "false");
+
+    fireEvent.click(screen.getByText("最近运行摘要").closest("a")!);
+
+    expect(screen.getByTestId("run-detail-pending")).toHaveTextContent("正在加载轨迹详情");
   });
 
   it("links injected record ids to memory detail pages", async () => {

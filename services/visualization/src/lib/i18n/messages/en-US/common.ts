@@ -41,6 +41,7 @@ const enCommon = {
       current: "Current",
       retryLater: "Try again later.",
       requestFailedStatus: "Request failed with status {status}.",
+      loadingResults: "Loading results...",
       switchToDark: "Switch to dark mode",
       switchToLight: "Switch to light mode"
     },
@@ -121,7 +122,8 @@ const enCommon = {
       reload: "Reload",
       loadFailedTitle: "Dashboard failed to load",
       loadFailedDescription: "Dashboard data cannot be read right now. Check runtime / storage source status and try again.",
-      loadingSubtitle: "Reading runtime and storage metrics."
+      loadingSubtitle: "Reading runtime and storage metrics.",
+      loadingWindow: "Switching time window..."
     },
     memories: {
       kicker: "Memory store",
@@ -250,6 +252,7 @@ const enCommon = {
       filterDescription: "Locate a run trace by turn, session, or debug ID.",
       recentKicker: "Recent traces",
       selectedKicker: "Selected trace",
+      loadingDetail: "Loading trace detail...",
       dependencies: "Dependencies",
       notSelectedTitle: "No trace selected",
       degraded: "Degraded",

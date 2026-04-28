@@ -1,7 +1,9 @@
 import React from "react";
+import type { Route } from "next";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard } from "@/components/metric-card";
 import { HealthModalButton } from "@/components/health-modal";
+import { NavigationPendingProvider, PendingLink, PendingNavigationStatus } from "@/components/pending-link";
 import { StatusBadge } from "@/components/status-badge";
 import { TrendCard } from "@/components/trend-card";
 import { getDashboard } from "@/features/dashboard/service";
@@ -56,17 +58,31 @@ export default async function DashboardPage({
               <p className="tile-subtitle">{t("dashboard.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <div className="segment-control" aria-label={t("dashboard.timeWindow")}>
-                {windows.map((item) => (
-                  <a
-                    key={item.value}
-                    href={`/dashboard?window=${item.value}`}
-                    className={`segment-item ${item.value === window ? "segment-item-active" : ""}`}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-              </div>
+              <NavigationPendingProvider>
+                <div className="grid gap-2">
+                  <div className="segment-control" aria-label={t("dashboard.timeWindow")}>
+                    {windows.map((item) => (
+                      <PendingLink
+                        key={item.value}
+                        href={`/dashboard?window=${item.value}` as Route}
+                        pendingKey="dashboard-window"
+                        pendingLabel={t("dashboard.loadingWindow")}
+                        inlinePending={false}
+                        testId={`dashboard-window-${item.value}`}
+                        className={`segment-item ${item.value === window ? "segment-item-active" : ""}`}
+                      >
+                        {item.label}
+                      </PendingLink>
+                    ))}
+                  </div>
+                  <PendingNavigationStatus
+                    pendingKey="dashboard-window"
+                    label={t("dashboard.loadingWindow")}
+                    className="flex items-center gap-2 text-[14px] leading-[1.43] text-[var(--primary)]"
+                    testId="dashboard-window-pending"
+                  />
+                </div>
+              </NavigationPendingProvider>
               <HealthModalButton health={health} />
             </div>
           </div>
