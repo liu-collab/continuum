@@ -159,10 +159,10 @@ export function FileTree({
           )}
           <div className="grid gap-2">
             {registerError ? (
-              <div className="text-[11px] text-rose-700">{registerError}</div>
+              <div className="text-[11px] text-[var(--ink)]">{registerError}</div>
             ) : null}
             {openError ? (
-              <div data-testid="file-tree-open-error" className="text-[11px] text-rose-700">
+              <div data-testid="file-tree-open-error" className="text-[11px] text-[var(--ink)]">
                 {openError}
               </div>
             ) : null}

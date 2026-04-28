@@ -143,7 +143,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <div className="shrink-0 rounded-md bg-amber-100 p-1.5 text-amber-700">
+              <div className="shrink-0 rounded-[var(--radius-md)] bg-[var(--surface-pearl)] p-1.5 text-[var(--primary)]">
                 <AlertTriangle className="h-4 w-4" />
               </div>
               <div className="min-w-0">
@@ -241,7 +241,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="shrink-0 rounded-md bg-amber-100 p-1.5 text-amber-700">
+            <div className="shrink-0 rounded-[var(--radius-md)] bg-[var(--surface-pearl)] p-1.5 text-[var(--primary)]">
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div className="min-w-0">
@@ -254,7 +254,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
               {pendingConfirm.riskHint ? (
                 <div
                   data-testid="confirm-risk-hint"
-                  className="mt-2 inline-flex max-w-full items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800"
+                  className="mt-2 inline-flex max-w-full items-center rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--surface-pearl)] px-2 py-1 text-xs font-medium text-muted-foreground"
                 >
                   {t("confirmDialog.riskHint", {
                     risk: t(`confirmDialog.risk.${pendingConfirm.riskHint}`)

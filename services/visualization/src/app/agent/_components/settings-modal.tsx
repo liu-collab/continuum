@@ -553,13 +553,13 @@ export function SettingsModal({
     >
       <div className="space-y-6" data-testid="runtime-config-card">
         {errorMessage ? (
-          <p className="text-sm text-rose-600" data-testid="runtime-config-error">
+          <p className="text-sm text-[var(--ink)]" data-testid="runtime-config-error">
             {errorMessage}
           </p>
         ) : null}
         {feedbackMessage ? (
           <p
-            className={feedbackMessage.tone === "success" ? "text-sm text-emerald-600" : "text-sm text-amber-600"}
+            className={feedbackMessage.tone === "success" ? "text-sm text-[var(--primary)]" : "text-sm text-muted-foreground"}
             data-testid="runtime-config-feedback"
           >
             {feedbackMessage.text}
@@ -1114,4 +1114,3 @@ export function SettingsModal({
     </Modal>
   );
 }
-

@@ -344,7 +344,7 @@ function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, u
       {errorOutput ? (
         <div
           data-testid={`tool-call-output-${props.toolCallId}`}
-          className="mt-2 whitespace-pre-wrap break-words rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs leading-5 text-rose-800"
+          className="mt-2 whitespace-pre-wrap break-words rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--surface-pearl)] px-2 py-1.5 text-xs leading-5 text-[var(--ink)]"
         >
           {errorOutput}
         </div>

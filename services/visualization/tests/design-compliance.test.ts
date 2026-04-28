@@ -27,4 +27,18 @@ describe("visualization design compliance", () => {
     expect(filterBar).not.toContain("fontWeight: 500");
     expect(assistantThread).not.toMatch(/text-\[12px\] font-medium uppercase/);
   });
+
+  it("keeps audited agent UI colors on design tokens instead of secondary accent palettes", () => {
+    const auditedFiles = [
+      "src/app/agent/_components/assistant-thread.tsx",
+      "src/app/agent/_components/chat-panel.tsx",
+      "src/app/agent/_components/confirm-dialog.tsx",
+      "src/app/agent/_components/file-tree.tsx",
+      "src/app/agent/_components/mcp-panel.tsx",
+      "src/app/agent/_components/settings-modal.tsx"
+    ];
+    const source = auditedFiles.map(readSource).join("\n");
+
+    expect(source).not.toMatch(/\b(?:border|bg|text)-(?:rose|amber|emerald)-\d+/);
+  });
 });

@@ -846,3 +846,33 @@ body { letter-spacing: -0.374px; }
 - `assistant-thread.tsx` → `font-normal`
 
 ---
+
+### 修复二十：移除第二强调色，统一为 Action Blue
+
+**状态：已完成**
+
+#### 问题
+
+设计稿规定 Action Blue（#0066cc）是唯一强调色。以下组件使用了 rose/amber/emerald：
+
+| 文件 | 违规代码 |
+|---|---|
+| `assistant-thread.tsx` | `border-rose-200 bg-rose-50 text-rose-800` |
+| `chat-panel.tsx` | `text-emerald-700` / `text-amber-700` / `text-rose-700` |
+| `confirm-dialog.tsx` | `bg-amber-100 text-amber-700` + `border-amber-200 bg-amber-50 text-amber-800` |
+| `file-tree.tsx` | `text-rose-700` ×2 |
+| `mcp-panel.tsx` | `text-rose-700` |
+| `settings-modal.tsx` | `text-rose-600` / `text-emerald-600` / `text-amber-600` |
+
+#### 方案
+
+统一替换为设计稿语义 Token：
+
+| 旧（Tailwind） | 新（设计稿 Token） |
+|---|---|
+| `text-rose-*` | `.status-danger` 或 `var(--ink)` |
+| `text-amber-*` | `.status-warning` 或 `var(--text-muted)` |
+| `text-emerald-*` | `.status-success` 或 `var(--primary)` |
+| `bg-rose-50` / `bg-amber-100` 等 | `var(--surface-pearl)` 或 `var(--canvas-parchment)` |
+
+---

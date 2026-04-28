@@ -66,7 +66,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
                 </button>
               </div>
               {server.last_error ? (
-                <div className="mt-2 text-xs leading-5 text-rose-700">{server.last_error}</div>
+                <div className="mt-2 text-xs leading-5 text-[var(--ink)]">{server.last_error}</div>
               ) : null}
             </div>
           ))
