@@ -575,6 +575,47 @@ describe("AgentRunner", () => {
     );
   });
 
+  it("warns then pauses writeback after repeated finalize failures", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.finalizeTurn.mockRejectedValue(new Error("runtime timeout"));
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "已确认默认用中文。" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    for (let index = 0; index < 9; index += 1) {
+      await runner.submit("记住默认用中文回复", `turn-writeback-health-${index}`);
+      await Promise.resolve();
+    }
+
+    expect(memoryClient.finalizeTurn).toHaveBeenCalledTimes(8);
+    expect(io.emitError.mock.calls.filter((call) => call[1]?.code === "memory_writeback_degraded")).toHaveLength(1);
+    expect(io.emitError.mock.calls.filter((call) => call[1]?.code === "memory_writeback_paused")).toHaveLength(1);
+  });
+
   it("emits a session error once when store writes fail but still completes the turn", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();

@@ -149,6 +149,18 @@ interface PendingResidentRefreshState {
 
 const MAX_RESIDENT_REFRESH_ATTEMPTS = 5;
 const RESIDENT_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
+const MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_WARN = 3;
+const MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_SKIP = 8;
+const WRITEBACK_SKIP_COOLDOWN_MS = 5 * 60 * 1000;
+
+interface WritebackHealthState {
+  consecutiveFailures: number;
+  lastFailureReason: MemoryWritebackIncompleteReason | null;
+  lastSuccessAt: number | null;
+  degradedSince: number | null;
+  degradedWarningEmitted: boolean;
+  pausedWarningEmitted: boolean;
+}
 
 export class AgentRunner {
   private readonly conversation = new Conversation();
@@ -166,6 +178,14 @@ export class AgentRunner {
   private storeWarningEmitted = false;
   private currentPlan: ExecutionPlan | null = null;
   private readonly planRevisionCounter = new Map<string, number>();
+  private writebackHealth: WritebackHealthState = {
+    consecutiveFailures: 0,
+    lastFailureReason: null,
+    lastSuccessAt: null,
+    degradedSince: null,
+    degradedWarningEmitted: false,
+    pausedWarningEmitted: false,
+  };
 
   constructor(private readonly deps: RunnerDeps) {
     this.sessionId = deps.sessionId ?? createSessionId();
@@ -591,7 +611,7 @@ export class AgentRunner {
       evaluationEvents,
     );
 
-    if (shouldFinalizeTurn(userInput, assistantOutput)) {
+    if (shouldFinalizeTurn(userInput, assistantOutput) && this.shouldAttemptWriteback()) {
       const finalizeSpan = this.tracer.startSpan({
         traceId,
         name: "finalize_turn",
@@ -609,9 +629,11 @@ export class AgentRunner {
         memory_mode: this.deps.config.memory.mode,
       }).catch((error) => {
         finalizeSpan.finish("error");
+        const reason = classifyMemoryWritebackError(error);
+        this.recordWritebackFailure(reason);
         this.deps.io.emitError(
           "turn",
-          createMemoryWritebackIncompleteError(classifyMemoryWritebackError(error)),
+          createMemoryWritebackIncompleteError(reason),
           turnId,
         );
       }).then((response) => {
@@ -620,11 +642,14 @@ export class AgentRunner {
         }
         const incompleteReason = classifyMemoryWritebackResult(response);
         if (incompleteReason) {
+          this.recordWritebackFailure(incompleteReason);
           this.deps.io.emitError(
             "turn",
             createMemoryWritebackIncompleteError(incompleteReason),
             turnId,
           );
+        } else {
+          this.recordWritebackSuccess();
         }
         const residentJobs = response?.submitted_jobs
           ?.filter((job, index) => {
@@ -862,6 +887,59 @@ export class AgentRunner {
         code: (error as Error & { code?: string }).code ?? "memory_unavailable",
       }));
       return null;
+    }
+  }
+
+  private shouldAttemptWriteback(): boolean {
+    const { consecutiveFailures, degradedSince } = this.writebackHealth;
+    if (consecutiveFailures < MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_SKIP) {
+      return true;
+    }
+
+    return Boolean(degradedSince && Date.now() - degradedSince >= WRITEBACK_SKIP_COOLDOWN_MS);
+  }
+
+  private recordWritebackSuccess(): void {
+    this.writebackHealth = {
+      consecutiveFailures: 0,
+      lastFailureReason: null,
+      lastSuccessAt: Date.now(),
+      degradedSince: null,
+      degradedWarningEmitted: false,
+      pausedWarningEmitted: false,
+    };
+  }
+
+  private recordWritebackFailure(reason: MemoryWritebackIncompleteReason): void {
+    this.writebackHealth.consecutiveFailures += 1;
+    this.writebackHealth.lastFailureReason = reason;
+    this.writebackHealth.degradedSince ??= Date.now();
+
+    if (
+      this.writebackHealth.consecutiveFailures >= MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_WARN &&
+      !this.writebackHealth.degradedWarningEmitted
+    ) {
+      this.writebackHealth.degradedWarningEmitted = true;
+      this.deps.io.emitError(
+        "session",
+        Object.assign(new Error("memory writeback degraded"), {
+          code: "memory_writeback_degraded",
+          reason,
+        }),
+      );
+    }
+
+    if (
+      this.writebackHealth.consecutiveFailures >= MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_SKIP &&
+      !this.writebackHealth.pausedWarningEmitted
+    ) {
+      this.writebackHealth.pausedWarningEmitted = true;
+      this.deps.io.emitError(
+        "session",
+        Object.assign(new Error("memory writeback paused"), {
+          code: "memory_writeback_paused",
+        }),
+      );
     }
   }
 
