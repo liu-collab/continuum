@@ -154,6 +154,8 @@ export function createSchema(config: StorageSchemaConfig) {
       userId: uuid("user_id"),
       recordId: uuid("record_id").notNull(),
       conflictWithRecordId: uuid("conflict_with_record_id").notNull(),
+      pendingRecordId: uuid("pending_record_id"),
+      existingRecordId: uuid("existing_record_id"),
       conflictType: text("conflict_type").notNull(),
       conflictSummary: text("conflict_summary").notNull(),
       status: text("status").notNull(),
@@ -166,6 +168,7 @@ export function createSchema(config: StorageSchemaConfig) {
       index("memory_conflicts_status_idx").on(table.status, table.createdAt),
       index("memory_conflicts_record_idx").on(table.recordId),
       index("memory_conflicts_with_record_idx").on(table.conflictWithRecordId),
+      index("memory_conflicts_pending_record_idx").on(table.pendingRecordId),
     ],
   );
 
@@ -211,6 +214,85 @@ export function createSchema(config: StorageSchemaConfig) {
     (table) => [
       index("memory_governance_actions_record_idx").on(table.recordId, table.createdAt),
       index("memory_governance_actions_type_idx").on(table.actionType, table.createdAt),
+    ],
+  );
+
+  const memoryGovernanceProposals = privateSchema.table(
+    "memory_governance_proposals",
+    {
+      id: uuid("id").defaultRandom().primaryKey(),
+      workspaceId: uuid("workspace_id").notNull(),
+      proposalType: text("proposal_type").notNull(),
+      status: text("status").notNull(),
+      reasonCode: text("reason_code").notNull(),
+      reasonText: text("reason_text").notNull(),
+      suggestedChangesJson: jsonb("suggested_changes_json").$type<Record<string, unknown>>().notNull(),
+      evidenceJson: jsonb("evidence_json").$type<Record<string, unknown>>().notNull(),
+      plannerModel: text("planner_model").notNull(),
+      plannerConfidence: numeric("planner_confidence", { precision: 3, scale: 2 }).notNull(),
+      verifierRequired: boolean("verifier_required").default(false).notNull(),
+      verifierModel: text("verifier_model"),
+      verifierDecision: text("verifier_decision"),
+      verifierConfidence: numeric("verifier_confidence", { precision: 3, scale: 2 }),
+      verifierNotes: text("verifier_notes"),
+      policyVersion: text("policy_version").notNull(),
+      idempotencyKey: text("idempotency_key").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+      updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    },
+    (table) => [
+      check(
+        "memory_governance_proposals_confidence_check",
+        sql`${table.plannerConfidence} between 0 and 1`,
+      ),
+      check(
+        "memory_governance_proposals_verifier_confidence_check",
+        sql`${table.verifierConfidence} is null or ${table.verifierConfidence} between 0 and 1`,
+      ),
+      uniqueIndex("memory_governance_proposals_idempotency_uidx").on(table.idempotencyKey),
+      index("memory_governance_proposals_workspace_idx").on(table.workspaceId, table.createdAt),
+      index("memory_governance_proposals_type_status_idx").on(
+        table.proposalType,
+        table.status,
+        table.createdAt,
+      ),
+    ],
+  );
+
+  const memoryGovernanceProposalTargets = privateSchema.table(
+    "memory_governance_proposal_targets",
+    {
+      proposalId: uuid("proposal_id").notNull(),
+      recordId: uuid("record_id"),
+      conflictId: uuid("conflict_id"),
+      role: text("role").notNull(),
+      createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    },
+    (table) => [
+      index("memory_governance_proposal_targets_proposal_idx").on(table.proposalId, table.createdAt),
+      index("memory_governance_proposal_targets_record_idx").on(table.recordId),
+      index("memory_governance_proposal_targets_conflict_idx").on(table.conflictId),
+    ],
+  );
+
+  const memoryGovernanceExecutions = privateSchema.table(
+    "memory_governance_executions",
+    {
+      id: uuid("id").defaultRandom().primaryKey(),
+      workspaceId: uuid("workspace_id").notNull(),
+      proposalId: uuid("proposal_id").notNull(),
+      proposalType: text("proposal_type").notNull(),
+      executionStatus: text("execution_status").notNull(),
+      resultSummary: text("result_summary"),
+      errorMessage: text("error_message"),
+      sourceService: text("source_service").notNull(),
+      startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+      finishedAt: timestamp("finished_at", { withTimezone: true }),
+      createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    },
+    (table) => [
+      index("memory_governance_executions_workspace_idx").on(table.workspaceId, table.startedAt),
+      index("memory_governance_executions_proposal_idx").on(table.proposalId, table.startedAt),
     ],
   );
 
@@ -276,6 +358,9 @@ export function createSchema(config: StorageSchemaConfig) {
     memoryConflicts,
     memoryRelations,
     memoryGovernanceActions,
+    memoryGovernanceProposals,
+    memoryGovernanceProposalTargets,
+    memoryGovernanceExecutions,
     memoryReadModel,
     memoryReadModelRefreshJobs,
   };
@@ -292,6 +377,9 @@ export const {
   memoryConflicts,
   memoryRelations,
   memoryGovernanceActions,
+  memoryGovernanceProposals,
+  memoryGovernanceProposalTargets,
+  memoryGovernanceExecutions,
   memoryReadModel,
   memoryReadModelRefreshJobs,
 } = defaultSchema;

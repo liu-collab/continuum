@@ -197,6 +197,8 @@ ORDER BY ... LIMIT ... OFFSET ...
 
 ## 优化四：双 Drizzle schema 漂移风险
 
+**状态：已完成**
+
 ### 问题
 
 存在两套 schema 定义且互相独立：
