@@ -893,3 +893,17 @@ body { letter-spacing: -0.374px; }
 | `confirm-dialog.tsx` modal 背景 | `bg-black/35` | `var(--surface-black)` 加 opacity |
 
 ---
+
+### 修复二十二：font-size 对齐设计字体阶梯
+
+**状态：已完成**
+
+#### 问题
+
+| 位置 | 当前值 | 应改为 |
+|---|---|---|
+| `.field` 输入框 | `font-size: 15px` | 14px（caption） |
+| `file-tree.tsx` 多处 | `text-[11px]` | 12px（fine-print） |
+| `assistant-thread.tsx` | `rounded-xl`（=12px） | `var(--radius-lg)`（18px） |
+
+---

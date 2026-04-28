@@ -726,7 +726,7 @@ a {
     background: var(--canvas);
     color: var(--ink);
     padding: 9px 18px;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 400;
     line-height: 1.43;
     letter-spacing: 0;
@@ -780,7 +780,7 @@ a {
     background: var(--canvas);
     color: var(--ink);
     padding: 9px 18px;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.43;
     text-align: left;
     transition: border-color 100ms ease, outline-color 100ms ease;

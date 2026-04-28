@@ -94,10 +94,10 @@ export function FileTree({
             <div className="mt-0.5 truncate text-xs text-muted-foreground">{path}</div>
           </div>
           {selectedWorkspace ? (
-            <div className="rounded-xl border bg-surface px-3 py-3">
+            <div className="rounded-[var(--radius-lg)] border bg-surface px-3 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] text-muted-foreground">{t("fileTree.selectedFolderLabel")}</div>
+                  <div className="text-[12px] text-muted-foreground">{t("fileTree.selectedFolderLabel")}</div>
                   <div
                     data-testid="selected-workspace-path"
                     className="mt-1 truncate text-sm font-medium text-foreground"
@@ -159,20 +159,20 @@ export function FileTree({
           )}
           <div className="grid gap-2">
             {registerError ? (
-              <div className="text-[11px] text-[var(--ink)]">{registerError}</div>
+              <div className="text-[12px] text-[var(--ink)]">{registerError}</div>
             ) : null}
             {openError ? (
-              <div data-testid="file-tree-open-error" className="text-[11px] text-[var(--ink)]">
+              <div data-testid="file-tree-open-error" className="text-[12px] text-[var(--ink)]">
                 {openError}
               </div>
             ) : null}
             {picking ? (
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-[12px] text-muted-foreground">
                 {t("fileTree.pickFolderPendingHint")}
               </div>
             ) : null}
             {openingTarget ? (
-              <div data-testid="file-tree-open-pending" className="text-[11px] text-muted-foreground">
+              <div data-testid="file-tree-open-pending" className="text-[12px] text-muted-foreground">
                 {t("fileTree.openPending")}
               </div>
             ) : null}

@@ -61,4 +61,15 @@ describe("visualization design compliance", () => {
     expect(modal).not.toContain("bg-black/35");
     expect(modal).toContain("bg-[var(--modal-backdrop)]");
   });
+
+  it("uses the design font size and radius ladder in audited controls", () => {
+    const css = readSource("src/app/globals.css");
+    const fileTree = readSource("src/app/agent/_components/file-tree.tsx");
+
+    expect(css).toMatch(/\.field\s*\{[\s\S]*font-size:\s*14px;/);
+    expect(css).toMatch(/\.field-button\s*\{[\s\S]*font-size:\s*14px;/);
+    expect(fileTree).not.toContain("text-[11px]");
+    expect(fileTree).not.toContain("rounded-xl");
+    expect(fileTree).toContain("rounded-[var(--radius-lg)]");
+  });
 });
