@@ -2,6 +2,7 @@ import { Pool, type PoolClient, type QueryResult } from "pg";
 
 import type { StorageConfig } from "../config.js";
 import type { Logger } from "../logger.js";
+import { createSchema, type StorageDrizzleSchema } from "./schema.js";
 
 export interface DbSession {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -44,12 +45,17 @@ class Session implements DbSession {
 export class StorageDatabase {
   readonly privateSchema: string;
   readonly sharedSchema: string;
+  readonly schema: StorageDrizzleSchema;
   private readonly pool: Pool;
   private readonly logger: Logger;
 
   constructor(config: StorageConfig, logger: Logger) {
     this.privateSchema = config.storage_schema_private;
     this.sharedSchema = config.storage_schema_shared;
+    this.schema = createSchema({
+      privateSchema: config.storage_schema_private,
+      sharedSchema: config.storage_schema_shared,
+    });
     this.logger = logger;
     this.pool = new Pool({
       connectionString: config.database_url,

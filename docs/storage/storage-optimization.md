@@ -246,6 +246,8 @@ export async function validateSchemaAlignment(
 
 ## 优化五：Schema 名称绕过配置系统从环境变量直接读取
 
+**状态：已完成**
+
 ### 问题
 
 `schema.ts` 在模块加载时直接从 `process.env` 读取 schema 名称：

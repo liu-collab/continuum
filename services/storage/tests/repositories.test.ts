@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 import type { MemoryRecord, ReadModelEntry } from "../src/contracts.js";
+import { loadConfig } from "../src/config.js";
+import { StorageDatabase } from "../src/db/client.js";
 import { createRepositories, snapshotRecord } from "../src/db/repositories.js";
+import { createSchema } from "../src/db/schema.js";
+import { createLogger } from "../src/logger.js";
 import { buildCandidate } from "./memory-repositories.js";
 
 type RecordedQuery = {
@@ -10,6 +15,29 @@ type RecordedQuery = {
 };
 
 describe("storage repositories", () => {
+  it("creates drizzle schema from validated storage config", async () => {
+    const config = loadConfig({
+      DATABASE_URL: "postgres://storage:test@localhost:5432/storage",
+      STORAGE_SCHEMA_PRIVATE: "tenant_private",
+      STORAGE_SCHEMA_SHARED: "tenant_shared_v2",
+    });
+
+    const schema = createSchema({
+      privateSchema: config.storage_schema_private,
+      sharedSchema: config.storage_schema_shared,
+    });
+    const records = getTableConfig(schema.memoryRecords);
+    const readModel = getTableConfig(schema.memoryReadModel);
+
+    expect(records.schema).toBe("tenant_private");
+    expect(records.name).toBe("memory_records");
+    expect(readModel.schema).toBe("tenant_shared_v2");
+
+    const database = new StorageDatabase(config, createLogger("silent"));
+    expect(getTableConfig(database.schema.memoryRecords).schema).toBe("tenant_private");
+    await database.close();
+  });
+
   it("deep copies record snapshots", async () => {
     const record = {
       id: "11111111-1111-4111-8111-111111111111",
