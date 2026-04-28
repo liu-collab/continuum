@@ -369,6 +369,8 @@ const thresholds = {
 
 ## 优化八：缓存增加容量上限
 
+**状态：已完成**
+
 ### 问题
 
 `cache.ts` 用 `Map` 实现内存缓存，无上限。dashboard 每次换 locale + window 组合创建新 key，进程运行久了内存持续增长。

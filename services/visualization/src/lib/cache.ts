@@ -3,6 +3,8 @@ type CacheEntry<T> = {
   value: Promise<T>;
 };
 
+const MAX_CACHE_ENTRIES = 200;
+
 declare global {
   var __AGENT_MEMORY_VIZ_CACHE__: Map<string, CacheEntry<unknown>> | undefined;
 }
@@ -21,11 +23,19 @@ export function getCachedValue<T>(key: string, ttlMs: number, loader: () => Prom
   const existing = store.get(key);
 
   if (existing && existing.expiresAt > now) {
+    store.delete(key);
+    store.set(key, existing);
     return existing.value as Promise<T>;
   }
 
-  const value = loader().catch((error) => {
+  if (existing) {
     store.delete(key);
+  }
+
+  const value = loader().catch((error) => {
+    if (store.get(key)?.value === value) {
+      store.delete(key);
+    }
     throw error;
   });
 
@@ -34,5 +44,21 @@ export function getCachedValue<T>(key: string, ttlMs: number, loader: () => Prom
     value
   });
 
+  evictCacheEntries(store);
+
   return value;
+}
+
+function evictCacheEntries(store: Map<string, CacheEntry<unknown>>) {
+  if (store.size <= MAX_CACHE_ENTRIES) {
+    return;
+  }
+
+  for (const key of store.keys()) {
+    store.delete(key);
+
+    if (store.size <= MAX_CACHE_ENTRIES) {
+      return;
+    }
+  }
 }
