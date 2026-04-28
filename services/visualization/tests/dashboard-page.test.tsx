@@ -77,8 +77,8 @@ describe("dashboard page", () => {
 
     expect(screen.getByTestId("dashboard-diagnosis-empty")).toHaveTextContent("暂无诊断项");
     expect(screen.getByTestId("dashboard-source-empty")).toHaveTextContent("暂无数据源状态");
-    expect(screen.getByTestId("dashboard-runtime-empty")).toHaveTextContent("暂无 runtime 指标");
-    expect(screen.getByTestId("dashboard-storage-empty")).toHaveTextContent("暂无 storage 指标");
+    expect(screen.getByTestId("dashboard-runtime-empty")).toHaveTextContent("暂无运行时指标");
+    expect(screen.getByTestId("dashboard-storage-empty")).toHaveTextContent("暂无存储指标");
     expect(screen.getByTestId("dashboard-trends-empty")).toHaveTextContent("暂无趋势");
   });
 

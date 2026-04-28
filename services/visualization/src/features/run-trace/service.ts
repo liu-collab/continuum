@@ -2,6 +2,8 @@ import "server-only";
 
 import { RunTraceFilters, RunTracePhaseNarrative, RunTraceResponse, Scope } from "@/lib/contracts";
 import { formatSessionReference, formatSourceReference, memoryModeSummary, scopeExplanation, scopeLabel } from "@/lib/format";
+import { createTranslator, joinLocalizedList, type AppLocale } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
 import { toRunTraceQuery } from "@/lib/query-params";
 import {
   RuntimeDependencyRecord,
@@ -36,43 +38,78 @@ type PhaseAggregate = {
   writeBackRun?: RuntimeWritebackRecord;
 };
 
+type ResidentInjectionContext = {
+  traceId: string;
+  injectedCount: number;
+  createdAt: string | null;
+};
+
 const phasePriority = ["before_response", "before_plan", "task_switch", "task_start", "session_start", "after_response"];
 
 function uniqueScopes(scopes: Scope[]) {
   return Array.from(new Set(scopes));
 }
 
-function formatScopeList(scopes: Scope[]) {
+function formatScopeList(scopes: Scope[], locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
+
   if (scopes.length === 0) {
-    return "未记录";
+    return t("service.runs.scopesMissing");
   }
 
-  return uniqueScopes(scopes)
-    .map((scope) => scopeLabel(scope))
-    .join(", ");
+  return joinLocalizedList(locale, uniqueScopes(scopes).map((scope) => scopeLabel(scope, locale)));
 }
 
-function summarizeRecall(run?: RuntimeRecallRecord) {
+function isResidentMemoryContinuation(run?: RuntimeRecallRecord, residentContext: ResidentInjectionContext | null = null) {
+  return Boolean(residentContext && run && run.candidateCount > 0 && run.selectedCount === 0);
+}
+
+function summarizeRecall(
+  run?: RuntimeRecallRecord,
+  residentContext: ResidentInjectionContext | null = null,
+  locale: AppLocale = "zh-CN"
+) {
+  const t = createTranslator(locale);
+
   if (!run) {
-    return "未记录召回阶段";
+    return t("service.runs.recallMissing");
+  }
+
+  if (isResidentMemoryContinuation(run, residentContext)) {
+    return t("service.runs.residentRecall", { candidateCount: run.candidateCount });
+  }
+
+  if (run.candidateCount > 0 && run.selectedCount === 0) {
+    return t("service.runs.candidateNotInjected", { candidateCount: run.candidateCount });
   }
 
   if (run.resultState === "empty" || run.selectedCount === 0) {
-    return run.emptyReason ? `已触发但为空：${run.emptyReason}` : "已触发但为空";
+    return run.emptyReason
+      ? t("service.runs.triggeredEmptyWithReason", { reason: run.emptyReason })
+      : t("service.runs.triggeredEmpty");
   }
 
-  return `从 ${formatScopeList(run.selectedScopes)} 中选中了 ${run.selectedCount} 条记录`;
+  return t("service.runs.selectedRecords", {
+    scopes: formatScopeList(run.selectedScopes, locale),
+    count: run.selectedCount
+  });
 }
 
-function summarizePlanRuns(runs: RuntimeMemoryPlanRecord[]) {
+function summarizePlanRuns(runs: RuntimeMemoryPlanRecord[], locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
+
   if (runs.length === 0) {
-    return "未记录 plan 级事件。";
+    return t("service.runs.planMissing");
   }
 
-  return `记录了 ${runs.length} 条 plan 级事件：${runs.map((run) => run.planKind).join("、")}。`;
+  return t("service.runs.planSummary", {
+    count: runs.length,
+    kinds: joinLocalizedList(locale, runs.map((run) => run.planKind))
+  });
 }
 
-function summarizeScopes(detail: RunAggregate) {
+function summarizeScopes(detail: RunAggregate, locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
   const primary = pickPrimaryPhase(detail);
   const triggerRun = primary?.triggerRun;
   const recallRun = primary?.recallRun;
@@ -82,10 +119,75 @@ function summarizeScopes(detail: RunAggregate) {
   const selected = injectionRun?.selectedScopes ?? recallRun?.selectedScopes ?? [];
 
   if (requested.length === 0 && selected.length === 0) {
-    return "未记录作用域决策";
+    return t("service.runs.scopeDecisionMissing");
   }
 
-  return `请求作用域：${formatScopeList(requested)}；最终选择：${formatScopeList(selected)}。`;
+  return t("service.runs.scopeDecisionSummary", {
+    requested: formatScopeList(requested, locale),
+    selected: formatScopeList(selected, locale)
+  });
+}
+
+function findInjectionSkipReason(detail: RunAggregate) {
+  const outputSummary = detail.memoryPlanRuns.find(
+    (run) => run.planKind === "memory_injection_plan" && run.outputSummary?.includes("should_inject=false")
+  )?.outputSummary;
+
+  if (!outputSummary) {
+    return null;
+  }
+
+  const reason = outputSummary.match(/(?:^|;\s*)reason=([^;]+)/)?.[1]?.trim();
+  return reason && reason.length > 0 ? reason : null;
+}
+
+function findResidentInjectionContext(detail: RunAggregate, candidates: RunAggregate[]) {
+  const sessionId = detail.turn.sessionId;
+  if (!sessionId) {
+    return null;
+  }
+
+  const selectedCreatedAt = detail.turn.createdAt;
+  const residentInjections = candidates.flatMap((candidate) => {
+    if (candidate.turn.traceId === detail.turn.traceId || candidate.turn.sessionId !== sessionId) {
+      return [];
+    }
+
+    return candidate.injectionRuns
+      .filter((run) => run.phase === "session_start" && run.injected)
+      .map((run) => ({
+        traceId: candidate.turn.traceId,
+        injectedCount: run.injectedCount,
+        createdAt: run.createdAt
+      }));
+  });
+
+  return residentInjections
+    .filter((item) => !selectedCreatedAt || !item.createdAt || item.createdAt <= selectedCreatedAt)
+    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""))[0] ?? null;
+}
+
+async function resolveResidentInjectionContext(
+  detail: RunAggregate,
+  candidates: RunAggregate[],
+  filters: RunTraceFilters,
+  locale: AppLocale
+) {
+  const existing = findResidentInjectionContext(detail, candidates);
+  if (existing || !detail.turn.sessionId) {
+    return existing;
+  }
+
+  const sessionResult = await fetchRuntimeRuns(toRunTraceQuery({
+    ...filters,
+    turnId: undefined,
+    traceId: undefined,
+    sessionId: detail.turn.sessionId,
+    page: 1,
+    pageSize: 100
+  }), { locale });
+  const sessionGrouped = groupByTrace(sessionResult.data);
+  return findResidentInjectionContext(detail, sessionGrouped);
 }
 
 function groupByPhase(detail: RunAggregate): PhaseAggregate[] {
@@ -170,7 +272,12 @@ function groupByTrace(data: RuntimeObserveRunsSnapshot) {
   });
 }
 
-export function buildNarrative(detail: RunAggregate) {
+export function buildNarrative(
+  detail: RunAggregate,
+  residentContext: ResidentInjectionContext | null = null,
+  locale: AppLocale = "zh-CN"
+) {
+  const t = createTranslator(locale);
   const primary = pickPrimaryPhase(detail);
   const triggerRun = primary?.triggerRun;
   const recallRun = primary?.recallRun;
@@ -191,8 +298,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (hasPlanOnlyTrace) {
     return {
       outcomeCode: "plan_only",
-      outcomeLabel: "仅计划轨迹",
-      explanation: "这条轨迹主要记录了 plan 级观测事件，用来调试治理或编排决策。",
+      outcomeLabel: t("service.runs.planOnlyLabel"),
+      explanation: t("service.runs.planOnlyExplanation"),
       incomplete: false
     };
   }
@@ -200,8 +307,42 @@ export function buildNarrative(detail: RunAggregate) {
   if (!triggerRun || !triggerRun.triggerHit) {
     return {
       outcomeCode: "no_trigger",
-      outcomeLabel: "未触发",
-      explanation: "这一轮没有命中召回触发条件，所以记忆系统跳过了检索。",
+      outcomeLabel: t("service.runs.noTriggerLabel"),
+      explanation: t("service.runs.noTriggerExplanation"),
+      incomplete
+    };
+  }
+
+  if (recallRun && recallRun.candidateCount > 0 && recallRun.selectedCount === 0) {
+    const skipReason = findInjectionSkipReason(detail);
+
+    if (residentContext) {
+      return {
+        outcomeCode: "resident_memory_used",
+        outcomeLabel: t("service.runs.residentMemoryLabel"),
+        explanation: skipReason
+          ? t("service.runs.residentMemoryExplanationWithReason", {
+              candidateCount: recallRun.candidateCount,
+              injectedCount: residentContext.injectedCount,
+              reason: skipReason
+            })
+          : t("service.runs.residentMemoryExplanation", {
+              candidateCount: recallRun.candidateCount,
+              injectedCount: residentContext.injectedCount
+            }),
+        incomplete
+      };
+    }
+
+    return {
+      outcomeCode: "candidate_not_selected",
+      outcomeLabel: t("service.runs.candidateNotSelectedLabel"),
+      explanation: skipReason
+        ? t("service.runs.candidateNotSelectedWithReason", {
+            candidateCount: recallRun.candidateCount,
+            reason: skipReason
+          })
+        : t("service.runs.candidateNotSelected", { candidateCount: recallRun.candidateCount }),
       incomplete
     };
   }
@@ -209,9 +350,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (!recallRun || recallRun.resultState === "empty" || recallRun.selectedCount === 0) {
     return {
       outcomeCode: "empty_recall",
-      outcomeLabel: "空召回",
-      explanation:
-        "虽然已经触发召回，但在请求的作用域和记忆类型下，没有找到可用的记忆记录。",
+      outcomeLabel: t("service.runs.emptyRecallLabel"),
+      explanation: t("service.runs.emptyRecallExplanation"),
       incomplete
     };
   }
@@ -223,9 +363,8 @@ export function buildNarrative(detail: RunAggregate) {
   ) {
     return {
       outcomeCode: "found_but_not_injected",
-      outcomeLabel: "找到了但未注入",
-      explanation:
-        "虽然找到了相关记忆，但在提示词注入前被预算或裁剪规则全部裁掉了。",
+      outcomeLabel: t("service.runs.foundNotInjectedLabel"),
+      explanation: t("service.runs.foundNotInjectedExplanation"),
       incomplete
     };
   }
@@ -233,9 +372,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (injectionRun && injectionRun.trimmedRecordIds.length > 0) {
     return {
       outcomeCode: "injection_trimmed",
-      outcomeLabel: "注入被裁剪",
-      explanation:
-        "相关记忆已经找到并部分注入，但候选集里有一部分在最终注入前被裁剪掉了。",
+      outcomeLabel: t("service.runs.injectionTrimmedLabel"),
+      explanation: t("service.runs.injectionTrimmedExplanation"),
       incomplete
     };
   }
@@ -243,9 +381,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (writeBackRun?.resultState === "failed") {
     return {
       outcomeCode: "writeback_failed",
-      outcomeLabel: "写回失败",
-      explanation:
-        "这一轮生成了写回内容，但在存储真正接收之前，提交或依赖处理失败了。",
+      outcomeLabel: t("service.runs.writebackFailedLabel"),
+      explanation: t("service.runs.writebackFailedExplanation"),
       incomplete
     };
   }
@@ -253,9 +390,8 @@ export function buildNarrative(detail: RunAggregate) {
   if (writeBackRun?.resultState === "no_candidates") {
     return {
       outcomeCode: "no_writeback",
-      outcomeLabel: "没有写回候选",
-      explanation:
-        "这一轮已经完成召回和注入，但没有候选内容达到结构化写回阈值。",
+      outcomeLabel: t("service.runs.noWritebackLabel"),
+      explanation: t("service.runs.noWritebackExplanation"),
       incomplete
     };
   }
@@ -263,108 +399,137 @@ export function buildNarrative(detail: RunAggregate) {
   if (recallRun?.degraded || writeBackRun?.degraded) {
     return {
       outcomeCode: "dependency_unavailable",
-      outcomeLabel: "依赖降级",
-      explanation:
-        "运行时以降级模式完成了这条轨迹，因为至少有一个依赖不可用或过慢。",
+      outcomeLabel: t("service.runs.dependencyUnavailableLabel"),
+      explanation: t("service.runs.dependencyUnavailableExplanation"),
       incomplete
     };
   }
 
   return {
     outcomeCode: "completed",
-    outcomeLabel: "轨迹完成",
-    explanation:
-      "这条轨迹完成了 turn、trigger、recall、injection 和 write-back 阶段，没有出现明显主导异常。",
+    outcomeLabel: t("service.runs.completedLabel"),
+    explanation: t("service.runs.completedExplanation"),
     incomplete
   };
 }
 
-function buildPhaseNarratives(detail: RunAggregate): RunTracePhaseNarrative[] {
+function buildPhaseNarratives(
+  detail: RunAggregate,
+  residentContext: ResidentInjectionContext | null = null,
+  locale: AppLocale = "zh-CN"
+): RunTracePhaseNarrative[] {
+  const t = createTranslator(locale);
   const phases = groupByPhase(detail);
 
   return phases.flatMap((phase) => {
     const turn = phase.turn ?? detail.turn;
+    const residentContinuation = isResidentMemoryContinuation(phase.recallRun, residentContext);
     return [
       {
         key: "turn" as const,
-        title: `轮次 / ${phase.phase}`,
-        summary: `${formatSourceReference(turn.turnId ?? turn.traceId)} 运行在 ${phase.phase}。`,
+        title: t("service.runs.turnTitle", { phase: phase.phase }),
+        summary: t("service.runs.turnSummary", {
+          turn: formatSourceReference(turn.turnId ?? turn.traceId, locale),
+          phase: phase.phase
+        }),
         details: [
-          formatSessionReference(turn.sessionId),
-          `当前输入：${turn.currentInput ?? "未记录"}`,
-          `助手输出：${turn.assistantOutput ?? "未记录"}`
+          formatSessionReference(turn.sessionId, locale),
+          t("service.runs.currentInput", { value: turn.currentInput ?? t("common.notRecorded") }),
+          t("service.runs.assistantOutput", { value: turn.assistantOutput ?? t("common.notRecorded") })
         ]
       },
       {
         key: "trigger" as const,
-        title: `Trigger / ${phase.phase}`,
+        title: t("service.runs.triggerPhaseTitle", { phase: phase.phase }),
         summary: phase.triggerRun?.triggerHit
-          ? `${memoryModeSummary(phase.triggerRun.memoryMode)} 触发条件已命中。原因：${phase.triggerRun.triggerReason ?? "运行时记录到了触发命中"}。`
-          : `这一阶段没有触发。${phase.triggerRun?.triggerReason ?? "未记录触发原因。"} `,
+          ? t("service.runs.triggerHitSummary", {
+              mode: memoryModeSummary(phase.triggerRun.memoryMode, locale),
+              reason: phase.triggerRun.triggerReason ?? t("service.runs.defaultTriggerReason")
+            })
+          : t("service.runs.triggerMissSummary", {
+              reason: phase.triggerRun?.triggerReason ?? t("service.runs.triggerReasonMissing")
+            }),
         details: [
-          `请求作用域：${formatScopeList(phase.triggerRun?.requestedScopes ?? [])}`,
-          `选中作用域：${formatScopeList(phase.triggerRun?.selectedScopes ?? [])}`,
-          phase.triggerRun?.scopeDecision ?? "未记录作用域决策说明。"
+          t("service.runs.requestedScopes", { scopes: formatScopeList(phase.triggerRun?.requestedScopes ?? [], locale) }),
+          t("service.runs.selectedScopes", { scopes: formatScopeList(phase.triggerRun?.selectedScopes ?? [], locale) }),
+          phase.triggerRun?.scopeDecision ?? t("service.runs.scopeDecisionMissing")
         ]
       },
       {
         key: "recall" as const,
-        title: `Recall / ${phase.phase}`,
-        summary: summarizeRecall(phase.recallRun),
+        title: t("service.runs.recallPhaseTitle", { phase: phase.phase }),
+        summary: summarizeRecall(phase.recallRun, residentContext, locale),
         details: [
-          `记忆模式：${memoryModeSummary(phase.recallRun?.memoryMode)}`,
-          `请求作用域：${formatScopeList(phase.recallRun?.requestedScopes ?? [])}`,
-          `命中作用域：${formatScopeList(phase.recallRun?.selectedScopes ?? [])}`,
+          t("service.runs.memoryMode", { mode: memoryModeSummary(phase.recallRun?.memoryMode, locale) }),
+          t("service.runs.requestedScopes", { scopes: formatScopeList(phase.recallRun?.requestedScopes ?? [], locale) }),
+          t("service.runs.selectedScopes", { scopes: formatScopeList(phase.recallRun?.selectedScopes ?? [], locale) }),
           ...(phase.recallRun?.scopeHitCounts.map(
-            (item) => `${scopeLabel(item.scope)} 命中：${item.count}`
+            (item) => t("service.runs.hitScope", { scope: scopeLabel(item.scope, locale), count: item.count })
           ) ?? []),
-          phase.recallRun?.emptyReason ?? "未记录空召回说明。"
+          phase.recallRun?.emptyReason ?? t("service.runs.emptyRecallReasonMissing")
         ]
       },
       {
         key: "injection" as const,
-        title: `Injection / ${phase.phase}`,
-        summary: phase.injectionRun?.injected
-          ? phase.injectionRun.memorySummary ?? "注入已完成。"
-          : phase.injectionRun?.resultState ?? "未记录注入阶段",
+        title: t("service.runs.injectionPhaseTitle", { phase: phase.phase }),
+        summary: residentContinuation
+          ? t("service.runs.injectionResidentSummary", { count: residentContext?.injectedCount ?? 0 })
+          : phase.injectionRun?.injected
+            ? phase.injectionRun.memorySummary ?? t("service.runs.injectionDone")
+            : phase.injectionRun?.resultState ?? t("service.runs.injectionMissing"),
         details: [
-          `选中作用域：${formatScopeList(phase.injectionRun?.selectedScopes ?? [])}`,
-          `保留记录：${phase.injectionRun?.keptRecordIds.join(", ") || "未记录"}`,
-          `裁剪记录：${phase.injectionRun?.trimmedRecordIds.join(", ") || "未记录"}`,
-          `裁剪原因：${phase.injectionRun?.trimReasons.join(", ") || "未记录"}`
+          t("service.runs.selectedScopes", { scopes: formatScopeList(phase.injectionRun?.selectedScopes ?? [], locale) }),
+          t("service.runs.keptRecords", { records: phase.injectionRun?.keptRecordIds.join(", ") || t("common.notRecorded") }),
+          t("service.runs.trimmedRecords", { records: phase.injectionRun?.trimmedRecordIds.join(", ") || t("common.notRecorded") }),
+          t("service.runs.trimReasons", { reasons: phase.injectionRun?.trimReasons.join(", ") || t("common.notRecorded") })
         ]
       },
       {
         key: "plan" as const,
-        title: `Plan / ${phase.phase}`,
-        summary: summarizePlanRuns(phase.memoryPlanRuns),
+        title: t("service.runs.planPhaseTitle", { phase: phase.phase }),
+        summary: summarizePlanRuns(phase.memoryPlanRuns, locale),
         details: phase.memoryPlanRuns.flatMap((run) => [
-          `${run.planKind}：${run.resultState}${run.degraded ? "（降级）" : ""}`,
-          `输入摘要：${run.inputSummary ?? "未记录"}`,
-          `输出摘要：${run.outputSummary ?? "未记录"}`,
-          `版本：prompt=${run.promptVersion ?? "未记录"} / schema=${run.schemaVersion ?? "未记录"}`
+          t("service.runs.planRunSummary", {
+            kind: run.planKind,
+            state: run.resultState,
+            degraded: run.degraded ? t("service.runs.degradedMark") : ""
+          }),
+          t("service.runs.inputSummary", { value: run.inputSummary ?? t("common.notRecorded") }),
+          t("service.runs.outputSummary", { value: run.outputSummary ?? t("common.notRecorded") }),
+          t("service.runs.version", {
+            prompt: run.promptVersion ?? t("common.notRecorded"),
+            schema: run.schemaVersion ?? t("common.notRecorded")
+          })
         ])
       },
       {
         key: "writeback" as const,
-        title: `Write-back / ${phase.phase}`,
+        title: t("service.runs.writebackPhaseTitle", { phase: phase.phase }),
         summary: phase.writeBackRun
-          ? `写回状态：${phase.writeBackRun.resultState}。${memoryModeSummary(phase.writeBackRun.memoryMode)}`
-          : "未记录写回阶段。",
+          ? t("service.runs.writebackSummary", {
+              state: phase.writeBackRun.resultState,
+              mode: memoryModeSummary(phase.writeBackRun.memoryMode, locale)
+            })
+          : t("service.runs.writebackMissing"),
         details: [
-          `已提交作业：${phase.writeBackRun?.submittedJobIds.join(", ") || "未记录"}`,
-          `候选摘要：${phase.writeBackRun?.candidateSummaries.join(" | ") || "未记录"}`,
+          t("service.runs.submittedJobs", { jobs: phase.writeBackRun?.submittedJobIds.join(", ") || t("common.notRecorded") }),
+          t("service.runs.candidateSummaries", { summaries: phase.writeBackRun?.candidateSummaries.join(" | ") || t("common.notRecorded") }),
           ...(phase.writeBackRun?.scopeDecisions.map(
-            (item) => `${scopeLabel(item.scope)} x${item.count}：${item.reason}`
+            (item) => t("service.runs.scopeDecisionItem", {
+              scope: scopeLabel(item.scope, locale),
+              count: item.count,
+              reason: item.reason
+            })
           ) ?? []),
-          `过滤原因：${phase.writeBackRun?.filteredReasons.join(", ") || "未记录"}`
+          t("service.runs.filteredReasons", { reasons: phase.writeBackRun?.filteredReasons.join(", ") || t("common.notRecorded") })
         ]
       }
     ];
   });
 }
 
-function buildListItem(detail: RunAggregate) {
+function buildListItem(detail: RunAggregate, locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
   const primary = pickPrimaryPhase(detail);
   const triggerRun = primary?.triggerRun;
   const recallRun = primary?.recallRun;
@@ -383,27 +548,28 @@ function buildListItem(detail: RunAggregate) {
       injectionRun?.memoryMode ??
       writeBackRun?.memoryMode ??
       null,
-    scopeSummary: summarizeScopes(detail),
+    scopeSummary: summarizeScopes(detail, locale),
     triggerLabel: triggerRun?.triggerType
-      ? `${triggerRun.triggerType}${triggerRun.triggerHit ? "" : " (miss)"}`
-      : "未记录触发阶段",
-    recallOutcome: summarizeRecall(recallRun),
+      ? `${triggerRun.triggerType}${triggerRun.triggerHit ? "" : ` (${t("service.runs.triggerMissMark")})`}`
+      : t("service.runs.triggerMissing"),
+    recallOutcome: summarizeRecall(recallRun, null, locale),
     injectedCount: injectionRun?.injectedCount ?? 0,
     writeBackStatus: writeBackRun?.resultState ?? "not_recorded",
     degraded: recallRun?.degraded ?? writeBackRun?.degraded ?? false,
     summary:
       turn.currentInput ??
       turn.assistantOutput ??
-      "这一轮没有记录输入或输出摘要。"
+      t("service.runs.noSummary")
   };
 }
 
-function toDependencyStatus(dependencies: RuntimeDependencyRecord[]) {
+function toDependencyStatus(dependencies: RuntimeDependencyRecord[], locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
   const labelByName: Record<string, string> = {
-    read_model: "运行时读模型",
-    embeddings: "运行时向量依赖",
-    storage_writeback: "运行时存储写回",
-    memory_llm: "记忆模型"
+    read_model: t("service.runs.dependencyReadModel"),
+    embeddings: t("service.runs.dependencyEmbeddings"),
+    storage_writeback: t("service.runs.dependencyStorageWriteback"),
+    memory_llm: t("service.runs.dependencyMemoryLlm")
   };
 
   return dependencies.map((dependency) => ({
@@ -427,7 +593,18 @@ function hasRunRecords(data: RuntimeObserveRunsSnapshot) {
 }
 
 export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceResponse> {
-  let result = await fetchRuntimeRuns(toRunTraceQuery(filters));
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
+  const hasSelectionFilter = Boolean(filters.turnId || filters.traceId);
+  const listFilters = hasSelectionFilter
+    ? {
+        ...filters,
+        turnId: undefined,
+        traceId: undefined
+      }
+    : filters;
+
+  let result = await fetchRuntimeRuns(toRunTraceQuery(filters), { locale });
   let selectionFilters = filters;
 
   if (filters.turnId && !filters.traceId && !hasRunRecords(result.data)) {
@@ -436,13 +613,17 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
       turnId: undefined,
       traceId: filters.turnId
     };
-    const fallbackResult = await fetchRuntimeRuns(toRunTraceQuery(fallbackFilters));
+    const fallbackResult = await fetchRuntimeRuns(toRunTraceQuery(fallbackFilters), { locale });
     if (hasRunRecords(fallbackResult.data)) {
       result = fallbackResult;
       selectionFilters = fallbackFilters;
     }
   }
 
+  const listResult = hasSelectionFilter ? await fetchRuntimeRuns(toRunTraceQuery(listFilters), { locale }) : result;
+  const listGrouped = groupByTrace(listResult.data).sort((left, right) =>
+    (right.turn.createdAt ?? "").localeCompare(left.turn.createdAt ?? "")
+  );
   const grouped = groupByTrace(result.data).sort((left, right) =>
     (right.turn.createdAt ?? "").localeCompare(left.turn.createdAt ?? "")
   );
@@ -453,10 +634,13 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
       : selectionFilters.traceId
         ? grouped.find((item) => item.turn.traceId === selectionFilters.traceId) ?? null
         : grouped[0] ?? null;
+  const residentContext = selected
+    ? await resolveResidentInjectionContext(selected, listGrouped, filters, locale)
+    : null;
 
   return {
-    items: grouped.map((item) => buildListItem(item)),
-    total: grouped.length,
+    items: listGrouped.map((item) => buildListItem(item, locale)),
+    total: listGrouped.length,
     selectedTurn: selected
       ? {
           turn: {
@@ -501,8 +685,8 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             scopeDecision:
               run.scopeDecision ??
               (run.selectedScopes.length > 0
-                ? `已选择 ${formatScopeList(run.selectedScopes)}。`
-                : "未记录作用域决策说明。"),
+                ? t("service.runs.scopeSelected", { scopes: formatScopeList(run.selectedScopes, locale) })
+                : t("service.runs.scopeDecisionMissing")),
             scopeLimit: run.scopeLimit,
             importanceThreshold: run.importanceThreshold,
             cooldownApplied: run.cooldownApplied,
@@ -521,7 +705,7 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             selectedScopes: run.selectedScopes,
             scopeHitCounts: run.scopeHitCounts.map((item) => ({
               scope: item.scope,
-              scopeLabel: scopeLabel(item.scope),
+              scopeLabel: scopeLabel(item.scope, locale),
               count: item.count
             })),
             selectedRecordIds: run.selectedRecordIds,
@@ -576,7 +760,7 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             candidateSummaries: run.candidateSummaries,
             scopeDecisions: run.scopeDecisions.map((item) => ({
               scope: item.scope,
-              scopeLabel: scopeLabel(item.scope),
+              scopeLabel: scopeLabel(item.scope, locale),
               count: item.count,
               reason: item.reason
             })),
@@ -587,9 +771,9 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
             latencyMs: run.durationMs,
             createdAt: run.createdAt
           })),
-          dependencyStatus: toDependencyStatus(selected.dependencyStatus),
-          phaseNarratives: buildPhaseNarratives(selected),
-          narrative: buildNarrative(selected)
+          dependencyStatus: toDependencyStatus(selected.dependencyStatus, locale),
+          phaseNarratives: buildPhaseNarratives(selected, residentContext, locale),
+          narrative: buildNarrative(selected, residentContext, locale)
         }
       : null,
     appliedFilters: filters,
@@ -597,28 +781,30 @@ export async function getRunTrace(filters: RunTraceFilters): Promise<RunTraceRes
   };
 }
 
-export function describeRunTraceEmptyState(response: RunTraceResponse) {
+export function describeRunTraceEmptyState(response: RunTraceResponse, locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
+
   if (response.sourceStatus.status !== "healthy") {
     return {
-      title: "运行时数据源暂不可用",
+      title: t("service.runs.sourceUnavailableTitle"),
       description:
         response.sourceStatus.detail ??
-        "运行时观测接口当前不可查询，所以轨迹数据暂时不可用。"
+        t("service.runs.sourceUnavailableDescription")
     };
   }
 
   if (response.appliedFilters.turnId || response.appliedFilters.traceId) {
     return {
-      title: "当前筛选条件下没有找到轨迹",
+      title: t("service.runs.emptySelectionTitle"),
       description:
-        "运行时观测接口可访问，但没有返回对应轮次或调试标识的轨迹。"
+        t("service.runs.emptySelectionDescription")
     };
   }
 
   return {
-    title: "请输入轮次或调试标识查看轨迹",
+    title: t("service.runs.emptyPromptTitle"),
     description:
-      "下方仍然可以列出最近轨迹，但主详情视图仍然由轮次或调试标识驱动。"
+      t("service.runs.emptyPromptDescription")
   };
 }
 

@@ -3,6 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import React, { ReactNode, useState } from "react";
 import { Modal } from "@/components/modal";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type FilterModalButtonProps = {
   activeCount?: number;
@@ -13,11 +14,13 @@ type FilterModalButtonProps = {
 
 export function FilterModalButton({
   activeCount = 0,
-  title = "筛选",
+  title,
   description,
   children
 }: FilterModalButtonProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useAppI18n();
+  const titleText = title ?? t("common.filter");
 
   return (
     <>
@@ -27,7 +30,7 @@ export function FilterModalButton({
         className="btn-outline"
       >
         <SlidersHorizontal style={{ width: 16, height: 16, opacity: 0.6 }} />
-        筛选
+        {t("common.filter")}
         {activeCount > 0 ? (
           <span style={{
             marginLeft: "0.25rem",
@@ -42,7 +45,7 @@ export function FilterModalButton({
           </span>
         ) : null}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title={title} description={description} size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={titleText} description={description} size="lg">
         {children}
       </Modal>
     </>

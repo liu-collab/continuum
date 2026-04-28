@@ -76,7 +76,7 @@ describe("PromptInspector", () => {
     expect(screen.getByText("阶段命中记录")).toBeInTheDocument();
     expect(screen.getByText("core_system · fixed")).toBeInTheDocument();
     expect(screen.getByText("memory_high · high")).toBeInTheDocument();
-    expect(screen.getByText("phase: before_response")).toBeInTheDocument();
+    expect(screen.getByText("阶段：before_response")).toBeInTheDocument();
     expect(screen.getByText("默认用中文回答")).toBeInTheDocument();
     expect(screen.getByText("task_switch")).toBeInTheDocument();
     expect(screen.getByText("任务切换时命中了相关偏好")).toBeInTheDocument();

@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { getMemoryCatalog } from "@/features/memory-catalog/service";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
 import { jsonApiError, zodApiError } from "@/lib/server/api-errors";
 
 export async function GET(request: NextRequest) {
+  const { t } = await getServerTranslator();
+
   try {
     const filters = parseMemoryCatalogFilters(request.nextUrl.searchParams);
     const data = await getMemoryCatalog(filters);
@@ -15,6 +18,6 @@ export async function GET(request: NextRequest) {
       return zodApiError(error);
     }
 
-    return jsonApiError("memory_catalog_failed", "Failed to load memory catalog.", 500);
+    return jsonApiError("memory_catalog_failed", t("service.apiErrors.memoryCatalogFailed"), 500);
   }
 }

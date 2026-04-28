@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { SelectField } from "@/components/select-field";
 import { MemoryCatalogDetail, MemoryStatus, Scope } from "@/lib/contracts";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type GovernanceAction = "confirm" | "invalidate" | "archive" | "delete";
 
@@ -12,15 +13,9 @@ type GovernancePanelProps = {
   detail: MemoryCatalogDetail;
 };
 
-const actionLabels: Record<GovernanceAction, string> = {
-  confirm: "确认",
-  invalidate: "失效",
-  archive: "归档",
-  delete: "删除"
-};
-
 export function GovernancePanel({ detail }: GovernancePanelProps) {
   const router = useRouter();
+  const { t } = useAppI18n();
   const [reason, setReason] = useState("");
   const [summary, setSummary] = useState(detail.summary);
   const [scope, setScope] = useState<Scope>(detail.scope);
@@ -57,7 +52,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
       | null;
 
     if (!response.ok) {
-      throw new Error(payload?.error?.message ?? payload?.message ?? "请求失败。");
+      throw new Error(payload?.error?.message ?? payload?.message ?? t("memories.governancePanel.errors.requestFailed"));
     }
 
     return payload;
@@ -67,7 +62,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("请先填写原因，再执行治理动作。");
+      setError(t("memories.governancePanel.errors.reasonRequiredAction"));
       return;
     }
 
@@ -78,12 +73,18 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         { reason: reason.trim() }
       );
 
-      setMessage(payload?.message ?? `${actionLabels[action]} 已提交。`);
+      setMessage(payload?.message ?? t("memories.governancePanel.submitted.action", {
+        action: t(`memories.governancePanel.actions.${action}`)
+      }));
       markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(
-        submissionError instanceof Error ? submissionError.message : `${actionLabels[action]} 执行失败。`
+        submissionError instanceof Error
+          ? submissionError.message
+          : t("memories.governancePanel.errors.actionFailed", {
+              action: t(`memories.governancePanel.actions.${action}`)
+            })
       );
     }
   }
@@ -92,7 +93,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("请先填写原因，再编辑这条记忆。");
+      setError(t("memories.governancePanel.errors.reasonRequiredEdit"));
       return;
     }
 
@@ -104,11 +105,11 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         status
       });
 
-      setMessage(payload?.message ?? "编辑已提交。");
+      setMessage(payload?.message ?? t("memories.governancePanel.submitted.edit"));
       markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "编辑失败。");
+      setError(submissionError instanceof Error ? submissionError.message : t("memories.governancePanel.errors.editFailed"));
     }
   }
 
@@ -116,12 +117,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     clearFeedback();
 
     if (reason.trim().length === 0) {
-      setError("请先填写原因，再恢复版本。");
+      setError(t("memories.governancePanel.errors.reasonRequiredRestore"));
       return;
     }
 
     if (versionId.trim().length === 0) {
-      setError("请填写要恢复的版本号。");
+      setError(t("memories.governancePanel.errors.versionRequired"));
       return;
     }
 
@@ -135,11 +136,11 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         }
       );
 
-      setMessage(payload?.message ?? "版本恢复已提交。");
+      setMessage(payload?.message ?? t("memories.governancePanel.submitted.restore"));
       markRefreshPending();
       startTransition(() => router.refresh());
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "版本恢复失败。");
+      setError(submissionError instanceof Error ? submissionError.message : t("memories.governancePanel.errors.restoreFailed"));
     }
   }
 
@@ -147,32 +148,32 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
     <div className="panel p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="section-kicker">治理</div>
+          <div className="section-kicker">{t("memories.governancePanel.title")}</div>
           <p className="mt-2 text-[17px] leading-[1.47] text-muted">
-            填写原因后执行动作。
+            {t("memories.governancePanel.description")}
           </p>
         </div>
       </div>
 
       {pendingActionAt ? (
         <div className="notice notice-warning mt-3">
-          已提交，读模型刷新中，10 秒后自动再刷新。
+          {t("memories.governancePanel.pendingRefresh")}
         </div>
       ) : null}
 
       <label className="mt-4 block">
-        <span className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">原因</span>
+        <span className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{t("memories.governancePanel.reason")}</span>
         <textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           rows={3}
           className="field mt-1"
-          placeholder="说明为什么需要执行这次治理动作。"
+          placeholder={t("memories.governancePanel.reasonPlaceholder")}
         />
       </label>
 
       <div className="mt-4">
-        <div className="section-kicker">快捷动作</div>
+        <div className="section-kicker">{t("memories.governancePanel.quickActions")}</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {(["confirm", "invalidate", "archive", "delete"] as GovernanceAction[]).map((action) => (
             <button
@@ -182,7 +183,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
               onClick={() => void submitAction(action)}
               className="btn-outline"
             >
-              {actionLabels[action]}
+              {t(`memories.governancePanel.actions.${action}`)}
             </button>
           ))}
         </div>
@@ -190,9 +191,9 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="record-card space-y-3">
-          <div className="section-kicker">编辑</div>
+          <div className="section-kicker">{t("memories.governancePanel.edit")}</div>
           <label className="block">
-            <span className="text-[14px] text-muted-foreground">摘要</span>
+            <span className="text-[14px] text-muted-foreground">{t("memories.governancePanel.summary")}</span>
             <textarea
               value={summary}
               onChange={(event) => setSummary(event.target.value)}
@@ -202,31 +203,31 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
           </label>
           <div className="grid gap-2 md:grid-cols-2">
             <label className="block">
-              <span className="text-[14px] text-muted-foreground">作用域</span>
+              <span className="text-[14px] text-muted-foreground">{t("memories.fields.scope")}</span>
               <div className="mt-1">
                 <SelectField
                   value={scope}
                   onChange={(value) => setScope(value as Scope)}
                   options={[
-                    { value: "session", label: "会话" },
-                    { value: "task", label: "任务" },
-                    { value: "workspace", label: "工作区" },
-                    { value: "user", label: "平台" }
+                    { value: "session", label: t("enums.scope.session") },
+                    { value: "task", label: t("enums.scope.task") },
+                    { value: "workspace", label: t("enums.scope.workspace") },
+                    { value: "user", label: t("enums.scope.user") }
                   ]}
                 />
               </div>
             </label>
             <label className="block">
-              <span className="text-[14px] text-muted-foreground">状态</span>
+              <span className="text-[14px] text-muted-foreground">{t("memories.fields.status")}</span>
               <div className="mt-1">
                 <SelectField
                   value={status}
                   onChange={(value) => setStatus(value as MemoryStatus)}
                   options={[
-                    { value: "active", label: "生效中" },
-                    { value: "pending_confirmation", label: "待确认" },
-                    { value: "superseded", label: "已被替代" },
-                    { value: "archived", label: "已归档" }
+                    { value: "active", label: t("enums.memoryStatus.active") },
+                    { value: "pending_confirmation", label: t("enums.memoryStatus.pending_confirmation") },
+                    { value: "superseded", label: t("enums.memoryStatus.superseded") },
+                    { value: "archived", label: t("enums.memoryStatus.archived") }
                   ]}
                 />
               </div>
@@ -238,19 +239,19 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
             onClick={() => void submitEdit()}
             className="btn-outline mt-1"
           >
-            保存编辑
+            {t("memories.governancePanel.saveEdit")}
           </button>
         </div>
 
         <div className="record-card space-y-3">
-          <div className="section-kicker">恢复版本</div>
+          <div className="section-kicker">{t("memories.governancePanel.restoreVersion")}</div>
           <label className="block">
-            <span className="text-[14px] text-muted-foreground">版本号</span>
+            <span className="text-[14px] text-muted-foreground">{t("memories.governancePanel.versionId")}</span>
             <input
               value={versionId}
               onChange={(event) => setVersionId(event.target.value)}
               className="field mt-1"
-              placeholder="例如 3"
+              placeholder={t("memories.governancePanel.versionPlaceholder")}
             />
           </label>
           <button
@@ -259,7 +260,7 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
             onClick={() => void submitRestoreVersion()}
             className="btn-outline mt-1"
           >
-            恢复版本
+            {t("memories.governancePanel.restoreVersion")}
           </button>
         </div>
       </div>

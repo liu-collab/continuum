@@ -23,6 +23,22 @@ vi.mock("@/components/health-modal", () => ({
   HealthModalButton: () => <button type="button">健康</button>
 }));
 
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    scroll,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    href: string;
+    scroll?: boolean;
+  }) => (
+    <a href={href} data-scroll={String(scroll)} {...props}>
+      {children}
+    </a>
+  )
+}));
+
 import RunsPage from "@/app/runs/page";
 
 const healthyStatus = {
@@ -96,5 +112,6 @@ describe("runs page", () => {
       "href",
       "/runs?trace_id=a048c6c0-900a-443e-9d34-d8db2981c2bf"
     );
+    expect(screen.getByText("最近运行摘要").closest("a")).toHaveAttribute("data-scroll", "false");
   });
 });

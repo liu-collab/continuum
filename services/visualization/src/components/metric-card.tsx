@@ -1,7 +1,10 @@
+"use client";
+
 import React from "react";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardMetric } from "@/lib/contracts";
-import { dashboardSeverityLabel, dashboardSeverityTone } from "@/lib/format";
+import { dashboardSeverityTone } from "@/lib/format";
+import { useAppI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 type MetricCardProps = {
@@ -9,6 +12,8 @@ type MetricCardProps = {
 };
 
 export function MetricCard({ metric }: MetricCardProps) {
+  const { t } = useAppI18n();
+
   return (
     <div
       className={cn(
@@ -27,7 +32,7 @@ export function MetricCard({ metric }: MetricCardProps) {
           </div>
         </div>
         <StatusBadge tone={dashboardSeverityTone(metric.severity)}>
-          {dashboardSeverityLabel(metric.severity)}
+          {t(`enums.severity.${metric.severity}`)}
         </StatusBadge>
       </div>
       <div

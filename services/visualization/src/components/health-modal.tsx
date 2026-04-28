@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Modal } from "@/components/modal";
 import { SourceHealthPanel } from "@/components/source-health-panel";
 import type { ServiceHealthResponse, SourceStatus } from "@/lib/contracts";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type HealthModalButtonProps =
   | { label?: string; health: ServiceHealthResponse; sources?: never }
@@ -29,6 +30,7 @@ const dotColor: Record<HealthTone, string> = {
 
 export function HealthModalButton(props: HealthModalButtonProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useAppI18n();
   const tone = computeTone(props.health, props.sources);
 
   return (
@@ -40,9 +42,9 @@ export function HealthModalButton(props: HealthModalButtonProps) {
       >
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor[tone] }} />
         <HeartPulse style={{ width: 16, height: 16, opacity: 0.6 }} />
-        {props.label ?? "Status"}
+        {props.label ?? t("health.button")}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Service Health" size="xl">
+      <Modal open={open} onClose={() => setOpen(false)} title={t("health.title")} size="xl">
         {props.health ? <SourceHealthPanel health={props.health} /> : <SourceHealthPanel sources={props.sources!} />}
       </Modal>
     </>

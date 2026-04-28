@@ -12,7 +12,7 @@ import {
   describeCatalogFilterHints,
   getMemoryCatalog
 } from "@/features/memory-catalog/service";
-import { memoryViewModeLabel } from "@/lib/format";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { parseMemoryCatalogFilters } from "@/lib/query-params";
 
 export default async function MemoriesPage({
@@ -21,11 +21,12 @@ export default async function MemoriesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const { locale, t } = await getServerTranslator();
   const filters = parseMemoryCatalogFilters(params);
   const response = await getMemoryCatalog(filters);
-  const emptyState = describeCatalogEmptyState(response);
-  const views = buildMemoryCatalogQuickViews(filters);
-  const hints = describeCatalogFilterHints(filters);
+  const emptyState = describeCatalogEmptyState(response, locale);
+  const views = buildMemoryCatalogQuickViews(filters, locale);
+  const hints = describeCatalogFilterHints(filters, locale);
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
@@ -34,14 +35,12 @@ export default async function MemoriesPage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">记忆库</div>
-              <h1 className="tile-title">记忆目录</h1>
-              <p className="tile-subtitle">
-                查看已经结构化的偏好、任务状态和情景记忆。
-              </p>
+              <div className="section-kicker">{t("memories.kicker")}</div>
+              <h1 className="tile-title">{t("memories.title")}</h1>
+              <p className="tile-subtitle">{t("memories.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <FilterModalButton activeCount={activeCount} title="筛选记忆" description="按工作区、任务、类型、作用域、状态和更新时间筛选。">
+              <FilterModalButton activeCount={activeCount} title={t("memories.filterTitle")} description={t("memories.filterDescription")}>
                 <SearchForm
                   action="/memories"
                   initialValues={{
@@ -57,44 +56,49 @@ export default async function MemoriesPage({
                     updated_to: filters.updatedTo
                   }}
                 >
-                  <FormField label="工作区" name="workspace_id" placeholder="工作区文件夹或标识" defaultValue={filters.workspaceId} />
-                  <FormField label="任务" name="task_id" placeholder="任务标识" defaultValue={filters.taskId} />
-                  <FormField label="会话" name="session_id" placeholder="会话标识" defaultValue={filters.sessionId} />
-                  <FormField label="来源" name="source_ref" placeholder="来源轮次或引用" defaultValue={filters.sourceRef} />
-                  <FormField label="视图" name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
-                    { label: "工作区 + 平台", value: "workspace_plus_global" },
-                    { label: "仅工作区", value: "workspace_only" }
+                  <FormField label={t("memories.fields.workspace")} name="workspace_id" placeholder={t("memories.placeholders.workspace")} defaultValue={filters.workspaceId} />
+                  <FormField label={t("memories.fields.task")} name="task_id" placeholder={t("memories.placeholders.task")} defaultValue={filters.taskId} />
+                  <FormField label={t("memories.fields.session")} name="session_id" placeholder={t("memories.placeholders.session")} defaultValue={filters.sessionId} />
+                  <FormField label={t("memories.fields.source")} name="source_ref" placeholder={t("memories.placeholders.source")} defaultValue={filters.sourceRef} />
+                  <FormField label={t("memories.fields.view")} name="memory_view_mode" defaultValue={filters.memoryViewMode} options={[
+                    { label: t("enums.memoryViewMode.workspace_plus_global"), value: "workspace_plus_global" },
+                    { label: t("enums.memoryViewMode.workspace_only"), value: "workspace_only" }
                   ]} />
-                  <FormField label="类型" name="memory_type" defaultValue={filters.memoryType} options={[
-                    { label: "事实与偏好", value: "fact_preference" },
-                    { label: "任务状态", value: "task_state" },
-                    { label: "情景记忆", value: "episodic" }
+                  <FormField label={t("memories.fields.type")} name="memory_type" defaultValue={filters.memoryType} options={[
+                    { label: t("enums.memoryType.fact_preference"), value: "fact_preference" },
+                    { label: t("enums.memoryType.task_state"), value: "task_state" },
+                    { label: t("enums.memoryType.episodic"), value: "episodic" }
                   ]} />
-                  <FormField label="作用域" name="scope" defaultValue={filters.scope} options={[
-                    { label: "会话", value: "session" },
-                    { label: "任务", value: "task" },
-                    { label: "平台", value: "user" },
-                    { label: "工作区", value: "workspace" }
+                  <FormField label={t("memories.fields.scope")} name="scope" defaultValue={filters.scope} options={[
+                    { label: t("enums.scope.session"), value: "session" },
+                    { label: t("enums.scope.task"), value: "task" },
+                    { label: t("enums.scope.user"), value: "user" },
+                    { label: t("enums.scope.workspace"), value: "workspace" }
                   ]} />
-                  <FormField label="状态" name="status" defaultValue={filters.status} options={[
-                    { label: "生效中", value: "active" },
-                    { label: "待确认", value: "pending_confirmation" },
-                    { label: "已被替代", value: "superseded" },
-                    { label: "已归档", value: "archived" },
-                    { label: "已删除", value: "deleted" }
+                  <FormField label={t("memories.fields.status")} name="status" defaultValue={filters.status} options={[
+                    { label: t("enums.memoryStatus.active"), value: "active" },
+                    { label: t("enums.memoryStatus.pending_confirmation"), value: "pending_confirmation" },
+                    { label: t("enums.memoryStatus.superseded"), value: "superseded" },
+                    { label: t("enums.memoryStatus.archived"), value: "archived" },
+                    { label: t("enums.memoryStatus.deleted"), value: "deleted" }
                   ]} />
-                  <FormField label="更新开始" name="updated_from" type="date" defaultValue={filters.updatedFrom} />
-                  <FormField label="更新结束" name="updated_to" type="date" defaultValue={filters.updatedTo} />
+                  <FormField label={t("memories.fields.updatedFrom")} name="updated_from" type="date" defaultValue={filters.updatedFrom} />
+                  <FormField label={t("memories.fields.updatedTo")} name="updated_to" type="date" defaultValue={filters.updatedTo} />
                 </SearchForm>
               </FilterModalButton>
-              <HealthModalButton sources={[response.sourceStatus]} label="数据源" />
+              <HealthModalButton sources={[response.sourceStatus]} label={t("common.dataSource")} />
             </div>
           </div>
 
           <div className="stat-grid">
-            <SummaryCard label="记录总数" value={response.total.toLocaleString()} />
-            <SummaryCard label="当前视图" value={memoryViewModeLabel(filters.memoryViewMode)} />
-            <SummaryCard label="待确认" value={response.pendingConfirmationCount.toLocaleString()} tone={response.pendingConfirmationCount > 0 ? "warning" : "neutral"} />
+            <SummaryCard label={t("memories.total")} value={response.total.toLocaleString()} />
+            <SummaryCard label={t("memories.view")} value={t(`enums.memoryViewMode.${filters.memoryViewMode}`)} />
+            <SummaryCard
+              label={t("memories.pendingConfirmation")}
+              value={response.pendingConfirmationCount.toLocaleString()}
+              tone={response.pendingConfirmationCount > 0 ? "warning" : "neutral"}
+              reviewLabel={t("memories.reviewNeeded")}
+            />
           </div>
 
           {hints.length > 0 ? (
@@ -105,7 +109,7 @@ export default async function MemoriesPage({
           ) : null}
           {response.pendingConfirmationCount > 0 && filters.status !== "pending_confirmation" ? (
             <div className="notice notice-warning mt-3">
-              还有 {response.pendingConfirmationCount} 条待确认记忆，可以切到待确认队列集中处理。
+              {t("memories.pendingNotice", { count: response.pendingConfirmationCount })}
             </div>
           ) : null}
         </div>
@@ -114,11 +118,9 @@ export default async function MemoriesPage({
       <section className="tile tile-dark">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">视图</div>
-            <h2 className="tile-title">常用入口</h2>
-            <p className="tile-subtitle">
-              先按用户最常用的使用方式切换，再用筛选做精确定位。
-            </p>
+            <div className="section-kicker">{t("memories.viewsKicker")}</div>
+            <h2 className="tile-title">{t("memories.viewsTitle")}</h2>
+            <p className="tile-subtitle">{t("memories.viewsDescription")}</p>
           </div>
           <div className="utility-grid">
             {views.map((view) => (
@@ -129,7 +131,7 @@ export default async function MemoriesPage({
               >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{view.label}</h3>
-                  {view.active ? <StatusBadge tone="success">当前</StatusBadge> : null}
+                  {view.active ? <StatusBadge tone="success">{t("memories.active")}</StatusBadge> : null}
                 </div>
                 <p className="mt-3 text-[17px] leading-[1.47] text-muted">{view.description}</p>
               </Link>
@@ -142,12 +144,12 @@ export default async function MemoriesPage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">记录</div>
-              <h2 className="tile-title">当前结果</h2>
+              <div className="section-kicker">{t("memories.recordsKicker")}</div>
+              <h2 className="tile-title">{t("memories.recordsTitle")}</h2>
               <p className="tile-subtitle">{response.viewSummary}</p>
             </div>
             <StatusBadge tone={response.sourceStatus.status === "healthy" ? "success" : response.sourceStatus.status === "partial" ? "warning" : "danger"}>
-              {response.sourceStatus.label}: {response.sourceStatus.status}
+              {response.sourceStatus.label}: {t(`enums.sourceStatus.${response.sourceStatus.status}`)}
             </StatusBadge>
           </div>
           {response.items.length > 0 ? (
@@ -164,17 +166,19 @@ export default async function MemoriesPage({
 function SummaryCard({
   label,
   value,
-  tone = "neutral"
+  tone = "neutral",
+  reviewLabel
 }: {
   label: string;
   value: string;
   tone?: "neutral" | "warning";
+  reviewLabel?: string;
 }) {
   return (
     <div className="panel p-6">
       <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{label}</div>
       <div className="mt-4 text-[40px] font-semibold leading-[1.1] text-text">{value}</div>
-      {tone === "warning" ? <div className="notice notice-warning mt-4">需要复核</div> : null}
+      {tone === "warning" ? <div className="notice notice-warning mt-4">{reviewLabel}</div> : null}
     </div>
   );
 }

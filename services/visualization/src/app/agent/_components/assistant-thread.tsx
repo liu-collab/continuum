@@ -229,7 +229,7 @@ function AssistantMessageBubble({
         {meta?.plan ? (
           <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
             <div className="text-xs font-medium text-foreground">
-              plan · {meta.plan.status}
+              {t("chatPanel.plan")} · {meta.plan.status}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">{meta.plan.goal}</div>
             <div className="mt-2 space-y-1">
@@ -244,7 +244,7 @@ function AssistantMessageBubble({
 
         {meta?.evaluations.length ? (
           <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
-            <div className="text-xs font-medium text-foreground">evaluation</div>
+            <div className="text-xs font-medium text-foreground">{t("chatPanel.evaluation")}</div>
             <div className="mt-2 space-y-1">
               {meta.evaluations.slice(-4).map((item, index) => (
                 <div key={`${item.scope}-${index}`} className="text-xs text-muted-foreground">

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 
 import { SelectField } from "@/components/select-field";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type FormFieldProps = {
   label: string;
@@ -15,6 +16,7 @@ type FormFieldProps = {
 
 export function FormField({ label, name, defaultValue, placeholder, options, type = "text" }: FormFieldProps) {
   const [selectedValue, setSelectedValue] = useState(defaultValue ?? "");
+  const { t } = useAppI18n();
 
   return (
     <label style={{ display: "grid", gap: "8px", position: "relative" }}>
@@ -32,7 +34,7 @@ export function FormField({ label, name, defaultValue, placeholder, options, typ
           name={name}
           value={selectedValue}
           onChange={setSelectedValue}
-          options={[{ label: "全部", value: "" }, ...options]}
+          options={[{ label: t("common.all"), value: "" }, ...options]}
         />
       ) : (
         <input

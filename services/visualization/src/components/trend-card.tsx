@@ -1,12 +1,16 @@
+"use client";
+
 import React from "react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { DashboardTrend } from "@/lib/contracts";
-import { dashboardSeverityLabel, dashboardSeverityTone, formatMetricValue } from "@/lib/format";
+import { dashboardSeverityTone, formatMetricValue } from "@/lib/format";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type TrendCardProps = { trend: DashboardTrend };
 
 export function TrendCard({ trend }: TrendCardProps) {
+  const { t } = useAppI18n();
   const numericPoints = trend.points
     .map((p) => p.value)
     .filter((v): v is number => v !== null);
@@ -25,7 +29,7 @@ export function TrendCard({ trend }: TrendCardProps) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <StatusBadge tone={dashboardSeverityTone(trend.severity)}>
-            {dashboardSeverityLabel(trend.severity)}
+            {t(`enums.severity.${trend.severity}`)}
           </StatusBadge>
           <span className="text-[17px] font-semibold leading-[1.24] text-text">
             {trend.deltaFormatted}
@@ -34,11 +38,11 @@ export function TrendCard({ trend }: TrendCardProps) {
       </div>
       <div className="mt-6 grid grid-cols-2 gap-6">
         <div>
-          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">当前</div>
+          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{t("dashboard.currentValue")}</div>
           <div className="mt-1 text-[28px] font-normal leading-[1.14] text-text">{trend.currentFormatted}</div>
         </div>
         <div>
-          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">上一窗口</div>
+          <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{t("dashboard.previousValue")}</div>
           <div className="mt-1 text-[28px] font-normal leading-[1.14] text-muted">{trend.previousFormatted}</div>
         </div>
       </div>
@@ -49,7 +53,7 @@ export function TrendCard({ trend }: TrendCardProps) {
             <div className="flex h-12 items-end">
               {point.value === null ? (
                 <div
-                  aria-label={`${point.label}: 不可用`}
+                  aria-label={`${point.label}: ${t("common.unavailable")}`}
                   className="h-3 w-full border border-dashed border-border bg-transparent"
                 />
               ) : (

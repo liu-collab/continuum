@@ -1,22 +1,29 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
+
 const execFileAsync = promisify(execFile);
 
-export async function pickWorkspaceDirectory(): Promise<string | null> {
+export async function pickWorkspaceDirectory(
+  options: { locale?: AppLocale } = {}
+): Promise<string | null> {
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+
   switch (process.platform) {
     case "win32":
-      return pickWorkspaceDirectoryOnWindows();
+      return pickWorkspaceDirectoryOnWindows(locale);
     case "darwin":
-      return pickWorkspaceDirectoryOnMac();
+      return pickWorkspaceDirectoryOnMac(locale);
     case "linux":
-      return pickWorkspaceDirectoryOnLinux();
+      return pickWorkspaceDirectoryOnLinux(locale);
     default:
-      throw unsupportedWorkspacePicker();
+      throw unsupportedWorkspacePicker(locale);
   }
 }
 
-async function pickWorkspaceDirectoryOnWindows(): Promise<string | null> {
+async function pickWorkspaceDirectoryOnWindows(locale: AppLocale): Promise<string | null> {
+  const t = createTranslator(locale);
   const script = [
     "Add-Type -AssemblyName System.Windows.Forms",
     "Add-Type -AssemblyName System.Drawing",
@@ -31,7 +38,7 @@ async function pickWorkspaceDirectoryOnWindows(): Promise<string | null> {
     "$null = $owner.Show()",
     "$owner.Activate()",
     "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
-    "$dialog.Description = '选择工作区文件夹'",
+    `$dialog.Description = '${t("service.workspacePicker.title")}'`,
     "$dialog.ShowNewFolderButton = $false",
     "$result = $dialog.ShowDialog($owner)",
     "$owner.Close()",
@@ -55,10 +62,11 @@ async function pickWorkspaceDirectoryOnWindows(): Promise<string | null> {
   return selectedPath.length > 0 ? selectedPath : null;
 }
 
-async function pickWorkspaceDirectoryOnMac(): Promise<string | null> {
+async function pickWorkspaceDirectoryOnMac(locale: AppLocale): Promise<string | null> {
+  const t = createTranslator(locale);
   const script = [
     "try",
-    'set selectedFolder to choose folder with prompt "选择工作区文件夹"',
+    `set selectedFolder to choose folder with prompt "${t("service.workspacePicker.title")}"`,
     "POSIX path of selectedFolder",
     "on error number -128",
     'return ""',
@@ -74,15 +82,17 @@ async function pickWorkspaceDirectoryOnMac(): Promise<string | null> {
   return selectedPath.length > 0 ? selectedPath : null;
 }
 
-async function pickWorkspaceDirectoryOnLinux(): Promise<string | null> {
+async function pickWorkspaceDirectoryOnLinux(locale: AppLocale): Promise<string | null> {
+  const t = createTranslator(locale);
+  const title = t("service.workspacePicker.title");
   const candidates: Array<{ command: string; args: string[] }> = [
     {
       command: "zenity",
-      args: ["--file-selection", "--directory", "--title=选择工作区文件夹"],
+      args: ["--file-selection", "--directory", `--title=${title}`],
     },
     {
       command: "kdialog",
-      args: ["--getexistingdirectory", ".", "--title", "选择工作区文件夹"],
+      args: ["--getexistingdirectory", ".", "--title", title],
     },
   ];
 
@@ -116,12 +126,12 @@ async function pickWorkspaceDirectoryOnLinux(): Promise<string | null> {
     }
   }
 
-  throw unsupportedWorkspacePicker();
+  throw unsupportedWorkspacePicker(locale);
 }
 
-function unsupportedWorkspacePicker() {
+function unsupportedWorkspacePicker(locale: AppLocale = DEFAULT_APP_LOCALE) {
   return Object.assign(
-    new Error("当前系统没有可用的文件夹选择器，请改用手动输入路径。"),
+    new Error(createTranslator(locale)("service.workspacePicker.unsupported")),
     {
       code: "workspace_picker_unsupported",
     },

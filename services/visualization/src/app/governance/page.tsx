@@ -6,6 +6,7 @@ import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/memory-catalog/service";
 import { formatDebugReference, formatTimestamp, formatWorkspaceReference, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
+import { getServerTranslator } from "@/lib/i18n/server";
 
 function parseSearchParams(input: Record<string, string | string[] | undefined>) {
   const valueOf = (key: string) => {
@@ -27,6 +28,7 @@ export default async function GovernancePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { locale, t } = await getServerTranslator();
   const params = parseSearchParams(await searchParams);
   const response = await getGovernanceHistory({
     workspaceId: params.workspaceId,
@@ -46,42 +48,40 @@ export default async function GovernancePage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">治理</div>
-              <h1 className="tile-title">记忆治理</h1>
-              <p className="tile-subtitle">
-                查看自动提案、复核决策和最终执行结果。
-              </p>
+              <div className="section-kicker">{t("governance.kicker")}</div>
+              <h1 className="tile-title">{t("governance.title")}</h1>
+              <p className="tile-subtitle">{t("governance.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <FilterModalButton activeCount={activeCount} title="筛选治理记录" description="按工作区、动作和执行状态筛选。">
+              <FilterModalButton activeCount={activeCount} title={t("governance.filterTitle")} description={t("governance.filterDescription")}>
                 <SearchForm action="/governance" initialValues={{
                   workspace_id: params.workspaceId,
                   proposal_type: params.proposalType,
                   execution_status: params.executionStatus,
                   limit: String(params.limit)
                 }}>
-                  <FormField label="工作区" name="workspace_id" placeholder="工作区文件夹或标识" defaultValue={params.workspaceId} />
-                  <FormField label="动作" name="proposal_type" defaultValue={params.proposalType} options={[
-                    { label: "归档", value: "archive" },
-                    { label: "确认", value: "confirm" },
-                    { label: "删除", value: "delete" },
-                    { label: "降级", value: "downgrade" },
-                    { label: "合并", value: "merge" },
-                    { label: "解决冲突", value: "resolve_conflict" },
-                    { label: "摘要收敛", value: "summarize" }
+                  <FormField label={t("governance.fields.workspace")} name="workspace_id" placeholder={t("memories.placeholders.workspace")} defaultValue={params.workspaceId} />
+                  <FormField label={t("governance.fields.action")} name="proposal_type" defaultValue={params.proposalType} options={[
+                    { label: t("governance.actions.archive"), value: "archive" },
+                    { label: t("governance.actions.confirm"), value: "confirm" },
+                    { label: t("governance.actions.delete"), value: "delete" },
+                    { label: t("governance.actions.downgrade"), value: "downgrade" },
+                    { label: t("governance.actions.merge"), value: "merge" },
+                    { label: t("governance.actions.resolve_conflict"), value: "resolve_conflict" },
+                    { label: t("governance.actions.summarize"), value: "summarize" }
                   ]} />
-                  <FormField label="状态" name="execution_status" defaultValue={params.executionStatus} options={[
-                    { label: "执行成功", value: "executed" },
-                    { label: "执行失败", value: "failed" },
-                    { label: "执行中", value: "executing" },
-                    { label: "已提案", value: "proposed" },
-                    { label: "已复核", value: "verified" },
-                    { label: "已拦截", value: "rejected_by_guard" }
+                  <FormField label={t("governance.fields.status")} name="execution_status" defaultValue={params.executionStatus} options={[
+                    { label: t("enums.governanceStatus.executed"), value: "executed" },
+                    { label: t("enums.governanceStatus.failed"), value: "failed" },
+                    { label: t("enums.governanceStatus.executing"), value: "executing" },
+                    { label: t("enums.governanceStatus.proposed"), value: "proposed" },
+                    { label: t("enums.governanceStatus.verified"), value: "verified" },
+                    { label: t("enums.governanceStatus.rejected_by_guard"), value: "rejected_by_guard" }
                   ]} />
-                  <FormField label="数量" name="limit" type="number" placeholder="50" defaultValue={String(params.limit)} />
+                  <FormField label={t("governance.fields.limit")} name="limit" type="number" placeholder="50" defaultValue={String(params.limit)} />
                 </SearchForm>
               </FilterModalButton>
-              <HealthModalButton sources={[response.sourceStatus, detailResponse.status]} label="数据源" />
+              <HealthModalButton sources={[response.sourceStatus, detailResponse.status]} label={t("common.dataSource")} />
             </div>
           </div>
         </div>
@@ -91,7 +91,7 @@ export default async function GovernancePage({
         <div className="tile-inner">
           <div className="master-detail-grid">
             <aside className="panel p-5">
-              <div className="section-kicker">最近治理</div>
+              <div className="section-kicker">{t("governance.recentKicker")}</div>
               {response.items.length > 0 ? (
                 <div className="record-list mt-4">
                   {response.items.map((item) => {
@@ -118,18 +118,18 @@ export default async function GovernancePage({
                         </div>
                         {item.verificationBlocked ? (
                           <div className="notice notice-warning mt-3">
-                            阻塞：{item.verificationBlockedReason ?? "等待复核"}
+                            {t("common.blocked", { reason: item.verificationBlockedReason ?? t("common.pendingReview") })}
                           </div>
                         ) : null}
                         <div className="mt-3 text-[14px] leading-[1.43] text-muted-foreground">
-                          {formatTimestamp(item.startedAt)}
+                          {formatTimestamp(item.startedAt, locale)}
                         </div>
                       </a>
                     );
                   })}
                 </div>
               ) : (
-                <EmptyState title="没有治理记录" description={response.sourceStatus.detail ?? "当前筛选条件下没有治理记录。"} />
+                <EmptyState title={t("governance.emptyTitle")} description={response.sourceStatus.detail ?? t("governance.emptyDescription")} />
               )}
             </aside>
 
@@ -139,7 +139,7 @@ export default async function GovernancePage({
                   <div className="panel p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="section-kicker">详情</div>
+                        <div className="section-kicker">{t("governance.detailKicker")}</div>
                         <h2 className="mt-3 text-[34px] font-semibold leading-[1.12] text-text">
                           {detailResponse.detail.proposalTypeLabel}
                         </h2>
@@ -155,46 +155,46 @@ export default async function GovernancePage({
 
                   <div className="detail-grid">
                     <section className="panel p-6">
-                      <div className="section-kicker">规划与复核</div>
+                      <div className="section-kicker">{t("governance.planningKicker")}</div>
                       <dl className="kv-grid mt-4">
-                        <Row label="规划模型" value={detailResponse.detail.plannerModel} />
-                        <Row label="规划置信度" value={String(detailResponse.detail.plannerConfidence ?? "未记录")} />
-                        <Row label="需要复核" value={detailResponse.detail.verifierRequired ? "需要" : "不需要"} />
-                        <Row label="复核结论" value={detailResponse.detail.verifierDecision ?? "未记录"} />
-                        <Row label="已阻塞" value={detailResponse.detail.verificationBlocked ? "是" : "否"} />
-                        <Row label="复核模型" value={detailResponse.detail.verifierModel ?? "未记录"} />
-                        <Row label="策略版本" value={detailResponse.detail.policyVersion} />
+                        <Row label={t("governance.fields.plannerModel")} value={detailResponse.detail.plannerModel} />
+                        <Row label={t("governance.fields.plannerConfidence")} value={String(detailResponse.detail.plannerConfidence ?? t("common.notRecorded"))} />
+                        <Row label={t("governance.fields.verifierRequired")} value={detailResponse.detail.verifierRequired ? t("common.needed") : t("common.notNeeded")} />
+                        <Row label={t("governance.fields.verifierDecision")} value={detailResponse.detail.verifierDecision ?? t("common.notRecorded")} />
+                        <Row label={t("governance.fields.verificationBlocked")} value={detailResponse.detail.verificationBlocked ? t("common.yes") : t("common.noValue")} />
+                        <Row label={t("governance.fields.verifierModel")} value={detailResponse.detail.verifierModel ?? t("common.notRecorded")} />
+                        <Row label={t("governance.fields.policyVersion")} value={detailResponse.detail.policyVersion} />
                       </dl>
                     </section>
 
                     <section className="panel p-6">
-                      <div className="section-kicker">执行</div>
+                      <div className="section-kicker">{t("governance.executionKicker")}</div>
                       {detailResponse.detail.verificationBlocked ? (
                         <div className="notice notice-warning mt-4">
-                          阻塞：{detailResponse.detail.verificationBlockedReason ?? "等待复核"}
+                          {t("common.blocked", { reason: detailResponse.detail.verificationBlockedReason ?? t("common.pendingReview") })}
                         </div>
                       ) : null}
                       <dl className="kv-grid mt-4">
-                        <Row label="执行记录" value={formatDebugReference(detailResponse.detail.executionId)} />
-                        <Row label="提案记录" value={formatDebugReference(detailResponse.detail.proposalId)} />
-                        <Row label="工作区" value={formatWorkspaceReference(detailResponse.detail.workspaceId)} />
-                        <Row label="开始时间" value={formatTimestamp(detailResponse.detail.startedAt)} />
-                        <Row label="完成时间" value={formatTimestamp(detailResponse.detail.finishedAt)} />
-                        <Row label="结果" value={detailResponse.detail.resultSummary ?? "未记录"} />
-                        <Row label="错误" value={detailResponse.detail.errorMessage ?? "无"} />
+                        <Row label={t("governance.fields.executionRecord")} value={formatDebugReference(detailResponse.detail.executionId, locale)} />
+                        <Row label={t("governance.fields.proposalRecord")} value={formatDebugReference(detailResponse.detail.proposalId, locale)} />
+                        <Row label={t("governance.fields.workspace")} value={formatWorkspaceReference(detailResponse.detail.workspaceId, locale)} />
+                        <Row label={t("governance.fields.startedAt")} value={formatTimestamp(detailResponse.detail.startedAt, locale)} />
+                        <Row label={t("governance.fields.finishedAt")} value={formatTimestamp(detailResponse.detail.finishedAt, locale)} />
+                        <Row label={t("governance.fields.result")} value={detailResponse.detail.resultSummary ?? t("common.notRecorded")} />
+                        <Row label={t("governance.fields.error")} value={detailResponse.detail.errorMessage ?? t("common.no")} />
                       </dl>
                     </section>
                   </div>
 
                   <section className="panel p-6">
-                    <div className="section-kicker">目标</div>
+                    <div className="section-kicker">{t("governance.targetKicker")}</div>
                     <p className="mt-4 text-[17px] leading-[1.47] text-muted">
-                      {summarizeGovernanceTarget(detailResponse.detail.targets)}
+                      {summarizeGovernanceTarget(detailResponse.detail.targets, locale)}
                     </p>
                     <div className="record-list mt-5">
                       {detailResponse.detail.targets.map((target, index) => (
                         <div key={`${target.role}-${index}`} className="record-card">
-                          <Row label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId)} />
+                          <Row label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId, locale)} />
                         </div>
                       ))}
                     </div>
@@ -202,22 +202,22 @@ export default async function GovernancePage({
 
                   <details className="panel p-6">
                     <summary className="cursor-pointer text-[21px] font-semibold leading-[1.19] text-text">
-                      内部证据
+                      {t("governance.evidenceSummary")}
                     </summary>
                     <div className="detail-grid mt-5">
                       <div>
-                        <div className="section-kicker mb-3">建议变更</div>
+                        <div className="section-kicker mb-3">{t("governance.suggestedChanges")}</div>
                         <pre className="quiet-code">{JSON.stringify(detailResponse.detail.suggestedChanges, null, 2)}</pre>
                       </div>
                       <div>
-                        <div className="section-kicker mb-3">证据</div>
+                        <div className="section-kicker mb-3">{t("governance.evidence")}</div>
                         <pre className="quiet-code">{JSON.stringify(detailResponse.detail.evidence, null, 2)}</pre>
                       </div>
                     </div>
                   </details>
                 </>
               ) : (
-                <EmptyState title="未选择治理记录" description={detailResponse.status.detail ?? "请选择左侧一条治理记录查看详情。"} />
+                <EmptyState title={t("governance.notSelectedTitle")} description={detailResponse.status.detail ?? t("governance.notSelectedDescription")} />
               )}
             </section>
           </div>

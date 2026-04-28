@@ -10,6 +10,7 @@ import {
   pickString,
   pickStringArray
 } from "@/lib/records";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { fetchJsonFromSource } from "@/lib/server/http-client";
 
 export type RuntimeMetricsSnapshot = {
@@ -184,7 +185,10 @@ function unwrapData(value: unknown) {
   return value;
 }
 
-export function normalizeRuntimeRunsPayload(value: unknown): RuntimeObserveRunsSnapshot {
+export function normalizeRuntimeRunsPayload(
+  value: unknown,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): RuntimeObserveRunsSnapshot {
   const root = asRecord(unwrapData(value));
 
   if (!root) {
@@ -210,9 +214,9 @@ export function normalizeRuntimeRunsPayload(value: unknown): RuntimeObserveRunsS
       .map(mapMemoryPlanRun)
       .filter(isDefined),
     writeBackRuns: pickArray(root, "writeback_submissions", "writeBackRuns", "write_back_runs")
-      .map(mapWriteBackRun)
+      .map((item) => mapWriteBackRun(item, locale))
       .filter(isDefined),
-    dependencyStatus: mapDependencyStatus(root.dependency_status)
+    dependencyStatus: mapDependencyStatus(root.dependency_status, locale)
   };
 }
 
@@ -408,8 +412,12 @@ function mapInjectionRun(value: unknown): RuntimeInjectionRecord | null {
   };
 }
 
-function mapWriteBackRun(value: unknown): RuntimeWritebackRecord | null {
+function mapWriteBackRun(
+  value: unknown,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): RuntimeWritebackRecord | null {
   const record = asRecord(value);
+  const t = createTranslator(locale);
 
   if (!record) {
     return null;
@@ -440,7 +448,7 @@ function mapWriteBackRun(value: unknown): RuntimeWritebackRecord | null {
         return {
           scope,
           count: pickNumber(scopeRecord, "count") ?? 0,
-          reason: pickString(scopeRecord, "reason") ?? "No scope decision reason recorded."
+          reason: pickString(scopeRecord, "reason") ?? t("service.runs.scopeDecisionReasonMissing")
         };
       })
       .filter((item): item is { scope: "session" | "task" | "user" | "workspace"; count: number; reason: string } => Boolean(item)),
@@ -491,8 +499,9 @@ function mapMemoryPlanRun(value: unknown): RuntimeMemoryPlanRecord | null {
   };
 }
 
-function mapDependencyStatus(value: unknown): RuntimeDependencyRecord[] {
+function mapDependencyStatus(value: unknown, locale: AppLocale = DEFAULT_APP_LOCALE): RuntimeDependencyRecord[] {
   const record = asRecord(value);
+  const t = createTranslator(locale);
 
   if (!record) {
     return [];
@@ -509,7 +518,7 @@ function mapDependencyStatus(value: unknown): RuntimeDependencyRecord[] {
       return {
         name,
         status: pickString(dependency, "status") ?? "unknown",
-        detail: pickString(dependency, "detail") ?? "No detail available.",
+        detail: pickString(dependency, "detail") ?? t("service.runs.dependencyDetailMissing"),
         checkedAt:
           pickString(dependency, "last_checked_at", "lastCheckedAt") ?? new Date(0).toISOString()
       };
@@ -517,15 +526,18 @@ function mapDependencyStatus(value: unknown): RuntimeDependencyRecord[] {
     .filter(isDefined);
 }
 
-export async function fetchRuntimeMetrics() {
+export async function fetchRuntimeMetrics(options: { locale?: AppLocale } = {}) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "runtime_api",
-    sourceLabel: "Runtime observe API",
+    sourceLabel: t("service.sources.runtimeObserveApi"),
     url: values.RUNTIME_API_BASE_URL
       ? `${values.RUNTIME_API_BASE_URL}/v1/runtime/observe/metrics`
       : undefined,
-    timeoutMs: values.RUNTIME_API_TIMEOUT_MS
+    timeoutMs: values.RUNTIME_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -542,8 +554,8 @@ export async function fetchRuntimeMetrics() {
       status: {
         ...response.status,
         status: "partial" as const,
-        lastError: "Upstream returned a non-object payload.",
-        detail: "Upstream returned a non-object payload."
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload")
       },
       metrics: null
     };
@@ -571,17 +583,20 @@ export async function fetchRuntimeMetrics() {
   };
 }
 
-export async function fetchRuntimeRuns(query: string) {
+export async function fetchRuntimeRuns(query: string, options: { locale?: AppLocale } = {}) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const url = values.RUNTIME_API_BASE_URL
     ? `${values.RUNTIME_API_BASE_URL}/v1/runtime/observe/runs${query ? `?${query}` : ""}`
     : undefined;
 
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "runtime_api",
-    sourceLabel: "Runtime observe API",
+    sourceLabel: t("service.sources.runtimeObserveApi"),
     url,
-    timeoutMs: values.RUNTIME_API_TIMEOUT_MS
+    timeoutMs: values.RUNTIME_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -606,8 +621,8 @@ export async function fetchRuntimeRuns(query: string) {
       status: {
         ...response.status,
         status: "partial" as const,
-        lastError: "Upstream returned a non-object payload.",
-        detail: "Upstream returned a non-object payload."
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload")
       },
       data: {
         turns: [],
@@ -623,6 +638,6 @@ export async function fetchRuntimeRuns(query: string) {
 
   return {
     status: response.status,
-    data: normalizeRuntimeRunsPayload(root)
+    data: normalizeRuntimeRunsPayload(root, locale)
   };
 }

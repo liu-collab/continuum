@@ -1,6 +1,7 @@
 import "server-only";
 
 import { SourceStatus } from "@/lib/contracts";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { readSourceLastOk, rememberSourceSuccess } from "@/lib/server/source-status-memory";
 
 type FetchJsonOptions = {
@@ -11,19 +12,22 @@ type FetchJsonOptions = {
   method?: string;
   headers?: HeadersInit;
   body?: string;
+  locale?: AppLocale;
 };
 
-function normalizeUpstreamError(status: number, payload: unknown) {
+function normalizeUpstreamError(status: number, payload: unknown, locale: AppLocale) {
+  const t = createTranslator(locale);
+
   if (status === 401 || status === 403) {
-    return "上游服务拒绝访问，请检查认证配置。";
+    return t("service.upstream.accessDenied");
   }
 
   if (status === 404) {
-    return "上游服务接口不存在，请检查服务版本或路由配置。";
+    return t("service.upstream.notFound");
   }
 
   if (status >= 500) {
-    return `上游服务返回 ${status}，请检查目标服务日志。`;
+    return t("service.upstream.serverError", { status });
   }
 
   if (payload && typeof payload === "object") {
@@ -36,29 +40,31 @@ function normalizeUpstreamError(status: number, payload: unknown) {
           : null;
 
     if (message) {
-      return `上游服务返回 ${status}：${message}`;
+      return t("service.upstream.message", { status, message });
     }
   }
 
-  return `上游服务返回 ${status}。`;
+  return t("service.upstream.status", { status });
 }
 
-function normalizeThrownError(error: unknown, timeoutMs: number) {
+function normalizeThrownError(error: unknown, timeoutMs: number, locale: AppLocale) {
+  const t = createTranslator(locale);
+
   if (error instanceof Error) {
     if (error.name === "AbortError") {
-      return `请求在 ${timeoutMs} 毫秒后超时。`;
+      return t("service.upstream.timeout", { timeoutMs });
     }
 
     const message = error.message.trim();
 
     if (/ECONNREFUSED|fetch failed|ENOTFOUND|EHOSTUNREACH|network/i.test(message)) {
-      return `无法连接到上游服务：${message}`;
+      return t("service.upstream.connect", { message });
     }
 
-    return `访问上游服务失败：${message}`;
+    return t("service.upstream.failed", { message });
   }
 
-  return "无法连接到上游服务。";
+  return t("service.upstream.unreachable");
 }
 
 export type SourceResult<T> = {
@@ -94,6 +100,8 @@ function buildStatus(
 export async function fetchJsonFromSource<T>(
   options: FetchJsonOptions
 ): Promise<SourceResult<T>> {
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const startedAt = Date.now();
   const checkedAt = new Date().toISOString();
   const cachedLastOkAt = readSourceLastOk(options.sourceName);
@@ -106,7 +114,7 @@ export async function fetchJsonFromSource<T>(
         options,
         "misconfigured",
         checkedAt,
-        "Missing base URL configuration.",
+        t("service.upstream.missingBaseUrl"),
         null,
         cachedLastOkAt
       )
@@ -139,7 +147,7 @@ export async function fetchJsonFromSource<T>(
           options,
           "unavailable",
           checkedAt,
-          normalizeUpstreamError(response.status, json),
+          normalizeUpstreamError(response.status, json, locale),
           responseTimeMs,
           cachedLastOkAt
         )
@@ -174,7 +182,7 @@ export async function fetchJsonFromSource<T>(
         options,
         error instanceof Error && error.name === "AbortError" ? "timeout" : "unavailable",
         checkedAt,
-        normalizeThrownError(error, options.timeoutMs),
+        normalizeThrownError(error, options.timeoutMs, locale),
         Date.now() - startedAt,
         cachedLastOkAt
       )

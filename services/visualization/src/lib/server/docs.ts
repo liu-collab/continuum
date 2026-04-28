@@ -3,17 +3,14 @@ import path from "node:path";
 
 import { marked } from "marked";
 
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
+
 const repositoryRoot = path.resolve(process.cwd(), "..", "..");
 const docsRoot = "docs";
 const absoluteDocsRoot = path.resolve(repositoryRoot, docsRoot);
-const defaultDescription = "查看这份文档的完整内容和章节目录。";
 const defaultCategoryOrder = 99;
-const categoryLabels: Record<string, string> = {
-  overview: "公共文档",
-  storage: "Storage",
-  retrieval: "Retrieval",
-  visualization: "Visualization",
-  "memory-native-agent": "Memory Native Agent",
+const categoryLabelKeys: Record<string, string> = {
+  overview: "docs.overviewCategory"
 };
 const categoryOrders: Record<string, number> = {
   overview: 0,
@@ -126,15 +123,15 @@ export function parseDocFrontmatter(markdown: string): { frontmatter: DocFrontma
 
 export function buildRepositoryDocIndex(
   files: RepositoryDocFile[],
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; locale?: AppLocale } = {},
 ): RepositoryDocIndexEntry[] {
   return files
-    .map((file) => buildRepositoryDocIndexEntry(file))
+    .map((file) => buildRepositoryDocIndexEntry(file, options.locale))
     .filter((entry) => options.includeHidden || !entry.hidden)
     .sort(compareRepositoryDocIndexEntries);
 }
 
-export async function getRepositoryDocs(options: { includeHidden?: boolean } = {}) {
+export async function getRepositoryDocs(options: { includeHidden?: boolean; locale?: AppLocale } = {}) {
   const relativePaths = await collectMarkdownFiles(docsRoot);
   const files = await Promise.all(
     relativePaths.map(async (relativePath) => ({
@@ -210,11 +207,12 @@ export function renderMarkdownDocument(markdown: string) {
   };
 }
 
-function buildRepositoryDocIndexEntry(file: RepositoryDocFile): RepositoryDocIndexEntry {
+function buildRepositoryDocIndexEntry(file: RepositoryDocFile, locale: AppLocale = DEFAULT_APP_LOCALE): RepositoryDocIndexEntry {
+  const t = createTranslator(locale);
   const { frontmatter, content } = parseDocFrontmatter(file.markdown);
-  const category = resolveDocCategory(file.relativePath, frontmatter);
-  const title = frontmatter.title ?? extractDocTitle(content) ?? titleFromPath(file.relativePath);
-  const description = frontmatter.description ?? extractDocDescription(content) ?? defaultDescription;
+  const category = resolveDocCategory(file.relativePath, frontmatter, locale);
+  const title = frontmatter.title ?? extractDocTitle(content) ?? titleFromPath(file.relativePath, locale);
+  const description = frontmatter.description ?? extractDocDescription(content) ?? t("docs.defaultDescription");
   const slug = normalizeDocSlug(frontmatter.slug ?? slugFromPath(file.relativePath));
 
   return {
@@ -270,12 +268,18 @@ async function collectMarkdownFiles(relativeDirectory: string): Promise<string[]
   return files;
 }
 
-function resolveDocCategory(relativePath: string, frontmatter: DocFrontmatter): RepositoryDocIndexEntry["category"] {
+function resolveDocCategory(
+  relativePath: string,
+  frontmatter: DocFrontmatter,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): RepositoryDocIndexEntry["category"] {
   const frontmatterCategory = frontmatter.category ? normalizeCategoryKey(frontmatter.category) : undefined;
   const key = frontmatterCategory ?? deriveCategoryKey(relativePath);
+  const labelKey = categoryLabelKeys[key];
+  const label = labelKey ? createTranslator(locale)(labelKey) : undefined;
   return {
     key,
-    label: categoryLabels[key] ?? frontmatter.category ?? titleFromSegment(key),
+    label: label ?? frontmatter.category ?? titleFromSegment(key),
     order: frontmatter.categoryOrder ?? categoryOrders[key] ?? defaultCategoryOrder,
   };
 }
@@ -336,12 +340,12 @@ function extractDocDescription(markdown: string) {
   return undefined;
 }
 
-function titleFromPath(relativePath: string) {
+function titleFromPath(relativePath: string, locale: AppLocale = DEFAULT_APP_LOCALE) {
   const normalized = normalizeRepositoryPath(relativePath);
   const withoutExtension = normalized.replace(/\.md$/i, "");
   const base = withoutExtension.split("/").pop() ?? withoutExtension;
   if (/^(README|index)$/i.test(base)) {
-    return "文档目录";
+    return createTranslator(locale)("docs.indexTitle");
   }
   return titleFromSegment(base);
 }

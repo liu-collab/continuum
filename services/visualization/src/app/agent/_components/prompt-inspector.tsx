@@ -78,28 +78,38 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-0.5 text-foreground">{payload?.tools.length ?? 0}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">messages</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.messages")}</dt>
                 <dd className="mt-0.5 text-foreground">{payload?.messages.length ?? 0}</dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">round</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.round")}</dt>
                 <dd className="mt-0.5 text-foreground">{payload?.round ?? t("promptInspector.notLoaded")}</dd>
               </div>
             </dl>
 
             <div className="mt-6">
-              <div className="section-kicker">budget</div>
+              <div className="section-kicker">{t("promptInspector.budget")}</div>
               <div className="mt-3 grid gap-2 text-sm text-foreground">
                 {payload?.budget_plan ? (
                   <>
                     <div className="record-card px-3 py-2">
-                      total: {String(payload.budget_plan.budget.total ?? "unbounded")} / reserve: {payload.budget_plan.budget.reserve}
+                      {t("promptInspector.budgetTotal", {
+                        total: String(payload.budget_plan.budget.total ?? t("promptInspector.unbounded")),
+                        reserve: payload.budget_plan.budget.reserve
+                      })}
                     </div>
                     <div className="record-card px-3 py-2">
-                      fixed {payload.budget_plan.allocation.fixed} · memory {payload.budget_plan.allocation.memory} · tools {payload.budget_plan.allocation.tools}
+                      {t("promptInspector.budgetAllocationPrimary", {
+                        fixed: payload.budget_plan.allocation.fixed,
+                        memory: payload.budget_plan.allocation.memory,
+                        tools: payload.budget_plan.allocation.tools
+                      })}
                     </div>
                     <div className="record-card px-3 py-2">
-                      history {payload.budget_plan.allocation.history} · current {payload.budget_plan.allocation.current_turn}
+                      {t("promptInspector.budgetAllocationSecondary", {
+                        history: payload.budget_plan.allocation.history,
+                        current: payload.budget_plan.allocation.current_turn
+                      })}
                     </div>
                   </>
                 ) : (
@@ -109,7 +119,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
             </div>
 
             <details className="mt-6 rounded-[var(--radius-lg)] border border-[var(--hairline)] bg-[var(--canvas)] p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-foreground">raw payload</summary>
+              <summary className="cursor-pointer text-sm font-semibold text-foreground">{t("promptInspector.rawPayload")}</summary>
               <pre
                 data-testid="prompt-inspector-raw-payload"
                 className="quiet-code mt-3 max-h-[32rem] overflow-auto"
@@ -130,7 +140,9 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                         {segment.kind} · {segment.priority}
                       </div>
                       {segment.phase ? (
-                        <div className="mt-0.5 text-[11px] text-muted-foreground">phase: {segment.phase}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {t("promptInspector.segmentPhase", { phase: segment.phase })}
+                        </div>
                       ) : null}
                       <div className="mt-1 text-xs leading-5 text-foreground">{segment.preview}</div>
                     </div>
@@ -141,7 +153,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">dropped</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.dropped")}</dt>
                 <dd className="mt-1 space-y-2">
                   {dropped.map((item, index) => (
                     <div key={`${item.source}-${index}`} className="record-card px-3 py-2 text-xs">
@@ -179,7 +191,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">plan</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.plan")}</dt>
                 <dd className="mt-1 space-y-2">
                   {plan ? (
                     <>
@@ -199,7 +211,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">plan revisions</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.planRevisions")}</dt>
                 <dd className="mt-1 space-y-2">
                   {planRevisions.map((item) => (
                     <div key={item.id} className="record-card px-3 py-2 text-xs">
@@ -215,7 +227,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">evaluation</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.evaluation")}</dt>
                 <dd className="mt-1 space-y-2">
                   {evaluation.map((item, index) => (
                     <div key={`${item.scope}-${index}`} className="record-card px-3 py-2 text-xs">
@@ -228,7 +240,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">trace</dt>
+                <dt className="text-xs text-muted-foreground">{t("promptInspector.trace")}</dt>
                 <dd className="mt-1 space-y-2">
                   {traceSpans.map((span) => (
                     <div key={span.id} className="record-card px-3 py-2 text-xs">

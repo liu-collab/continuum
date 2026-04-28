@@ -11,6 +11,7 @@ import {
   summarizeGovernanceTarget,
 } from "@/lib/format";
 import { getAppConfig } from "@/lib/env";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { asRecord, pickArray, pickBoolean, pickNumber, pickRecord, pickString } from "@/lib/records";
 import { fetchJsonFromSource } from "@/lib/server/http-client";
 
@@ -52,8 +53,9 @@ function buildExecutionDetailUrl(executionId: string) {
     : undefined;
 }
 
-function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
+function mapExecutionRow(value: unknown, locale: AppLocale = DEFAULT_APP_LOCALE): GovernanceExecutionListItem | null {
   const record = asRecord(value);
+  const t = createTranslator(locale);
   if (!record) {
     return null;
   }
@@ -75,6 +77,7 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
         conflictId: pickString(target, "conflict_id", "conflictId") ?? null,
         role: pickString(target, "role") ?? "target",
       })),
+    locale
   );
   const targetRecordIds = targets
     .map((target) => asRecord(target))
@@ -99,11 +102,11 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
       ?? pickString(proposal ?? {}, "workspace_id", "workspaceId")
       ?? "unknown-workspace",
     proposalType,
-    proposalTypeLabel: governanceProposalTypeLabel(proposalType),
+    proposalTypeLabel: governanceProposalTypeLabel(proposalType, locale),
     executionStatus,
-    executionStatusLabel: governanceExecutionStatusLabel(executionStatus),
+    executionStatusLabel: governanceExecutionStatusLabel(executionStatus, locale),
     reasonCode: pickString(proposal ?? {}, "reason_code", "reasonCode") ?? "unknown_reason",
-    reasonText: pickString(proposal ?? {}, "reason_text", "reasonText") ?? "未记录原因",
+    reasonText: pickString(proposal ?? {}, "reason_text", "reasonText") ?? t("service.governance.reasonMissing"),
     deleteReason: pickString(evidence, "delete_reason", "deleteReason") ?? null,
     startedAt: pickString(execution, "started_at", "startedAt") ?? null,
     finishedAt: pickString(execution, "finished_at", "finishedAt") ?? null,
@@ -119,7 +122,7 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
     verificationBlocked,
     verificationBlockedReason:
       verificationBlocked
-        ? executionError ?? pickString(proposal ?? {}, "verifier_notes", "verifierNotes") ?? "等待 verifier 通过"
+        ? executionError ?? pickString(proposal ?? {}, "verifier_notes", "verifierNotes") ?? t("service.governance.verifierPending")
         : null,
     targetSummary,
     targetRecordIds,
@@ -128,13 +131,19 @@ function mapExecutionRow(value: unknown): GovernanceExecutionListItem | null {
   };
 }
 
-export async function fetchGovernanceExecutions(filters: GovernanceExecutionFilters) {
+export async function fetchGovernanceExecutions(
+  filters: GovernanceExecutionFilters,
+  options: { locale?: AppLocale } = {}
+) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "storage_governance_executions",
-    sourceLabel: "Storage governance executions",
+    sourceLabel: t("service.sources.storageGovernanceExecutions"),
     url: buildExecutionUrl(filters),
     timeoutMs: values.STORAGE_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -149,18 +158,24 @@ export async function fetchGovernanceExecutions(filters: GovernanceExecutionFilt
   return {
     status: response.status,
     items: rows
-      .map((row: unknown) => mapExecutionRow(row))
+      .map((row: unknown) => mapExecutionRow(row, locale))
       .filter((row: GovernanceExecutionListItem | null): row is GovernanceExecutionListItem => Boolean(row)),
   };
 }
 
-export async function fetchGovernanceExecutionDetail(executionId: string) {
+export async function fetchGovernanceExecutionDetail(
+  executionId: string,
+  options: { locale?: AppLocale } = {}
+) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "storage_governance_execution_detail",
-    sourceLabel: "Storage governance execution detail",
+    sourceLabel: t("service.sources.storageGovernanceExecutionDetail"),
     url: buildExecutionDetailUrl(executionId),
     timeoutMs: values.STORAGE_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -176,14 +191,14 @@ export async function fetchGovernanceExecutionDetail(executionId: string) {
       status: {
         ...response.status,
         status: "partial" as const,
-        lastError: "Upstream returned a non-object payload.",
-        detail: "Upstream returned a non-object payload.",
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload"),
       },
       detail: null,
     };
   }
 
-  const base = mapExecutionRow(record);
+  const base = mapExecutionRow(record, locale);
   const proposal = pickRecord(record, "proposal") ?? {};
   const evidence = pickRecord(proposal, "evidence_json", "evidence") ?? {};
   const suggestedChanges = pickRecord(proposal, "suggested_changes_json", "suggestedChanges") ?? {};

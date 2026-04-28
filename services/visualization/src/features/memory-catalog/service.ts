@@ -32,6 +32,8 @@ import {
   fetchGovernanceExecutionDetail,
   fetchGovernanceExecutions,
 } from "@/lib/server/storage-governance-executions-client";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { createTranslator, type AppLocale } from "@/lib/i18n/messages";
 
 export type MemoryCatalogQuickView = {
   key: string;
@@ -54,8 +56,10 @@ function isImplicitGlobalView(filters: MemoryCatalogFilters) {
 
 function toCatalogItem(
   row: Awaited<ReturnType<typeof queryCatalogView>>["rows"][number],
-  filters: MemoryCatalogFilters
+  filters: MemoryCatalogFilters,
+  locale: AppLocale
 ): MemoryCatalogItem {
+  const t = createTranslator(locale);
   const source = mapSource(row.source);
   const originWorkspaceId = source.originWorkspaceId ?? row.workspace_id;
   const scope = row.scope as MemoryCatalogResponse["items"][number]["scope"];
@@ -68,23 +72,25 @@ function toCatalogItem(
     taskId: row.task_id,
     sessionId: row.session_id,
     memoryType,
-    memoryTypeLabel: memoryTypeLabel(memoryType),
+    memoryTypeLabel: memoryTypeLabel(memoryType, locale),
     scope,
-    scopeLabel: scopeLabel(scope),
-    scopeExplanation: scopeExplanation(scope, originWorkspaceId),
+    scopeLabel: scopeLabel(scope, locale),
+    scopeExplanation: scopeExplanation(scope, originWorkspaceId, locale),
     status,
-    statusLabel: memoryStatusLabel(status),
-    statusExplanation: memoryStatusExplanation(status),
+    statusLabel: memoryStatusLabel(status, locale),
+    statusExplanation: memoryStatusExplanation(status, locale),
     summary: row.summary,
     importance: row.importance,
     confidence: row.confidence,
     originWorkspaceId,
-    originWorkspaceLabel: originWorkspaceId ? `来源${formatWorkspaceReference(originWorkspaceId)}` : "未记录来源工作区",
-    visibilitySummary: visibilitySummary(scope, filters.memoryViewMode, originWorkspaceId),
+    originWorkspaceLabel: originWorkspaceId
+      ? t("service.memory.sourceWorkspace", { workspace: formatWorkspaceReference(originWorkspaceId, locale) })
+      : t("service.memory.sourceWorkspaceMissing"),
+    visibilitySummary: visibilitySummary(scope, filters.memoryViewMode, originWorkspaceId, locale),
     sourceType: source.sourceType,
     sourceRef: source.sourceRef,
     sourceServiceName: source.sourceServiceName,
-    sourceSummary: [source.sourceType ?? "未知来源", formatSourceReference(source.sourceRef)].join(
+    sourceSummary: [source.sourceType ?? t("service.memory.unknownSource"), formatSourceReference(source.sourceRef, locale)].join(
       " · "
     ),
     lastConfirmedAt: row.last_confirmed_at,
@@ -92,22 +98,41 @@ function toCatalogItem(
   };
 }
 
-function buildViewSummary(filters: MemoryCatalogFilters) {
-  const base = memoryViewModeExplanation(filters.memoryViewMode);
+function buildViewSummary(filters: MemoryCatalogFilters, locale: AppLocale) {
+  const t = createTranslator(locale);
+  const base = memoryViewModeExplanation(filters.memoryViewMode, locale);
 
   if (filters.memoryViewMode === "workspace_only") {
     return filters.workspaceId
-      ? `${base} 当前${formatWorkspaceReference(filters.workspaceId)}${filters.sessionId ? `，${formatSessionReference(filters.sessionId)}` : ""}${filters.sourceRef ? `，${formatSourceReference(filters.sourceRef)}` : ""}。`
-      : `${base} 当前缺少工作区筛选，所以只能依赖显式筛选条件进一步收窄结果。`;
+      ? t("service.memory.workspaceOnlySummaryWithWorkspace", {
+          base,
+          workspace: formatWorkspaceReference(filters.workspaceId, locale),
+          session: filters.sessionId
+            ? t("service.memory.sessionSuffix", { session: formatSessionReference(filters.sessionId, locale) })
+            : "",
+          source: filters.sourceRef
+            ? t("service.memory.sourceSuffix", { source: formatSourceReference(filters.sourceRef, locale) })
+            : ""
+        })
+      : t("service.memory.workspaceOnlySummaryMissingWorkspace", { base });
   }
 
   if (filters.scope === "user" || isImplicitGlobalView(filters)) {
-    return `${base} 当前正在查看平台级记忆，不需要工作区筛选。`;
+    return t("service.memory.globalViewSummary", { base });
   }
 
   return filters.workspaceId
-    ? `${base} 当前${formatWorkspaceReference(filters.workspaceId)}。${filters.sessionId ? `当前${formatSessionReference(filters.sessionId)}。` : ""}${filters.sourceRef ? `当前${formatSourceReference(filters.sourceRef)}。` : ""}`
-    : `${base} 当前缺少工作区筛选，所以页面结果可能不完整。`;
+    ? t("service.memory.workspacePlusSummaryWithWorkspace", {
+        base,
+        workspace: formatWorkspaceReference(filters.workspaceId, locale),
+        session: filters.sessionId
+          ? t("service.memory.sessionSentence", { session: formatSessionReference(filters.sessionId, locale) })
+          : "",
+        source: filters.sourceRef
+          ? t("service.memory.sourceSentence", { source: formatSourceReference(filters.sourceRef, locale) })
+          : ""
+      })
+    : t("service.memory.workspacePlusSummaryMissingWorkspace", { base });
 }
 
 function buildQuickViewHref(filters: MemoryCatalogFilters) {
@@ -168,13 +193,17 @@ function createQuickView(
   };
 }
 
-export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): MemoryCatalogQuickView[] {
+export function buildMemoryCatalogQuickViews(
+  filters: MemoryCatalogFilters,
+  locale: AppLocale = "zh-CN"
+): MemoryCatalogQuickView[] {
+  const t = createTranslator(locale);
   const views: MemoryCatalogQuickView[] = [
     createQuickView(
       filters,
       "global-user",
-      "全局记忆",
-      "直接查看平台级偏好和长期事实，不受会话限制。",
+      t("service.memory.quickGlobalTitle"),
+      t("service.memory.quickGlobalDescription"),
       {
         workspaceId: filters.workspaceId,
         memoryViewMode: "workspace_plus_global",
@@ -187,8 +216,8 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
     createQuickView(
       filters,
       "pending-confirmation",
-      "待确认队列",
-      "集中查看还没确认的新偏好和冲突记录，便于尽快确认或失效。",
+      t("service.memory.quickPendingTitle"),
+      t("service.memory.quickPendingDescription"),
       {
         workspaceId: filters.workspaceId,
         memoryViewMode: "workspace_plus_global",
@@ -202,8 +231,8 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       createQuickView(
         filters,
         "workspace-plus-global",
-        "当前工作区 + 全局",
-        "查看当前工作区的工作区、任务、会话记忆，同时包含全局记忆。",
+        t("service.memory.quickWorkspaceGlobalTitle"),
+        t("service.memory.quickWorkspaceGlobalDescription"),
         {
           workspaceId: filters.workspaceId,
           memoryViewMode: "workspace_plus_global"
@@ -212,8 +241,8 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       createQuickView(
         filters,
         "workspace-only",
-        "仅当前工作区",
-        "只看当前工作区下的工作区、任务、会话记忆，不包含全局记忆。",
+        t("service.memory.quickWorkspaceOnlyTitle"),
+        t("service.memory.quickWorkspaceOnlyDescription"),
         {
           workspaceId: filters.workspaceId,
           memoryViewMode: "workspace_only"
@@ -227,8 +256,8 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       createQuickView(
         filters,
         "turn-related",
-        "本轮相关",
-        "按来源引用查看这一轮写出来的相关记忆。",
+        t("service.memory.quickTurnRelatedTitle"),
+        t("service.memory.quickTurnRelatedDescription"),
         {
           workspaceId: filters.workspaceId,
           sourceRef: filters.sourceRef,
@@ -243,8 +272,8 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
       createQuickView(
         filters,
         "clear-session",
-        "去掉会话限制",
-        "保留当前工作区，但不再用会话限制结果，避免把全局记忆筛掉。",
+        t("service.memory.quickClearSessionTitle"),
+        t("service.memory.quickClearSessionDescription"),
         {
           workspaceId: filters.workspaceId,
           memoryViewMode: filters.workspaceId ? "workspace_plus_global" : "workspace_plus_global",
@@ -257,18 +286,19 @@ export function buildMemoryCatalogQuickViews(filters: MemoryCatalogFilters): Mem
   return views;
 }
 
-export function describeCatalogFilterHints(filters: MemoryCatalogFilters) {
+export function describeCatalogFilterHints(filters: MemoryCatalogFilters, locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
   const hints: string[] = [];
 
   if (filters.sessionId) {
-    hints.push("当前带了会话筛选，只会稳定命中会话级记录。平台级记忆通常不绑定会话，所以想看全局偏好时请直接点“全局记忆”。");
+    hints.push(t("service.memory.sessionFilterHint"));
   }
 
   if (!filters.workspaceId) {
     if (filters.scope === "user" || isImplicitGlobalView(filters)) {
-      hints.push("当前正在查看平台级记忆，不需要工作区筛选。");
+      hints.push(t("service.memory.platformNoWorkspaceHint"));
     } else {
-      hints.push("当前没有工作区筛选，页面只能稳定展示平台级记忆。要看工作区、任务或会话记忆，请补充工作区。");
+      hints.push(t("service.memory.missingWorkspaceHint"));
     }
   }
 
@@ -276,61 +306,70 @@ export function describeCatalogFilterHints(filters: MemoryCatalogFilters) {
 }
 
 export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<MemoryCatalogResponse> {
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
   const [result, pendingResult] = await Promise.all([
-    queryCatalogView(filters),
+    queryCatalogView(filters, { locale }),
     queryCatalogView({
       ...filters,
       status: "pending_confirmation",
       page: 1,
       pageSize: 1
-    })
+    }, { locale })
   ]);
 
   return {
-    items: result.rows.map((row) => toCatalogItem(row, filters)),
+    items: result.rows.map((row) => toCatalogItem(row, filters, locale)),
     total: result.total,
     page: filters.page,
     pageSize: filters.pageSize,
     appliedFilters: filters,
     viewSummary:
       pendingResult.total > 0
-        ? `${buildViewSummary(filters)} 当前共有 ${pendingResult.total} 条待确认记忆。`
-        : buildViewSummary(filters),
+        ? t("service.memory.pendingSummary", {
+            summary: buildViewSummary(filters, locale),
+            count: pendingResult.total
+          })
+        : buildViewSummary(filters, locale),
     viewWarnings: result.warnings,
     pendingConfirmationCount: pendingResult.total,
     sourceStatus: result.status
   };
 }
 
-export function describeCatalogEmptyState(response: MemoryCatalogResponse) {
+export function describeCatalogEmptyState(response: MemoryCatalogResponse, locale: AppLocale = "zh-CN") {
+  const t = createTranslator(locale);
+
   if (response.sourceStatus.status === "unavailable" || response.sourceStatus.status === "timeout") {
     return {
-      title: "记忆数据源暂不可用",
+      title: t("service.memory.sourceUnavailableTitle"),
       description:
         response.sourceStatus.detail ??
-        "共享读模型当前不可查询，所以记忆目录暂时处于降级状态。"
+        t("service.memory.sourceUnavailableDescription")
     };
   }
 
   if (response.sourceStatus.status === "misconfigured") {
     return {
-      title: "记忆数据源配置不完整",
+      title: t("service.memory.sourceMisconfiguredTitle"),
       description:
         response.sourceStatus.detail ??
-        "共享读模型连接尚未配置完成，所以目录暂时无法加载。"
+        t("service.memory.sourceMisconfiguredDescription")
     };
   }
 
   return {
-    title: "当前视图下没有匹配的记忆",
+    title: t("service.memory.emptyTitle"),
     description:
       response.appliedFilters.memoryViewMode === "workspace_only"
-        ? "当前是仅工作区视图，没有任何工作区、任务或会话记忆命中当前工作区和筛选条件。"
-        : "当前是工作区加全局视图，没有任何当前工作区或全局记忆命中所选筛选条件。"
+        ? t("service.memory.emptyWorkspaceOnly")
+        : t("service.memory.emptyWorkspaceGlobal")
   };
 }
 
 export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail | null> {
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
   const record = await fetchMemoryById(id);
 
   if (!record) {
@@ -351,10 +390,10 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     page: 1,
     pageSize: 1
   };
-  const base = toCatalogItem(record, filters);
+  const base = toCatalogItem(record, filters, locale);
   const sourceParts = [
     base.sourceType,
-    base.sourceRef ? formatSourceReference(base.sourceRef) : null,
+    base.sourceRef ? formatSourceReference(base.sourceRef, locale) : null,
     base.sourceServiceName
   ].filter(Boolean);
   const governanceResult = await fetchGovernanceExecutions({
@@ -362,7 +401,7 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     proposalType: undefined,
     executionStatus: undefined,
     limit: 50,
-  });
+  }, { locale });
   const governanceHistory = governanceResult.items.filter((item: (typeof governanceResult.items)[number]) =>
     item.targetSummary.includes(id),
   );
@@ -375,7 +414,7 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     ...base,
     details: record.details,
     detailsFormatted: JSON.stringify(record.details ?? {}, null, 2),
-    sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : "未知",
+    sourceFormatted: sourceParts.length > 0 ? sourceParts.join(" / ") : t("service.memory.sourceFormattedMissing"),
     sourceExcerpt: typeof originTrace?.source_excerpt === "string" ? originTrace.source_excerpt : null,
     extractionBasis: typeof originTrace?.extraction_basis === "string" ? originTrace.extraction_basis : null,
     sourceTurnId: typeof originTrace?.source_turn_id === "string" ? originTrace.source_turn_id : null,
@@ -383,15 +422,16 @@ export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail |
     governanceHistory,
     governanceSummary:
       governanceHistory.length > 0
-        ? `最近 ${governanceHistory.length} 次自动治理命中过这条记忆。`
-        : "当前还没有自动治理命中这条记忆。",
+        ? t("service.memory.governanceHitSummary", { count: governanceHistory.length })
+        : t("service.memory.governanceNoHitSummary"),
   };
 }
 
 export async function getGovernanceHistory(
   filters: GovernanceExecutionFilters,
 ): Promise<GovernanceExecutionResponse> {
-  const result = await fetchGovernanceExecutions(filters);
+  const locale = await getRequestLocale();
+  const result = await fetchGovernanceExecutions(filters, { locale });
 
   return {
     items: result.items,
@@ -401,5 +441,6 @@ export async function getGovernanceHistory(
 }
 
 export async function getGovernanceExecutionDetail(executionId: string) {
-  return fetchGovernanceExecutionDetail(executionId);
+  const locale = await getRequestLocale();
+  return fetchGovernanceExecutionDetail(executionId, { locale });
 }

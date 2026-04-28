@@ -4,6 +4,8 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import React, { FormEvent, ReactNode } from "react";
 
+import { useAppI18n } from "@/lib/i18n/client";
+
 type SearchFormProps = {
   action: Route;
   initialValues?: Record<string, string | undefined>;
@@ -13,6 +15,7 @@ type SearchFormProps = {
 
 export function SearchForm({ action, children, onSubmitted }: SearchFormProps) {
   const router = useRouter();
+  const { t } = useAppI18n();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,13 +44,13 @@ export function SearchForm({ action, children, onSubmitted }: SearchFormProps) {
           onClick={() => { router.push(action); onSubmitted?.(); }}
           className="btn-outline"
         >
-          清除
+          {t("common.clear")}
         </button>
         <button
           type="submit"
           className="btn-primary"
         >
-          应用
+          {t("common.apply")}
         </button>
       </div>
     </form>

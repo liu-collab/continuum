@@ -5,6 +5,7 @@ import * as fs from "node:fs/promises";
 
 import { getAppConfig } from "@/lib/env";
 import { AgentTokenBootstrapResponse } from "@/lib/contracts";
+import { getServerTranslator } from "@/lib/i18n/server";
 
 const TOKEN_READ_TIMEOUT_MS = 100;
 
@@ -56,6 +57,7 @@ async function probeMna(baseUrl: string) {
 }
 
 export async function GET() {
+  const { t } = await getServerTranslator();
   const { values } = getAppConfig();
   const tokenPath = resolveTokenPath(values.MNA_TOKEN_PATH);
   const browserMnaBaseUrl = values.NEXT_PUBLIC_MNA_BASE_URL;
@@ -67,7 +69,7 @@ export async function GET() {
       return json({
         status: "token_missing",
         token: null,
-        reason: "token 文件为空。",
+        reason: t("service.agentToken.empty"),
         mnaBaseUrl: browserMnaBaseUrl
       });
     }
@@ -76,7 +78,7 @@ export async function GET() {
       return json({
         status: "token_invalid",
         token: null,
-        reason: "token 文件格式不合法。",
+        reason: t("service.agentToken.invalidFormat"),
         mnaBaseUrl: browserMnaBaseUrl
       });
     }
@@ -97,7 +99,7 @@ export async function GET() {
       return json({
         status: "token_missing",
         token: null,
-        reason: "读取 token 文件超时。",
+        reason: t("service.agentToken.readTimeout"),
         mnaBaseUrl: browserMnaBaseUrl
       });
     }
@@ -106,7 +108,7 @@ export async function GET() {
       return json({
         status: "mna_not_running",
         token: null,
-        reason: "未找到 token 文件，请先启动 memory-native-agent。",
+        reason: t("service.agentToken.notFound"),
         mnaBaseUrl: browserMnaBaseUrl
       });
     }
@@ -115,7 +117,7 @@ export async function GET() {
       return json({
         status: "token_invalid",
         token: null,
-        reason: "没有权限读取 token 文件。",
+        reason: t("service.agentToken.permissionDenied"),
         mnaBaseUrl: browserMnaBaseUrl
       });
     }
@@ -123,7 +125,7 @@ export async function GET() {
     return json({
       status: "token_invalid",
       token: null,
-      reason: error instanceof Error ? error.message : "读取 token 文件失败。",
+      reason: error instanceof Error ? error.message : t("service.agentToken.readFailed"),
       mnaBaseUrl: browserMnaBaseUrl
     });
   }

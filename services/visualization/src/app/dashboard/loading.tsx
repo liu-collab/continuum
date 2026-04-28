@@ -1,17 +1,23 @@
+"use client";
+
 import React from "react";
+
+import { useAppI18n } from "@/lib/i18n/client";
 
 const windows = ["15m", "30m", "1h", "6h", "24h"];
 
 export default function DashboardLoading() {
+  const { t } = useAppI18n();
+
   return (
     <div className="app-page" data-testid="dashboard-loading-state" aria-busy="true">
       <section className="tile tile-light">
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">诊断</div>
-              <h1 className="tile-title">运行时指标</h1>
-              <p className="tile-subtitle">正在读取运行时与存储指标。</p>
+              <div className="section-kicker">{t("dashboard.kicker")}</div>
+              <h1 className="tile-title">{t("dashboard.title")}</h1>
+              <p className="tile-subtitle">{t("dashboard.loadingSubtitle")}</p>
             </div>
             <div className="segment-control">
               {windows.map((item) => (
@@ -27,7 +33,7 @@ export default function DashboardLoading() {
 
       <DashboardSkeletonSection title="retrieval-runtime" count={4} />
       <DashboardSkeletonSection title="storage" count={4} />
-      <DashboardSkeletonSection title="趋势" count={2} />
+      <DashboardSkeletonSection title={t("dashboard.trendsKicker")} count={2} />
     </div>
   );
 }

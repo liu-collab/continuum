@@ -1,7 +1,10 @@
 "use client";
 
 import React from "react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+import { APP_LOCALE_STORAGE_KEY } from "@/lib/i18n/messages";
+import { useOptionalAppI18n } from "@/lib/i18n/client";
 
 import type { AgentLocale } from "../_lib/openapi-types";
 import { DEFAULT_AGENT_LOCALE, resolveBrowserLocale } from "../_lib/config";
@@ -44,20 +47,33 @@ export function AgentI18nProvider({
   children: ReactNode;
   defaultLocale?: string;
 }) {
-  const [locale, setLocaleState] = useState<AgentLocale>(resolveBrowserLocale(defaultLocale ?? DEFAULT_AGENT_LOCALE));
+  const appI18n = useOptionalAppI18n();
+  const [locale, setLocaleState] = useState<AgentLocale>(() => resolveBrowserLocale(defaultLocale ?? appI18n?.locale ?? DEFAULT_AGENT_LOCALE));
+  const appLocale = appI18n?.locale;
+  const setAppLocale = appI18n?.setLocale;
 
   useEffect(() => {
+    const appStored = window.localStorage.getItem(APP_LOCALE_STORAGE_KEY);
     const stored = window.localStorage.getItem(AGENT_LOCALE_STORAGE_KEY);
-    if (stored === "zh-CN" || stored === "en-US") {
+    if (!appStored && (stored === "zh-CN" || stored === "en-US")) {
       setLocaleState(stored);
+      setAppLocale?.(stored);
     }
-  }, []);
+  }, [setAppLocale]);
 
-  const value: AgentI18nValue = {
+  useEffect(() => {
+    if (!appLocale) {
+      return;
+    }
+    setLocaleState(resolveBrowserLocale(appLocale));
+  }, [appLocale]);
+
+  const value: AgentI18nValue = useMemo(() => ({
     locale,
     setLocale(nextLocale) {
       setLocaleState(nextLocale);
       window.localStorage.setItem(AGENT_LOCALE_STORAGE_KEY, nextLocale);
+      setAppLocale?.(nextLocale);
     },
     t(key, variables) {
       return translateMessage(locale, key, variables);
@@ -86,7 +102,7 @@ export function AgentI18nProvider({
     formatAgentError(code, fallbackMessage, reason) {
       return formatAgentError(locale, code, fallbackMessage, reason);
     }
-  };
+  }), [locale, setAppLocale]);
 
   return <AgentI18nContext.Provider value={value}>{children}</AgentI18nContext.Provider>;
 }

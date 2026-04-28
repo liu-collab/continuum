@@ -5,6 +5,7 @@ import { Brain, PencilLine, Trash2, Workflow } from "lucide-react";
 import { useState } from "react";
 
 import { StatusBadge } from "@/components/status-badge";
+import { createTranslator } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "../_i18n/provider";
@@ -187,23 +188,25 @@ export function SessionList({
 }
 
 function getSessionWorkspaceLabel(locale: AgentLocale, session: MnaSessionSummary, workspace: MnaWorkspaceSummary | null) {
+  const t = createTranslator(locale);
   const folderLabel = getWorkspaceFolderLabel(workspace);
   if (folderLabel) {
     return folderLabel;
   }
 
-  return locale === "en-US"
-    ? `Unknown workspace ${getShortIdentifier(session.workspace_id)}`
-    : `未知工作区 ${getShortIdentifier(session.workspace_id)}`;
+  return t("service.memory.unknownWorkspace", {
+    id: getShortIdentifier(session.workspace_id)
+  });
 }
 
 function formatFallbackSessionTitle(locale: AgentLocale, session: MnaSessionSummary) {
+  const t = createTranslator(locale);
   const formattedTime = formatSessionTimeTitle(locale, session.created_at);
   if (formattedTime) {
-    return locale === "en-US" ? `Session · ${formattedTime}` : `会话 · ${formattedTime}`;
+    return t("service.memory.sessionTimeTitle", { time: formattedTime });
   }
 
-  return locale === "en-US" ? "Untitled session" : "未命名会话";
+  return t("service.memory.untitledSession");
 }
 
 function QuickActionLink({

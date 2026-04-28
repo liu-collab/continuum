@@ -11,9 +11,10 @@ type RepositoryDocPageProps = {
     html: string;
     headings: DocHeading[];
   };
+  tocLabel: string;
 };
 
-export function RepositoryDocPage({ eyebrow, title, description, document }: RepositoryDocPageProps) {
+export function RepositoryDocPage({ eyebrow, title, description, document, tocLabel }: RepositoryDocPageProps) {
   return (
     <div className="app-page">
       <section className="tile tile-light">
@@ -30,7 +31,7 @@ export function RepositoryDocPage({ eyebrow, title, description, document }: Rep
         <div className="tile-inner">
           <div className="master-detail-grid">
             <aside className="panel h-fit p-5 xl:sticky xl:top-28">
-              <div className="section-kicker">目录</div>
+              <div className="section-kicker">{tocLabel}</div>
               <nav className="mt-4">
                 <ul className="grid gap-1.5">
                   {document.headings

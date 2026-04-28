@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAppConfig } from "@/lib/env";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { asRecord, pickNumber, pickString } from "@/lib/records";
 import { fetchJsonFromSource } from "@/lib/server/http-client";
 
@@ -85,15 +86,18 @@ function toWriteJobRecord(value: unknown): StorageWriteJobRecord | null {
   };
 }
 
-export async function fetchStorageMetrics() {
+export async function fetchStorageMetrics(options: { locale?: AppLocale } = {}) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "storage_api",
-    sourceLabel: "Storage observe API",
+    sourceLabel: t("service.sources.storageObserveApi"),
     url: values.STORAGE_API_BASE_URL
       ? `${values.STORAGE_API_BASE_URL}/v1/storage/observe/metrics`
       : undefined,
-    timeoutMs: values.STORAGE_API_TIMEOUT_MS
+    timeoutMs: values.STORAGE_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -110,8 +114,8 @@ export async function fetchStorageMetrics() {
       status: {
         ...response.status,
         status: "partial" as const,
-        lastError: "Upstream returned a non-object payload.",
-        detail: "Upstream returned a non-object payload."
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload")
       },
       metrics: null
     };
@@ -192,15 +196,18 @@ export async function fetchStorageMetrics() {
   };
 }
 
-export async function fetchStorageWriteJobs() {
+export async function fetchStorageWriteJobs(options: { locale?: AppLocale } = {}) {
   const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const response = await fetchJsonFromSource<unknown>({
     sourceName: "storage_write_jobs",
-    sourceLabel: "Storage write jobs",
+    sourceLabel: t("service.sources.storageWriteJobs"),
     url: values.STORAGE_API_BASE_URL
       ? `${values.STORAGE_API_BASE_URL}/v1/storage/observe/write-jobs`
       : undefined,
-    timeoutMs: values.STORAGE_API_TIMEOUT_MS
+    timeoutMs: values.STORAGE_API_TIMEOUT_MS,
+    locale
   });
 
   if (!response.ok || !response.data) {
@@ -217,8 +224,8 @@ export async function fetchStorageWriteJobs() {
       status: {
         ...response.status,
         status: "partial" as const,
-        lastError: "Upstream returned a non-object payload.",
-        detail: "Upstream returned a non-object payload."
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload")
       },
       jobs: null
     };

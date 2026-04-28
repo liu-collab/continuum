@@ -4,6 +4,8 @@ import type { Route } from "next";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import { createTranslator } from "@/lib/i18n/messages";
+
 import { initialAgentState, reduceAgentEvent } from "../_lib/event-reducer";
 import type {
   AgentApprovalMode,
@@ -413,12 +415,13 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   }
 
   async function pickWorkspace() {
+    const t = createTranslator(options.uiLocale);
     let payload;
     try {
       payload = await client.pickWorkspace();
     } catch (error) {
       if (error instanceof MnaRequestError && error.statusCode === 404) {
-        throw new Error("当前 memory-native-agent 还不支持“选择文件夹”。请先重启到最新版本后再试。");
+        throw new Error(t("agentErrors.workspacePickerUnsupported"));
       }
       throw error;
     }
@@ -445,6 +448,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     streamRef.current?.close();
     streamRef.current = client.connectSessionStream(sessionId, {
       initialLastEventId,
+      locale: options.uiLocale,
       onConnectionChange(connection) {
         if (streamGenerationRef.current !== generation) {
           return;
@@ -585,7 +589,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
       if (!streamRef.current) {
-        throw new Error("session websocket is not connected");
+        throw new Error(createTranslator(options.uiLocale)("agentErrors.websocketNotConnected"));
       }
       streamRef.current.send({
         kind: "tool_confirm",
@@ -597,7 +601,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
       if (!streamRef.current) {
-        throw new Error("session websocket is not connected");
+        throw new Error(createTranslator(options.uiLocale)("agentErrors.websocketNotConnected"));
       }
       streamRef.current.send({
         kind: "plan_confirm",

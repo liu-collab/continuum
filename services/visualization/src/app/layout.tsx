@@ -1,47 +1,60 @@
 import type { Metadata } from "next";
+import type { ResolvingMetadata } from "next";
 import type { Route } from "next";
 import Link from "next/link";
 
+import { AppLocaleSwitch } from "@/components/app-locale-switch";
 import { Providers } from "@/app/providers";
+import { getRequestLocale } from "@/lib/i18n/server";
+import { createTranslator } from "@/lib/i18n/messages";
 
 import "./globals.css";
 
 const navigation = [
-  { href: "/agent" as Route, label: "Agent" },
-  { href: "/dashboard" as Route, label: "指标" },
-  { href: "/memories" as Route, label: "记忆" },
-  { href: "/runs" as Route, label: "轨迹" },
-  { href: "/governance" as Route, label: "治理" },
-  { href: "/docs/configuration" as Route, label: "文档" }
+  { href: "/agent" as Route, labelKey: "layout.nav.agent" },
+  { href: "/dashboard" as Route, labelKey: "layout.nav.dashboard" },
+  { href: "/memories" as Route, labelKey: "layout.nav.memories" },
+  { href: "/runs" as Route, labelKey: "layout.nav.runs" },
+  { href: "/governance" as Route, labelKey: "layout.nav.governance" },
+  { href: "/docs/configuration" as Route, labelKey: "layout.nav.docs" }
 ];
 
-export const metadata: Metadata = {
-  title: "Continuum · Observatory",
-  description: "Agent memory runtime observability dashboard."
-};
+export async function generateMetadata(_props: unknown, _parent: ResolvingMetadata): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
 
-export default function RootLayout({
+  return {
+    title: t("layout.metadataTitle"),
+    description: t("layout.metadataDescription")
+  };
+}
+
+export default async function RootLayout({
   children
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
+
   return (
-    <html lang="zh-CN">
+    <html lang={locale}>
       <body>
-        <Providers>
+        <Providers defaultLocale={locale}>
           <div className="min-h-screen bg-background text-foreground">
             <header className="global-nav">
               <div className="global-nav-inner">
                 <Link href={"/" as Route} className="global-nav-link font-semibold">
                   Continuum
                 </Link>
-                <nav className="global-nav-links" aria-label="全局导航">
+                <nav className="global-nav-links" aria-label={t("layout.navAria")}>
                   {navigation.map((item) => (
                     <Link key={item.href} href={item.href} className="global-nav-link">
-                      {item.label}
+                      {t(item.labelKey)}
                     </Link>
                   ))}
                 </nav>
+                <AppLocaleSwitch />
               </div>
             </header>
 

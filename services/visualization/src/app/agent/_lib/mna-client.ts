@@ -1,4 +1,5 @@
 import type { AgentTokenBootstrapResponse } from "@/lib/contracts";
+import { createTranslator, resolveAppLocale, type AppLocale } from "@/lib/i18n/messages";
 
 import { DEFAULT_MNA_BASE_URL, toWebSocketUrl } from "./config";
 import type {
@@ -63,6 +64,7 @@ type StreamOptions = {
   onConnectionChange(state: "connecting" | "open" | "reconnecting" | "closed"): void;
   onError(error: Error): void;
   initialLastEventId?: number | null;
+  locale?: AppLocale;
 };
 
 export type SessionStreamHandle = {
@@ -72,6 +74,11 @@ export type SessionStreamHandle = {
 
 export class MnaClient {
   private bootstrapCache: BootstrapResult | null = null;
+
+  private t(locale?: AppLocale) {
+    const resolvedLocale = resolveAppLocale(locale ?? (typeof navigator === "undefined" ? null : navigator.language));
+    return createTranslator(resolvedLocale);
+  }
 
   async bootstrap(force = false): Promise<BootstrapResult> {
     if (!force && this.bootstrapCache) {
@@ -168,7 +175,7 @@ export class MnaClient {
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as MnaApiError | null;
       throw new MnaRequestError(
-        payload?.error?.message ?? `Request failed with status ${response.status}.`,
+        payload?.error?.message ?? this.t()("common.requestFailedStatus", { status: response.status }),
         response.status,
         payload?.error?.code ?? "request_failed"
       );
@@ -341,7 +348,7 @@ export class MnaClient {
       }
       if (retries >= maxRetries) {
         options.onConnectionChange("closed");
-        options.onError(new MnaUnavailableError("memory-native-agent 当前不可访问，请稍后重试。", "mna_not_running"));
+        options.onError(new MnaUnavailableError(this.t(options.locale)("agentErrors.unavailable"), "mna_not_running"));
         return;
       }
 
@@ -372,7 +379,7 @@ export class MnaClient {
         return;
       }
       if (bootstrap.status !== "ok" || !bootstrap.token) {
-        throw new MnaUnavailableError(bootstrap.reason ?? "memory-native-agent 不可用。", bootstrap.status);
+        throw new MnaUnavailableError(bootstrap.reason ?? this.t(options.locale)("agentErrors.notAvailable"), bootstrap.status);
       }
 
       const generation = connectionGeneration + 1;
@@ -405,7 +412,7 @@ export class MnaClient {
         try {
           payload = JSON.parse(String(message.data)) as MnaServerEventEnvelope;
         } catch {
-          options.onError(new Error("Invalid websocket message."));
+          options.onError(new Error(this.t(options.locale)("agentErrors.invalidWebsocketMessage")));
           return;
         }
 
@@ -444,9 +451,9 @@ export class MnaClient {
     });
 
     return {
-      send(event) {
+      send: (event) => {
         if (!socket || socket.readyState !== WebSocket.OPEN) {
-          throw new Error("session websocket is not connected");
+          throw new Error(this.t(options.locale)("agentErrors.websocketNotConnected"));
         }
         socket.send(JSON.stringify(event));
       },
@@ -463,7 +470,7 @@ export class MnaClient {
   private async requestJson<T>(pathname: string, init?: RequestInit, retryOnUnauthorized = true): Promise<T> {
     const bootstrap = await this.bootstrap();
     if (bootstrap.status !== "ok" || !bootstrap.token) {
-      throw new MnaUnavailableError(bootstrap.reason ?? "memory-native-agent 不可用。", bootstrap.status);
+      throw new MnaUnavailableError(bootstrap.reason ?? this.t()("agentErrors.notAvailable"), bootstrap.status);
     }
 
     const headers = new Headers(init?.headers);
@@ -483,7 +490,7 @@ export class MnaClient {
     } catch (error) {
       this.bootstrapCache = null;
       throw new MnaUnavailableError(
-        error instanceof Error ? error.message : "memory-native-agent 当前不可访问，请稍后重试。",
+        error instanceof Error ? error.message : this.t()("agentErrors.unavailable"),
         "mna_not_running"
       );
     }
@@ -496,7 +503,7 @@ export class MnaClient {
     if (!response.ok) {
       const payload = (await response.json().catch(() => null)) as MnaApiError | null;
       throw new MnaRequestError(
-        payload?.error?.message ?? `Request failed with status ${response.status}.`,
+        payload?.error?.message ?? this.t()("common.requestFailedStatus", { status: response.status }),
         response.status,
         payload?.error?.code ?? "request_failed"
       );

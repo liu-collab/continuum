@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 
 import { getAppConfig } from "@/lib/env";
+import { createTranslator, type AppLocale } from "@/lib/i18n/messages";
+import { getRequestLocale } from "@/lib/i18n/server";
 import { jsonApiError } from "@/lib/server/api-errors";
 import { pickWorkspaceDirectory } from "@/lib/server/workspace-picker";
 
 export async function POST() {
-  const proxied = await tryProxyToManagedMna();
+  const locale = await getRequestLocale();
+  const t = createTranslator(locale);
+  const proxied = await tryProxyToManagedMna(locale);
   if (proxied) {
     return proxied;
   }
 
   try {
-    const cwd = await pickWorkspaceDirectory();
+    const cwd = await pickWorkspaceDirectory({ locale });
     return NextResponse.json({
       cancelled: !cwd,
       cwd: cwd ?? null,
@@ -25,21 +29,22 @@ export async function POST() {
     if (code === "workspace_picker_unsupported") {
       return jsonApiError(
         "workspace_picker_unsupported",
-        error instanceof Error ? error.message : "当前系统没有可用的文件夹选择器，请改用手动输入路径。",
+        error instanceof Error ? error.message : t("service.workspacePicker.unsupported"),
         400,
       );
     }
 
     return jsonApiError(
       "workspace_picker_failed",
-      error instanceof Error ? error.message : "打开文件夹选择器失败。",
+      error instanceof Error ? error.message : t("service.workspacePicker.failed"),
       500,
     );
   }
 }
 
-async function tryProxyToManagedMna() {
+async function tryProxyToManagedMna(locale: AppLocale) {
   const { values } = getAppConfig();
+  const t = createTranslator(locale);
   const mnaBaseUrl = values.MNA_INTERNAL_BASE_URL?.trim();
   const tokenPath = values.MNA_TOKEN_PATH?.trim();
 
@@ -76,7 +81,7 @@ async function tryProxyToManagedMna() {
         payload ?? {
           error: {
             code: "workspace_picker_failed",
-            message: `Request failed with status ${response.status}.`,
+            message: t("common.requestFailedStatus", { status: response.status }),
           },
         },
         { status: response.status },
@@ -84,7 +89,7 @@ async function tryProxyToManagedMna() {
     }
 
     if (!payload || typeof payload !== "object") {
-      return jsonApiError("workspace_picker_failed", "文件夹选择结果无效。", 500);
+      return jsonApiError("workspace_picker_failed", t("service.workspacePicker.invalidResult"), 500);
     }
 
     return NextResponse.json(payload);

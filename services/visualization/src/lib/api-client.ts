@@ -12,6 +12,7 @@ import {
   ServiceHealthResponse,
   ServiceHealthResponseSchema
 } from "@/lib/contracts";
+import { createTranslator, resolveAppLocale } from "@/lib/i18n/messages";
 import { buildQueryString, toMemoryCatalogQuery, toRunTraceQuery } from "@/lib/query-params";
 
 async function fetchInternalJson<T>(path: string, schema: { parse: (value: unknown) => T }) {
@@ -22,10 +23,17 @@ async function fetchInternalJson<T>(path: string, schema: { parse: (value: unkno
   const json = (await response.json().catch(() => null)) as unknown;
 
   if (!response.ok) {
+    const t = createTranslator(resolveAppLocale(typeof navigator === "undefined" ? null : navigator.language));
+    const error =
+      typeof json === "object" && json !== null && "error" in json
+        ? (json.error as unknown)
+        : null;
     const message =
-      typeof json === "object" && json !== null && "error" in json && typeof json.error === "string"
-        ? json.error
-        : `Request failed with status ${response.status}`;
+      typeof error === "string"
+        ? error
+        : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+          ? error.message
+        : t("common.requestFailedStatus", { status: response.status });
 
     throw new Error(message);
   }

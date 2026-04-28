@@ -9,7 +9,8 @@ import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
 import { getSourceHealth } from "@/features/source-health/service";
-import { formatDebugReference, formatRunTraceTitle, formatTimestamp, memoryViewModeLabel } from "@/lib/format";
+import { formatDebugReference, formatRunTraceTitle, formatTimestamp } from "@/lib/format";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { parseRunTraceFilters } from "@/lib/query-params";
 
 function sectionStatusTone(value: string) {
@@ -25,9 +26,10 @@ export default async function RunsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const { locale, t } = await getServerTranslator();
   const filters = parseRunTraceFilters(params);
   const [response, health] = await Promise.all([getRunTrace(filters), getSourceHealth()]);
-  const emptyState = describeRunTraceEmptyState(response);
+  const emptyState = describeRunTraceEmptyState(response, locale);
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return (
@@ -36,18 +38,16 @@ export default async function RunsPage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">运行</div>
-              <h1 className="tile-title">运行轨迹</h1>
-              <p className="tile-subtitle">
-                查看一轮对话中触发、召回、注入和写回的结果。
-              </p>
+              <div className="section-kicker">{t("runs.kicker")}</div>
+              <h1 className="tile-title">{t("runs.title")}</h1>
+              <p className="tile-subtitle">{t("runs.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <FilterModalButton activeCount={activeCount} title="筛选轨迹" description="按轮次、会话或调试标识定位一条运行轨迹。">
+              <FilterModalButton activeCount={activeCount} title={t("runs.filterTitle")} description={t("runs.filterDescription")}>
                 <SearchForm action="/runs" initialValues={{ turn_id: filters.turnId, session_id: filters.sessionId, trace_id: filters.traceId }}>
-                  <FormField label="轮次" name="turn_id" placeholder="轮次标识" defaultValue={filters.turnId} />
-                  <FormField label="会话" name="session_id" placeholder="会话标识" defaultValue={filters.sessionId} />
-                  <FormField label="调试标识" name="trace_id" placeholder="trace 标识" defaultValue={filters.traceId} />
+                  <FormField label={t("runs.fields.turn")} name="turn_id" placeholder={t("runs.placeholders.turn")} defaultValue={filters.turnId} />
+                  <FormField label={t("runs.fields.session")} name="session_id" placeholder={t("runs.placeholders.session")} defaultValue={filters.sessionId} />
+                  <FormField label={t("runs.fields.trace")} name="trace_id" placeholder={t("runs.placeholders.trace")} defaultValue={filters.traceId} />
                 </SearchForm>
               </FilterModalButton>
               <HealthModalButton health={health} />
@@ -60,33 +60,34 @@ export default async function RunsPage({
         <div className="tile-inner">
           <div className="master-detail-grid">
             <aside className="panel p-5">
-              <div className="section-kicker">最近轨迹</div>
+              <div className="section-kicker">{t("runs.recentKicker")}</div>
               {response.items.length > 0 ? (
                 <div className="record-list mt-4">
                   {response.items.map((item) => (
                     <Link
                       key={item.traceId}
                       href={`/runs?trace_id=${encodeURIComponent(item.traceId)}` as Route}
+                      scroll={false}
                       className={`record-link ${response.selectedTurn?.turn.traceId === item.traceId ? "record-link-active" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-[17px] font-semibold leading-[1.24] text-text" title={item.turnId}>
-                            {formatRunTraceTitle(item.createdAt)}
+                            {formatRunTraceTitle(item.createdAt, locale)}
                           </div>
                           <div className="mt-1 text-[14px] leading-[1.43] text-muted">
-                            {item.memoryMode ? memoryViewModeLabel(item.memoryMode) : "未记录记忆模式"}
+                            {item.memoryMode ? t(`enums.memoryViewMode.${item.memoryMode}`) : t("runs.memoryModeNotRecorded")}
                           </div>
                         </div>
                         <StatusBadge tone={item.degraded ? "warning" : "success"}>
-                          {item.degraded ? "降级" : "正常"}
+                          {item.degraded ? t("runs.degraded") : t("runs.normal")}
                         </StatusBadge>
                       </div>
                       <p className="mt-3 line-clamp-2 text-[14px] leading-[1.43] text-muted">{item.summary}</p>
                       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[14px] leading-[1.43] text-muted-foreground">
                         <span>{item.triggerLabel}</span>
-                        <span>注入 {item.injectedCount}</span>
-                        <span>{formatTimestamp(item.createdAt)}</span>
+                        <span>{t("runs.injectedCount", { count: item.injectedCount })}</span>
+                        <span>{formatTimestamp(item.createdAt, locale)}</span>
                       </div>
                     </Link>
                   ))}
@@ -102,9 +103,9 @@ export default async function RunsPage({
                   <div className="panel p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <div className="section-kicker">选中轨迹</div>
+                        <div className="section-kicker">{t("runs.selectedKicker")}</div>
                         <h2 className="mt-3 break-all text-[34px] font-semibold leading-[1.12] text-text">
-                          {formatRunTraceTitle(response.selectedTurn.turn.createdAt)}
+                          {formatRunTraceTitle(response.selectedTurn.turn.createdAt, locale)}
                         </h2>
                         <p className="mt-4 text-[17px] leading-[1.47] text-muted">
                           {response.selectedTurn.narrative.explanation}
@@ -115,15 +116,15 @@ export default async function RunsPage({
                       </StatusBadge>
                     </div>
                     <dl className="kv-grid mt-6">
-                      <Row label="调试标识" value={formatDebugReference(response.selectedTurn.turn.traceId)} />
-                      <Row label="轮次" value={formatDebugReference(response.selectedTurn.turn.turnId)} />
-                      <Row label="阶段" value={response.selectedTurn.turn.phase ?? "未记录"} />
-                      <Row label="宿主" value={response.selectedTurn.turn.host ?? "未记录"} />
-                      <Row label="创建" value={formatTimestamp(response.selectedTurn.turn.createdAt)} />
+                      <Row label={t("runs.fields.trace")} value={formatDebugReference(response.selectedTurn.turn.traceId, locale)} />
+                      <Row label={t("runs.fields.turn")} value={formatDebugReference(response.selectedTurn.turn.turnId, locale)} />
+                      <Row label={t("runs.fields.phase")} value={response.selectedTurn.turn.phase ?? t("common.notRecorded")} />
+                      <Row label={t("runs.fields.host")} value={response.selectedTurn.turn.host ?? t("common.notRecorded")} />
+                      <Row label={t("runs.fields.created")} value={formatTimestamp(response.selectedTurn.turn.createdAt, locale)} />
                     </dl>
                     <div className="detail-grid mt-6">
-                      <TextBlock label="输入" value={response.selectedTurn.turn.inputSummary ?? "未记录"} />
-                      <TextBlock label="输出" value={response.selectedTurn.turn.assistantOutputSummary ?? "未记录"} />
+                      <TextBlock label={t("runs.fields.input")} value={response.selectedTurn.turn.inputSummary ?? t("common.notRecorded")} />
+                      <TextBlock label={t("runs.fields.output")} value={response.selectedTurn.turn.assistantOutputSummary ?? t("common.notRecorded")} />
                     </div>
                   </div>
 
@@ -147,7 +148,7 @@ export default async function RunsPage({
                   </div>
 
                   <div className="panel p-6">
-                    <div className="section-kicker">依赖</div>
+                    <div className="section-kicker">{t("runs.dependencies")}</div>
                     <div className="utility-grid mt-4">
                       {response.selectedTurn.dependencyStatus.map((dependency) => (
                         <div key={dependency.name} className="record-card">
@@ -159,7 +160,7 @@ export default async function RunsPage({
                             <StatusBadge tone={sectionStatusTone(dependency.status)}>{dependency.status}</StatusBadge>
                           </div>
                           <div className="mt-3 text-[14px] leading-[1.43] text-muted-foreground">
-                            {formatTimestamp(dependency.checkedAt)}
+                            {formatTimestamp(dependency.checkedAt, locale)}
                           </div>
                         </div>
                       ))}
@@ -167,7 +168,7 @@ export default async function RunsPage({
                   </div>
                 </>
               ) : (
-                <EmptyState title="未选择轨迹" description={emptyState.description} />
+                <EmptyState title={t("runs.notSelectedTitle")} description={emptyState.description} />
               )}
             </section>
           </div>

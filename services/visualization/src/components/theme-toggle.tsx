@@ -3,7 +3,10 @@
 import { Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useAppI18n } from "@/lib/i18n/client";
+
 export function ThemeToggle() {
+  const { t } = useAppI18n();
   const [light, setLight] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -38,7 +41,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label={light ? "Switch to dark" : "Switch to light"}
+      aria-label={light ? t("common.switchToDark") : t("common.switchToLight")}
       style={{
         display: "inline-flex",
         alignItems: "center",

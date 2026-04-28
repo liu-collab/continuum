@@ -124,6 +124,77 @@ describe("run trace narrative", () => {
     expect(narrative.outcomeCode).toBe("empty_recall");
   });
 
+  it("explains recall candidates that are intentionally not injected", () => {
+    const narrative = buildNarrative({
+      ...baseDetail,
+      triggerRuns: [
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          triggerHit: true,
+          triggerType: "history_reference",
+          triggerReason: "reason",
+          memoryMode: "workspace_plus_global" as const,
+          requestedTypes: ["fact_preference"],
+          requestedScopes: ["user", "session"],
+          selectedScopes: [],
+          scopeDecision: "Selected user and session scope.",
+          scopeLimit: ["user", "session"],
+          importanceThreshold: 3,
+          cooldownApplied: false,
+          semanticScore: null,
+          durationMs: 10,
+          createdAt: null
+        }
+      ],
+      recallRuns: [
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          triggerType: "history_reference",
+          triggerHit: true,
+          triggerReason: "reason",
+          memoryMode: "workspace_plus_global" as const,
+          requestedTypes: ["fact_preference"],
+          requestedScopes: ["user", "session"],
+          selectedScopes: [],
+          scopeHitCounts: [{ scope: "user", count: 1 }],
+          selectedRecordIds: [],
+          queryScope: "scope=user,session",
+          candidateCount: 1,
+          selectedCount: 0,
+          resultState: "empty",
+          emptyReason: null,
+          durationMs: 120,
+          degraded: false,
+          degradationReason: null,
+          createdAt: null
+        }
+      ],
+      memoryPlanRuns: [
+        {
+          traceId: "trace-1",
+          phase: "before_response",
+          planKind: "memory_injection_plan",
+          inputSummary: "input=你是谁; candidate_count=1",
+          outputSummary: "should_inject=false; reason=当前问题自包含，虽有称呼偏好但非回答所必需; candidate_count=1; summary=",
+          promptVersion: "memory-recall-injection-v1",
+          schemaVersion: "memory-plan-schema-v1",
+          degraded: false,
+          degradationReason: null,
+          resultState: "skipped",
+          durationMs: 20,
+          createdAt: null
+        }
+      ]
+    });
+
+    expect(narrative.outcomeCode).toBe("candidate_not_selected");
+    expect(narrative.explanation).toContain("查到了 1 条候选记忆");
+    expect(narrative.explanation).toContain("当前问题自包含");
+    expect(narrative.explanation).not.toContain("本轮不需要放入提示词");
+  });
+
   it("explains found but not injected", () => {
     const narrative = buildNarrative({
       ...baseDetail,
@@ -319,8 +390,8 @@ describe("run trace narrative", () => {
     });
 
     expect(narratives.some((item) => item.title === "轮次 / task_start")).toBe(true);
-    expect(narratives.some((item) => item.title === "Recall / before_response")).toBe(true);
-    expect(narratives.some((item) => item.title === "Plan / before_response")).toBe(true);
+    expect(narratives.some((item) => item.title === "召回 / before_response")).toBe(true);
+    expect(narratives.some((item) => item.title === "计划 / before_response")).toBe(true);
   });
 
   it("describes governance plan-only traces", () => {
@@ -444,6 +515,28 @@ describe("run trace narrative", () => {
             }
           ]
         }
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          memoryPlanRuns: [
+            {
+              traceId,
+              phase: "before_response",
+              planKind: "memory_intent_plan",
+              inputSummary: "input=继续",
+              outputSummary: "needs_memory=true",
+              promptVersion: "memory-intent-plan-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "planned",
+              durationMs: 3,
+              createdAt: "2026-04-22T00:00:00Z"
+            }
+          ]
+        }
       });
 
     const response = await getRunTrace({
@@ -454,10 +547,423 @@ describe("run trace narrative", () => {
       pageSize: 20
     });
 
-    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(1, `turn_id=${traceId}&page=1&page_size=20`);
-    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(2, `trace_id=${traceId}&page=1&page_size=20`);
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(1, `turn_id=${traceId}&page=1&page_size=20`, { locale: "zh-CN" });
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(2, `trace_id=${traceId}&page=1&page_size=20`, { locale: "zh-CN" });
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(3, "page=1&page_size=20", { locale: "zh-CN" });
+    expect(fetchRuntimeRunsMock).toHaveBeenCalledTimes(3);
     expect(response.selectedTurn?.turn.traceId).toBe(traceId);
     expect(response.selectedTurn?.narrative.outcomeCode).toBe("plan_only");
+  });
+
+  it("keeps the recent run list when a trace is selected", async () => {
+    fetchRuntimeRunsMock
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          memoryPlanRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              planKind: "memory_intent_plan",
+              inputSummary: "selected input",
+              outputSummary: "selected output",
+              promptVersion: "memory-intent-plan-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "planned",
+              durationMs: 3,
+              createdAt: "2026-04-22T00:00:00Z"
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          memoryPlanRuns: [
+            {
+              traceId: "trace-newer",
+              phase: "before_response",
+              planKind: "memory_intent_plan",
+              inputSummary: "newer input",
+              outputSummary: "newer output",
+              promptVersion: "memory-intent-plan-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "planned",
+              durationMs: 3,
+              createdAt: "2026-04-23T00:00:00Z"
+            },
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              planKind: "memory_intent_plan",
+              inputSummary: "selected input",
+              outputSummary: "selected output",
+              promptVersion: "memory-intent-plan-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "planned",
+              durationMs: 3,
+              createdAt: "2026-04-22T00:00:00Z"
+            }
+          ]
+        }
+      });
+
+    const response = await getRunTrace({
+      turnId: undefined,
+      sessionId: undefined,
+      traceId: "trace-selected",
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(1, "trace_id=trace-selected&page=1&page_size=20", { locale: "zh-CN" });
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(2, "page=1&page_size=20", { locale: "zh-CN" });
+    expect(fetchRuntimeRunsMock).toHaveBeenCalledTimes(2);
+    expect(response.selectedTurn?.turn.traceId).toBe("trace-selected");
+    expect(response.items.map((item) => item.traceId)).toEqual(["trace-newer", "trace-selected"]);
+  });
+
+  it("attributes skipped current-turn injection to resident session memory", async () => {
+    fetchRuntimeRunsMock
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          turns: [
+            {
+              traceId: "trace-selected",
+              turnId: "turn-selected",
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "before_response",
+              currentInput: "你是谁",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:52:12.000Z"
+            }
+          ],
+          triggerRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              triggerHit: true,
+              triggerType: "history_reference",
+              triggerReason: "当前输入明确引用了历史上下文或既有偏好。",
+              memoryMode: "workspace_plus_global",
+              requestedTypes: ["fact_preference"],
+              requestedScopes: ["user", "session"],
+              selectedScopes: [],
+              scopeDecision: null,
+              scopeLimit: ["user", "session"],
+              importanceThreshold: 3,
+              cooldownApplied: false,
+              semanticScore: null,
+              durationMs: 10,
+              createdAt: "2026-04-28T02:52:02.000Z"
+            }
+          ],
+          recallRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              triggerType: "history_reference",
+              triggerHit: true,
+              triggerReason: "reason",
+              memoryMode: "workspace_plus_global",
+              requestedTypes: ["fact_preference"],
+              requestedScopes: ["user", "session"],
+              selectedScopes: [],
+              scopeHitCounts: [{ scope: "user", count: 1 }],
+              selectedRecordIds: [],
+              queryScope: "scope=user,session",
+              candidateCount: 1,
+              selectedCount: 0,
+              resultState: "empty",
+              emptyReason: null,
+              durationMs: 120,
+              degraded: false,
+              degradationReason: null,
+              createdAt: "2026-04-28T02:52:11.000Z"
+            }
+          ],
+          injectionRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              injected: false,
+              injectedCount: 0,
+              memoryMode: "workspace_plus_global",
+              requestedScopes: ["user", "session"],
+              selectedScopes: [],
+              keptRecordIds: [],
+              injectionReason: null,
+              memorySummary: null,
+              tokenEstimate: 0,
+              trimmedRecordIds: [],
+              trimReasons: [],
+              resultState: "no_records",
+              durationMs: 0,
+              createdAt: "2026-04-28T02:52:11.000Z"
+            }
+          ],
+          memoryPlanRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              planKind: "memory_injection_plan",
+              inputSummary: "input=你是谁; candidate_count=1",
+              outputSummary: "should_inject=false; reason=当前问题自包含，虽有称呼偏好但非回答所必需; candidate_count=1; summary=",
+              promptVersion: "memory-recall-injection-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "skipped",
+              durationMs: 20,
+              createdAt: "2026-04-28T02:52:11.000Z"
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          turns: [
+            {
+              traceId: "trace-selected",
+              turnId: "turn-selected",
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "before_response",
+              currentInput: "你是谁",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:52:12.000Z"
+            },
+            {
+              traceId: "trace-session-start",
+              turnId: null,
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "session_start",
+              currentInput: "session start",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:48:31.000Z"
+            }
+          ],
+          injectionRuns: [
+            {
+              traceId: "trace-session-start",
+              phase: "session_start",
+              injected: true,
+              injectedCount: 1,
+              memoryMode: "workspace_plus_global",
+              requestedScopes: ["workspace", "user"],
+              selectedScopes: ["user"],
+              keptRecordIds: [],
+              injectionReason: null,
+              memorySummary: null,
+              tokenEstimate: 47,
+              trimmedRecordIds: [],
+              trimReasons: [],
+              resultState: "injected",
+              durationMs: 0,
+              createdAt: "2026-04-28T02:48:41.000Z"
+            }
+          ]
+        }
+      });
+
+    const response = await getRunTrace({
+      turnId: undefined,
+      sessionId: undefined,
+      traceId: "trace-selected",
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(response.selectedTurn?.narrative.outcomeCode).toBe("resident_memory_used");
+    expect(response.selectedTurn?.narrative.outcomeLabel).toBe("常驻记忆已生效");
+    expect(response.selectedTurn?.narrative.explanation).toContain("同一会话启动时已经注入 1 条常驻记忆");
+    expect(response.selectedTurn?.narrative.explanation).toContain("当前回复仍会带着这部分记忆");
+    expect(response.selectedTurn?.phaseNarratives.find((item) => item.title === "召回 / before_response")?.summary)
+      .toContain("本轮再次命中 1 条候选");
+    expect(response.selectedTurn?.phaseNarratives.find((item) => item.title === "注入 / before_response")?.summary)
+      .toContain("本轮没有重复注入");
+  });
+
+  it("looks up resident session memory when the recent list does not include session start", async () => {
+    fetchRuntimeRunsMock
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          turns: [
+            {
+              traceId: "trace-selected",
+              turnId: "turn-selected",
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "before_response",
+              currentInput: "你是谁",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:52:12.000Z"
+            }
+          ],
+          triggerRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              triggerHit: true,
+              triggerType: "history_reference",
+              triggerReason: "reason",
+              memoryMode: "workspace_plus_global",
+              requestedTypes: ["fact_preference"],
+              requestedScopes: ["user", "session"],
+              selectedScopes: [],
+              scopeDecision: null,
+              scopeLimit: ["user", "session"],
+              importanceThreshold: 3,
+              cooldownApplied: false,
+              semanticScore: null,
+              durationMs: 10,
+              createdAt: "2026-04-28T02:52:02.000Z"
+            }
+          ],
+          recallRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              triggerType: "history_reference",
+              triggerHit: true,
+              triggerReason: "reason",
+              memoryMode: "workspace_plus_global",
+              requestedTypes: ["fact_preference"],
+              requestedScopes: ["user", "session"],
+              selectedScopes: [],
+              scopeHitCounts: [{ scope: "user", count: 1 }],
+              selectedRecordIds: [],
+              queryScope: "scope=user,session",
+              candidateCount: 1,
+              selectedCount: 0,
+              resultState: "empty",
+              emptyReason: null,
+              durationMs: 120,
+              degraded: false,
+              degradationReason: null,
+              createdAt: "2026-04-28T02:52:11.000Z"
+            }
+          ],
+          injectionRuns: [],
+          memoryPlanRuns: [
+            {
+              traceId: "trace-selected",
+              phase: "before_response",
+              planKind: "memory_injection_plan",
+              inputSummary: "input=你是谁; candidate_count=1",
+              outputSummary: "should_inject=false; reason=当前问题自包含，虽有称呼偏好但非回答所必需; candidate_count=1; summary=",
+              promptVersion: "memory-recall-injection-v1",
+              schemaVersion: "memory-plan-schema-v1",
+              degraded: false,
+              degradationReason: null,
+              resultState: "skipped",
+              durationMs: 20,
+              createdAt: "2026-04-28T02:52:11.000Z"
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          turns: [
+            {
+              traceId: "trace-selected",
+              turnId: "turn-selected",
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "before_response",
+              currentInput: "你是谁",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:52:12.000Z"
+            }
+          ]
+        }
+      })
+      .mockResolvedValueOnce({
+        status: healthyStatus,
+        data: {
+          ...emptyRuntimeRuns,
+          turns: [
+            {
+              traceId: "trace-session-start",
+              turnId: null,
+              workspaceId: "workspace-1",
+              taskId: null,
+              sessionId: "session-1",
+              threadId: null,
+              host: "memory_native_agent",
+              phase: "session_start",
+              currentInput: "session start",
+              assistantOutput: null,
+              createdAt: "2026-04-28T02:48:31.000Z"
+            }
+          ],
+          injectionRuns: [
+            {
+              traceId: "trace-session-start",
+              phase: "session_start",
+              injected: true,
+              injectedCount: 1,
+              memoryMode: "workspace_plus_global",
+              requestedScopes: ["workspace", "user"],
+              selectedScopes: ["user"],
+              keptRecordIds: [],
+              injectionReason: null,
+              memorySummary: null,
+              tokenEstimate: 47,
+              trimmedRecordIds: [],
+              trimReasons: [],
+              resultState: "injected",
+              durationMs: 0,
+              createdAt: "2026-04-28T02:48:41.000Z"
+            }
+          ]
+        }
+      });
+
+    const response = await getRunTrace({
+      turnId: undefined,
+      sessionId: undefined,
+      traceId: "trace-selected",
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(fetchRuntimeRunsMock).toHaveBeenNthCalledWith(3, "session_id=session-1&page=1&page_size=100", { locale: "zh-CN" });
+    expect(response.selectedTurn?.narrative.outcomeCode).toBe("resident_memory_used");
   });
 });
 

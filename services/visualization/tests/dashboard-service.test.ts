@@ -204,7 +204,7 @@ describe("dashboard diagnosis", () => {
       []
     );
 
-    expect(diagnosis.title).toContain("Recall strategy");
+    expect(diagnosis.title).toContain("召回策略");
   });
 
   it("falls back to no dominant anomaly", () => {
@@ -681,4 +681,3 @@ describe("dashboard window selection", () => {
     ).toBe("danger");
   });
 });
-

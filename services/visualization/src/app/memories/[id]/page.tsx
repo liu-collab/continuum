@@ -11,6 +11,7 @@ import {
   formatTimestamp,
   governanceStatusTone,
 } from "@/lib/format";
+import { getServerTranslator } from "@/lib/i18n/server";
 
 function statusTone(status: string) {
   if (status === "active") return "success";
@@ -24,6 +25,7 @@ export default async function MemoryDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { locale, t } = await getServerTranslator();
   const { id } = await params;
   const detail = await getMemoryDetail(id);
 
@@ -34,9 +36,9 @@ export default async function MemoryDetailPage({
           <div className="tile-inner-narrow">
             <Link href={"/memories" as Route} className="button-secondary-pill mb-6">
               <ArrowLeft className="h-4 w-4" />
-              返回记忆
+              {t("memories.detail.back")}
             </Link>
-            <EmptyState title="未找到这条记忆" description="请求的记录不在已发布的存储读模型里。" />
+            <EmptyState title={t("memories.detail.notFoundTitle")} description={t("memories.detail.notFoundDescription")} />
           </div>
         </section>
       </div>
@@ -49,11 +51,11 @@ export default async function MemoryDetailPage({
         <div className="tile-inner">
           <Link href={"/memories" as Route} className="button-secondary-pill mb-8">
             <ArrowLeft className="h-4 w-4" />
-            返回记忆
+            {t("memories.detail.back")}
           </Link>
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">记忆详情</div>
+              <div className="section-kicker">{t("memories.detail.kicker")}</div>
               <h1 className="tile-title">{detail.summary}</h1>
               <p className="tile-subtitle">{detail.visibilitySummary}</p>
             </div>
@@ -62,7 +64,7 @@ export default async function MemoryDetailPage({
 
           <div className="detail-grid">
             <section className="panel p-6">
-              <div className="section-kicker">状态</div>
+              <div className="section-kicker">{t("memories.detail.status")}</div>
               <p className="mt-4 text-[21px] font-semibold leading-[1.19] text-text">
                 {detail.statusExplanation}
               </p>
@@ -72,16 +74,16 @@ export default async function MemoryDetailPage({
             </section>
 
             <section className="panel p-6">
-              <div className="section-kicker">属性</div>
+              <div className="section-kicker">{t("memories.detail.attributes")}</div>
               <dl className="kv-grid mt-4">
-                <Row label="类型" value={detail.memoryTypeLabel} />
-                <Row label="作用域" value={detail.scopeLabel} />
-                <Row label="来源文件夹/工作区" value={detail.originWorkspaceLabel} />
-                <Row label="重要度" value={detail.importance != null ? String(detail.importance) : "未记录"} />
-                <Row label="置信度" value={detail.confidence != null ? String(detail.confidence) : "未记录"} />
-                <Row label="最近确认" value={formatTimestamp(detail.lastConfirmedAt)} />
-                <Row label="创建" value={formatTimestamp(detail.createdAt)} />
-                <Row label="更新" value={formatTimestamp(detail.updatedAt)} />
+                <Row label={t("memories.fields.type")} value={detail.memoryTypeLabel} />
+                <Row label={t("memories.fields.scope")} value={detail.scopeLabel} />
+                <Row label={t("memories.detail.originWorkspace")} value={detail.originWorkspaceLabel} />
+                <Row label={t("memories.detail.importance")} value={detail.importance != null ? String(detail.importance) : t("common.notRecorded")} />
+                <Row label={t("memories.detail.confidence")} value={detail.confidence != null ? String(detail.confidence) : t("common.notRecorded")} />
+                <Row label={t("memories.detail.lastConfirmed")} value={formatTimestamp(detail.lastConfirmedAt, locale)} />
+                <Row label={t("memories.detail.created")} value={formatTimestamp(detail.createdAt, locale)} />
+                <Row label={t("memories.detail.updated")} value={formatTimestamp(detail.updatedAt, locale)} />
               </dl>
             </section>
           </div>
@@ -91,23 +93,23 @@ export default async function MemoryDetailPage({
       <section className="tile tile-parchment">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">来源</div>
-            <h2 className="tile-title">写入依据</h2>
+            <div className="section-kicker">{t("memories.detail.sourceKicker")}</div>
+            <h2 className="tile-title">{t("memories.detail.sourceTitle")}</h2>
           </div>
           <div className="detail-grid">
             <section className="panel p-6">
               <dl className="kv-grid">
-                <Row label="摘要" value={detail.sourceFormatted} />
-                <Row label="类型" value={detail.sourceType ?? "未记录"} />
-                <Row label="来源" value={formatDebugReference(detail.sourceRef)} />
-                <Row label="服务" value={detail.sourceServiceName ?? "未记录"} />
-                <Row label="来源轮次" value={formatDebugReference(detail.sourceTurnId)} />
-                <Row label="提取依据" value={detail.extractionBasis ?? "未记录"} />
+                <Row label={t("memories.detail.summary")} value={detail.sourceFormatted} />
+                <Row label={t("memories.fields.type")} value={detail.sourceType ?? t("common.notRecorded")} />
+                <Row label={t("memories.fields.source")} value={formatDebugReference(detail.sourceRef, locale)} />
+                <Row label={t("memories.detail.service")} value={detail.sourceServiceName ?? t("common.notRecorded")} />
+                <Row label={t("memories.detail.sourceTurn")} value={formatDebugReference(detail.sourceTurnId, locale)} />
+                <Row label={t("memories.detail.extractionBasis")} value={detail.extractionBasis ?? t("common.notRecorded")} />
               </dl>
             </section>
             {detail.sourceExcerpt ? (
               <section className="panel p-6">
-                <div className="section-kicker">片段</div>
+                <div className="section-kicker">{t("memories.detail.excerpt")}</div>
                 <p className="mt-4 text-[17px] leading-[1.47] text-muted">{detail.sourceExcerpt}</p>
               </section>
             ) : null}
@@ -118,8 +120,8 @@ export default async function MemoryDetailPage({
       <section className="tile tile-light">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">手动治理</div>
-            <h2 className="tile-title">复核与修正</h2>
+            <div className="section-kicker">{t("memories.detail.manualGovernanceKicker")}</div>
+            <h2 className="tile-title">{t("memories.detail.manualGovernanceTitle")}</h2>
           </div>
           <GovernancePanel detail={detail} />
         </div>
@@ -129,15 +131,15 @@ export default async function MemoryDetailPage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">自动治理</div>
-              <h2 className="tile-title">历史记录</h2>
+              <div className="section-kicker">{t("memories.detail.autoGovernanceKicker")}</div>
+              <h2 className="tile-title">{t("memories.detail.autoGovernanceTitle")}</h2>
               <p className="tile-subtitle">{detail.governanceSummary}</p>
             </div>
             <Link
               href={`/governance?workspace_id=${encodeURIComponent(detail.workspaceId ?? "")}` as Route}
               className="button-secondary-pill"
             >
-              查看全部
+              {t("memories.detail.viewAll")}
             </Link>
           </div>
 
@@ -155,17 +157,17 @@ export default async function MemoryDetailPage({
                     </StatusBadge>
                   </div>
                   <div className="mt-4 detail-grid">
-                    <Row label="目标" value={item.targetSummary} />
-                    <Row label="Planner" value={`${item.plannerModel} / ${item.plannerConfidence ?? "未记录"}`} />
-                    <Row label="Verifier" value={item.verifierRequired ? item.verifierDecision ?? "待复核" : "不需要"} />
-                    <Row label="执行时间" value={formatTimestamp(item.startedAt)} />
-                    {item.errorMessage ? <Row label="失败原因" value={item.errorMessage} /> : null}
+                    <Row label={t("memories.detail.target")} value={item.targetSummary} />
+                    <Row label={t("memories.detail.planner")} value={`${item.plannerModel} / ${item.plannerConfidence ?? t("common.notRecorded")}`} />
+                    <Row label={t("memories.detail.verifier")} value={item.verifierRequired ? item.verifierDecision ?? t("common.pendingReview") : t("common.notNeeded")} />
+                    <Row label={t("memories.detail.executionTime")} value={formatTimestamp(item.startedAt, locale)} />
+                    {item.errorMessage ? <Row label={t("memories.detail.failureReason")} value={item.errorMessage} /> : null}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <EmptyState title="还没有治理记录" description="自动治理暂时没有命中过这条记忆。" />
+            <EmptyState title={t("memories.detail.emptyGovernanceTitle")} description={t("memories.detail.emptyGovernanceDescription")} />
           )}
         </div>
       </section>

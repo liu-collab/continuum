@@ -8,12 +8,14 @@ import { getDashboard } from "@/features/dashboard/service";
 import { getSourceHealth } from "@/features/source-health/service";
 import type { DashboardDiagnosisCard, SourceStatus } from "@/lib/contracts";
 import {
-  dashboardSeverityLabel,
   dashboardSeverityTone,
-  formatTimestamp,
-  sourceStatusLabel
+  formatTimestamp
 } from "@/lib/format";
+import { joinLocalizedList, type AppLocale } from "@/lib/i18n/messages";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { parseDashboardWindow } from "@/lib/query-params";
+
+type TFunction = (key: string, variables?: Record<string, string | number>) => string;
 
 const windows = [
   { label: "15m", value: "15m" },
@@ -23,10 +25,10 @@ const windows = [
   { label: "24h", value: "24h" }
 ];
 
-function sourceSummary(source: SourceStatus) {
+function sourceSummary(source: SourceStatus, fallback: string) {
   if (source.detail) return source.detail;
   if (source.lastError) return source.lastError;
-  return "Last check passed.";
+  return fallback;
 }
 
 export default async function DashboardPage({
@@ -35,6 +37,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const { locale, t } = await getServerTranslator();
   const window = parseDashboardWindow(params);
   const [response, health] = await Promise.all([getDashboard(window), getSourceHealth()]);
   const partial = response.sourceStatus.filter((source) => source.status === "partial");
@@ -48,14 +51,12 @@ export default async function DashboardPage({
         <div className="tile-inner">
           <div className="tile-head tile-head-row">
             <div>
-              <div className="section-kicker">诊断</div>
-              <h1 className="tile-title">运行时指标</h1>
-              <p className="tile-subtitle">
-                按时间窗查看召回、注入、写回和存储治理的主要信号。
-              </p>
+              <div className="section-kicker">{t("dashboard.kicker")}</div>
+              <h1 className="tile-title">{t("dashboard.title")}</h1>
+              <p className="tile-subtitle">{t("dashboard.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <div className="segment-control" aria-label="时间窗口">
+              <div className="segment-control" aria-label={t("dashboard.timeWindow")}>
                 {windows.map((item) => (
                   <a
                     key={item.value}
@@ -82,7 +83,7 @@ export default async function DashboardPage({
                   </p>
                 </div>
                 <StatusBadge tone={dashboardSeverityTone(response.diagnosis.severity)}>
-                  {dashboardSeverityLabel(response.diagnosis.severity)} · {response.trendWindow}
+                  {t(`enums.severity.${response.diagnosis.severity}`)} · {response.trendWindow}
                 </StatusBadge>
               </div>
             </div>
@@ -91,25 +92,25 @@ export default async function DashboardPage({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 id="dashboard-source-heading" className="text-[21px] font-semibold leading-[1.19] text-text">
-                    数据源状态
+                    {t("dashboard.sourceTitle")}
                   </h2>
                   <p className="mt-2 text-[14px] leading-[1.43] text-muted">
-                    只展示会影响页面可信度的依赖状态。
+                    {t("dashboard.sourceDescription")}
                   </p>
                 </div>
-                <HealthModalButton sources={response.sourceStatus} label="详情" />
+                <HealthModalButton sources={response.sourceStatus} label={t("dashboard.sourceDetail")} />
               </div>
 
               {response.sourceStatus.length > 0 ? (
                 <div className="record-list mt-5">
                   {response.sourceStatus.map((source) => (
-                    <SourceCard key={source.name} source={source} />
+                    <SourceCard key={source.name} source={source} locale={locale} t={t} />
                   ))}
                 </div>
               ) : (
                 <EmptyState
-                  title="暂无数据源状态"
-                  description="当前窗口没有返回数据源健康信息。"
+                  title={t("dashboard.sourceEmptyTitle")}
+                  description={t("dashboard.sourceEmptyDescription")}
                   testId="dashboard-source-empty"
                   className="mt-5"
                 />
@@ -119,12 +120,18 @@ export default async function DashboardPage({
 
           {unavailable.length > 0 ? (
             <div className="notice notice-danger mt-6">
-              当前有 {unavailable.length} 个数据源不可用或已超时：{unavailable.map((source) => source.label).join("、")}。
+              {t("dashboard.unavailableNotice", {
+                count: unavailable.length,
+                sources: joinLocalizedList(locale, unavailable.map((source) => source.label))
+              })}
             </div>
           ) : null}
           {partial.length > 0 ? (
             <div className="notice notice-warning mt-3">
-              当前有 {partial.length} 个数据源只返回了部分结果：{partial.map((source) => source.label).join("、")}。
+              {t("dashboard.partialNotice", {
+                count: partial.length,
+                sources: joinLocalizedList(locale, partial.map((source) => source.label))
+              })}
             </div>
           ) : null}
         </div>
@@ -133,19 +140,19 @@ export default async function DashboardPage({
       <section className="tile tile-dark">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">当前判断</div>
-            <h2 className="tile-title">诊断卡片</h2>
+            <div className="section-kicker">{t("dashboard.diagnosisKicker")}</div>
+            <h2 className="tile-title">{t("dashboard.diagnosisTitle")}</h2>
           </div>
           {response.diagnosisCards.length > 0 ? (
             <div className="utility-grid">
               {response.diagnosisCards.map((card) => (
-                <DiagnosisCard key={card.key} card={card} />
+                <DiagnosisCard key={card.key} card={card} t={t} />
               ))}
             </div>
           ) : (
             <EmptyState
-              title="暂无诊断项"
-              description="当前窗口没有足够数据生成诊断项。"
+              title={t("dashboard.diagnosisEmptyTitle")}
+              description={t("dashboard.diagnosisEmptyDescription")}
               testId="dashboard-diagnosis-empty"
             />
           )}
@@ -155,8 +162,8 @@ export default async function DashboardPage({
       <section className="tile tile-parchment">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">runtime</div>
-            <h2 className="tile-title">召回与注入</h2>
+            <div className="section-kicker">{t("dashboard.runtimeKicker")}</div>
+            <h2 className="tile-title">{t("dashboard.retrievalTitle")}</h2>
           </div>
           {response.retrievalMetrics.length > 0 ? (
             <div className="stat-grid">
@@ -166,8 +173,8 @@ export default async function DashboardPage({
             </div>
           ) : (
             <EmptyState
-              title="暂无 runtime 指标"
-              description="当前窗口还没有运行时指标。"
+              title={t("dashboard.retrievalEmptyTitle")}
+              description={t("dashboard.retrievalEmptyDescription")}
               testId="dashboard-runtime-empty"
             />
           )}
@@ -177,8 +184,8 @@ export default async function DashboardPage({
       <section className="tile tile-light">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">storage</div>
-            <h2 className="tile-title">写回与治理</h2>
+            <div className="section-kicker">{t("dashboard.storageKicker")}</div>
+            <h2 className="tile-title">{t("dashboard.storageTitle")}</h2>
           </div>
           {response.storageMetrics.length > 0 ? (
             <div className="stat-grid">
@@ -188,8 +195,8 @@ export default async function DashboardPage({
             </div>
           ) : (
             <EmptyState
-              title="暂无 storage 指标"
-              description="当前窗口还没有存储指标。"
+              title={t("dashboard.storageEmptyTitle")}
+              description={t("dashboard.storageEmptyDescription")}
               testId="dashboard-storage-empty"
             />
           )}
@@ -199,8 +206,8 @@ export default async function DashboardPage({
       <section className="tile tile-parchment">
         <div className="tile-inner">
           <div className="tile-head">
-            <div className="section-kicker">趋势</div>
-            <h2 className="tile-title">窗口变化</h2>
+            <div className="section-kicker">{t("dashboard.trendsKicker")}</div>
+            <h2 className="tile-title">{t("dashboard.trendsTitle")}</h2>
           </div>
           {response.trends.length > 0 ? (
             <div className="utility-grid">
@@ -210,8 +217,8 @@ export default async function DashboardPage({
             </div>
           ) : (
             <EmptyState
-              title="暂无趋势"
-              description="当前窗口的数据点还不足以形成趋势。"
+              title={t("dashboard.trendsEmptyTitle")}
+              description={t("dashboard.trendsEmptyDescription")}
               testId="dashboard-trends-empty"
             />
           )}
@@ -221,27 +228,27 @@ export default async function DashboardPage({
   );
 }
 
-function SourceCard({ source }: { source: SourceStatus }) {
+function SourceCard({ source, locale, t }: { source: SourceStatus; locale: AppLocale; t: TFunction }) {
   return (
     <div className="record-card">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="truncate text-[17px] font-semibold leading-[1.24] text-text">{source.label}</div>
-          <p className="mt-1 line-clamp-2 text-[14px] leading-[1.43] text-muted">{sourceSummary(source)}</p>
+          <p className="mt-1 line-clamp-2 text-[14px] leading-[1.43] text-muted">{sourceSummary(source, t("dashboard.sourcePassed"))}</p>
         </div>
         <StatusBadge tone={source.status === "healthy" ? "success" : source.status === "partial" ? "warning" : "danger"}>
-          {sourceStatusLabel(source.status)}
+          {t(`enums.sourceStatus.${source.status}`)}
         </StatusBadge>
       </div>
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[14px] leading-[1.43] text-muted-foreground">
-        <span>{formatTimestamp(source.lastCheckedAt || source.checkedAt)}</span>
-        <span>{source.responseTimeMs === null ? "未记录延迟" : `${source.responseTimeMs} ms`}</span>
+        <span>{formatTimestamp(source.lastCheckedAt || source.checkedAt, locale)}</span>
+        <span>{source.responseTimeMs === null ? t("common.latencyNotRecorded") : `${source.responseTimeMs} ms`}</span>
       </div>
     </div>
   );
 }
 
-function DiagnosisCard({ card }: { card: DashboardDiagnosisCard }) {
+function DiagnosisCard({ card, t }: { card: DashboardDiagnosisCard; t: TFunction }) {
   return (
     <div className="panel p-6">
       <div className="flex items-start justify-between gap-4">
@@ -249,7 +256,7 @@ function DiagnosisCard({ card }: { card: DashboardDiagnosisCard }) {
           <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{card.title}</h3>
           <p className="mt-1 text-[14px] leading-[1.43] text-muted">{card.source}</p>
         </div>
-        <StatusBadge tone={dashboardSeverityTone(card.severity)}>{dashboardSeverityLabel(card.severity)}</StatusBadge>
+        <StatusBadge tone={dashboardSeverityTone(card.severity)}>{t(`enums.severity.${card.severity}`)}</StatusBadge>
       </div>
       <p className="mt-4 text-[17px] leading-[1.47] text-muted">{card.summary}</p>
     </div>

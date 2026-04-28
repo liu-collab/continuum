@@ -4,6 +4,7 @@ import { Pool } from "pg";
 
 import { MemoryCatalogFilters, Scope, SourceStatus } from "@/lib/contracts";
 import { getAppConfig } from "@/lib/env";
+import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
 import { asRecord, pickString } from "@/lib/records";
 import { readSourceLastOk, rememberSourceSuccess } from "@/lib/server/source-status-memory";
 
@@ -101,14 +102,16 @@ function qualifiedReadModelTable() {
 function unavailableStatus(
   status: SourceStatus["status"],
   detail: string,
-  responseTimeMs: number | null
+  responseTimeMs: number | null,
+  locale: AppLocale = DEFAULT_APP_LOCALE
 ): SourceStatus {
+  const t = createTranslator(locale);
   const checkedAt = new Date().toISOString();
   const lastOkAt = readSourceLastOk("storage_read_model");
 
   return {
     name: "storage_read_model",
-    label: "Storage read model",
+    label: t("service.sources.storageReadModel"),
     kind: "dependency",
     status,
     checkedAt,
@@ -221,13 +224,18 @@ async function countReadModelRows(pool: Pool, options: QueryOptions): Promise<nu
   return result.rows[0]?.total ?? 0;
 }
 
-function healthyStatus(responseTimeMs: number, warnings: string[] = []): SourceStatus {
+function healthyStatus(
+  responseTimeMs: number,
+  warnings: string[] = [],
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): SourceStatus {
+  const t = createTranslator(locale);
   const checkedAt = new Date().toISOString();
   rememberSourceSuccess("storage_read_model", checkedAt);
 
   return {
     name: "storage_read_model",
-    label: "Storage read model",
+    label: t("service.sources.storageReadModel"),
     kind: "dependency",
     status: warnings.length > 0 ? "partial" : "healthy",
     checkedAt,
@@ -280,17 +288,20 @@ function isImplicitGlobalCatalogView(filters: MemoryCatalogFilters) {
 }
 
 export async function queryMemoryReadModel(
-  filters: MemoryCatalogFilters
+  filters: MemoryCatalogFilters,
+  options: { locale?: AppLocale } = {}
 ): Promise<ReadModelQueryResult> {
   const pool = getPool();
   const { values, issues } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const startedAt = Date.now();
 
   if (issues.length > 0) {
     return {
       rows: [],
       total: 0,
-      status: unavailableStatus("misconfigured", issues.join(" "), null)
+      status: unavailableStatus("misconfigured", issues.join(" "), null, locale)
     };
   }
 
@@ -300,8 +311,9 @@ export async function queryMemoryReadModel(
       total: 0,
       status: unavailableStatus(
         "misconfigured",
-        "Missing STORAGE_READ_MODEL_DSN configuration.",
-        null
+        t("service.readModel.missingDsn"),
+        null,
+        locale
       )
     };
   }
@@ -320,7 +332,7 @@ export async function queryMemoryReadModel(
     return {
       rows,
       total,
-      status: healthyStatus(Date.now() - startedAt)
+      status: healthyStatus(Date.now() - startedAt, [], locale)
     };
   } catch (error) {
     return {
@@ -328,18 +340,22 @@ export async function queryMemoryReadModel(
       total: 0,
       status: unavailableStatus(
         "unavailable",
-        error instanceof Error ? error.message : "Read model query failed.",
-        Date.now() - startedAt
+        error instanceof Error ? error.message : t("service.readModel.queryFailed"),
+        Date.now() - startedAt,
+        locale
       )
     };
   }
 }
 
 export async function queryCatalogView(
-  filters: MemoryCatalogFilters
+  filters: MemoryCatalogFilters,
+  options: { locale?: AppLocale } = {}
 ): Promise<CatalogViewQueryResult> {
   const pool = getPool();
   const { values, issues } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const startedAt = Date.now();
   const warnings: string[] = [];
 
@@ -348,7 +364,7 @@ export async function queryCatalogView(
       rows: [],
       total: 0,
       warnings,
-      status: unavailableStatus("misconfigured", issues.join(" "), null)
+      status: unavailableStatus("misconfigured", issues.join(" "), null, locale)
     };
   }
 
@@ -359,8 +375,9 @@ export async function queryCatalogView(
       warnings,
       status: unavailableStatus(
         "misconfigured",
-        "Missing STORAGE_READ_MODEL_DSN configuration.",
-        null
+        t("service.readModel.missingDsn"),
+        null,
+        locale
       )
     };
   }
@@ -371,7 +388,7 @@ export async function queryCatalogView(
 
   if (!filters.workspaceId && !globalOnlyView) {
     warnings.push(
-      "当前缺少工作区筛选，无法正确解析工作区、任务和会话级别的记录。"
+      t("service.readModel.missingWorkspaceWarning")
     );
   }
 
@@ -443,7 +460,7 @@ export async function queryCatalogView(
       rows: mergedRows.slice(offset, offset + filters.pageSize),
       total: dedupedRows.length,
       warnings,
-      status: healthyStatus(Date.now() - startedAt, warnings)
+      status: healthyStatus(Date.now() - startedAt, warnings, locale)
     };
   } catch (error) {
     return {
@@ -452,34 +469,38 @@ export async function queryCatalogView(
       warnings,
       status: unavailableStatus(
         "unavailable",
-        error instanceof Error ? error.message : "Catalog view query failed.",
-        Date.now() - startedAt
+        error instanceof Error ? error.message : t("service.readModel.queryFailed"),
+        Date.now() - startedAt,
+        locale
       )
     };
   }
 }
 
-export async function pingMemoryReadModel() {
+export async function pingMemoryReadModel(options: { locale?: AppLocale } = {}) {
   const pool = getPool();
   const { values, issues } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
   const startedAt = Date.now();
 
   if (issues.length > 0) {
-    return unavailableStatus("misconfigured", issues.join(" "), null);
+    return unavailableStatus("misconfigured", issues.join(" "), null, locale);
   }
 
   if (!pool || !values.STORAGE_READ_MODEL_DSN) {
-    return unavailableStatus("misconfigured", "Missing STORAGE_READ_MODEL_DSN configuration.", null);
+    return unavailableStatus("misconfigured", t("service.readModel.missingDsn"), null, locale);
   }
 
   try {
     await pool.query(`SELECT 1 FROM ${qualifiedReadModelTable()} LIMIT 1`);
-    return healthyStatus(Date.now() - startedAt);
+    return healthyStatus(Date.now() - startedAt, [], locale);
   } catch (error) {
     return unavailableStatus(
       "unavailable",
-      error instanceof Error ? error.message : "Read model ping failed.",
-      Date.now() - startedAt
+      error instanceof Error ? error.message : t("service.readModel.pingFailed"),
+      Date.now() - startedAt,
+      locale
     );
   }
 }

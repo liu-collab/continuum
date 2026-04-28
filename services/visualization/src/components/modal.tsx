@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import React, { ReactNode, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useAppI18n } from "@/lib/i18n/client";
 
 type ModalProps = {
   open: boolean;
@@ -21,6 +22,8 @@ const sizeClass: Record<NonNullable<ModalProps["size"]>, string> = {
 };
 
 export function Modal({ open, onClose, title, description, size = "md", children, footer }: ModalProps) {
+  const { t } = useAppI18n();
+
   useEffect(() => {
     if (!open) return;
     function handleKeydown(event: KeyboardEvent) {
@@ -57,7 +60,7 @@ export function Modal({ open, onClose, title, description, size = "md", children
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="icon-button !h-11 !w-11"
           >
             <X className="h-4 w-4" />
