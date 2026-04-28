@@ -361,6 +361,8 @@ const response = await this.storageClient.listRecords({
 
 ## 优化七：GovernanceEngine 手动操作去重
 
+**状态：已完成**
+
 ### 问题
 
 `patchRecord`、`archiveRecord`、`confirmRecord`、`invalidateRecord`、`deleteRecord`、`restoreVersion` 六个方法结构完全一致，每个 ~30 行：
