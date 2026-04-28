@@ -467,7 +467,8 @@ const enCommon = {
         memoryArchiveFailed: "Failed to archive memory.",
         memoryConfirmFailed: "Failed to confirm memory.",
         memoryDeleteFailed: "Failed to delete memory.",
-        memoryInvalidateFailed: "Failed to invalidate memory."
+        memoryInvalidateFailed: "Failed to invalidate memory.",
+        memoryActionNotFound: "Unknown memory governance action."
       },
       memory: {
         sourceWorkspace: "Source {workspace}",

@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 import React from "react";
+import { DetailRow } from "@/components/detail-row";
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -116,11 +117,11 @@ export default async function RunsPage({
                       </StatusBadge>
                     </div>
                     <dl className="kv-grid mt-6">
-                      <Row label={t("runs.fields.trace")} value={formatDebugReference(response.selectedTurn.turn.traceId, locale)} />
-                      <Row label={t("runs.fields.turn")} value={formatDebugReference(response.selectedTurn.turn.turnId, locale)} />
-                      <Row label={t("runs.fields.phase")} value={response.selectedTurn.turn.phase ?? t("common.notRecorded")} />
-                      <Row label={t("runs.fields.host")} value={response.selectedTurn.turn.host ?? t("common.notRecorded")} />
-                      <Row label={t("runs.fields.created")} value={formatTimestamp(response.selectedTurn.turn.createdAt, locale)} />
+                      <DetailRow label={t("runs.fields.trace")} value={formatDebugReference(response.selectedTurn.turn.traceId, locale)} />
+                      <DetailRow label={t("runs.fields.turn")} value={formatDebugReference(response.selectedTurn.turn.turnId, locale)} />
+                      <DetailRow label={t("runs.fields.phase")} value={response.selectedTurn.turn.phase ?? t("common.notRecorded")} />
+                      <DetailRow label={t("runs.fields.host")} value={response.selectedTurn.turn.host ?? t("common.notRecorded")} />
+                      <DetailRow label={t("runs.fields.created")} value={formatTimestamp(response.selectedTurn.turn.createdAt, locale)} />
                     </dl>
                     <div className="detail-grid mt-6">
                       <TextBlock label={t("runs.fields.input")} value={response.selectedTurn.turn.inputSummary ?? t("common.notRecorded")} />
@@ -174,15 +175,6 @@ export default async function RunsPage({
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="kv-row">
-      <dt className="kv-label">{label}</dt>
-      <dd className="kv-value">{value}</dd>
     </div>
   );
 }

@@ -467,7 +467,8 @@ const zhCommon = {
         memoryArchiveFailed: "记忆归档失败。",
         memoryConfirmFailed: "记忆确认失败。",
         memoryDeleteFailed: "记忆删除失败。",
-        memoryInvalidateFailed: "记忆失效失败。"
+        memoryInvalidateFailed: "记忆失效失败。",
+        memoryActionNotFound: "未知的记忆治理操作。"
       },
       memory: {
         sourceWorkspace: "来源{workspace}",

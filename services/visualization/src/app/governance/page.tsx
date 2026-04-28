@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DetailRow } from "@/components/detail-row";
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -180,13 +181,13 @@ export default async function GovernancePage({
                     <section className="panel p-6">
                       <div className="section-kicker">{t("governance.planningKicker")}</div>
                       <dl className="kv-grid mt-4">
-                        <Row label={t("governance.fields.plannerModel")} value={detailResponse.detail.plannerModel} />
-                        <Row label={t("governance.fields.plannerConfidence")} value={String(detailResponse.detail.plannerConfidence ?? t("common.notRecorded"))} />
-                        <Row label={t("governance.fields.verifierRequired")} value={detailResponse.detail.verifierRequired ? t("common.needed") : t("common.notNeeded")} />
-                        <Row label={t("governance.fields.verifierDecision")} value={detailResponse.detail.verifierDecision ?? t("common.notRecorded")} />
-                        <Row label={t("governance.fields.verificationBlocked")} value={detailResponse.detail.verificationBlocked ? t("common.yes") : t("common.noValue")} />
-                        <Row label={t("governance.fields.verifierModel")} value={detailResponse.detail.verifierModel ?? t("common.notRecorded")} />
-                        <Row label={t("governance.fields.policyVersion")} value={detailResponse.detail.policyVersion} />
+                        <DetailRow label={t("governance.fields.plannerModel")} value={detailResponse.detail.plannerModel} />
+                        <DetailRow label={t("governance.fields.plannerConfidence")} value={String(detailResponse.detail.plannerConfidence ?? t("common.notRecorded"))} />
+                        <DetailRow label={t("governance.fields.verifierRequired")} value={detailResponse.detail.verifierRequired ? t("common.needed") : t("common.notNeeded")} />
+                        <DetailRow label={t("governance.fields.verifierDecision")} value={detailResponse.detail.verifierDecision ?? t("common.notRecorded")} />
+                        <DetailRow label={t("governance.fields.verificationBlocked")} value={detailResponse.detail.verificationBlocked ? t("common.yes") : t("common.noValue")} />
+                        <DetailRow label={t("governance.fields.verifierModel")} value={detailResponse.detail.verifierModel ?? t("common.notRecorded")} />
+                        <DetailRow label={t("governance.fields.policyVersion")} value={detailResponse.detail.policyVersion} />
                       </dl>
                     </section>
 
@@ -198,13 +199,13 @@ export default async function GovernancePage({
                         </div>
                       ) : null}
                       <dl className="kv-grid mt-4">
-                        <Row label={t("governance.fields.executionRecord")} value={formatDebugReference(detailResponse.detail.executionId, locale)} />
-                        <Row label={t("governance.fields.proposalRecord")} value={formatDebugReference(detailResponse.detail.proposalId, locale)} />
-                        <Row label={t("governance.fields.workspace")} value={formatWorkspaceReference(detailResponse.detail.workspaceId, locale)} />
-                        <Row label={t("governance.fields.startedAt")} value={formatTimestamp(detailResponse.detail.startedAt, locale)} />
-                        <Row label={t("governance.fields.finishedAt")} value={formatTimestamp(detailResponse.detail.finishedAt, locale)} />
-                        <Row label={t("governance.fields.result")} value={detailResponse.detail.resultSummary ?? t("common.notRecorded")} />
-                        <Row label={t("governance.fields.error")} value={detailResponse.detail.errorMessage ?? t("common.no")} />
+                        <DetailRow label={t("governance.fields.executionRecord")} value={formatDebugReference(detailResponse.detail.executionId, locale)} />
+                        <DetailRow label={t("governance.fields.proposalRecord")} value={formatDebugReference(detailResponse.detail.proposalId, locale)} />
+                        <DetailRow label={t("governance.fields.workspace")} value={formatWorkspaceReference(detailResponse.detail.workspaceId, locale)} />
+                        <DetailRow label={t("governance.fields.startedAt")} value={formatTimestamp(detailResponse.detail.startedAt, locale)} />
+                        <DetailRow label={t("governance.fields.finishedAt")} value={formatTimestamp(detailResponse.detail.finishedAt, locale)} />
+                        <DetailRow label={t("governance.fields.result")} value={detailResponse.detail.resultSummary ?? t("common.notRecorded")} />
+                        <DetailRow label={t("governance.fields.error")} value={detailResponse.detail.errorMessage ?? t("common.no")} />
                       </dl>
                     </section>
                   </div>
@@ -217,7 +218,7 @@ export default async function GovernancePage({
                     <div className="record-list mt-5">
                       {detailResponse.detail.targets.map((target, index) => (
                         <div key={`${target.role}-${index}`} className="record-card">
-                          <Row label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId, locale)} />
+                          <DetailRow label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId, locale)} />
                         </div>
                       ))}
                     </div>
@@ -246,15 +247,6 @@ export default async function GovernancePage({
           </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="kv-row">
-      <dt className="kv-label">{label}</dt>
-      <dd className="kv-value">{value}</dd>
     </div>
   );
 }
