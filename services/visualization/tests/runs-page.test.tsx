@@ -114,4 +114,99 @@ describe("runs page", () => {
     );
     expect(screen.getByText("最近运行摘要").closest("a")).toHaveAttribute("data-scroll", "false");
   });
+
+  it("links injected record ids to memory detail pages", async () => {
+    getRunTraceMock.mockResolvedValue({
+      items: [],
+      total: 1,
+      selectedTurn: {
+        turn: {
+          traceId: "trace-selected",
+          turnId: "turn-selected",
+          workspaceId: "workspace-1",
+          taskId: null,
+          sessionId: "session-1",
+          threadId: null,
+          host: "agent",
+          phase: "before_response",
+          inputSummary: "input",
+          assistantOutputSummary: "output",
+          turnStatus: "completed",
+          createdAt: "2026-04-22T00:00:00Z",
+          completedAt: "2026-04-22T00:00:01Z"
+        },
+        turns: [],
+        triggerRuns: [],
+        recallRuns: [],
+        injectionRuns: [
+          {
+            traceId: "trace-selected",
+            injected: true,
+            injectedCount: 1,
+            memoryMode: "workspace_plus_global",
+            requestedScopes: ["workspace"],
+            selectedScopes: ["workspace"],
+            keptRecordIds: ["memory-kept-1"],
+            injectionReason: "matched preference",
+            memorySummary: "injected memory",
+            resultState: "injected",
+            dropReasons: [],
+            tokenEstimate: 120,
+            droppedRecordIds: ["memory-trimmed-1"],
+            latencyMs: 42,
+            createdAt: "2026-04-22T00:00:00Z"
+          }
+        ],
+        memoryPlanRuns: [],
+        writeBackRuns: [],
+        dependencyStatus: [],
+        phaseNarratives: [
+          {
+            key: "injection",
+            title: "注入 / before_response",
+            summary: "injected memory",
+            details: ["保留记录：memory-kept-1", "裁剪记录：memory-trimmed-1"]
+          }
+        ],
+        narrative: {
+          outcomeCode: "completed",
+          outcomeLabel: "轨迹完成",
+          explanation: "trace completed",
+          incomplete: false
+        }
+      },
+      appliedFilters: {
+        turnId: undefined,
+        sessionId: undefined,
+        traceId: "trace-selected",
+        page: 1,
+        pageSize: 20
+      },
+      sourceStatus: healthyStatus
+    });
+    getSourceHealthMock.mockResolvedValue({
+      liveness: {
+        status: "ok",
+        checkedAt: new Date().toISOString()
+      },
+      readiness: {
+        status: "ready",
+        checkedAt: new Date().toISOString(),
+        summary: "ready"
+      },
+      service: {
+        name: "visualization",
+        summary: "ready"
+      },
+      dependencies: [healthyStatus]
+    });
+
+    const element = await RunsPage({
+      searchParams: Promise.resolve({ trace_id: "trace-selected" })
+    });
+    render(element);
+
+    expect(screen.getByTitle("memory-kept-1")).toHaveAttribute("href", "/memories/memory-kept-1");
+    expect(screen.getByTitle("memory-trimmed-1")).toHaveAttribute("href", "/memories/memory-trimmed-1");
+  });
 });

@@ -104,4 +104,66 @@ describe("governance page", () => {
     );
     expect(link).toHaveAttribute("data-scroll", "false");
   });
+
+  it("links target records to memory detail pages", async () => {
+    getGovernanceHistoryMock.mockResolvedValue({
+      items: [],
+      total: 1,
+      sourceStatus
+    });
+    getGovernanceExecutionDetailMock.mockResolvedValue({
+      detail: {
+        executionId: "execution-1",
+        proposalId: "proposal-1",
+        workspaceId: "workspace-1",
+        proposalType: "archive",
+        proposalTypeLabel: "归档",
+        executionStatus: "executed",
+        executionStatusLabel: "已执行",
+        reasonCode: "obsolete",
+        reasonText: "清理旧记忆",
+        deleteReason: null,
+        startedAt: "2026-04-22T00:00:00Z",
+        finishedAt: "2026-04-22T00:01:00Z",
+        sourceService: "retrieval-runtime",
+        plannerModel: "memory_llm",
+        plannerConfidence: 0.9,
+        verifierRequired: false,
+        verifierModel: null,
+        verifierDecision: null,
+        verifierConfidence: null,
+        verifierNotes: null,
+        verificationBlocked: false,
+        verificationBlockedReason: null,
+        targetSummary: "memory-1",
+        targetRecordIds: ["memory-1"],
+        resultSummary: null,
+        errorMessage: null,
+        policyVersion: "memory-governance-v1",
+        suggestedChanges: {},
+        evidence: {},
+        targets: [
+          {
+            recordId: "memory-1",
+            conflictId: null,
+            role: "target"
+          }
+        ]
+      },
+      status: sourceStatus
+    });
+    fetchRuntimeGovernanceConfigMock.mockResolvedValue({
+      governance: null,
+      status: sourceStatus
+    });
+
+    const element = await GovernancePage({
+      searchParams: Promise.resolve({
+        execution_id: "execution-1"
+      })
+    });
+    render(element);
+
+    expect(screen.getByTitle("memory-1")).toHaveAttribute("href", "/memories/memory-1");
+  });
 });

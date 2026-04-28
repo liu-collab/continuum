@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import React from "react";
 
 import { DetailRow } from "@/components/detail-row";
@@ -26,6 +27,28 @@ function parseSearchParams(input: Record<string, string | string[] | undefined>)
     executionId: valueOf("execution_id"),
     limit: Number.parseInt(valueOf("limit") ?? "50", 10) || 50,
   };
+}
+
+function targetReferenceLink(
+  target: { recordId: string | null; conflictId: string | null },
+  locale: "zh-CN" | "en-US"
+) {
+  const value = target.recordId ?? target.conflictId;
+  const label = formatDebugReference(value, locale);
+
+  if (!target.recordId) {
+    return label;
+  }
+
+  return (
+    <Link
+      href={`/memories/${encodeURIComponent(target.recordId)}` as Route}
+      className="text-[var(--primary)] underline underline-offset-2"
+      title={target.recordId}
+    >
+      {label}
+    </Link>
+  );
 }
 
 export default async function GovernancePage({
@@ -220,7 +243,7 @@ export default async function GovernancePage({
                     <div className="record-list mt-5">
                       {detailResponse.detail.targets.map((target, index) => (
                         <div key={`${target.role}-${index}`} className="record-card">
-                          <DetailRow label={target.role} value={formatDebugReference(target.recordId ?? target.conflictId, locale)} />
+                          <DetailRow label={target.role} value={targetReferenceLink(target, locale)} />
                         </div>
                       ))}
                     </div>

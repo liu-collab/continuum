@@ -1,5 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
+import React from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { DetailRow } from "@/components/detail-row";
@@ -12,6 +13,7 @@ import {
   formatTimestamp,
   governanceStatusTone,
 } from "@/lib/format";
+import type { AppLocale } from "@/lib/i18n/messages";
 import { getServerTranslator } from "@/lib/i18n/server";
 
 function statusTone(status: string) {
@@ -19,6 +21,20 @@ function statusTone(status: string) {
   if (status === "pending_confirmation") return "warning";
   if (status === "deleted") return "danger";
   return "neutral";
+}
+
+function linkedDebugReference(value: string | null | undefined, href: Route | null, locale: AppLocale) {
+  const label = formatDebugReference(value, locale);
+
+  if (!value || !href) {
+    return label;
+  }
+
+  return (
+    <Link href={href} className="text-[var(--primary)] underline underline-offset-2" title={value}>
+      {label}
+    </Link>
+  );
 }
 
 export default async function MemoryDetailPage({
@@ -102,9 +118,23 @@ export default async function MemoryDetailPage({
               <dl className="kv-grid">
                 <DetailRow label={t("memories.detail.summary")} value={detail.sourceFormatted} />
                 <DetailRow label={t("memories.fields.type")} value={detail.sourceType ?? t("common.notRecorded")} />
-                <DetailRow label={t("memories.fields.source")} value={formatDebugReference(detail.sourceRef, locale)} />
+                <DetailRow
+                  label={t("memories.fields.source")}
+                  value={linkedDebugReference(
+                    detail.sourceRef,
+                    detail.sourceRef ? (`/runs?turn_id=${encodeURIComponent(detail.sourceRef)}` as Route) : null,
+                    locale
+                  )}
+                />
                 <DetailRow label={t("memories.detail.service")} value={detail.sourceServiceName ?? t("common.notRecorded")} />
-                <DetailRow label={t("memories.detail.sourceTurn")} value={formatDebugReference(detail.sourceTurnId, locale)} />
+                <DetailRow
+                  label={t("memories.detail.sourceTurn")}
+                  value={linkedDebugReference(
+                    detail.sourceTurnId,
+                    detail.sourceTurnId ? (`/runs?turn_id=${encodeURIComponent(detail.sourceTurnId)}` as Route) : null,
+                    locale
+                  )}
+                />
                 <DetailRow label={t("memories.detail.extractionBasis")} value={detail.extractionBasis ?? t("common.notRecorded")} />
               </dl>
             </section>
@@ -147,7 +177,11 @@ export default async function MemoryDetailPage({
           {detail.governanceHistory.length > 0 ? (
             <div className="record-list">
               {detail.governanceHistory.map((item) => (
-                <div key={item.executionId} className="record-card">
+                <Link
+                  key={item.executionId}
+                  href={`/governance?workspace_id=${encodeURIComponent(detail.workspaceId ?? "")}&execution_id=${encodeURIComponent(item.executionId)}` as Route}
+                  className="record-card"
+                >
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{item.proposalTypeLabel}</h3>
@@ -164,7 +198,7 @@ export default async function MemoryDetailPage({
                     <DetailRow label={t("memories.detail.executionTime")} value={formatTimestamp(item.startedAt, locale)} />
                     {item.errorMessage ? <DetailRow label={t("memories.detail.failureReason")} value={item.errorMessage} /> : null}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           ) : (

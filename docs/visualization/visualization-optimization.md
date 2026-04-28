@@ -576,3 +576,35 @@ runtime 启动时从配置文件加载，`PUT` 后热更新（MaintenanceWorker 
 | **P3** | 优化十（route params 替代手动解析） | 健壮性 |
 
 每项优化独立可实施、独立可验证。
+
+---
+
+## 交互优化
+
+### 优化十二：打通跨页记忆追溯链路
+
+**状态：已完成**
+
+### 问题
+
+记忆在 Memories、Runs、Governance 三个页面之间存在数据血缘，但页面之间没有导航链接：
+
+- 记忆详情显示 `sourceTurnId` / `sourceRef`，不能点击跳转到对应的 run trace
+- Runs 页注入面板显示 `keptRecordIds` / `trimmedRecordIds`，裸 UUID 字符串不可点击
+- Governance 页 target records 显示 `recordId`，不可点击
+- 记忆详情 → Governance（"View All"）单向，无反向链接
+
+### 方案
+
+**（a）记忆详情 → Runs：** `sourceTurnId` 渲染为 `<Link href={`/runs?turn_id=${sourceTurnId}`}>`。
+
+**（b）Runs → 记忆详情：** `keptRecordIds` 和 `trimmedRecordIds` 拆分为 `<Link>` 列表，每个 ID 指向 `/memories/[id]`。UUID 用 `formatDebugReference` 截取前 8 位，hover 显示完整 ID。
+
+**（c）Governance targets ↔ 记忆详情：** target recordId 渲染为可点击链接。Governance 详情增加返回记忆详情的链接。
+
+### 效果
+
+- 用户可以从一条记忆追溯完整链路：谁产生的 → 被注入了哪些轮次 → 被治理做了什么
+- 不再需要手动复制 UUID 去搜索
+
+---

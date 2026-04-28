@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { describeRunTraceEmptyState, getRunTrace } from "@/features/run-trace/service";
 import { getSourceHealth } from "@/features/source-health/service";
 import { formatDebugReference, formatRunTraceTitle, formatTimestamp } from "@/lib/format";
+import type { AppLocale } from "@/lib/i18n/messages";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { parseRunTraceFilters } from "@/lib/query-params";
 
@@ -32,6 +33,7 @@ export default async function RunsPage({
   const [response, health] = await Promise.all([getRunTrace(filters), getSourceHealth()]);
   const emptyState = describeRunTraceEmptyState(response, locale);
   const activeCount = Object.values(filters).filter(Boolean).length;
+  const selectedTurn = response.selectedTurn;
 
   return (
     <div className="app-page">
@@ -69,7 +71,7 @@ export default async function RunsPage({
                       key={item.traceId}
                       href={`/runs?trace_id=${encodeURIComponent(item.traceId)}` as Route}
                       scroll={false}
-                      className={`record-link ${response.selectedTurn?.turn.traceId === item.traceId ? "record-link-active" : ""}`}
+                      className={`record-link ${selectedTurn?.turn.traceId === item.traceId ? "record-link-active" : ""}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -99,38 +101,38 @@ export default async function RunsPage({
             </aside>
 
             <section className="grid gap-6">
-              {response.selectedTurn ? (
+              {selectedTurn ? (
                 <>
                   <div className="panel p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="section-kicker">{t("runs.selectedKicker")}</div>
                         <h2 className="mt-3 break-all text-[34px] font-semibold leading-[1.12] text-text">
-                          {formatRunTraceTitle(response.selectedTurn.turn.createdAt, locale)}
+                          {formatRunTraceTitle(selectedTurn.turn.createdAt, locale)}
                         </h2>
                         <p className="mt-4 text-[17px] leading-[1.47] text-muted">
-                          {response.selectedTurn.narrative.explanation}
+                          {selectedTurn.narrative.explanation}
                         </p>
                       </div>
-                      <StatusBadge tone={response.selectedTurn.narrative.incomplete ? "warning" : "success"}>
-                        {response.selectedTurn.narrative.outcomeLabel}
+                      <StatusBadge tone={selectedTurn.narrative.incomplete ? "warning" : "success"}>
+                        {selectedTurn.narrative.outcomeLabel}
                       </StatusBadge>
                     </div>
                     <dl className="kv-grid mt-6">
-                      <DetailRow label={t("runs.fields.trace")} value={formatDebugReference(response.selectedTurn.turn.traceId, locale)} />
-                      <DetailRow label={t("runs.fields.turn")} value={formatDebugReference(response.selectedTurn.turn.turnId, locale)} />
-                      <DetailRow label={t("runs.fields.phase")} value={response.selectedTurn.turn.phase ?? t("common.notRecorded")} />
-                      <DetailRow label={t("runs.fields.host")} value={response.selectedTurn.turn.host ?? t("common.notRecorded")} />
-                      <DetailRow label={t("runs.fields.created")} value={formatTimestamp(response.selectedTurn.turn.createdAt, locale)} />
+                      <DetailRow label={t("runs.fields.trace")} value={formatDebugReference(selectedTurn.turn.traceId, locale)} />
+                      <DetailRow label={t("runs.fields.turn")} value={formatDebugReference(selectedTurn.turn.turnId, locale)} />
+                      <DetailRow label={t("runs.fields.phase")} value={selectedTurn.turn.phase ?? t("common.notRecorded")} />
+                      <DetailRow label={t("runs.fields.host")} value={selectedTurn.turn.host ?? t("common.notRecorded")} />
+                      <DetailRow label={t("runs.fields.created")} value={formatTimestamp(selectedTurn.turn.createdAt, locale)} />
                     </dl>
                     <div className="detail-grid mt-6">
-                      <TextBlock label={t("runs.fields.input")} value={response.selectedTurn.turn.inputSummary ?? t("common.notRecorded")} />
-                      <TextBlock label={t("runs.fields.output")} value={response.selectedTurn.turn.assistantOutputSummary ?? t("common.notRecorded")} />
+                      <TextBlock label={t("runs.fields.input")} value={selectedTurn.turn.inputSummary ?? t("common.notRecorded")} />
+                      <TextBlock label={t("runs.fields.output")} value={selectedTurn.turn.assistantOutputSummary ?? t("common.notRecorded")} />
                     </div>
                   </div>
 
                   <div className="detail-grid">
-                    {response.selectedTurn.phaseNarratives.map((phase, index) => (
+                    {selectedTurn.phaseNarratives.map((phase, index) => (
                       <div key={`${phase.key}-${index}-${phase.title}`} className="panel p-6">
                         <div className="flex items-start justify-between gap-4">
                           <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{phase.title}</h3>
@@ -144,6 +146,15 @@ export default async function RunsPage({
                             ))}
                           </ul>
                         ) : null}
+                        {phase.key === "injection" ? (
+                          <RunInjectionRecordLinks
+                            keptRecordIds={selectedTurn.injectionRuns.flatMap((run) => run.keptRecordIds)}
+                            droppedRecordIds={selectedTurn.injectionRuns.flatMap((run) => run.droppedRecordIds)}
+                            locale={locale}
+                            keptLabel={t("service.runs.keptRecords", { records: "" })}
+                            droppedLabel={t("service.runs.trimmedRecords", { records: "" })}
+                          />
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -151,7 +162,7 @@ export default async function RunsPage({
                   <div className="panel p-6">
                     <div className="section-kicker">{t("runs.dependencies")}</div>
                     <div className="utility-grid mt-4">
-                      {response.selectedTurn.dependencyStatus.map((dependency) => (
+                      {selectedTurn.dependencyStatus.map((dependency) => (
                         <div key={dependency.name} className="record-card">
                           <div className="flex items-start justify-between gap-3">
                             <div>
@@ -184,6 +195,58 @@ function TextBlock({ label, value }: { label: string; value: string }) {
     <div className="record-card">
       <div className="section-kicker">{label}</div>
       <p className="mt-3 text-[17px] leading-[1.47] text-muted">{value}</p>
+    </div>
+  );
+}
+
+function RunInjectionRecordLinks({
+  keptRecordIds,
+  droppedRecordIds,
+  locale,
+  keptLabel,
+  droppedLabel
+}: {
+  keptRecordIds: string[];
+  droppedRecordIds: string[];
+  locale: AppLocale;
+  keptLabel: string;
+  droppedLabel: string;
+}) {
+  const uniqueKeptRecordIds = Array.from(new Set(keptRecordIds));
+  const uniqueDroppedRecordIds = Array.from(new Set(droppedRecordIds));
+
+  if (uniqueKeptRecordIds.length === 0 && uniqueDroppedRecordIds.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 grid gap-3">
+      <RecordIdLinks label={keptLabel} recordIds={uniqueKeptRecordIds} locale={locale} />
+      <RecordIdLinks label={droppedLabel} recordIds={uniqueDroppedRecordIds} locale={locale} />
+    </div>
+  );
+}
+
+function RecordIdLinks({ label, recordIds, locale }: { label: string; recordIds: string[]; locale: AppLocale }) {
+  if (recordIds.length === 0) {
+    return null;
+  }
+
+  return (
+    <div>
+      <div className="section-kicker mb-2">{label}</div>
+      <div className="flex flex-wrap gap-2">
+        {recordIds.map((recordId) => (
+          <Link
+            key={recordId}
+            href={`/memories/${encodeURIComponent(recordId)}` as Route}
+            className="status-badge hover:border-[rgba(0,102,204,0.28)] hover:text-[var(--primary)]"
+            title={recordId}
+          >
+            {formatDebugReference(recordId, locale)}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
