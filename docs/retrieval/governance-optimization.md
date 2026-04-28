@@ -136,6 +136,8 @@ if (passMinimumQuality(knowledge)) {
 
 ## 优化三：applyMerge 对已归档记录容错
 
+**状态：已完成**
+
 ### 问题
 
 `merge` 操作中如果任一条目标记录在 LLM 规划后被手动归档，`guardRecord` 抛异常导致整个事务回滚：

@@ -134,6 +134,52 @@ describe("governance execution engine", () => {
     expect((await repositories.records.findById(second.id))?.status).toBe("archived");
   });
 
+  it("skips archived records when applying a merge", async () => {
+    const first = buildSeed("Use pnpm in this repository");
+    const archived = {
+      ...buildSeed("Repository package manager is already archived"),
+      status: "archived" as const,
+    };
+    const third = buildSeed("Repository uses pnpm");
+    const repositories = createMemoryRepositories({
+      records: [first, archived, third],
+    });
+    const engine = new GovernanceExecutionEngine(repositories);
+
+    const result = await engine.executeBatch({
+      workspace_id: first.workspace_id,
+      source_service: "retrieval-runtime",
+      items: [
+        {
+          proposal_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          proposal_type: "merge",
+          targets: { record_ids: [first.id, archived.id, third.id] },
+          suggested_changes: {
+            summary: "Repository default is pnpm",
+            importance: 4,
+          },
+          reason_code: "duplicate_preference",
+          reason_text: "merge duplicate repository preference",
+          evidence: { seed_record_ids: [first.id], related_record_ids: [archived.id, third.id] },
+          planner: { model: "memory_llm", confidence: 0.94 },
+          verifier: {
+            required: true,
+            model: "memory_llm",
+            decision: "approve",
+            confidence: 0.91,
+          },
+          policy_version: "memory-governance-v1",
+          idempotency_key: "merge-batch-skip-archived",
+        },
+      ],
+    });
+
+    expect(result[0]?.execution.execution_status).toBe("executed");
+    expect((await repositories.records.findById(first.id))?.summary).toBe("Repository default is pnpm");
+    expect((await repositories.records.findById(archived.id))?.status).toBe("archived");
+    expect((await repositories.records.findById(third.id))?.status).toBe("archived");
+  });
+
   it("cancels execution when target record status changed before apply", async () => {
     const seed = {
       ...buildSeed("Old task state"),

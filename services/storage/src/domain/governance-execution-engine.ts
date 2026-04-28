@@ -291,11 +291,23 @@ export class GovernanceExecutionEngine {
   }
 
   private async applyMerge(tx: StorageRepositories, item: GovernanceExecutionItem) {
-    const [first, ...rest] = item.targets.record_ids;
-    if (!first || item.targets.record_ids.length < 2) {
+    if (item.targets.record_ids.length < 2) {
       throw new Error("merge requires at least two records");
     }
-    await this.guardRecord(tx, first);
+
+    const activeRecordIds: string[] = [];
+    for (const recordId of item.targets.record_ids) {
+      const record = await this.guardRecord(tx, recordId, { skipArchived: true });
+      if (record) {
+        activeRecordIds.push(record.id);
+      }
+    }
+
+    const [first, ...rest] = activeRecordIds;
+    if (!first || rest.length === 0) {
+      return;
+    }
+
     await tx.records.updateRecord(first, {
       ...(item.suggested_changes.summary ? { summary: item.suggested_changes.summary } : {}),
       ...(item.suggested_changes.importance !== undefined
@@ -303,7 +315,6 @@ export class GovernanceExecutionEngine {
         : {}),
     });
     for (const recordId of rest) {
-      await this.guardRecord(tx, recordId);
       await tx.records.updateRecord(recordId, {
         status: "archived",
         archived_at: new Date().toISOString(),
@@ -368,12 +379,25 @@ export class GovernanceExecutionEngine {
     }
   }
 
-  private async guardRecord(tx: StorageRepositories, recordId: string): Promise<MemoryRecord> {
+  private async guardRecord(tx: StorageRepositories, recordId: string): Promise<MemoryRecord>;
+  private async guardRecord(
+    tx: StorageRepositories,
+    recordId: string,
+    options: { skipArchived: true },
+  ): Promise<MemoryRecord | null>;
+  private async guardRecord(
+    tx: StorageRepositories,
+    recordId: string,
+    options?: { skipArchived?: boolean },
+  ): Promise<MemoryRecord | null> {
     const record = await tx.records.findById(recordId);
     if (!record) {
       throw new NotFoundError("memory record not found", { recordId });
     }
     if (record.status !== "active" && record.status !== "pending_confirmation") {
+      if (options?.skipArchived && record.status === "archived") {
+        return null;
+      }
       throw new GovernanceExecutionCancelledError(`record ${recordId} status changed before execution`, {
         recordId,
         actual_status: record.status,
