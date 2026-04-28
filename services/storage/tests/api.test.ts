@@ -316,22 +316,21 @@ describe("storage api", () => {
         source_service: "retrieval-runtime",
         candidates: [
           {
-            candidate_type: "commitment",
-            scope: "task",
-            summary: "Will finish migration cleanup today",
+            candidate_type: "preference",
+            scope: "user",
+            summary: "User prefers concise migration notes",
             details: {
-              promise: "finish migration cleanup",
+              preference: "concise migration notes",
             },
             importance: 4,
             confidence: 0.9,
-            write_reason: "explicit commitment",
+            write_reason: "explicit preference",
             source: {
               host: "codex_app_server",
               session_id: "33333333-3333-4333-8333-333333333333",
               turn_id: "turn-9",
-              task_id: "44444444-4444-4444-8444-444444444444",
             },
-            dedupe_key: "commitment:cleanup",
+            dedupe_key: "preference:concise-migration-notes",
           },
         ],
       },
@@ -340,6 +339,8 @@ describe("storage api", () => {
     expect(response.statusCode).toBe(202);
     expect(response.json().jobs).toHaveLength(1);
     expect(response.json().submitted_jobs).toHaveLength(1);
+    const jobs = await service.listWriteJobs();
+    expect(jobs[0]?.candidate_json.candidate_type).toBe("fact_preference");
   });
 
   it("returns write projection status for succeeded write jobs with refresh progress", async () => {

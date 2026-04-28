@@ -21,6 +21,7 @@ import type {
   WriteProjectionStatus,
   WriteBackCandidate,
 } from "./contracts.js";
+import { mapRuntimeCandidateType } from "./contracts.js";
 import type { StorageConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import type { StorageDatabase } from "./db/client.js";
@@ -500,10 +501,7 @@ function adaptRuntimeCandidateToStorage(
   candidate: RuntimeCompatibleWriteBackBatchRequest["candidates"][number],
   index: number,
 ): WriteBackCandidate {
-  const candidateType =
-    candidate.candidate_type === "commitment" || candidate.candidate_type === "important_event"
-      ? "episodic"
-      : candidate.candidate_type;
+  const candidateType = mapRuntimeCandidateType(candidate.candidate_type);
 
   return {
     workspace_id: payload.workspace_id,

@@ -1,10 +1,21 @@
 import { z } from "zod";
 
+import { AppError } from "./errors.js";
+
 export const memoryTypeSchema = z.enum([
   "fact_preference",
   "task_state",
   "episodic",
 ]);
+
+const runtimeCandidateTypeValues = [
+  "fact_preference",
+  "task_state",
+  "episodic",
+  "commitment",
+  "preference",
+  "important_event",
+] as const;
 
 export const scopeSchema = z.enum(["session", "task", "user", "workspace"]);
 
@@ -279,13 +290,7 @@ export const runtimeWriteBackCandidateSchema = writeBackCandidateSchema;
 export const runtimeWriteBackBatchRequestSchema = writeBackBatchRequestSchema;
 
 export const runtimeCompatibleWriteBackCandidateSchema = z.object({
-  candidate_type: z.enum([
-    "fact_preference",
-    "task_state",
-    "episodic",
-    "commitment",
-    "important_event",
-  ]),
+  candidate_type: z.enum(runtimeCandidateTypeValues),
   scope: z.enum(["session", "task", "user"]),
   summary: z.string().trim().min(3).max(500),
   details: structuredDetailsSchema,
@@ -372,6 +377,7 @@ export const resolveConflictSchema = z.object({
 });
 
 export type MemoryType = z.infer<typeof memoryTypeSchema>;
+export type RuntimeCandidateType = (typeof runtimeCandidateTypeValues)[number];
 export type Scope = z.infer<typeof scopeSchema>;
 export type MemoryStatus = z.infer<typeof memoryStatusSchema>;
 export type WriteJobStatus = z.infer<typeof writeJobStatusSchema>;
@@ -402,6 +408,26 @@ export type RestoreVersionInput = z.infer<typeof restoreVersionSchema>;
 export type ResolveConflictInput = z.infer<typeof resolveConflictSchema>;
 export type GovernanceExecutionItem = z.infer<typeof governanceExecutionItemSchema>;
 export type GovernanceExecutionBatchRequest = z.infer<typeof governanceExecutionBatchRequestSchema>;
+
+export const RUNTIME_TO_STORAGE_TYPE_MAP = {
+  fact_preference: "fact_preference",
+  task_state: "task_state",
+  episodic: "episodic",
+  commitment: "episodic",
+  preference: "fact_preference",
+  important_event: "episodic",
+} satisfies Record<RuntimeCandidateType, MemoryType>;
+
+export function mapRuntimeCandidateType(runtimeType: string): MemoryType {
+  const mapped = RUNTIME_TO_STORAGE_TYPE_MAP[runtimeType as RuntimeCandidateType];
+  if (!mapped) {
+    throw new AppError("unknown_candidate_type", "unknown runtime candidate type", 400, {
+      runtimeType,
+    });
+  }
+
+  return mapped;
+}
 
 export interface NormalizedMemory extends WriteBackCandidate {
   user_id: string | null;

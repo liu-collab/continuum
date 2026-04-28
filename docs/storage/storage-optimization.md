@@ -369,6 +369,8 @@ await tx.records.updateRecord(recordId, {
 
 ## 优化八：`adaptRuntimeCandidateToStorage` 硬编码类型映射
 
+**状态：已完成**
+
 ### 问题
 
 `services.ts` 中的适配器硬编码了 retrieval-runtime 格式到 storage 格式的映射：
