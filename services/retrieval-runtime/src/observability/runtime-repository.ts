@@ -51,6 +51,7 @@ export interface RuntimeRepository {
   }): Promise<string | null>;
   findFinalizeIdempotencyRecord(key: string): Promise<FinalizeIdempotencyRecord | null>;
   upsertFinalizeIdempotencyRecord(record: FinalizeIdempotencyRecord): Promise<void>;
+  clearFinalizeIdempotencyRecords?(): Promise<void>;
   updateDependencyStatus(status: DependencyStatus): Promise<void>;
   getDependencyStatus(): Promise<DependencyStatusSnapshot>;
   upsertRecentInjectionStates(records: RecentInjectionStateRecord[]): Promise<void>;

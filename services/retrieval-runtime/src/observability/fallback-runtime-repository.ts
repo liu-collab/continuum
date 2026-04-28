@@ -114,6 +114,10 @@ export class FallbackRuntimeRepository implements RuntimeRepository {
     await this.tryPrimaryOrFallback((repository) => repository.upsertFinalizeIdempotencyRecord(record));
   }
 
+  async clearFinalizeIdempotencyRecords(): Promise<void> {
+    await this.tryPrimaryOrFallback((repository) => repository.clearFinalizeIdempotencyRecords?.() ?? Promise.resolve());
+  }
+
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {
     await this.tryPrimaryOrFallback((repository) => repository.updateDependencyStatus(status));
   }

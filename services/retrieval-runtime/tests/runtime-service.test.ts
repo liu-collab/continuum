@@ -480,6 +480,9 @@ class StubRecallEffectivenessEvaluator implements RecallEffectivenessEvaluator {
 }
 
 class StubLlmRecallPlanner implements LlmRecallPlanner {
+  public searchCallCount = 0;
+  public injectionCallCount = 0;
+
   constructor(
     private readonly searchPlan: LlmRecallSearchPlan,
     private readonly injectionPlan: LlmRecallPlan,
@@ -487,6 +490,7 @@ class StubLlmRecallPlanner implements LlmRecallPlanner {
   ) {}
 
   async planSearch(): Promise<LlmRecallSearchPlan> {
+    this.searchCallCount += 1;
     if (this.shouldFail) {
       throw new Error("recall llm timeout");
     }
@@ -494,6 +498,7 @@ class StubLlmRecallPlanner implements LlmRecallPlanner {
   }
 
   async planInjection(): Promise<LlmRecallPlan> {
+    this.injectionCallCount += 1;
     if (this.shouldFail) {
       throw new Error("recall llm timeout");
     }
@@ -532,6 +537,8 @@ class StubRecallInjectionPlanner implements RecallInjectionPlanner {
 }
 
 class StubIntentAnalyzer implements IntentAnalyzer {
+  public callCount = 0;
+
   constructor(
     private readonly output: {
       needs_memory: boolean;
@@ -544,6 +551,7 @@ class StubIntentAnalyzer implements IntentAnalyzer {
   ) {}
 
   async analyze() {
+    this.callCount += 1;
     return this.output;
   }
 }
@@ -995,6 +1003,59 @@ describe("retrieval-runtime service", () => {
     expect(intentPlan).toBeTruthy();
     expect(intentPlan?.result_state).toBe("planned");
     expect(intentPlan?.output_summary).toContain("needs_memory=true");
+  });
+
+  it("uses one unified recall planner call for intent and search planning", async () => {
+    const intentAnalyzer = new StubIntentAnalyzer({
+      needs_memory: true,
+      memory_types: ["fact_preference"],
+      urgency: "immediate",
+      confidence: 0.92,
+      reason: "旧意图分析器不应被调用。",
+      suggested_scopes: ["user"],
+    });
+    const planner = new StubLlmRecallPlanner({
+      needs_memory: true,
+      intent_confidence: 0.91,
+      intent_reason: "用户在继续之前的任务，需要恢复任务状态。",
+      should_search: true,
+      reason: "继续任务前先恢复记忆。",
+      requested_scopes: ["user", "task"],
+      requested_memory_types: ["fact_preference", "task_state"],
+      importance_threshold: 3,
+      query_hint: "继续之前的任务与偏好",
+      candidate_limit: 6,
+    }, {
+      should_inject: true,
+      reason: "需要注入偏好与当前任务状态。",
+      selected_record_ids: ["mem-preference", "mem-task"],
+      memory_summary: "延续用户偏好，并恢复当前任务状态。",
+    });
+    const { service, repository } = createRuntime({
+      intentAnalyzer,
+      llmRecallPlanner: planner,
+    });
+
+    await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-unified-recall-plan",
+      phase: "before_response",
+      current_input: "请根据当前需求处理这个问题。",
+    });
+
+    const runs = await repository.getRuns({ turn_id: "turn-unified-recall-plan" });
+    const intentPlan = runs.memory_plan_runs.find((run) => run.plan_kind === "memory_intent_plan");
+    const searchPlan = runs.memory_plan_runs.find((run) => run.plan_kind === "memory_search_plan");
+
+    expect(planner.searchCallCount).toBe(1);
+    expect(intentAnalyzer.callCount).toBe(0);
+    expect(intentPlan?.output_summary).toContain("needs_memory=true");
+    expect(intentPlan?.output_summary).toContain("继续之前的任务");
+    expect(searchPlan?.output_summary).toContain("query_hint=继续之前的任务与偏好");
   });
 
   it("returns proactive recommendations on session start", async () => {

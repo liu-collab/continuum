@@ -53,6 +53,9 @@ export class HttpMemoryRecallSearchPlanner implements RecallSearchPlanner {
     }
 
     return {
+      needs_memory: parsed.data.needs_memory,
+      intent_confidence: parsed.data.intent_confidence,
+      intent_reason: parsed.data.intent_reason,
       should_search: parsed.data.should_search,
       reason: parsed.data.reason,
       requested_scopes: parsed.data.requested_scopes,

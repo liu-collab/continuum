@@ -1159,6 +1159,7 @@ export class RetrievalRuntimeService {
 
     if (clearFinalizeIdempotencyCache && this.finalizeIdempotencyCache) {
       this.finalizeIdempotencyCache.clear();
+      await this.repository.clearFinalizeIdempotencyRecords?.();
       cleared.push("finalize_idempotency_cache");
     }
 

@@ -7,6 +7,9 @@ export const memoryCandidateLimitSchema = z.number().int().min(1).max(50);
 export const memoryConfidenceSchema = z.number().min(0).max(1);
 
 export const memoryRecallSearchSchema = z.object({
+  needs_memory: z.boolean().optional(),
+  intent_confidence: memoryConfidenceSchema.optional(),
+  intent_reason: z.string().min(1).optional(),
   should_search: z.boolean(),
   reason: z.string().min(1),
   requested_scopes: z.array(memoryScopeSchema).optional(),

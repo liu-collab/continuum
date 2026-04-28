@@ -161,7 +161,13 @@ export class TriggerEngine {
         }
       | undefined;
 
-    if (this.intentAnalyzer && context.phase === "before_response") {
+    if (
+      this.intentAnalyzer &&
+      context.phase === "before_response" &&
+      (!this.config.RECALL_LLM_JUDGE_ENABLED ||
+        !this.recallSearchPlanner ||
+        matchesHistoryReference(normalizedInput))
+    ) {
       const intentResult = await this.dependencyGuard.run(
         "memory_llm",
         this.config.MEMORY_LLM_TIMEOUT_MS,
@@ -289,6 +295,17 @@ export class TriggerEngine {
       );
 
       if (llmDecision.ok && llmDecision.value) {
+        const plannerNeedsMemory = llmDecision.value.needs_memory ?? llmDecision.value.should_search;
+        const plannerIntentConfidence = llmDecision.value.intent_confidence ?? (plannerNeedsMemory ? 0.8 : 0.6);
+        const plannerIntentReason = llmDecision.value.intent_reason ?? llmDecision.value.reason;
+        const plannerRequestedMemoryTypes = llmDecision.value.requested_memory_types
+          ?.length
+            ? llmDecision.value.requested_memory_types
+            : intentTypesForSearch;
+        const plannerRequestedScopes = llmDecision.value.requested_scopes?.length
+          ? dedupeScopes(llmDecision.value.requested_scopes)
+          : intentScopesForSearch;
+
         if (!llmDecision.value.should_search) {
           return {
             hit: false,
@@ -302,14 +319,13 @@ export class TriggerEngine {
             cooldown_applied: false,
             llm_used: true,
             llm_decision_reason: llmDecision.value.reason,
-            intent_reason: intentDecision?.reason,
-            intent_confidence: intentDecision?.confidence,
-            intent_needs_memory: intentDecision?.needsMemory,
-            intent_memory_types: intentDecision?.requestedMemoryTypes,
-            intent_scopes: intentDecision?.requestedScopes,
-            intent_plan_attempted: Boolean(intentDecision),
-            intent_plan_degraded: intentDecision?.degraded,
-            intent_plan_degradation_reason: intentDecision?.degradationReason,
+            intent_reason: plannerIntentReason,
+            intent_confidence: plannerIntentConfidence,
+            intent_needs_memory: plannerNeedsMemory,
+            intent_memory_types: plannerRequestedMemoryTypes,
+            intent_scopes: plannerRequestedScopes,
+            intent_plan_attempted: true,
+            intent_plan_degraded: false,
             search_plan_attempted: true,
             search_plan_degraded: false,
           };
@@ -323,11 +339,11 @@ export class TriggerEngine {
           requested_memory_types: llmDecision.value.requested_memory_types
             ?.length
             ? llmDecision.value.requested_memory_types
-            : intentTypesForSearch,
+            : plannerRequestedMemoryTypes,
           memory_mode: memoryMode,
           requested_scopes: llmDecision.value.requested_scopes?.length
             ? dedupeScopes(llmDecision.value.requested_scopes)
-            : intentScopesForSearch,
+            : plannerRequestedScopes,
           scope_reason: scopePlan.reason,
           importance_threshold:
             llmDecision.value.importance_threshold ??
@@ -337,14 +353,13 @@ export class TriggerEngine {
           candidate_limit: llmDecision.value.candidate_limit,
           llm_used: true,
           llm_decision_reason: llmDecision.value.reason,
-          intent_reason: intentDecision?.reason,
-          intent_confidence: intentDecision?.confidence,
-          intent_needs_memory: intentDecision?.needsMemory,
-          intent_memory_types: intentDecision?.requestedMemoryTypes,
-          intent_scopes: intentDecision?.requestedScopes,
-          intent_plan_attempted: Boolean(intentDecision),
-          intent_plan_degraded: intentDecision?.degraded,
-          intent_plan_degradation_reason: intentDecision?.degradationReason,
+          intent_reason: plannerIntentReason,
+          intent_confidence: plannerIntentConfidence,
+          intent_needs_memory: plannerNeedsMemory,
+          intent_memory_types: plannerRequestedMemoryTypes,
+          intent_scopes: plannerRequestedScopes,
+          intent_plan_attempted: true,
+          intent_plan_degraded: false,
           search_plan_attempted: true,
           search_plan_degraded: false,
         };
@@ -366,14 +381,17 @@ export class TriggerEngine {
           intentTypesForSearch,
           scopePlan.reason,
         )),
-        intent_reason: intentDecision?.reason,
-        intent_confidence: intentDecision?.confidence,
-        intent_needs_memory: intentDecision?.needsMemory,
-        intent_memory_types: intentDecision?.requestedMemoryTypes,
-        intent_scopes: intentDecision?.requestedScopes,
-        intent_plan_attempted: Boolean(intentDecision),
-        intent_plan_degraded: intentDecision?.degraded,
-        intent_plan_degradation_reason: intentDecision?.degradationReason,
+        intent_reason: intentDecision?.reason ?? "recall_planner_unavailable",
+        intent_confidence: intentDecision?.confidence ?? 0,
+        intent_needs_memory: intentDecision?.needsMemory ?? true,
+        intent_memory_types: intentDecision?.requestedMemoryTypes ?? intentTypesForSearch,
+        intent_scopes: intentDecision?.requestedScopes ?? intentScopesForSearch,
+        intent_plan_attempted: true,
+        intent_plan_degraded: true,
+        intent_plan_degradation_reason:
+          intentDecision?.degradationReason ??
+          llmDecision.error?.code ??
+          "memory_llm_unavailable",
         search_plan_attempted: true,
         search_plan_degraded: true,
         search_plan_degradation_reason:

@@ -830,6 +830,12 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     );
   }
 
+  async clearFinalizeIdempotencyRecords(): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM ${quoteIdentifier(this.runtimeSchema)}.runtime_finalize_idempotency`,
+    );
+  }
+
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {
     await this.pool.query(
       `

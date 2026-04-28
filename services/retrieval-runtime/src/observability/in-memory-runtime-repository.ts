@@ -222,6 +222,10 @@ export class InMemoryRuntimeRepository implements RuntimeRepository {
     this.finalizeIdempotencyRecords.set(record.idempotency_key, record);
   }
 
+  async clearFinalizeIdempotencyRecords(): Promise<void> {
+    this.finalizeIdempotencyRecords.clear();
+  }
+
   async updateDependencyStatus(status: DependencyStatus): Promise<void> {
     this.dependencies.set(status.name, status);
   }

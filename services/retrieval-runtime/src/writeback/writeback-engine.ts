@@ -52,11 +52,11 @@ interface ClassifiedDraft extends CandidateDraft {
 
 const PREFERENCE_PATTERNS = [
   /(?:我一般|我喜欢|我偏好|我习惯|一直用的是|prefer|i usually|i always|my convention is|my default is)\s*[:：]?\s*(.+)/i,
-  /(?:以后|今后|后续|从现在开始|from now on|going forward)\s*(?:都|都给我|统一|全部)?\s*(.+)/i,
   /((?:不要|不用|别|别给我|禁止|no more|stop using|don'?t use)\s+.+?)(?:[。.!]|$)/i,
   /(?:代码风格|编码规范|格式化|lint)(?:\s*(?:按|按照|使用|遵循|跟|走))\s*(.+)/i,
   /((?:用|使用|改用)\s*.+?而不是\s*.+?)(?:[。.!]|$)/i,
   /((?:这个项目|这个仓库|当前项目|当前仓库|项目里|仓库里|this project|this repo).*(?:默认|统一|规范|约定|使用|用).+?)(?:[。.!]|$)/i,
+  /((?=.*(?:默认|长期偏好|偏好|习惯|prefer|default|usually|always))(?:以后|今后|后续|从现在开始|from now on|going forward).+?)(?:[。.!]|$)/i,
 ];
 
 const REMEMBER_PREFERENCE_PATTERNS = [
@@ -109,9 +109,11 @@ const TASK_STATE_PATTERNS = [
 ];
 
 const OVERLAP_THRESHOLD_BY_METHOD: Record<string, number> = {
-  rules: 0.5,
+  rules: 0.35,
   llm: 0.35,
 };
+
+const MEANINGFUL_TOKEN_PATTERN = /[a-z0-9]{2,}|[\u4e00-\u9fff]{2,}/iu;
 
 const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
 const MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION = "memory-writeback-extract-v1";
@@ -388,6 +390,17 @@ function hasSufficientInputOverlap(summary: string, sourceText: string, threshol
 
   const containment = intersection / Math.min(summaryTokens.size, sourceTokens.size);
   return containment >= threshold;
+}
+
+function hasMeaningfulTokenOverlap(summary: string, sourceText: string): boolean {
+  const sourceTokens = new Set(tokenizeForOverlap(sourceText));
+  if (sourceTokens.size === 0) {
+    return false;
+  }
+
+  return tokenizeForOverlap(summary).some((token) => {
+    return MEANINGFUL_TOKEN_PATTERN.test(token) && sourceTokens.has(token);
+  });
 }
 
 function hasWorkspaceContext(text: string): boolean {
@@ -688,6 +701,7 @@ export class WritebackEngine {
   ): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
     const classifiedDrafts = drafts.map((draft) => this.classifyScope(input, draft));
     const scopeReasons: string[] = [];
+    const sourceText = [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" ");
     const candidates = classifiedDrafts
       .map((draft) => {
         if (draft.scope === "task" && !input.task_id) {
@@ -708,10 +722,11 @@ export class WritebackEngine {
           this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD;
         const hasInputOverlap = hasSufficientInputOverlap(
           candidate.summary,
-          [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" "),
+          sourceText,
           overlapThreshold,
         );
-        if (!hasInputOverlap) {
+        const hasMeaningfulOverlap = hasMeaningfulTokenOverlap(candidate.summary, sourceText);
+        if (!hasInputOverlap && !hasMeaningfulOverlap) {
           filteredReasons.push(`low_input_overlap:${candidate.candidate_type}`);
           return false;
         }

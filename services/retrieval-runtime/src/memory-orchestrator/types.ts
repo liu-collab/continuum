@@ -12,6 +12,9 @@ import type {
 } from "../shared/types.js";
 
 export interface RecallSearchPlan {
+  needs_memory?: boolean;
+  intent_confidence?: number;
+  intent_reason?: string;
   should_search: boolean;
   reason: string;
   requested_scopes?: ScopeType[];

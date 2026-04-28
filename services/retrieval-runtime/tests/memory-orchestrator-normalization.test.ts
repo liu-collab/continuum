@@ -65,6 +65,50 @@ describe("memory orchestrator response normalization", () => {
     expect(result.candidate_limit).toBe(8);
   });
 
+  it("parses unified intent fields from search planner output", async () => {
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  needs_memory: true,
+                  intent_confidence: 0.92,
+                  intent_reason: "用户在继续之前的任务",
+                  should_search: true,
+                  reason: "需要延续上下文",
+                  requested_scopes: ["workspace", "task"],
+                  requested_memory_types: ["task_state"],
+                  importance_threshold: 3,
+                }),
+              },
+            },
+          ],
+        }),
+      }) as Response) as typeof fetch;
+
+    const planner = new HttpMemoryRecallSearchPlanner(baseConfig);
+    const result = await planner.plan({
+      context: {
+        host: "codex_app_server",
+        workspace_id: "ws-1",
+        user_id: "user-1",
+        session_id: "session-1",
+        phase: "before_response",
+        current_input: "继续上次任务",
+      },
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task"],
+      requested_memory_types: ["task_state"],
+    });
+
+    expect(result.needs_memory).toBe(true);
+    expect(result.intent_confidence).toBe(0.92);
+    expect(result.intent_reason).toBe("用户在继续之前的任务");
+  });
+
   it("normalizes float importance_threshold for injection planner", async () => {
     globalThis.fetch = (async () =>
       ({
