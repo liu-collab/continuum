@@ -335,8 +335,7 @@ export class WritebackMaintenanceWorker {
     checkpointIso: string,
   ): GovernancePlan["actions"] {
     const nowMs = Date.parse(checkpointIso);
-    const sourceRecords = [...workspaceContext.seed_records, ...workspaceContext.related_records];
-    const expired = sourceRecords.filter((record, index, array) =>
+    const expired = workspaceContext.seed_records.filter((record, index, array) =>
       array.findIndex((candidate) => candidate.id === record.id) === index
       && isExpiredSessionEpisodic(record, this.config.WRITEBACK_SESSION_EPISODIC_TTL_MS, nowMs),
     );

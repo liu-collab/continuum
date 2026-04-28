@@ -748,4 +748,32 @@ describe("WritebackMaintenanceWorker", () => {
     expect(batch.items.some((item) => item.proposal_type === "archive" && item.targets.record_ids.includes("session-old"))).toBe(true);
     expect(batch.items.some((item) => item.targets.record_ids.includes("session-fresh"))).toBe(false);
   });
+
+  it("does not archive expired related session episodic memories", async () => {
+    const seed = makeRecord("seed-lifecycle", "默认使用中文输出");
+    const related = makeSessionEpisodicRecord("related-session-old", "2026-04-01T00:00:00.000Z");
+    const storage = new RecordingStorageClient([seed], [related]);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig({
+        WRITEBACK_SESSION_EPISODIC_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+      }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(0);
+    expect(storage.governanceBatches).toHaveLength(0);
+    expect(planner.planCalls).toHaveLength(0);
+  });
 });
