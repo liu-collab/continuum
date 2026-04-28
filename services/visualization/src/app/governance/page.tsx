@@ -1,4 +1,5 @@
 import Link from "next/link";
+import React from "react";
 
 import { DetailRow } from "@/components/detail-row";
 import { EmptyState } from "@/components/empty-state";
@@ -128,9 +129,10 @@ export default async function GovernancePage({
                     }).toString()}`;
 
                     return (
-                      <a
+                      <Link
                         key={item.executionId}
                         href={href}
+                        scroll={false}
                         className={`record-link ${item.executionId === selectedId ? "record-link-active" : ""}`}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -148,7 +150,7 @@ export default async function GovernancePage({
                         <div className="mt-3 text-[14px] leading-[1.43] text-muted-foreground">
                           {formatTimestamp(item.startedAt, locale)}
                         </div>
-                      </a>
+                      </Link>
                     );
                   })}
                 </div>

@@ -295,6 +295,8 @@ export async function handleGovernanceAction(
 
 ## 优化六：`governance/page.tsx` 用 `<Link>` 替代 `<a>` 标签
 
+**状态：已完成**
+
 ### 问题
 
 ```tsx
