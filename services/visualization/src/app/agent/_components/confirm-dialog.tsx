@@ -139,7 +139,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
           tabIndex={-1}
           data-testid="plan-confirm-dialog"
           onClick={(event) => event.stopPropagation()}
-          className="w-full max-w-xl rounded-lg border bg-surface p-5 shadow-overlay outline-none"
+          className="w-full max-w-xl rounded-lg border bg-surface p-5 outline-none"
         >
           <div className="flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
@@ -237,7 +237,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
         tabIndex={-1}
         data-testid="tool-confirm-dialog"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-xl rounded-lg border bg-surface p-5 shadow-overlay outline-none"
+        className="w-full max-w-xl rounded-lg border bg-surface p-5 outline-none"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">

@@ -72,4 +72,10 @@ describe("visualization design compliance", () => {
     expect(fileTree).not.toContain("rounded-xl");
     expect(fileTree).toContain("rounded-[var(--radius-lg)]");
   });
+
+  it("does not keep removed overlay shadow utilities on audited modals", () => {
+    const confirmDialog = readSource("src/app/agent/_components/confirm-dialog.tsx");
+
+    expect(confirmDialog).not.toContain("shadow-overlay");
+  });
 });

@@ -907,3 +907,17 @@ body { letter-spacing: -0.374px; }
 | `assistant-thread.tsx` | `rounded-xl`（=12px） | `var(--radius-lg)`（18px） |
 
 ---
+
+### 修复二十三：消除 UI 阴影
+
+**状态：已完成**
+
+#### 问题
+
+`confirm-dialog.tsx` 在 modal 上使用了 `shadow-overlay`。全局 `!important` 已将其强制归零（视觉上看不到），但意图偏差应修正。
+
+#### 方案
+
+删除 `confirm-dialog.tsx` 中 modal 上的 `shadow-overlay` 类名，不依赖 `!important` 覆盖。
+
+---
