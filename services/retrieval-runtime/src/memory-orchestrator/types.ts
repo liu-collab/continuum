@@ -104,6 +104,14 @@ export interface WritebackExtractionResult {
   candidates: WritebackExtractionCandidate[];
 }
 
+export interface WritebackRuleHint {
+  summary: string;
+  candidate_type: WritebackExtractionCandidate["candidate_type"];
+  scope: WritebackExtractionCandidate["scope"];
+  importance: number;
+  confidence: number;
+}
+
 export interface RuleCandidateDigest {
   index: number;
   candidate_type: WritebackExtractionCandidate["candidate_type"];
@@ -139,7 +147,9 @@ export interface WritebackRefineResult {
 }
 
 export interface WritebackPlanner {
-  extract(input: Pick<FinalizeTurnInput, "current_input" | "assistant_output" | "tool_results_summary" | "task_id">): Promise<WritebackExtractionResult>;
+  extract(input: Pick<FinalizeTurnInput, "current_input" | "assistant_output" | "tool_results_summary" | "task_id"> & {
+    rule_hints?: WritebackRuleHint[];
+  }): Promise<WritebackExtractionResult>;
   refine(input: WritebackRefineInput): Promise<WritebackRefineResult>;
   healthCheck?(): Promise<void> | undefined;
 }

@@ -77,6 +77,8 @@ const envSchema = z.object({
   FINALIZE_IDEMPOTENCY_TTL_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: z.coerce.number().int().positive().default(500),
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: z.coerce.number().min(0).max(1).default(0.2),
+  WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
   QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
   STORAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
   EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

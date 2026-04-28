@@ -7,12 +7,14 @@ import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { QualityAssessor, WritebackPlanner } from "../memory-orchestrator/index.js";
 import type { FinalizeTurnInput, MemoryType, ScopeType, SubmittedWriteBackJob, WriteBackCandidate } from "../shared/types.js";
 import { jaccardOverlap, normalizeText, tokenizeForOverlap } from "../shared/utils.js";
-import type {
-  LlmExtractionCandidate,
-  LlmRefineItem,
-  LlmRefineResult,
-  RuleCandidateDigest,
-} from "./llm-extractor.js";
+import type { LlmExtractionCandidate } from "./llm-extractor.js";
+import {
+  buildUnvalidatedCrossReference,
+  type CrossReferencePair,
+  type CrossReferenceResult,
+  type CrossReferenceValidatedDraft,
+  type EmbeddingCrossReferenceEngine,
+} from "./cross-reference.js";
 import type { StorageWritebackClient } from "./storage-client.js";
 
 export interface WritebackEngineResult {
@@ -115,7 +117,7 @@ const OVERLAP_THRESHOLD_BY_METHOD: Record<string, number> = {
 
 const MEANINGFUL_TOKEN_PATTERN = /[a-z0-9]{2,}|[\u4e00-\u9fff]{2,}/iu;
 
-const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
+const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-extract-v1";
 const MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION = "memory-writeback-extract-v1";
 const MEMORY_WRITEBACK_SCHEMA_VERSION = "memory-writeback-schema-v1";
 function summarizeObservationText(value: string, maxLength = 220) {
@@ -442,6 +444,7 @@ export class WritebackEngine {
     private readonly writebackPlanner?: WritebackPlanner,
     private readonly qualityAssessor?: QualityAssessor,
     private readonly logger?: Logger,
+    private readonly crossReferenceEngine?: EmbeddingCrossReferenceEngine,
   ) {}
 
   async extractCandidates(
@@ -453,7 +456,7 @@ export class WritebackEngine {
     if (!this.writebackPlanner || !this.config.WRITEBACK_REFINE_ENABLED) {
       const result = await this.applyQualityAssessment(
         input,
-        this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons),
+        this.postProcess(input, this.markRuleOnlyDrafts(ruleResult.drafts), ruleResult.filtered_reasons),
       );
       return {
         ...result,
@@ -473,106 +476,187 @@ export class WritebackEngine {
       };
     }
 
+    let llmDrafts: CandidateDraft[] = [];
+    let llmDegraded = false;
+    let llmDegradationReason: string | undefined;
+
     try {
       const extracted = await this.writebackPlanner.extract({
         current_input: input.current_input,
         assistant_output: input.assistant_output,
         tool_results_summary: input.tool_results_summary,
         task_id: input.task_id,
+        rule_hints: ruleResult.drafts.map((draft) => ({
+          summary: draft.summary,
+          candidate_type: draft.candidate_type,
+          scope: draft.scope,
+          importance: draft.importance,
+          confidence: draft.confidence,
+        })),
       });
-      const llmDrafts = extracted.candidates.map((candidate) => this.toDraftFromLlm(input, candidate));
-      const refineResult = await this.refineRuleCandidates(input, ruleResult.drafts);
-      const allDrafts = [...llmDrafts, ...refineResult.drafts];
-      const result = await this.applyQualityAssessment(
-        input,
-        this.postProcess(
-          input,
-          allDrafts,
-          [...ruleResult.filtered_reasons, ...refineResult.filtered_reasons],
-        ),
-      );
-      return {
-        ...result,
-        plan_observation: {
-          input_summary: summarizeObservationText(
-            `current_input=${input.current_input}; llm_candidates=${extracted.candidates.length}; rule_candidates=${ruleResult.drafts.length}`,
-          ),
-          output_summary: summarizeObservationText(
-            `candidates=${result.candidates.length}; filtered=${result.filtered_count}; reasons=${result.filtered_reasons.join(",")}`,
-          ),
-          prompt_version: MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION,
-          schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
-          degraded: refineResult.degraded,
-          degradation_reason: refineResult.degradation_reason,
-          result_state: result.candidates.length > 0 ? "planned" : "skipped",
-          duration_ms: Date.now() - startedAt,
-        },
-      };
+      llmDrafts = extracted.candidates.map((candidate) => this.toDraftFromLlm(input, candidate));
     } catch (error) {
+      llmDegraded = true;
+      llmDegradationReason = error instanceof Error ? error.message : "memory_llm_unavailable";
       this.logger?.warn?.({ err: error }, "memory llm extraction failed, using rule output");
-      const result = await this.applyQualityAssessment(
-        input,
-        this.postProcess(input, ruleResult.drafts, ruleResult.filtered_reasons),
+    }
+
+    let crossRefResult = buildUnvalidatedCrossReference(ruleResult.drafts, llmDrafts);
+    let crossRefDegraded = false;
+    let crossRefDegradationReason: string | undefined;
+
+    if (this.crossReferenceEngine && ruleResult.drafts.length > 0 && llmDrafts.length > 0) {
+      const crossRefAttempt = await this.dependencyGuard.run(
+        "embeddings",
+        this.config.EMBEDDING_TIMEOUT_MS,
+        (signal) => this.crossReferenceEngine!.crossReference(ruleResult.drafts, llmDrafts, signal),
       );
-      return {
-        ...result,
-        plan_observation: {
-          input_summary: summarizeObservationText(
-            `current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}`,
-          ),
-          output_summary: summarizeObservationText(
-            `fallback=${error instanceof Error ? error.message : "memory_llm_unavailable"}; candidates=${result.candidates.length}; filtered=${result.filtered_count}`,
-          ),
-          prompt_version: MEMORY_WRITEBACK_PROMPT_VERSION,
-          schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
+
+      if (crossRefAttempt.ok && crossRefAttempt.value) {
+        crossRefResult = crossRefAttempt.value;
+      } else {
+        crossRefDegraded = true;
+        crossRefDegradationReason = crossRefAttempt.error?.code ?? "embeddings_unavailable";
+        crossRefResult = {
+          ...crossRefResult,
           degraded: true,
-          degradation_reason: error instanceof Error ? error.message : "memory_llm_unavailable",
-          result_state: "fallback",
-          duration_ms: Date.now() - startedAt,
+          degradation_reason: crossRefDegradationReason,
+        };
+      }
+    }
+
+    const mergedDrafts = this.mergeWithCrossReference(crossRefResult);
+    const result = await this.applyQualityAssessment(
+      input,
+      this.postProcess(input, mergedDrafts, ruleResult.filtered_reasons),
+    );
+
+    return {
+      ...result,
+      plan_observation: {
+        input_summary: summarizeObservationText(
+          `current_input=${input.current_input}; rule_candidates=${ruleResult.drafts.length}; llm_candidates=${llmDrafts.length}; cross_validated=${crossRefResult.cross_reference.filter((pair) => pair.verdict === "independent_confirmation").length}`,
+        ),
+        output_summary: summarizeObservationText(
+          `candidates=${result.candidates.length}; filtered=${result.filtered_count}; reasons=${result.filtered_reasons.join(",")}`,
+        ),
+        prompt_version: MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION,
+        schema_version: MEMORY_WRITEBACK_SCHEMA_VERSION,
+        degraded: llmDegraded || crossRefDegraded,
+        degradation_reason: llmDegradationReason ?? crossRefDegradationReason,
+        result_state: llmDegraded ? "fallback" : result.candidates.length > 0 ? "planned" : "skipped",
+        duration_ms: Date.now() - startedAt,
+      },
+    };
+  }
+
+  private markRuleOnlyDrafts(ruleDrafts: CandidateDraft[]): CandidateDraft[] {
+    return ruleDrafts.map((draft) => ({
+      ...draft,
+      confidence: Math.max(0.7, draft.confidence - 0.05),
+      write_reason: `${draft.write_reason} (rule_only)`,
+      details: {
+        ...draft.details,
+        cross_reference: "rule_only",
+      },
+    }));
+  }
+
+  private mergeWithCrossReference(
+    crossRef: CrossReferenceResult<CandidateDraft>,
+  ): CandidateDraft[] {
+    const merged: CandidateDraft[] = [];
+    const consumedRules = new Set<number>();
+    const consumedLlms = new Set<number>();
+    const confirmedPairs = crossRef.cross_reference
+      .filter((pair) => pair.verdict === "independent_confirmation")
+      .sort((left, right) => right.similarity - left.similarity);
+
+    for (const pair of confirmedPairs) {
+      if (consumedRules.has(pair.rule_idx) || consumedLlms.has(pair.llm_idx)) {
+        continue;
+      }
+
+      const ruleDraft = crossRef.rule_drafts[pair.rule_idx];
+      const llmDraft = crossRef.llm_drafts[pair.llm_idx];
+      if (!ruleDraft || !llmDraft) {
+        continue;
+      }
+
+      consumedRules.add(pair.rule_idx);
+      consumedLlms.add(pair.llm_idx);
+      merged.push(this.mergeConfirmedPair(ruleDraft, llmDraft, pair));
+    }
+
+    for (let index = 0; index < crossRef.rule_drafts.length; index += 1) {
+      if (consumedRules.has(index)) {
+        continue;
+      }
+      const draft = crossRef.rule_drafts[index];
+      if (!draft) {
+        continue;
+      }
+      merged.push({
+        ...draft,
+        confidence: Math.max(0.7, draft.confidence - 0.05),
+        write_reason: `${draft.write_reason} (rule_only)`,
+        details: {
+          ...draft.details,
+          cross_reference: "rule_only",
         },
-      };
-    }
-  }
-
-  private extractByRules(input: FinalizeTurnInput): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
-    const rules = this.runRulesOnly(input);
-    return this.postProcess(input, rules.drafts, rules.filtered_reasons);
-  }
-
-  private async refineRuleCandidates(
-    input: FinalizeTurnInput,
-    ruleDrafts: CandidateDraft[],
-  ): Promise<{ drafts: CandidateDraft[]; filtered_reasons: string[]; degraded: boolean; degradation_reason?: string }> {
-    if (!this.writebackPlanner || ruleDrafts.length === 0) {
-      return {
-        drafts: ruleDrafts,
-        filtered_reasons: [],
-        degraded: false,
-      };
-    }
-
-    try {
-      const refined = await this.writebackPlanner.refine({
-        current_input: input.current_input,
-        assistant_output: input.assistant_output,
-        tool_results_summary: input.tool_results_summary,
-        task_id: input.task_id,
-        rule_candidates: ruleDrafts.map((draft, index) => toRuleDigest(draft, index)),
       });
-      return {
-        ...this.applyRefineResult(input, ruleDrafts, refined),
-        degraded: false,
-      };
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "memory_llm_refine_unavailable";
-      this.logger?.warn?.({ err: error }, "memory llm refine failed, keeping extracted and rule output");
-      return {
-        drafts: ruleDrafts,
-        filtered_reasons: [`llm_refine_failed:${reason}`],
-        degraded: true,
-        degradation_reason: reason,
-      };
     }
+
+    for (let index = 0; index < crossRef.llm_drafts.length; index += 1) {
+      if (consumedLlms.has(index)) {
+        continue;
+      }
+      const draft = crossRef.llm_drafts[index];
+      if (!draft) {
+        continue;
+      }
+      merged.push({
+        ...draft,
+        write_reason: `${draft.write_reason} (llm_only)`,
+        details: {
+          ...draft.details,
+          cross_reference: "llm_only",
+        },
+      });
+    }
+
+    return merged;
+  }
+
+  private mergeConfirmedPair(
+    ruleDraft: CandidateDraft & CrossReferenceValidatedDraft<CandidateDraft>,
+    llmDraft: CandidateDraft & CrossReferenceValidatedDraft<CandidateDraft>,
+    pair: CrossReferencePair,
+  ): CandidateDraft {
+    const llmSummaryIsClearer =
+      llmDraft.summary.length >= ruleDraft.summary.length &&
+      llmDraft.confidence >= ruleDraft.confidence - 0.1;
+    const primary = llmSummaryIsClearer ? llmDraft : ruleDraft;
+    const secondary = primary === llmDraft ? ruleDraft : llmDraft;
+
+    return {
+      ...primary,
+      scope:
+        llmDraft.confidence >= ruleDraft.confidence + 0.15
+          ? llmDraft.scope
+          : ruleDraft.scope,
+      importance: Math.max(ruleDraft.importance, llmDraft.importance),
+      confidence: Math.min(1, Math.max(ruleDraft.confidence, llmDraft.confidence) + 0.1),
+      write_reason: `${primary.write_reason} (independent_confirmation similarity=${pair.similarity.toFixed(2)})`,
+      details: {
+        ...secondary.details,
+        ...primary.details,
+        cross_reference: "independent_confirmation",
+        cross_reference_similarity: pair.similarity,
+        rule_summary: ruleDraft.summary,
+        llm_summary: llmDraft.summary,
+      },
+    };
   }
 
   private runRulesOnly(input: FinalizeTurnInput): { drafts: CandidateDraft[]; filtered_reasons: string[] } {
@@ -766,131 +850,6 @@ export class WritebackEngine {
       filtered_reasons: filteredReasons,
       scope_reasons: scopeReasons.slice(0, limited.length),
     };
-  }
-
-  private applyRefineResult(
-    input: FinalizeTurnInput,
-    ruleDrafts: CandidateDraft[],
-    refined: LlmRefineResult,
-  ): { drafts: CandidateDraft[]; filtered_reasons: string[] } {
-    const droppedIndices = new Set<number>();
-    const consumedIndices = new Set<number>();
-    const out: CandidateDraft[] = [];
-    const filtered: string[] = [];
-
-    for (const item of refined.refined_candidates) {
-      if (item.action === "drop") {
-        const idx = parseRuleIndex(item.source);
-        if (idx !== null) {
-          droppedIndices.add(idx);
-          consumedIndices.add(idx);
-          filtered.push(`llm_drop:${idx}`);
-        }
-        continue;
-      }
-
-      if (item.action === "keep") {
-        const idx = parseRuleIndex(item.source);
-        if (idx === null || !ruleDrafts[idx]) {
-          continue;
-        }
-        consumedIndices.add(idx);
-        out.push(mergeLlmCorrections(ruleDrafts[idx], item, input));
-        continue;
-      }
-
-      if (item.action === "merge") {
-        const anchor = parseRuleIndex(item.source);
-        const others = (item.merge_with ?? [])
-          .map(parseRuleIndex)
-          .filter((n): n is number => n !== null);
-        const anchorDraft = anchor !== null ? ruleDrafts[anchor] : undefined;
-        if (!anchorDraft) {
-          continue;
-        }
-        consumedIndices.add(anchor!);
-        for (const n of others) {
-          consumedIndices.add(n);
-        }
-        out.push(this.buildMergedDraft(anchorDraft, item, input));
-        continue;
-      }
-
-      if (item.action === "new") {
-        const draft = this.buildDraftFromLlmNew(item, input);
-        if (draft) {
-          out.push(draft);
-        }
-      }
-    }
-
-    ruleDrafts.forEach((draft, idx) => {
-      if (droppedIndices.has(idx) || consumedIndices.has(idx)) {
-        return;
-      }
-      out.push(draft);
-    });
-
-    return { drafts: out, filtered_reasons: filtered };
-  }
-
-  private buildMergedDraft(
-    anchor: CandidateDraft,
-    item: LlmRefineItem,
-    input: FinalizeTurnInput,
-  ): CandidateDraft {
-    const scope = item.scope ?? anchor.scope;
-    const normalizedScope = scope === "task" && !input.task_id ? "workspace" : scope;
-    const summary = normalizeText(item.summary ?? anchor.summary);
-    return withOriginTrace({
-      candidate_type: item.candidate_type ?? anchor.candidate_type,
-      scope: normalizedScope,
-      summary,
-      details: {
-        ...anchor.details,
-        extraction_method: "llm",
-        refine_action: "merge",
-        refine_reason: item.reason,
-      },
-      importance: item.importance ?? anchor.importance,
-      confidence: item.confidence ?? anchor.confidence,
-      write_reason: item.reason,
-      source_type: "memory_llm",
-      source_ref: anchor.source_ref,
-      confirmed_by_user: anchor.confirmed_by_user,
-      extraction_method: "llm",
-    }, input, item.summary ?? anchor.summary);
-  }
-
-  private buildDraftFromLlmNew(
-    item: LlmRefineItem,
-    input: FinalizeTurnInput,
-  ): CandidateDraft | null {
-    if (!item.summary || !item.candidate_type || !item.scope || item.importance === undefined || item.confidence === undefined) {
-      return null;
-    }
-    const normalizedSummary = normalizeText(item.summary);
-    const scope = item.scope === "task" && !input.task_id ? "workspace" : item.scope;
-    return withOriginTrace({
-      candidate_type: item.candidate_type,
-      scope,
-      summary: normalizedSummary,
-      details: {
-        extraction_method: "llm",
-        refine_action: "new",
-        refine_reason: item.reason,
-        extracted_summary: normalizedSummary,
-        candidate_type: item.candidate_type,
-        ...(scope === "task" && input.task_id ? { task_id: input.task_id } : {}),
-      },
-      importance: item.importance,
-      confidence: item.confidence,
-      write_reason: item.reason,
-      source_type: "memory_llm",
-      source_ref: input.turn_id ?? input.session_id,
-      confirmed_by_user: item.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
-      extraction_method: "llm",
-    }, input, item.summary);
   }
 
   private toDraftFromLlm(input: FinalizeTurnInput, candidate: LlmExtractionCandidate): CandidateDraft {
@@ -1143,14 +1102,14 @@ export class WritebackEngine {
       const filtered_reasons = [...result.filtered_reasons];
       const candidates = result.candidates.filter((candidate) => {
         const extractionMethod = candidate.source.extraction_method;
-        const refineAction =
-          typeof candidate.details.refine_action === "string" ? candidate.details.refine_action : undefined;
+        const crossReference =
+          typeof candidate.details.cross_reference === "string" ? candidate.details.cross_reference : undefined;
 
         if (extractionMethod !== "llm") {
           return true;
         }
 
-        if (refineAction === "keep" || refineAction === "merge") {
+        if (crossReference === "independent_confirmation") {
           return true;
         }
 
@@ -1166,54 +1125,4 @@ export class WritebackEngine {
       };
     }
   }
-}
-
-function toRuleDigest(draft: CandidateDraft, index: number): RuleCandidateDigest {
-  return {
-    index,
-    candidate_type: draft.candidate_type,
-    scope: draft.scope,
-    summary: draft.summary,
-    importance: draft.importance,
-    confidence: draft.confidence,
-    write_reason: draft.write_reason,
-  };
-}
-
-function parseRuleIndex(source: LlmRefineItem["source"]): number | null {
-  if (source === "llm_new") {
-    return null;
-  }
-  const match = source.match(/^rule_index:(\d+)$/);
-  if (!match) {
-    return null;
-  }
-  const parsed = Number.parseInt(match[1]!, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function mergeLlmCorrections(
-  draft: CandidateDraft,
-  item: LlmRefineItem,
-  input: FinalizeTurnInput,
-): CandidateDraft {
-  const scope = item.scope ?? draft.scope;
-  const normalizedScope = scope === "task" && !input.task_id ? "workspace" : scope;
-  return {
-    ...draft,
-    candidate_type: item.candidate_type ?? draft.candidate_type,
-    scope: normalizedScope,
-    summary: item.summary ? normalizeText(item.summary) : draft.summary,
-    importance: item.importance ?? draft.importance,
-    confidence: item.confidence ?? draft.confidence,
-    write_reason: item.reason ?? draft.write_reason,
-    details: {
-      ...draft.details,
-      extraction_method: "llm",
-      refine_action: "keep",
-      refine_reason: item.reason,
-    },
-    source_type: "memory_llm",
-    extraction_method: "llm",
-  };
 }

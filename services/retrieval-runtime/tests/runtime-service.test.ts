@@ -108,6 +108,8 @@ const baseConfig: AppConfig = {
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
+  WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD: 0.85,
+  WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD: 0.7,
   QUERY_TIMEOUT_MS: 50,
   STORAGE_TIMEOUT_MS: 50,
   EMBEDDING_TIMEOUT_MS: 50,
@@ -3361,7 +3363,7 @@ describe("retrieval-runtime service", () => {
 
     const first = await firstService.finalizeTurn(request);
     expect(llmExtractor.callCount).toBe(1);
-    expect(llmExtractor.refineCallCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(0);
 
     const secondService = new RetrievalRuntimeService(
       config,
@@ -3395,7 +3397,7 @@ describe("retrieval-runtime service", () => {
 
     expect(second).toEqual(first);
     expect(llmExtractor.callCount).toBe(1);
-    expect(llmExtractor.refineCallCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(0);
   });
 
   it("keeps upstream scope suggestions for llm candidates and leaves final arbitration to storage", async () => {

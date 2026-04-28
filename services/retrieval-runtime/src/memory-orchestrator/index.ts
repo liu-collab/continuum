@@ -40,6 +40,7 @@ export type {
   RuleCandidateDigest,
   WritebackExtractionCandidate,
   WritebackExtractionResult,
+  WritebackRuleHint,
   WritebackPlanner,
   WritebackRefineInput,
   WritebackRefineItem,

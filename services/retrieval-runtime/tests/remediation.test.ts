@@ -137,6 +137,8 @@ const config: AppConfig = {
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
+  WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD: 0.85,
+  WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD: 0.7,
   QUERY_TIMEOUT_MS: 40,
   STORAGE_TIMEOUT_MS: 40,
   EMBEDDING_TIMEOUT_MS: 40,
@@ -1305,7 +1307,7 @@ describe("retrieval-runtime remediation", () => {
     const second = await secondService.finalizeTurn(request);
 
     expect(first).toEqual(second);
-    expect(llmExtractor.refineCallCount).toBe(1);
+    expect(llmExtractor.refineCallCount).toBe(0);
     expect(storageClient.callCount).toBe(1);
   });
 

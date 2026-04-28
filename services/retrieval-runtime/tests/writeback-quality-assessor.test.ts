@@ -5,6 +5,7 @@ import type { AppConfig } from "../src/config.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import type { QualityAssessor, WritebackPlanner } from "../src/memory-orchestrator/types.js";
+import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import type {
   GovernanceExecutionResponseItem,
   MemoryConflictSnapshot,
@@ -20,6 +21,7 @@ import type {
   StorageMutationPayload,
   StorageWritebackClient,
 } from "../src/writeback/storage-client.js";
+import { EmbeddingCrossReferenceEngine } from "../src/writeback/cross-reference.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
 
 const config: AppConfig = {
@@ -75,6 +77,8 @@ const config: AppConfig = {
   FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
   FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
   WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
+  WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD: 0.85,
+  WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD: 0.7,
   QUERY_TIMEOUT_MS: 50,
   STORAGE_TIMEOUT_MS: 50,
   EMBEDDING_TIMEOUT_MS: 50,
@@ -172,9 +176,13 @@ class StubQualityAssessor implements QualityAssessor {
 }
 
 class StubWritebackPlanner implements WritebackPlanner {
+  public refineCallCount = 0;
+  public lastRuleHints: Parameters<WritebackPlanner["extract"]>[0]["rule_hints"] = [];
+
   constructor(private readonly summary: string) {}
 
-  async extract() {
+  async extract(input: Parameters<WritebackPlanner["extract"]>[0]) {
+    this.lastRuleHints = input.rule_hints ?? [];
     return {
       candidates: [
         {
@@ -190,7 +198,20 @@ class StubWritebackPlanner implements WritebackPlanner {
   }
 
   async refine() {
+    this.refineCallCount += 1;
     return { refined_candidates: [] };
+  }
+}
+
+class SemanticStubEmbeddingsClient implements EmbeddingsClient {
+  public callCount = 0;
+
+  async embedText(text: string): Promise<number[]> {
+    this.callCount += 1;
+    if (text.includes("中文")) {
+      return [1, 0, 0];
+    }
+    return [0, 1, 0];
   }
 }
 
@@ -298,5 +319,47 @@ describe("writeback quality assessor integration", () => {
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]?.summary).toBe("默认中文输出");
     expect(result.filtered_reasons).toContain("low_input_overlap:fact_preference");
+  });
+
+  it("merges independently confirmed rule and llm candidates without calling refine", async () => {
+    const planner = new StubWritebackPlanner("用户默认中文输出");
+    const embeddingsClient = new SemanticStubEmbeddingsClient();
+    const engine = new WritebackEngine(
+      config,
+      new StubStorageClient(),
+      new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false })),
+      planner,
+      undefined,
+      undefined,
+      new EmbeddingCrossReferenceEngine(embeddingsClient, {
+        confirmationThreshold: 0.85,
+        partialMatchThreshold: 0.7,
+      }),
+    );
+
+    const result = await engine.extractCandidates({
+      host: "codex_app_server",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+      user_id: "550e8400-e29b-41d4-a716-446655440001",
+      session_id: "550e8400-e29b-41d4-a716-446655440002",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 默认中文输出。",
+    });
+
+    expect(planner.refineCallCount).toBe(0);
+    expect(planner.lastRuleHints).toEqual([
+      expect.objectContaining({
+        candidate_type: "fact_preference",
+        summary: "默认中文输出",
+      }),
+    ]);
+    expect(embeddingsClient.callCount).toBe(2);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.details).toMatchObject({
+      cross_reference: "independent_confirmation",
+      rule_summary: "默认中文输出",
+      llm_summary: "用户默认中文输出",
+    });
+    expect(result.candidates[0]?.details.cross_reference_similarity).toBeGreaterThanOrEqual(0.85);
   });
 });

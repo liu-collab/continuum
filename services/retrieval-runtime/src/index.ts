@@ -25,6 +25,7 @@ import { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache
 import { HttpStorageWritebackClient } from "./writeback/storage-client.js";
 import { WritebackOutboxFlusher } from "./writeback/writeback-outbox-flusher.js";
 import { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
+import { EmbeddingCrossReferenceEngine } from "./writeback/cross-reference.js";
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
 import { hasCompleteRuntimeEmbeddingConfig } from "./embedding-config.js";
@@ -175,6 +176,13 @@ async function main() {
     relationDiscoverer,
     evolutionPlanner,
   );
+  const crossReferenceEngine = new EmbeddingCrossReferenceEngine(
+    embeddingsClient,
+    {
+      confirmationThreshold: config.WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD,
+      partialMatchThreshold: config.WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD,
+    },
+  );
   const memoryOrchestrator = createMemoryOrchestrator({
     config,
     intentAnalyzer,
@@ -215,6 +223,7 @@ async function main() {
       memoryOrchestrator?.writeback,
       memoryOrchestrator?.quality,
       logger,
+      crossReferenceEngine,
     ),
     repository,
     dependencyGuard,

@@ -35,6 +35,13 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
     assistant_output: string;
     tool_results_summary?: string;
     task_id?: string;
+    rule_hints?: Array<{
+      summary: string;
+      candidate_type: string;
+      scope: string;
+      importance: number;
+      confidence: number;
+    }>;
   }): Promise<WritebackExtractionResult> {
     const text = await callMemoryLlm(
       this.config,
@@ -44,6 +51,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
         assistant_output: input.assistant_output,
         tool_results_summary: input.tool_results_summary ?? "",
         task_id: input.task_id ?? null,
+        rule_hints: input.rule_hints ?? [],
       },
       this.config.MEMORY_LLM_MAX_TOKENS ?? 600,
     );

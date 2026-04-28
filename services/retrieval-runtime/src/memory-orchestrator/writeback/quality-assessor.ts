@@ -43,6 +43,11 @@ export class HttpMemoryQualityAssessor implements QualityAssessor {
           importance: candidate.importance,
           confidence: candidate.confidence,
           write_reason: candidate.write_reason,
+          cross_reference: typeof candidate.details.cross_reference === "string" ? candidate.details.cross_reference : undefined,
+          cross_reference_similarity:
+            typeof candidate.details.cross_reference_similarity === "number"
+              ? candidate.details.cross_reference_similarity
+              : undefined,
         })),
         existing_similar_records: input.existing_similar_records.map((record) => ({
           id: record.id,

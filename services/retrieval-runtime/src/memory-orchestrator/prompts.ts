@@ -102,6 +102,12 @@ Rules:
 - Use "workspace" for repository rules, project constraints, directory conventions, or workspace background.
 - Return at most 5 candidates.
 
+rule_hints lists candidates already captured by rule-based extraction.
+These are provided for your awareness only:
+- DO NOT re-extract content that is semantically equivalent to any rule_hint entry.
+- Only add new candidates when you discover durable information the rules missed.
+- If in doubt whether something is already covered, prefer to omit it.
+
 DO NOT extract:
 - Polite acknowledgments like "好的", "没问题", or "I'll help you with that".
 - File paths, code locations, or repository details mentioned only in passing.
@@ -153,6 +159,7 @@ Input JSON carries:
 - writeback_candidates: [{ id, candidate_type, scope, summary, importance, confidence, write_reason }]
 - existing_similar_records: [{ id, scope, memory_type, status, summary, importance, confidence }]
 - turn_context: { user_input, assistant_output }
+- candidate details may include cross_reference: "independent_confirmation" | "rule_only" | "llm_only"
 
 Return strict JSON only with shape:
 {"assessments":[{"candidate_id":"...","quality_score":0-1,"confidence":0-1,"potential_conflicts":["..."],"suggested_importance":1-5,"suggested_status":"active|pending_confirmation","issues":[{"type":"duplicate|low_quality|conflict|vague","severity":"high|medium|low","description":"..."}],"reason":"..."}]}
@@ -162,6 +169,9 @@ Rules:
 - potential_conflicts must only contain ids from existing_similar_records.
 - Use pending_confirmation when the candidate is plausible but duplicate/conflict risk remains.
 - quality_score should be lower for vague, redundant, low-signal, or temporary content.
+- independent_confirmation means rules and LLM found the same memory; raise confidence when the content is durable.
+- rule_only means only rules found it; check for regex false positives.
+- llm_only means only LLM found it; keep it only when the turn clearly supports it.
 - Keep reason and issue descriptions concise in Chinese.
 `.trim();
 
