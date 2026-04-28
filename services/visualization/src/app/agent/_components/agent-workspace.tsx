@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { cn } from "@/lib/utils";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import { useAgentWorkspace } from "../_hooks/use-agent-workspace";
 import { formatProviderKindLabel } from "../_lib/provider-kind";
 import { ChatPanel } from "./chat-panel";

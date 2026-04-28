@@ -5,7 +5,7 @@ import React from "react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import type { AgentTurnState } from "../_lib/event-reducer";
 
 type MemoryPanelProps = {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { RuntimeConfigCard } from "@/app/agent/_components/runtime-config-card";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 
 const baseConfig = {
   provider: {

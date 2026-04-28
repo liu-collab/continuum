@@ -3,7 +3,7 @@
 import React from "react";
 import dynamic from "next/dynamic";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((mod) => mod.default), {
   ssr: false

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { SessionList } from "@/app/agent/_components/session-list";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 import type { MnaSessionSummary, MnaWorkspaceSummary } from "@/app/agent/_lib/openapi-types";
 
 const sessions: MnaSessionSummary[] = [

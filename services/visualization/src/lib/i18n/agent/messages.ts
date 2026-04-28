@@ -1,30 +1,9 @@
-import zhCommon from "./zh-CN/common.json";
-import enCommon from "./en-US/common.json";
+import { createTranslator } from "@/lib/i18n/messages";
 
-import type { AgentConnectionState, AgentLocale, AgentMemoryMode, AgentToolTrustLevel, MnaMcpServerStatus } from "../_lib/openapi-types";
-
-const dictionaries = {
-  "zh-CN": zhCommon,
-  "en-US": enCommon
-} as const;
+import type { AgentConnectionState, AgentLocale, AgentMemoryMode, AgentToolTrustLevel, MnaMcpServerStatus } from "@/app/agent/_lib/openapi-types";
 
 export function translateMessage(locale: AgentLocale, key: string, variables?: Record<string, string | number>) {
-  const dictionary = dictionaries[locale] ?? dictionaries["zh-CN"];
-  const resolved = key.split(".").reduce<unknown>((current, segment) => {
-    if (!current || typeof current === "string" || typeof current !== "object") {
-      return undefined;
-    }
-    return (current as Record<string, unknown>)[segment];
-  }, dictionary);
-
-  if (typeof resolved !== "string") {
-    return key;
-  }
-
-  return resolved.replace(/\{(\w+)\}/g, (_match, token) => {
-    const value = variables?.[token];
-    return value === undefined ? `{${token}}` : String(value);
-  });
+  return createTranslator(locale, "agent")(key, variables);
 }
 
 export function formatConnectionState(locale: AgentLocale, connection: AgentConnectionState) {

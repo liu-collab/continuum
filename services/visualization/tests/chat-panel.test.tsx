@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ChatPanel } from "@/app/agent/_components/chat-panel";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 import type { AgentTurnState } from "@/app/agent/_lib/event-reducer";
 
 function createTurn(overrides: Partial<AgentTurnState> = {}): AgentTurnState {

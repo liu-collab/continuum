@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, Loader2, X } from "lucide-react";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import type { AgentPendingConfirm, AgentPendingPlanConfirm } from "../_lib/event-reducer";
 
 type ConfirmDecision = "allow" | "deny" | "allow_session" | "approve" | "revise" | "cancel";

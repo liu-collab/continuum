@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentWorkspace } from "@/app/agent/_components/agent-workspace";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 
 vi.mock("@/app/agent/_hooks/use-agent-workspace", () => ({
   useAgentWorkspace: vi.fn()

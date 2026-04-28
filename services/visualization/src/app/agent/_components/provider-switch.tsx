@@ -3,7 +3,7 @@
 import React from "react";
 import { useEffect, useState } from "react";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 
 type ProviderSwitchProps = {
   providerId: string;

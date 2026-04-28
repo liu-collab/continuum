@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatAgentError, translateMessage } from "@/app/agent/_i18n/messages";
+import { formatAgentError, translateMessage } from "@/lib/i18n/agent/messages";
 
 const errorCodes = [
   "token_invalid",

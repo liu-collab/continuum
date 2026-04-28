@@ -5,11 +5,17 @@ import { describe, expect, it, beforeEach } from "vitest";
 
 import { LocaleSwitch } from "@/app/agent/_components/locale-switch";
 import { UntrustedBadge } from "@/app/agent/_components/untrusted-badge";
-import { AgentI18nProvider, useAgentI18n } from "@/app/agent/_i18n/provider";
+import { AppI18nProvider, useAppI18n } from "@/lib/i18n/client";
+import { AgentI18nProvider, useAgentI18n } from "@/lib/i18n/agent/provider";
 
 function SampleLabel() {
   const { t } = useAgentI18n();
   return <div>{t("workspace.newSession")}</div>;
+}
+
+function GlobalApplyLabel() {
+  const { t } = useAppI18n();
+  return <div>{t("common.apply")}</div>;
 }
 
 describe("agent i18n", () => {
@@ -40,6 +46,28 @@ describe("agent i18n", () => {
     await user.click(screen.getByRole("button", { name: "English" }));
 
     expect(screen.getByText("New session")).toBeInTheDocument();
+  });
+
+  it("shares locale state with the global app provider", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AppI18nProvider defaultLocale="zh-CN">
+        <AgentI18nProvider defaultLocale="en-US">
+          <LocaleSwitch />
+          <SampleLabel />
+          <GlobalApplyLabel />
+        </AgentI18nProvider>
+      </AppI18nProvider>
+    );
+
+    expect(screen.getByText("新建会话")).toBeInTheDocument();
+    expect(screen.getByText("应用")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "English" }));
+
+    expect(screen.getByText("New session")).toBeInTheDocument();
+    expect(screen.getByText("Apply")).toBeInTheDocument();
   });
 
   it("formats trust labels with translated text", () => {

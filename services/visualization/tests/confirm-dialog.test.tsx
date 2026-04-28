@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConfirmDialog } from "@/app/agent/_components/confirm-dialog";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 import type { AgentPendingConfirm, AgentPendingPlanConfirm } from "@/app/agent/_lib/event-reducer";
 
 function renderConfirmDialog(

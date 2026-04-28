@@ -20,7 +20,7 @@ import {
   type EditableProviderKind,
   type ProviderKind
 } from "../_lib/provider-kind";
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 
 type SettingsModalProps = {
   open: boolean;

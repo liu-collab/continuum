@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { MemoryPanel } from "@/app/agent/_components/memory-panel";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 import type { AgentTurnState } from "@/app/agent/_lib/event-reducer";
 
 function createTurn(overrides: Partial<AgentTurnState> = {}): AgentTurnState {

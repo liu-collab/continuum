@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PromptInspector } from "@/app/agent/_components/prompt-inspector";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 
 describe("PromptInspector", () => {
   it("renders prompt segments metadata alongside raw messages", () => {

@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 
 import { formatDebugReference } from "@/lib/format";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import type { MnaPromptInspectorResponse } from "../_lib/openapi-types";
 
 type PromptInspectorProps = {

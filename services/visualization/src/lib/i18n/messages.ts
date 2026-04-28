@@ -1,3 +1,6 @@
+import enAgent from "@/lib/i18n/agent/en-US/common.json";
+import zhAgent from "@/lib/i18n/agent/zh-CN/common.json";
+
 export type AppLocale = "zh-CN" | "en-US";
 
 export const DEFAULT_APP_LOCALE: AppLocale = "zh-CN";
@@ -61,6 +64,7 @@ const dictionaries = {
       invalidWebsocketMessage: "WebSocket 消息格式无效。",
       websocketNotConnected: "会话 WebSocket 尚未连接。"
     },
+    agent: zhAgent,
     health: {
       button: "状态",
       title: "服务健康",
@@ -810,6 +814,7 @@ const dictionaries = {
       invalidWebsocketMessage: "Invalid WebSocket message.",
       websocketNotConnected: "The session WebSocket is not connected."
     },
+    agent: enAgent,
     health: {
       button: "Status",
       title: "Service Health",
@@ -1538,8 +1543,16 @@ export function translateMessage(locale: AppLocale, key: string, variables?: Var
   });
 }
 
-export function createTranslator(locale: AppLocale) {
-  return (key: string, variables?: Variables) => translateMessage(locale, key, variables);
+export function createTranslator(locale: AppLocale, namespace?: string) {
+  return (key: string, variables?: Variables) => {
+    if (!namespace) {
+      return translateMessage(locale, key, variables);
+    }
+
+    const namespacedKey = `${namespace}.${key}`;
+    const translated = translateMessage(locale, namespacedKey, variables);
+    return translated === namespacedKey ? key : translated;
+  };
 }
 
 export function joinLocalizedList(locale: AppLocale, parts: string[]) {

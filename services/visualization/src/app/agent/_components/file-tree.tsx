@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import { getWorkspaceDebugId, getWorkspaceFolderLabel, getWorkspacePathLabel } from "../_lib/display";
 import type { MnaFileTreeEntry, MnaWorkspaceSummary } from "../_lib/openapi-types";
 

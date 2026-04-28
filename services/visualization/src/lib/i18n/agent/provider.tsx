@@ -1,13 +1,13 @@
 "use client";
 
 import React from "react";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 
+import { AppI18nProvider, useAppI18n, useOptionalAppI18n } from "@/lib/i18n/client";
 import { APP_LOCALE_STORAGE_KEY } from "@/lib/i18n/messages";
-import { useOptionalAppI18n } from "@/lib/i18n/client";
 
-import type { AgentLocale } from "../_lib/openapi-types";
-import { DEFAULT_AGENT_LOCALE, resolveBrowserLocale } from "../_lib/config";
+import type { AgentLocale } from "@/app/agent/_lib/openapi-types";
+import { resolveBrowserLocale } from "@/app/agent/_lib/config";
 import {
   formatConnectionState,
   formatDefaultSessionTitle,
@@ -37,7 +37,6 @@ type AgentI18nValue = {
   };
 };
 
-const AgentI18nContext = createContext<AgentI18nValue | null>(null);
 const AGENT_LOCALE_STORAGE_KEY = "continuum.agent.locale";
 
 export function AgentI18nProvider({
@@ -48,32 +47,42 @@ export function AgentI18nProvider({
   defaultLocale?: string;
 }) {
   const appI18n = useOptionalAppI18n();
-  const [locale, setLocaleState] = useState<AgentLocale>(() => resolveBrowserLocale(defaultLocale ?? appI18n?.locale ?? DEFAULT_AGENT_LOCALE));
-  const appLocale = appI18n?.locale;
-  const setAppLocale = appI18n?.setLocale;
+
+  if (!appI18n) {
+    return (
+      <AppI18nProvider defaultLocale={defaultLocale}>
+        <AgentLocalePersistence>{children}</AgentLocalePersistence>
+      </AppI18nProvider>
+    );
+  }
+
+  return <AgentLocalePersistence>{children}</AgentLocalePersistence>;
+}
+
+function AgentLocalePersistence({ children }: { children: ReactNode }) {
+  const appI18n = useAppI18n();
+  const setAppLocale = appI18n.setLocale;
 
   useEffect(() => {
     const appStored = window.localStorage.getItem(APP_LOCALE_STORAGE_KEY);
     const stored = window.localStorage.getItem(AGENT_LOCALE_STORAGE_KEY);
     if (!appStored && (stored === "zh-CN" || stored === "en-US")) {
-      setLocaleState(stored);
-      setAppLocale?.(stored);
+      setAppLocale(stored);
     }
   }, [setAppLocale]);
 
-  useEffect(() => {
-    if (!appLocale) {
-      return;
-    }
-    setLocaleState(resolveBrowserLocale(appLocale));
-  }, [appLocale]);
+  return <>{children}</>;
+}
+
+export function useAgentI18n() {
+  const appI18n = useAppI18n();
+  const locale = resolveBrowserLocale(appI18n.locale);
 
   const value: AgentI18nValue = useMemo(() => ({
     locale,
     setLocale(nextLocale) {
-      setLocaleState(nextLocale);
       window.localStorage.setItem(AGENT_LOCALE_STORAGE_KEY, nextLocale);
-      setAppLocale?.(nextLocale);
+      appI18n.setLocale(nextLocale);
     },
     t(key, variables) {
       return translateMessage(locale, key, variables);
@@ -102,15 +111,7 @@ export function AgentI18nProvider({
     formatAgentError(code, fallbackMessage, reason) {
       return formatAgentError(locale, code, fallbackMessage, reason);
     }
-  }), [locale, setAppLocale]);
+  }), [appI18n, locale]);
 
-  return <AgentI18nContext.Provider value={value}>{children}</AgentI18nContext.Provider>;
-}
-
-export function useAgentI18n() {
-  const context = useContext(AgentI18nContext);
-  if (!context) {
-    throw new Error("useAgentI18n must be used within AgentI18nProvider");
-  }
-  return context;
+  return value;
 }

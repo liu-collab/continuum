@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useAgentI18n } from "../_i18n/provider";
+import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import type { AgentMemoryMode } from "../_lib/openapi-types";
 
 type ModeSwitchProps = {

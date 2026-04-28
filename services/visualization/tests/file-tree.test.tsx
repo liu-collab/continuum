@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { FileTree } from "@/app/agent/_components/file-tree";
-import { AgentI18nProvider } from "@/app/agent/_i18n/provider";
+import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 
 function renderFileTree(props?: Partial<React.ComponentProps<typeof FileTree>>) {
   const onPickWorkspace = vi.fn(async () => undefined);
