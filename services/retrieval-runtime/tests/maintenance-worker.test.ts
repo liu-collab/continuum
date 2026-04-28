@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import pino from "pino";
 
 import { loadConfig, type AppConfig } from "../src/config.js";
@@ -251,10 +251,12 @@ class StubVerifier implements GovernanceVerifier {
 
 class BlockingPlanner implements LlmMaintenancePlanner {
   private readonly waiters: Array<() => void> = [];
+  public callCount = 0;
 
   constructor(private readonly result: MaintenancePlan) {}
 
   async plan(_input: MaintenancePlanInput): Promise<MaintenancePlan> {
+    this.callCount += 1;
     await new Promise<void>((resolve) => {
       this.waiters.push(resolve);
     });
@@ -264,6 +266,12 @@ class BlockingPlanner implements LlmMaintenancePlanner {
   releaseNext() {
     const resolve = this.waiters.shift();
     resolve?.();
+  }
+}
+
+async function flushPromises() {
+  for (let index = 0; index < 10; index += 1) {
+    await Promise.resolve();
   }
 }
 
@@ -698,6 +706,65 @@ describe("WritebackMaintenanceWorker", () => {
     planner.releaseNext();
     const summary = await firstRun;
     expect(summary.actions_applied).toBe(1);
+  });
+
+  it("schedules the next automatic tick only after the current run finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const repository = new InMemoryRuntimeRepository();
+      const logger = pino({ enabled: false });
+      const guard = new DependencyGuard(repository, logger);
+      const worker = new WritebackMaintenanceWorker(
+        repository,
+        new RecordingStorageClient([], []),
+        undefined,
+        undefined,
+        guard,
+        makeConfig({ WRITEBACK_MAINTENANCE_INTERVAL_MS: 1000 }),
+        logger,
+      );
+      let finishFirstRun!: () => void;
+      const firstRun = new Promise<void>((resolve) => {
+        finishFirstRun = resolve;
+      });
+      const summary = {
+        workspace_ids_scanned: [],
+        seeds_inspected: 0,
+        related_fetched: 0,
+        actions_proposed: 0,
+        actions_applied: 0,
+        actions_skipped: 0,
+        conflicts_resolved: 0,
+        degraded: false,
+        next_checkpoint: new Date().toISOString(),
+      };
+      const runOnce = vi
+        .spyOn(worker, "runOnce")
+        .mockImplementationOnce(async () => {
+          await firstRun;
+          return summary;
+        })
+        .mockResolvedValue(summary);
+
+      worker.start();
+      await vi.advanceTimersByTimeAsync(1000);
+      await flushPromises();
+      expect(runOnce).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      await flushPromises();
+      expect(runOnce).toHaveBeenCalledTimes(1);
+
+      finishFirstRun();
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(1000);
+      await flushPromises();
+      expect(runOnce).toHaveBeenCalledTimes(2);
+
+      worker.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("prioritizes urgent maintenance workspaces ahead of checkpoint rotation", async () => {

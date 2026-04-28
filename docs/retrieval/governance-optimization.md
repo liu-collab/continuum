@@ -197,6 +197,8 @@ if (remaining.length === 0) return;  // 全部已归档，无事可做
 
 ## 优化四：定时器改为链式调度，消除扫描空窗
 
+**状态：已完成**
+
 ### 问题
 
 `setInterval` 固定间隔触发。如果 `runOnce` 耗时超过 interval，第二次触发时 `sweepRunning=true` 导致空返回，本次扫描被跳过：

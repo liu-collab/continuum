@@ -75,6 +75,7 @@ function summarizePlanText(value: string, maxLength = 220) {
 
 export class WritebackMaintenanceWorker {
   private timer: NodeJS.Timeout | null = null;
+  private stopped = true;
   private sweepRunning = false;
   private readonly workspaceLocks = new Set<string>();
 
@@ -98,18 +99,33 @@ export class WritebackMaintenanceWorker {
     if (!this.config.WRITEBACK_MAINTENANCE_ENABLED) {
       return;
     }
-    this.timer = setInterval(() => {
-      void this.runOnce().catch((error) => {
-        this.logger.warn({ err: error }, "writeback maintenance tick failed");
-      });
-    }, this.config.WRITEBACK_MAINTENANCE_INTERVAL_MS);
+    this.stopped = false;
+    this.scheduleNext();
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  private scheduleNext(): void {
+    if (this.stopped || !this.config.WRITEBACK_MAINTENANCE_ENABLED || this.timer) {
+      return;
+    }
+
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.runOnce()
+        .catch((error) => {
+          this.logger.warn({ err: error }, "writeback maintenance tick failed");
+        })
+        .finally(() => {
+          this.scheduleNext();
+        });
+    }, this.config.WRITEBACK_MAINTENANCE_INTERVAL_MS);
   }
 
   async runOnce(options: MaintenanceWorkerOptions = {}): Promise<MaintenanceRunSummary> {
