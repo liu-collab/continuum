@@ -753,6 +753,93 @@ describe("storage api", () => {
     expect(response.json().data.page_size).toBe(10);
   });
 
+  it("filters records by created_after query parameter", async () => {
+    const repositories = createMemoryRepositories({
+      records: [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          workspace_id: "11111111-1111-4111-8111-111111111111",
+          user_id: null,
+          task_id: null,
+          session_id: null,
+          memory_type: "fact_preference",
+          scope: "workspace",
+          status: "active",
+          summary: "Old project preference",
+          details_json: {},
+          importance: 4,
+          confidence: 0.9,
+          dedupe_key: "old-created-filter",
+          source_type: "user_input",
+          source_ref: "turn-old",
+          created_by_service: "retrieval-runtime",
+          last_confirmed_at: null,
+          created_at: "2026-04-01T00:00:00.000Z",
+          updated_at: "2026-04-01T00:00:00.000Z",
+          archived_at: null,
+          deleted_at: null,
+          version: 1,
+        },
+        {
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          workspace_id: "11111111-1111-4111-8111-111111111111",
+          user_id: null,
+          task_id: null,
+          session_id: null,
+          memory_type: "fact_preference",
+          scope: "workspace",
+          status: "active",
+          summary: "New project preference",
+          details_json: {},
+          importance: 4,
+          confidence: 0.9,
+          dedupe_key: "new-created-filter",
+          source_type: "user_input",
+          source_ref: "turn-new",
+          created_by_service: "retrieval-runtime",
+          last_confirmed_at: null,
+          created_at: "2026-04-22T00:00:00.000Z",
+          updated_at: "2026-04-22T00:00:00.000Z",
+          archived_at: null,
+          deleted_at: null,
+          version: 1,
+        },
+      ],
+    });
+    const service = createStorageService({
+      repositories,
+      logger: createLogger("silent"),
+      config: {
+        port: 3001,
+        host: "127.0.0.1",
+        log_level: "silent",
+        database_url: "postgres://example",
+        storage_schema_private: "storage_private",
+        storage_schema_shared: "storage_shared_v1",
+        write_job_poll_interval_ms: 1000,
+        write_job_batch_size: 10,
+        write_job_max_retries: 3,
+        read_model_refresh_max_retries: 2,
+        embedding_base_url: undefined,
+        embedding_api_key: undefined,
+        embedding_model: "text-embedding-3-small",
+        redis_url: undefined,
+      },
+    });
+    const app = createApp(service);
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/storage/records?workspace_id=11111111-1111-4111-8111-111111111111&scope=workspace&created_after=2026-04-10T00%3A00%3A00.000Z",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.items.map((record: { summary: string }) => record.summary)).toEqual([
+      "New project preference",
+    ]);
+  });
+
   it("serves record versions and history routes", async () => {
     const repositories = createMemoryRepositories();
     const service = createStorageService({

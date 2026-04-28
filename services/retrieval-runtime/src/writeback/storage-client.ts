@@ -23,6 +23,7 @@ export interface RecordListFilters {
   memory_type?: MemoryType;
   scope?: ScopeType;
   status?: RecordStatus;
+  created_after?: string;
   page?: number;
   page_size?: number;
 }
@@ -161,6 +162,7 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
     if (filters.memory_type) url.searchParams.set("memory_type", filters.memory_type);
     if (filters.scope) url.searchParams.set("scope", filters.scope);
     if (filters.status) url.searchParams.set("status", filters.status);
+    if (filters.created_after) url.searchParams.set("created_after", filters.created_after);
     if (filters.page) url.searchParams.set("page", String(filters.page));
     if (filters.page_size) url.searchParams.set("page_size", String(filters.page_size));
 

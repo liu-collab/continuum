@@ -89,6 +89,7 @@ export interface RecordRepository {
     memory_type?: string | undefined;
     scope?: string | undefined;
     status?: string | undefined;
+    created_after?: string | undefined;
     page: number;
     page_size: number;
   }): Promise<RecordListPage>;
@@ -531,6 +532,10 @@ function createRecordRepository(session: DbSession): RecordRepository {
       if (filters.memory_type) addCondition("memory_type", filters.memory_type);
       if (filters.scope) addCondition("scope", filters.scope);
       if (filters.status) addCondition("status", filters.status);
+      if (filters.created_after) {
+        values.push(filters.created_after);
+        conditions.push(`created_at >= $${values.length}::timestamptz`);
+      }
 
       if (filters.scope && filters.scope !== "user") {
         addCondition("workspace_id", filters.workspace_id);

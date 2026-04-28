@@ -597,12 +597,27 @@ export class WritebackMaintenanceWorker {
 
   private async fetchSeeds(workspaceId: string): Promise<MemoryRecordSnapshot[]> {
     const lookbackMs = this.config.WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS;
-    const threshold = Date.now() - lookbackMs;
+    const createdAfter = new Date(Date.now() - lookbackMs).toISOString();
 
-    const response = await this.runStorage((signal) =>
+    const recentResponse = await this.runStorage((signal) =>
       this.storageClient.listRecords(
         {
           workspace_id: workspaceId,
+          status: "active",
+          created_after: createdAfter,
+          page: 1,
+          page_size: this.config.WRITEBACK_MAINTENANCE_SEED_LIMIT,
+        },
+        signal,
+      ),
+    );
+
+    const sessionResponse = await this.runStorage((signal) =>
+      this.storageClient.listRecords(
+        {
+          workspace_id: workspaceId,
+          scope: "session",
+          memory_type: "episodic",
           status: "active",
           page: 1,
           page_size: this.config.WRITEBACK_MAINTENANCE_SEED_LIMIT,
@@ -610,20 +625,17 @@ export class WritebackMaintenanceWorker {
         signal,
       ),
     );
-    if (!response) {
-      return [];
-    }
 
-    return response.items.filter((record) => {
+    const seeds = new Map<string, MemoryRecordSnapshot>();
+    for (const record of recentResponse?.items ?? []) {
+      seeds.set(record.id, record);
+    }
+    for (const record of sessionResponse?.items ?? []) {
       if (isSessionEpisodicLifecycleCandidate(record)) {
-        return true;
+        seeds.set(record.id, record);
       }
-      const createdAt = Date.parse(record.created_at);
-      if (!Number.isFinite(createdAt)) {
-        return true;
-      }
-      return createdAt >= threshold;
-    });
+    }
+    return [...seeds.values()];
   }
 
   private async fetchRelated(

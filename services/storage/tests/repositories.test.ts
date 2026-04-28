@@ -9,6 +9,46 @@ type RecordedQuery = {
 };
 
 describe("storage repositories", () => {
+  it("binds created_after into record list queries", async () => {
+    const queries: RecordedQuery[] = [];
+    const session = {
+      privateSchema: "storage_private",
+      sharedSchema: "storage_shared_v1",
+      async query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]) {
+        queries.push({ text, values });
+        if (text.includes("count(*)")) {
+          return {
+            rows: [{ total: "0" }] as unknown as T[],
+            rowCount: 1,
+          };
+        }
+        return {
+          rows: [] as T[],
+          rowCount: 0,
+        };
+      },
+    };
+
+    const repositories = createRepositories({
+      session: () => session,
+      withTransaction: async <T>(callback: (tx: typeof session) => Promise<T>) => callback(session),
+    } as never);
+
+    await repositories.records.listRecords({
+      workspace_id: "11111111-1111-4111-8111-111111111111",
+      scope: "workspace",
+      status: "active",
+      created_after: "2026-04-10T00:00:00.000Z",
+      page: 1,
+      page_size: 20,
+    });
+
+    const selectQuery = queries.find((query) => query.text.includes("select *") && query.text.includes("memory_records"));
+    expect(selectQuery?.text).toContain("created_at >= $");
+    expect(selectQuery?.text).toContain("::timestamptz");
+    expect(selectQuery?.values).toContain("2026-04-10T00:00:00.000Z");
+  });
+
   it("binds read model upsert values to the current 21-column contract", async () => {
     const queries: RecordedQuery[] = [];
     const session = {

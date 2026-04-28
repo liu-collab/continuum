@@ -165,6 +165,7 @@ export function createApp(service: StorageService): FastifyInstance {
       memory_type: query.memory_type,
       scope: query.scope,
       status: query.status,
+      created_after: query.created_after,
       page: query.page,
       page_size: query.page_size,
     };

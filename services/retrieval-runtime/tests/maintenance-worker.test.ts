@@ -53,6 +53,7 @@ function makeConfig(overrides: Partial<AppConfig> = {}): AppConfig {
 }
 
 function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSnapshot {
+  const createdAt = new Date().toISOString();
   return {
     id,
     workspace_id: workspaceId,
@@ -66,8 +67,8 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
     details: null,
     importance,
     confidence: 0.9,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: createdAt,
+    updated_at: createdAt,
     last_used_at: null,
   };
 }
@@ -96,6 +97,7 @@ class RecordingStorageClient implements StorageWritebackClient {
   public governanceBatches: Array<unknown> = [];
   public relationBatches: Array<unknown> = [];
   public writebackCandidates: Array<unknown> = [];
+  public listRecordFilters: RecordListFilters[] = [];
   public waitForBatch = false;
   private batchResolvers: Array<() => void> = [];
 
@@ -119,8 +121,20 @@ class RecordingStorageClient implements StorageWritebackClient {
   }
 
   async listRecords(filters: RecordListFilters): Promise<RecordListPage> {
+    this.listRecordFilters.push(filters);
     const isSeedCall = !filters.memory_type;
-    const items = isSeedCall ? this.seeds : [...this.seeds, ...this.related];
+    const isSessionLifecycleSeedCall = filters.scope === "session" && filters.memory_type === "episodic";
+    const source = isSeedCall || isSessionLifecycleSeedCall ? this.seeds : [...this.seeds, ...this.related];
+    const items = source.filter((record) => {
+      if (filters.workspace_id && record.workspace_id !== filters.workspace_id) return false;
+      if (filters.user_id && record.user_id !== filters.user_id) return false;
+      if (filters.task_id && record.task_id !== filters.task_id) return false;
+      if (filters.memory_type && record.memory_type !== filters.memory_type) return false;
+      if (filters.scope && record.scope !== filters.scope) return false;
+      if (filters.status && record.status !== filters.status) return false;
+      if (filters.created_after && Date.parse(record.created_at) < Date.parse(filters.created_after)) return false;
+      return true;
+    });
     return {
       items,
       total: items.length,
@@ -945,5 +959,37 @@ describe("WritebackMaintenanceWorker", () => {
     expect(summary.actions_applied).toBe(0);
     expect(storage.governanceBatches).toHaveLength(0);
     expect(planner.planCalls).toHaveLength(0);
+  });
+
+  it("uses server-side created_after filtering for recent seeds", async () => {
+    const fresh = makeRecord("fresh-seed", "默认使用中文输出");
+    const old = makeRecord("old-seed", "旧偏好记录");
+    old.created_at = "2026-01-01T00:00:00.000Z";
+    old.updated_at = "2026-01-01T00:00:00.000Z";
+    const storage = new RecordingStorageClient([fresh, old], []);
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      new StubPlanner(() => ({ actions: [] })),
+      undefined,
+      guard,
+      makeConfig({ WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: 24 * 60 * 60 * 1000 }),
+      logger,
+    );
+
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.seeds_inspected).toBe(1);
+    expect(storage.listRecordFilters[0]?.created_after).toBeTruthy();
+    expect(storage.listRecordFilters[1]).toMatchObject({
+      scope: "session",
+      memory_type: "episodic",
+      status: "active",
+    });
+    expect(storage.listRecordFilters[1]?.created_after).toBeUndefined();
   });
 });

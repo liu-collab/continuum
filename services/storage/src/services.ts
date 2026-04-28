@@ -58,6 +58,7 @@ export interface RecordListFilters {
   memory_type?: string | undefined;
   scope?: string | undefined;
   status?: string | undefined;
+  created_after?: string | undefined;
   page: number;
   page_size: number;
 }

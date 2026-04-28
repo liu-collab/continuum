@@ -318,6 +318,7 @@ export const recordQuerySchema = z.object({
   memory_type: memoryTypeSchema.optional(),
   scope: scopeSchema.optional(),
   status: memoryStatusSchema.optional(),
+  created_after: z.iso.datetime({ offset: true }).optional(),
   page: z.coerce.number().int().min(1).default(1),
   page_size: z.coerce.number().int().min(1).max(100).default(20),
 });

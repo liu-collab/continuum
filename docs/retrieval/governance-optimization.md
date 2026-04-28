@@ -299,6 +299,8 @@ If a merge was rejected because the records were judged as unrelated, do not re-
 
 ## 优化六：seeds 拉取支持服务端时间过滤
 
+**状态：已完成**
+
 ### 问题
 
 `fetchSeeds` 先拉取全部 active 记录再客户端过滤 `created_at`：

@@ -231,6 +231,9 @@ export function createMemoryRepositories(
           if (filters.memory_type && record.memory_type !== filters.memory_type) return false;
           if (filters.scope && record.scope !== filters.scope) return false;
           if (filters.status && record.status !== filters.status) return false;
+          if (filters.created_after && Date.parse(record.created_at) < Date.parse(filters.created_after)) {
+            return false;
+          }
           return true;
         });
 
