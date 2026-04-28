@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { Bot, Database, GitBranch, HeartPulse } from "lucide-react";
+import React from "react";
+import { Bot, BookOpenText, Database, GitBranch, HeartPulse, ShieldCheck } from "lucide-react";
 
 import { getServerTranslator } from "@/lib/i18n/server";
 
@@ -22,6 +23,18 @@ const entries = [
     titleKey: "home.entries.runsTitle",
     descriptionKey: "home.entries.runsDescription",
     icon: GitBranch
+  },
+  {
+    href: "/governance" as Route,
+    titleKey: "home.entries.governanceTitle",
+    descriptionKey: "home.entries.governanceDescription",
+    icon: ShieldCheck
+  },
+  {
+    href: "/docs/configuration" as Route,
+    titleKey: "home.entries.docsTitle",
+    descriptionKey: "home.entries.docsDescription",
+    icon: BookOpenText
   },
   {
     href: "/agent" as Route,

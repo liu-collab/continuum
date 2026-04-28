@@ -83,6 +83,10 @@ const zhCommon = {
         memoriesDescription: "浏览结构化记忆、待确认项和不同作用域的可见性。",
         runsTitle: "运行轨迹",
         runsDescription: "定位一轮对话里触发、召回、注入和写回发生了什么。",
+        governanceTitle: "记忆治理",
+        governanceDescription: "查看自动提案、复核决策和治理执行结果。",
+        docsTitle: "项目文档",
+        docsDescription: "查看配置、启动方式和排查路径。",
         agentTitle: "Agent 工作台",
         agentDescription: "打开参考宿主，直接验证记忆注入与写回效果。"
       }

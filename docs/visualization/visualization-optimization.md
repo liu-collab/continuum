@@ -766,3 +766,27 @@ function formatEvidence(type: string, evidence: Record<string, unknown>, t: Tran
 - 未知类型保留折叠的原始数据作为兜底
 
 ---
+
+### 优化十七：修复 `/agent` 空页面 + 首页补全入口
+
+**状态：已完成**
+
+### 问题
+
+- `/agent` 和 `/agent/[sessionId]` 两个页面渲染 `null`，导航栏第一个入口是空白
+- 首页（`/`）只有 Dashboard、Memories、Runs、Agent 四个卡片，缺少 Governance 和 Docs
+
+### 方案
+
+**（a）`/agent` 渲染引导页：** 提示用户从左侧会话列表选择或创建新会话。
+
+**（b）`/agent/[sessionId]` 正确使用 params：** AgentRouteShell 不再用 `usePathname()` 手动解析，由 page 接收 props 并传入。
+
+**（c）首页补全：** 在 `page.tsx` 的卡片列表中增加 Governance 和 Docs 入口。
+
+### 效果
+
+- `/agent` 不再空白，新用户有明确引导
+- 首页可以到达所有功能模块
+
+---

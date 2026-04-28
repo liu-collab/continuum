@@ -83,6 +83,10 @@ const enCommon = {
         memoriesDescription: "Browse structured memories, pending confirmations, and scope visibility.",
         runsTitle: "Run traces",
         runsDescription: "See what happened across trigger, recall, injection, and writeback in one turn.",
+        governanceTitle: "Memory governance",
+        governanceDescription: "Inspect automatic proposals, verifier decisions, and governance executions.",
+        docsTitle: "Project docs",
+        docsDescription: "Open configuration, startup, and troubleshooting references.",
         agentTitle: "Agent workbench",
         agentDescription: "Open the reference host and validate memory injection and writeback directly."
       }
