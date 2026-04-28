@@ -52,6 +52,11 @@ interface ClassifiedDraft extends CandidateDraft {
 
 const PREFERENCE_PATTERNS = [
   /(?:我一般|我喜欢|我偏好|我习惯|一直用的是|prefer|i usually|i always|my convention is|my default is)\s*[:：]?\s*(.+)/i,
+  /(?:以后|今后|后续|从现在开始|from now on|going forward)\s*(?:都|都给我|统一|全部)?\s*(.+)/i,
+  /((?:不要|不用|别|别给我|禁止|no more|stop using|don'?t use)\s+.+?)(?:[。.!]|$)/i,
+  /(?:代码风格|编码规范|格式化|lint)(?:\s*(?:按|按照|使用|遵循|跟|走))\s*(.+)/i,
+  /((?:用|使用|改用)\s*.+?而不是\s*.+?)(?:[。.!]|$)/i,
+  /((?:这个项目|这个仓库|当前项目|当前仓库|项目里|仓库里|this project|this repo).*(?:默认|统一|规范|约定|使用|用).+?)(?:[。.!]|$)/i,
 ];
 
 const REMEMBER_PREFERENCE_PATTERNS = [
@@ -70,12 +75,18 @@ const ASSISTANT_CONFIRM_PREFERENCE_PATTERNS = [
 const COMMITMENT_PATTERNS = [
   /(?:我会|i will)\s+(?:在|after|before|每次|always|每天).{8,}/i,
   /(?:承诺|commit to|保证)\s*[:：]?\s*(.+)/i,
+  /(?:明天|下周|这周|今天晚点|tonight|tomorrow|next week)\s*(?:开始|要|准备|打算)\s*(.+)/i,
+  /(?:当|一旦|whenever|as soon as)\s*(.+?)\s*(?:就|则|我会|会)\s*(.+)/i,
+  /(?:计划|打算|schedule|roadmap)\s*[:：]?\s*(.+)/i,
 ];
 
 const TRIVIAL_TOOL_PATTERNS = /^(exit code|success|ok|done|completed|finished)\b/i;
 const STABLE_PREFERENCE_HINTS = [
   "默认",
   "以后",
+  "今后",
+  "后续",
+  "从现在开始",
   "长期偏好",
   "偏好",
   "习惯",
@@ -85,7 +96,22 @@ const STABLE_PREFERENCE_HINTS = [
   "default",
   "usually",
   "always",
+  "from now on",
+  "going forward",
 ];
+
+const TASK_STATE_PATTERNS = [
+  /(?:下一步|todo|plan|任务状态)\s*[:：]?\s*(.+)$/i,
+  /(?:已(?:经|完成|改完|实现|修复|处理)|搞定了|做好了|finished|completed|done with)\s*(.+?)(?:[。.!]|$|还剩|还要|接下来)/i,
+  /(?:还剩|还要|接下来|仍需|remaining|left to do|pending)\s*[:：]?\s*(.+)/i,
+  /(?:卡在|阻塞|等待|依赖|blocked by|waiting on|depends on)\s*[:：]?\s*(.+)/i,
+  /(?:把|将|状态)?(?:从|由)\s*(\S+)\s*(?:改为|改成|变为|更新为|标记为)\s*(\S+)/i,
+];
+
+const OVERLAP_THRESHOLD_BY_METHOD: Record<string, number> = {
+  rules: 0.5,
+  llm: 0.35,
+};
 
 const MEMORY_WRITEBACK_PROMPT_VERSION = "memory-writeback-refine-v1";
 const MEMORY_WRITEBACK_EXTRACTION_PROMPT_VERSION = "memory-writeback-extract-v1";
@@ -220,9 +246,12 @@ function inferPreferenceCanonical(text: string): {
 }
 
 function extractStablePreferenceFromUserInput(text: string): string | null {
-  const directMatch = PREFERENCE_PATTERNS.map((pattern) => text.match(pattern)).find((match) => match?.[1]);
+  const directMatch = PREFERENCE_PATTERNS.map((pattern) => text.match(pattern)).find((match) => match?.[1] || match?.[2]);
   if (directMatch?.[1]) {
     return cleanupPreferenceSummary(directMatch[1]);
+  }
+  if (directMatch?.[2]) {
+    return cleanupPreferenceSummary(directMatch[2]);
   }
 
   const defaultMatch = DEFAULT_PREFERENCE_PATTERNS.map((pattern) => text.match(pattern)).find((match) => match?.[1]);
@@ -246,6 +275,26 @@ function extractStablePreferenceFromUserInput(text: string): string | null {
   }
 
   return summary;
+}
+
+function extractTaskStateFromAssistantOutput(text: string): string | null {
+  for (const pattern of TASK_STATE_PATTERNS) {
+    const match = text.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const summary = normalizeText(
+      match[2] && match[1]
+        ? `${match[1]} -> ${match[2]}`
+        : match[1] ?? "",
+    );
+    if (summary.length >= 4) {
+      return summary;
+    }
+  }
+
+  return null;
 }
 
 function extractConfirmedPreferenceFromAssistantOutput(text: string): string | null {
@@ -339,6 +388,10 @@ function hasSufficientInputOverlap(summary: string, sourceText: string, threshol
 
   const containment = intersection / Math.min(summaryTokens.size, sourceTokens.size);
   return containment >= threshold;
+}
+
+function hasWorkspaceContext(text: string): boolean {
+  return /这个项目|这个仓库|当前项目|当前仓库|项目里|仓库里|this project|this repo|workspace|repository|repo/i.test(text);
 }
 
 function withOriginTrace(
@@ -564,12 +617,12 @@ export class WritebackEngine {
       filteredReasons.push("no_confirmed_fact_detected");
     }
 
-    const taskMatch = normalizedAssistant.match(/(?:下一步|todo|plan|任务状态)\s*[:：]?\s*(.+)$/i);
-    if (taskMatch?.[1] && input.task_id) {
+    const taskStateSummary = extractTaskStateFromAssistantOutput(normalizedAssistant);
+    if (taskStateSummary && input.task_id) {
       rawCandidates.push(withOriginTrace({
         candidate_type: "task_state",
         scope: "task",
-        summary: taskMatch[1],
+        summary: taskStateSummary,
         details: { assistant_output: normalizedAssistant, task_id: input.task_id, extraction_method: "rules" },
         importance: 4,
         confidence: 0.82,
@@ -649,17 +702,18 @@ export class WritebackEngine {
           return false;
         }
 
-        const extractionMethod = candidate.source.extraction_method;
-        if (extractionMethod === "llm") {
-          const hasInputOverlap = hasSufficientInputOverlap(
-            candidate.summary,
-            [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" "),
-            this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD,
-          );
-          if (!hasInputOverlap) {
-            filteredReasons.push(`low_input_overlap:${candidate.candidate_type}`);
-            return false;
-          }
+        const extractionMethod = candidate.source.extraction_method ?? "unknown";
+        const overlapThreshold =
+          OVERLAP_THRESHOLD_BY_METHOD[extractionMethod] ??
+          this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD;
+        const hasInputOverlap = hasSufficientInputOverlap(
+          candidate.summary,
+          [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" "),
+          overlapThreshold,
+        );
+        if (!hasInputOverlap) {
+          filteredReasons.push(`low_input_overlap:${candidate.candidate_type}`);
+          return false;
         }
 
         if (candidate.summary.length < 4) {
@@ -863,6 +917,7 @@ export class WritebackEngine {
     const userHints = ["偏好", "习惯", "风格", "prefer", "usually", "always", "默认"];
     const sessionHints = ["这轮", "本轮", "当前会话", "just now", "this turn", "temporary"];
     const taskHints = ["任务", "todo", "next step", "plan", "任务状态", "progress"];
+    const workspaceSignal = hasWorkspaceContext(text) || workspaceHints.some((hint) => text.includes(hint));
 
     if (draft.candidate_type === "task_state") {
       return {
@@ -871,6 +926,14 @@ export class WritebackEngine {
         scope_reason: input.task_id
           ? "task_state candidates are stored as task memory when task_id is available"
           : "task_state without task_id falls back to workspace memory",
+      };
+    }
+
+    if (draft.scope === "user" && workspaceSignal) {
+      return {
+        ...draft,
+        scope: "workspace",
+        scope_reason: "project or repository context overrides a generic user preference signal",
       };
     }
 
@@ -914,7 +977,7 @@ export class WritebackEngine {
       };
     }
 
-    if (workspaceHints.some((hint) => text.includes(hint))) {
+    if (workspaceSignal) {
       return {
         ...draft,
         scope: "workspace",

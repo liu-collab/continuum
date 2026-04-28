@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
-import type { QualityAssessor } from "../src/memory-orchestrator/types.js";
+import type { QualityAssessor, WritebackPlanner } from "../src/memory-orchestrator/types.js";
 import type {
   GovernanceExecutionResponseItem,
   MemoryConflictSnapshot,
@@ -171,6 +171,29 @@ class StubQualityAssessor implements QualityAssessor {
   }
 }
 
+class StubWritebackPlanner implements WritebackPlanner {
+  constructor(private readonly summary: string) {}
+
+  async extract() {
+    return {
+      candidates: [
+        {
+          candidate_type: "fact_preference" as const,
+          scope: "user" as const,
+          summary: this.summary,
+          importance: 4,
+          confidence: 0.92,
+          write_reason: "llm extracted a durable preference",
+        },
+      ],
+    };
+  }
+
+  async refine() {
+    return { refined_candidates: [] };
+  }
+}
+
 describe("writeback quality assessor integration", () => {
   it("blocks candidates below the quality threshold", async () => {
     const engine = new WritebackEngine(
@@ -220,5 +243,60 @@ describe("writeback quality assessor integration", () => {
       quality_reason: "建议人工确认",
       potential_conflicts: ["rec-existing"],
     });
+  });
+
+  it("extracts expanded rule patterns and keeps project defaults in workspace scope", async () => {
+    const engine = new WritebackEngine(
+      config,
+      new StubStorageClient(),
+      new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false })),
+    );
+
+    const result = await engine.extractCandidates({
+      host: "codex_app_server",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+      user_id: "550e8400-e29b-41d4-a716-446655440001",
+      session_id: "550e8400-e29b-41d4-a716-446655440002",
+      task_id: "550e8400-e29b-41d4-a716-446655440003",
+      current_input: "这个项目默认用 4 空格缩进",
+      assistant_output: "还剩 API 层需要补测试。",
+    });
+
+    expect(result.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          candidate_type: "fact_preference",
+          scope: "workspace",
+          summary: expect.stringContaining("这个项目默认用 4 空格缩进"),
+        }),
+        expect.objectContaining({
+          candidate_type: "task_state",
+          scope: "task",
+          summary: expect.stringContaining("API 层"),
+        }),
+      ]),
+    );
+  });
+
+  it("filters low-overlap llm candidates with the method-specific overlap threshold", async () => {
+    const engine = new WritebackEngine(
+      config,
+      new StubStorageClient(),
+      new DependencyGuard(new InMemoryRuntimeRepository(), pino({ enabled: false })),
+      new StubWritebackPlanner("使用 Kotlin 编写移动端模块"),
+    );
+
+    const result = await engine.extractCandidates({
+      host: "codex_app_server",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+      user_id: "550e8400-e29b-41d4-a716-446655440001",
+      session_id: "550e8400-e29b-41d4-a716-446655440002",
+      current_input: "我偏好: 默认中文输出",
+      assistant_output: "已确认: 默认中文输出。",
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.summary).toBe("默认中文输出");
+    expect(result.filtered_reasons).toContain("low_input_overlap:fact_preference");
   });
 });
