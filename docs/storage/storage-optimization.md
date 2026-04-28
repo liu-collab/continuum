@@ -284,6 +284,8 @@ export function createSchema(config: { privateSchema: string; sharedSchema: stri
 
 ## 优化六：`snapshotRecord` 浅拷贝导致版本快照共享引用
 
+**状态：已完成**
+
 ### 问题
 
 ```typescript

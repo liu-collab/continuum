@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ReadModelEntry } from "../src/contracts.js";
-import { createRepositories } from "../src/db/repositories.js";
+import type { MemoryRecord, ReadModelEntry } from "../src/contracts.js";
+import { createRepositories, snapshotRecord } from "../src/db/repositories.js";
 
 type RecordedQuery = {
   text: string;
@@ -9,6 +9,46 @@ type RecordedQuery = {
 };
 
 describe("storage repositories", () => {
+  it("deep copies record snapshots", async () => {
+    const record = {
+      id: "11111111-1111-4111-8111-111111111111",
+      workspace_id: "22222222-2222-4222-8222-222222222222",
+      user_id: null,
+      task_id: null,
+      session_id: null,
+      memory_type: "fact_preference",
+      scope: "workspace",
+      status: "active",
+      summary: "Project uses pnpm",
+      details_json: {
+        nested: {
+          value: "before",
+        },
+      },
+      importance: 4,
+      confidence: 0.9,
+      dedupe_key: "project-uses-pnpm",
+      source_type: "user_input",
+      source_ref: "turn-1",
+      created_by_service: "retrieval-runtime",
+      last_confirmed_at: null,
+      created_at: "2026-04-22T00:00:00.000Z",
+      updated_at: "2026-04-22T00:00:00.000Z",
+      archived_at: null,
+      deleted_at: null,
+      version: 1,
+    } satisfies MemoryRecord;
+
+    const snapshot = snapshotRecord(record);
+    record.details_json.nested = { value: "after" };
+
+    expect(snapshot.details_json).toEqual({
+      nested: {
+        value: "before",
+      },
+    });
+  });
+
   it("binds created_after into record list queries", async () => {
     const queries: RecordedQuery[] = [];
     const session = {

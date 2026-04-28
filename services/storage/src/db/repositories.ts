@@ -1665,7 +1665,7 @@ export function buildRecordFromNormalized(input: {
 }
 
 export function snapshotRecord(record: MemoryRecord): Record<string, unknown> {
-  return { ...record };
+  return JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
 }
 
 function requireRow(
