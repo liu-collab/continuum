@@ -57,15 +57,9 @@ describe("storage repositories", () => {
       sharedSchema: "storage_shared_v1",
       async query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]) {
         queries.push({ text, values });
-        if (text.includes("count(*)")) {
-          return {
-            rows: [{ total: "0" }] as unknown as T[],
-            rowCount: 1,
-          };
-        }
         return {
-          rows: [] as T[],
-          rowCount: 0,
+          rows: [{ records_json: [], total: "0" }] as unknown as T[],
+          rowCount: 1,
         };
       },
     };
@@ -84,10 +78,11 @@ describe("storage repositories", () => {
       page_size: 20,
     });
 
-    const selectQuery = queries.find((query) => query.text.includes("select *") && query.text.includes("memory_records"));
-    expect(selectQuery?.text).toContain("created_at >= $");
-    expect(selectQuery?.text).toContain("::timestamptz");
-    expect(selectQuery?.values).toContain("2026-04-10T00:00:00.000Z");
+    expect(queries).toHaveLength(1);
+    expect(queries[0]?.text).toContain("count(*) over()");
+    expect(queries[0]?.text).toContain("created_at >= $");
+    expect(queries[0]?.text).toContain("::timestamptz");
+    expect(queries[0]?.values).toContain("2026-04-10T00:00:00.000Z");
   });
 
   it("binds read model upsert values to the current 21-column contract", async () => {

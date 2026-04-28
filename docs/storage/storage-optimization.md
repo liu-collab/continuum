@@ -140,6 +140,8 @@ async enqueueMany(jobs: WriteJobEnqueueInput[]): Promise<WriteJobRecord[]> {
 
 ## 优化三：`listRecords` 用窗口函数替代 COUNT 独立查询
 
+**状态：已完成**
+
 ### 问题
 
 `listRecords` 先发 COUNT 查询，再发数据查询，两次扫描相同 WHERE 条件：

@@ -572,35 +572,45 @@ function createRecordRepository(session: DbSession): RecordRepository {
         );
       }
 
-      const countValues = [...values];
-      countValues.push(filters.page_size);
-      countValues.push((filters.page - 1) * filters.page_size);
+      values.push(filters.page_size);
+      values.push((filters.page - 1) * filters.page_size);
 
-      const [result, countResult] = await Promise.all([
-        session.query(
+      const result = await session.query<{
+        records_json: Record<string, unknown>[] | string | null;
+        total: string | number | null;
+      }>(
         `
-          select *
-          from ${table}
-          ${conditions.length ? `where ${conditions.join(" and ")}` : ""}
-          order by updated_at desc
-          limit $${countValues.length - 1}
-          offset $${countValues.length}
-        `,
-          countValues,
-        ),
-        session.query<{ total: string }>(
-          `
-            select count(*)::int as total
+          with filtered as (
+            select *
             from ${table}
             ${conditions.length ? `where ${conditions.join(" and ")}` : ""}
+          ),
+          counted as (
+            select *, count(*) over() as total_count
+            from filtered
+          ),
+          paged as (
+            select *
+            from counted
+            order by updated_at desc
+            limit $${values.length - 1}
+            offset $${values.length}
+          )
+          select
+            coalesce(
+              jsonb_agg(to_jsonb(paged) - 'total_count' order by paged.updated_at desc)
+                filter (where paged.id is not null),
+              '[]'::jsonb
+            ) as records_json,
+            coalesce((select max(total_count)::int from counted), 0) as total
+          from paged
           `,
           values,
-        ),
-      ]);
+      );
 
       return {
-        items: result.rows.map(mapMemoryRecord),
-        total: Number(countResult.rows[0]?.total ?? 0),
+        items: parseRecordRowsJson(result.rows[0]?.records_json).map(mapMemoryRecord),
+        total: Number(result.rows[0]?.total ?? 0),
         page: filters.page,
         page_size: filters.page_size,
       };
@@ -1482,6 +1492,23 @@ function mapMemoryRecord(row: Record<string, unknown>): MemoryRecord {
     deleted_at: nullableIsoString(row.deleted_at),
     version: Number(row.version),
   };
+}
+
+function parseRecordRowsJson(value: unknown): Record<string, unknown>[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value as Record<string, unknown>[];
+  }
+
+  if (typeof value === "string") {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as Record<string, unknown>[] : [];
+  }
+
+  return [];
 }
 
 function mapVersion(row: Record<string, unknown>): MemoryRecordVersion {
