@@ -230,6 +230,11 @@ export interface GovernancePlanInput {
   seed_records: MemoryRecordSnapshot[];
   related_records: MemoryRecordSnapshot[];
   open_conflicts: MemoryConflictSnapshot[];
+  recently_rejected?: Array<{
+    proposal_type: string;
+    reason_text: string;
+    verifier_notes: string | null;
+  }>;
 }
 
 export type GovernanceAction =

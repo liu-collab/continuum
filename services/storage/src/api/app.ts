@@ -251,6 +251,21 @@ export function createApp(service: StorageService): FastifyInstance {
     return ok(await service.submitGovernanceExecutions(payload));
   });
 
+  app.get("/v1/storage/governance-proposals/recent-rejected", async (request) => {
+    const query = z.object({
+      workspace_id: z.uuid(),
+      limit: z.coerce.number().int().min(1).max(20).default(5),
+    }).parse(request.query);
+    const proposals = await service.listRecentRejectedProposals(query.workspace_id, query.limit);
+    return ok(proposals.map((proposal) => ({
+      id: proposal.id,
+      proposal_type: proposal.proposal_type,
+      reason_text: proposal.reason_text,
+      verifier_notes: proposal.verifier_notes,
+      created_at: proposal.created_at,
+    })));
+  });
+
   app.post("/v1/storage/relations", async (request) => {
     const payload = z.object({
       relations: z.array(z.object({

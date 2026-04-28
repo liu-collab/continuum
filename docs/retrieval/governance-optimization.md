@@ -250,6 +250,8 @@ stop(): void {
 
 ## 优化五：跨周期的提案去重上下文
 
+**状态：已完成**
+
 ### 问题
 
 每次 maintenance sweep 独立调用 LLM planner。上一轮被 verifier 拒绝的提案，下一轮会再次被提出、再次被拒——浪费 LLM 调用且无进展。

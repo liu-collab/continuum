@@ -3,6 +3,7 @@ import type {
   ConflictStatus,
   GovernanceExecutionBatch,
   GovernanceExecutionResponseItem,
+  GovernanceRejectedProposalSnapshot,
   MemoryRelationType,
   MemoryConflictSnapshot,
   MemoryRelationSnapshot,
@@ -118,6 +119,11 @@ export interface StorageWritebackClient {
     batch: GovernanceExecutionBatch,
     signal?: AbortSignal,
   ): Promise<GovernanceExecutionResponseItem[]>;
+  listRecentRejectedProposals?(
+    workspaceId: string,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<GovernanceRejectedProposalSnapshot[]>;
 }
 
 export class HttpStorageWritebackClient implements StorageWritebackClient {
@@ -295,6 +301,18 @@ export class HttpStorageWritebackClient implements StorageWritebackClient {
     return envelope.data ?? [];
   }
 
+  async listRecentRejectedProposals(
+    workspaceId: string,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<GovernanceRejectedProposalSnapshot[]> {
+    const url = new URL("/v1/storage/governance-proposals/recent-rejected", this.config.STORAGE_WRITEBACK_URL);
+    url.searchParams.set("workspace_id", workspaceId);
+    url.searchParams.set("limit", String(limit));
+    const envelope = await fetchJson<{ data?: unknown[] }>(url, { method: "GET", signal });
+    return (envelope.data ?? []).map(mapRejectedProposalRow);
+  }
+
   private async postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
     const url = new URL(path, this.config.STORAGE_WRITEBACK_URL);
     return fetchJson<T>(url, {
@@ -373,6 +391,20 @@ function mapRelationRow(row: unknown): MemoryRelationSnapshot {
     created_by_service: String(r.created_by_service ?? ""),
     created_at: String(r.created_at ?? ""),
     updated_at: String(r.updated_at ?? ""),
+  };
+}
+
+function mapRejectedProposalRow(row: unknown): GovernanceRejectedProposalSnapshot {
+  if (!row || typeof row !== "object") {
+    throw new Error("storage rejected proposal row is not an object");
+  }
+  const r = row as Record<string, unknown>;
+  return {
+    id: String(r.id),
+    proposal_type: r.proposal_type as GovernanceRejectedProposalSnapshot["proposal_type"],
+    reason_text: String(r.reason_text ?? ""),
+    verifier_notes: nullableString(r.verifier_notes),
+    created_at: String(r.created_at ?? ""),
   };
 }
 

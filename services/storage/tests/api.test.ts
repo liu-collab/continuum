@@ -912,6 +912,59 @@ describe("storage api", () => {
     expect(detailResponse.json().data.execution.id).toBe(executionId);
     expect(detailResponse.json().data.proposal.id).toBe(executeResponse.json().data[0].proposal.id);
     expect(Array.isArray(detailResponse.json().data.targets)).toBe(true);
+
+    const rejectedResponse = await app.inject({
+      method: "POST",
+      url: "/v1/storage/governance-executions",
+      payload: {
+        workspace_id: "11111111-1111-4111-8111-111111111111",
+        source_service: "retrieval-runtime",
+        items: [
+          {
+            proposal_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            proposal_type: "delete",
+            targets: {
+              record_ids: [stored!.id],
+            },
+            suggested_changes: {
+              delete_mode: "soft",
+            },
+            reason_code: "obsolete_task_state",
+            reason_text: "delete obsolete task state",
+            evidence: {
+              delete_reason: "covered by newer state",
+            },
+            planner: {
+              model: "memory_llm",
+              confidence: 0.95,
+            },
+            verifier: {
+              required: true,
+              model: "memory_llm",
+              decision: "reject",
+              confidence: 0.41,
+              notes: "records were judged unrelated",
+            },
+            policy_version: "memory-governance-v1",
+            idempotency_key: "delete-proposal-rejected",
+          },
+        ],
+      },
+    });
+
+    expect(rejectedResponse.statusCode).toBe(200);
+    const recentRejectedResponse = await app.inject({
+      method: "GET",
+      url: "/v1/storage/governance-proposals/recent-rejected?workspace_id=11111111-1111-4111-8111-111111111111",
+    });
+    expect(recentRejectedResponse.statusCode).toBe(200);
+    expect(recentRejectedResponse.json().data).toEqual([
+      expect.objectContaining({
+        proposal_type: "delete",
+        reason_text: "delete obsolete task state",
+        verifier_notes: "records were judged unrelated",
+      }),
+    ]);
   });
 
   it("upserts and lists memory relations", async () => {

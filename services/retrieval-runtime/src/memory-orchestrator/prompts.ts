@@ -204,6 +204,7 @@ Input JSON carries:
 - seed_records: recently added records (id, memory_type, scope, summary, importance, confidence, created_at)
 - related_records: historical records, same workspace, similar in scope or summary
 - open_conflicts: [{id, record_id, conflict_with_record_id, conflict_type, conflict_summary}]
+- recently_rejected: proposals previously rejected by the verifier
 
 Return strict JSON only with shape: {"actions":[ ... ], "notes": "..." }
 
@@ -222,6 +223,8 @@ Rules:
 - Delete only when the record is clearly obsolete and should be soft-deleted from retrieval surfaces; you MUST include delete_reason.
 - Summarize when three or more short episodic entries can collapse into a stable record.
 - Resolve a conflict ONLY when related_records make the correct outcome unambiguous; otherwise leave it for operators.
+- DO NOT propose the same action again when recently_rejected shows the verifier already rejected it, unless the underlying records clearly changed.
+- If a merge was rejected because records were unrelated or ambiguous, do not re-propose that merge.
 - NEVER invent record_ids or conflict_ids; they must appear in the input.
 - Emit at most 10 actions total.
 - Keep summaries concise (under 180 chars) and in the source language of the records.

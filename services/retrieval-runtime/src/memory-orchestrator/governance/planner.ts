@@ -36,6 +36,7 @@ export class HttpMemoryGovernancePlanner implements GovernancePlanner {
         seed_records: input.seed_records.map(toCompactRecord),
         related_records: input.related_records.map(toCompactRecord),
         open_conflicts: input.open_conflicts.map(toCompactConflict),
+        recently_rejected: input.recently_rejected ?? [],
       },
       this.config.WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS,
     );

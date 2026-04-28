@@ -665,6 +665,14 @@ export interface GovernanceProposalResult {
   updated_at: string;
 }
 
+export interface GovernanceRejectedProposalSnapshot {
+  id: string;
+  proposal_type: GovernanceProposalType;
+  reason_text: string;
+  verifier_notes: string | null;
+  created_at: string;
+}
+
 export interface GovernanceExecutionResult {
   id: string;
   workspace_id: string;

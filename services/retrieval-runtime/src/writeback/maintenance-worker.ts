@@ -276,6 +276,7 @@ export class WritebackMaintenanceWorker {
         return;
       }
 
+      const recentlyRejected = await this.fetchRecentlyRejectedProposals(workspaceId);
       const planStartedAt = Date.now();
       const planResult = await this.dependencyGuard.run(
         "memory_llm",
@@ -285,6 +286,11 @@ export class WritebackMaintenanceWorker {
             seed_records: workspaceContext.seed_records,
             related_records: workspaceContext.related_records,
             open_conflicts: workspaceContext.open_conflicts,
+            recently_rejected: recentlyRejected.map((proposal) => ({
+              proposal_type: proposal.proposal_type,
+              reason_text: proposal.reason_text,
+              verifier_notes: proposal.verifier_notes,
+            })),
           }),
       );
 
@@ -684,6 +690,13 @@ export class WritebackMaintenanceWorker {
       return [];
     }
     return response.filter((conflict) => conflict.workspace_id === workspaceId).slice(0, 10);
+  }
+
+  private async fetchRecentlyRejectedProposals(workspaceId: string) {
+    if (!this.storageClient.listRecentRejectedProposals) {
+      return [];
+    }
+    return await this.runStorage((signal) => this.storageClient.listRecentRejectedProposals!(workspaceId, 5, signal)) ?? [];
   }
 
   private async applyActions(

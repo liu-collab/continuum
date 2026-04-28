@@ -318,6 +318,14 @@ export class StorageService {
     return this.repositories.governance.listExecutions(filters);
   }
 
+  async listRecentRejectedProposals(workspaceId: string, limit = 5) {
+    return this.repositories.governance.listProposals({
+      workspace_id: workspaceId,
+      status: "rejected_by_guard",
+      limit,
+    });
+  }
+
   async getGovernanceExecution(executionId: string) {
     const execution = await this.repositories.governance.findExecutionById(executionId);
     if (!execution) {

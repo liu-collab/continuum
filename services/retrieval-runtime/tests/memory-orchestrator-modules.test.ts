@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   HttpMemoryEvolutionPlanner,
 } from "../src/memory-orchestrator/governance/evolution-planner.js";
+import { HttpMemoryGovernancePlanner } from "../src/memory-orchestrator/governance/planner.js";
 import { HttpMemoryIntentAnalyzer } from "../src/memory-orchestrator/intent/intent-analyzer.js";
 import { HttpMemoryRecallEffectivenessEvaluator } from "../src/memory-orchestrator/recall/effectiveness-evaluator.js";
 import { HttpMemoryProactiveRecommender } from "../src/memory-orchestrator/recommendation/proactive-recommender.js";
@@ -21,6 +22,7 @@ const baseConfig = {
   RECALL_LLM_CANDIDATE_LIMIT: 12,
   MEMORY_LLM_REFINE_MAX_TOKENS: 800,
   WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: 1500,
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
 };
 
 const sampleRecord: MemoryRecordSnapshot = {
@@ -348,5 +350,47 @@ describe("memory orchestrator extra modules", () => {
 
     expect(result.source_records).toEqual(["rec-1"]);
     expect(result.consolidation_plan?.records_to_archive).toEqual(["rec-1"]);
+  });
+
+  it("includes recently rejected proposals in governance planner payload", async () => {
+    let requestBody: { messages?: Array<{ role: string; content: string }> } | undefined;
+    globalThis.fetch = (async (_url, init) => {
+      requestBody = JSON.parse(String(init?.body ?? "{}"));
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ actions: [] }),
+              },
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const planner = new HttpMemoryGovernancePlanner(baseConfig);
+    await planner.plan({
+      seed_records: [sampleRecord],
+      related_records: [],
+      open_conflicts: [],
+      recently_rejected: [
+        {
+          proposal_type: "merge",
+          reason_text: "merge duplicate stable preference",
+          verifier_notes: "records were judged unrelated",
+        },
+      ],
+    });
+
+    const userPayload = JSON.parse(requestBody?.messages?.find((message) => message.role === "user")?.content ?? "{}");
+    expect(userPayload.recently_rejected).toEqual([
+      {
+        proposal_type: "merge",
+        reason_text: "merge duplicate stable preference",
+        verifier_notes: "records were judged unrelated",
+      },
+    ]);
   });
 });

@@ -26,6 +26,7 @@ import type {
 import type {
   GovernanceExecutionResponseItem,
   ConflictStatus,
+  GovernanceRejectedProposalSnapshot,
   MemoryConflictSnapshot,
   MemoryRecordSnapshot,
   SubmittedWriteBackJob,
@@ -102,6 +103,7 @@ class RecordingStorageClient implements StorageWritebackClient {
     private readonly seeds: MemoryRecordSnapshot[],
     private readonly related: MemoryRecordSnapshot[],
     private readonly conflicts: MemoryConflictSnapshot[] = [],
+    private readonly rejectedProposals: GovernanceRejectedProposalSnapshot[] = [],
   ) {}
 
   async submitCandidates(candidates: Parameters<StorageWritebackClient["submitCandidates"]>[0]) {
@@ -143,6 +145,10 @@ class RecordingStorageClient implements StorageWritebackClient {
 
   async listConflicts(_status?: ConflictStatus): Promise<MemoryConflictSnapshot[]> {
     return this.conflicts;
+  }
+
+  async listRecentRejectedProposals(): Promise<GovernanceRejectedProposalSnapshot[]> {
+    return this.rejectedProposals;
   }
 
   async resolveConflict(_conflictId: string, _payload: ResolveConflictPayload): Promise<never> {
@@ -580,6 +586,44 @@ describe("WritebackMaintenanceWorker", () => {
     expect(summary.actions_applied).toBe(1);
     expect(summary.actions_skipped).toBe(0);
     expect(storage.governanceBatches).toHaveLength(0);
+  });
+
+  it("passes recently rejected proposals into governance planner", async () => {
+    const seed = makeRecord("seed-rejected", "默认使用中文输出", 4);
+    const related = makeRecord("rel-rejected", "偏好中文输出", 3);
+    const storage = new RecordingStorageClient([seed], [related], [], [
+      {
+        id: "proposal-rejected",
+        proposal_type: "merge",
+        reason_text: "merge duplicate stable preference",
+        verifier_notes: "records were judged unrelated",
+        created_at: "2026-04-22T00:00:00.000Z",
+      },
+    ]);
+    const planner = new StubPlanner(() => ({ actions: [] }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig(),
+      logger,
+    );
+
+    await worker.runOnce({ workspaceId, forced: true });
+
+    expect(planner.planCalls[0]?.recently_rejected).toEqual([
+      {
+        proposal_type: "merge",
+        reason_text: "merge duplicate stable preference",
+        verifier_notes: "records were judged unrelated",
+      },
+    ]);
   });
 
   it("discovers relations during maintenance and persists them", async () => {
