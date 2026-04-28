@@ -129,7 +129,7 @@ function UserMessageBubble({ message }: { message: MessageState }) {
   return (
     <div className="flex justify-end">
       <MessagePrimitive.Root className="max-w-[80%] bg-primary px-4 py-3 text-white" style={{ borderRadius: "var(--radius-lg)" }}>
-        <div className="text-[12px] font-medium uppercase text-white/70">
+        <div className="text-[12px] font-normal uppercase text-white/70">
           {t("chatPanel.you")}
         </div>
         <div
@@ -170,7 +170,7 @@ function AssistantMessageBubble({
     <div className="flex justify-start">
       <MessagePrimitive.Root className="w-full max-w-[92%] border bg-surface px-4 py-4" style={{ borderRadius: "var(--radius-lg)" }}>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="text-[12px] font-medium uppercase text-muted-foreground">
+          <div className="text-[12px] font-normal uppercase text-muted-foreground">
             {t("chatPanel.assistant")}
           </div>
           <StatusBadge tone="neutral">

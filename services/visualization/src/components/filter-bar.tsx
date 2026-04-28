@@ -17,7 +17,7 @@ export function FilterBar({ title, description, actions, children }: FilterBarPr
       <div>
         <h1 style={{
           fontSize: "1.375rem",
-          fontWeight: 500,
+          fontWeight: 600,
           fontFamily: "\"SF Pro Display\", system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
           color: "var(--text)",
           letterSpacing: 0

@@ -825,3 +825,24 @@ body { letter-spacing: -0.374px; }
 ```
 
 ---
+
+### 修复十九：消除 font-weight 500
+
+**状态：已完成**
+
+#### 问题
+
+设计稿明确 "Weight 500 is deliberately absent." 三处违规：
+
+| 文件 | 行 | 违规代码 |
+|---|---|---|
+| `components/filter-bar.tsx` | 20 | `fontWeight: 500`（inline style） |
+| `agent/_components/assistant-thread.tsx` | 132 | `font-medium`（Tailwind = 500） |
+| `agent/_components/assistant-thread.tsx` | 173 | `font-medium` |
+
+#### 方案
+
+- `filter-bar.tsx` → `fontWeight: 600`
+- `assistant-thread.tsx` → `font-normal`
+
+---
