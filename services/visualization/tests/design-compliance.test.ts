@@ -78,4 +78,11 @@ describe("visualization design compliance", () => {
 
     expect(confirmDialog).not.toContain("shadow-overlay");
   });
+
+  it("keeps record link active interactions on the shared press scale", () => {
+    const css = readSource("src/app/globals.css");
+
+    expect(css).toMatch(/\.record-link:active\s*\{[\s\S]*transform:\s*scale\(0\.95\);/);
+    expect(css).not.toMatch(/\.record-link:active\s*\{[\s\S]*transform:\s*scale\(0\.99\);/);
+  });
 });

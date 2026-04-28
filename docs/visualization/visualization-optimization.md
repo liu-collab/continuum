@@ -921,3 +921,23 @@ body { letter-spacing: -0.374px; }
 删除 `confirm-dialog.tsx` 中 modal 上的 `shadow-overlay` 类名，不依赖 `!important` 覆盖。
 
 ---
+
+### 修复二十四：record-link active 缩放系数修正
+
+**状态：已完成**
+
+#### 问题
+
+```css
+.record-link:active { transform: scale(0.99); }
+```
+
+设计稿规定全系统微交互统一 `scale(0.95)`。
+
+#### 方案
+
+```css
+.record-link:active { transform: scale(0.95); }
+```
+
+---
