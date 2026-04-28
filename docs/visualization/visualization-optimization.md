@@ -731,3 +731,38 @@ setTimeout(() => startTransition(() => refresh()), 10_000);
 - 加载态用骨架屏占位，避免布局跳动
 
 ---
+
+### 优化十六：治理 Evidence 替代原始 JSON 展示
+
+**状态：已完成**
+
+### 问题
+
+```tsx
+<pre>{JSON.stringify(detail.evidence, null, 2)}</pre>
+```
+
+原始 JSON 直接展示给用户，包含内部字段名和技术细节，不可读。
+
+### 方案
+
+按 proposal 类型格式化展示：
+
+```tsx
+function formatEvidence(type: string, evidence: Record<string, unknown>, t: Translator): React.ReactNode {
+  switch (type) {
+    case "merge":   return <p>{t("evidence.merge", { count: (evidence.merged_from as string[])?.length })}</p>;
+    case "archive": return <p>{t("evidence.archive", { reason: evidence.archive_reason })}</p>;
+    case "delete":  return <div className="notice notice-warning">{t("evidence.delete", { reason: evidence.delete_reason })}</div>;
+    case "summarize": return <p>{t("evidence.summarize", { count: (evidence.source_record_ids as string[])?.length })}</p>;
+    default: return <details><summary>{t("evidence.raw")}</summary><pre>{JSON.stringify(evidence, null, 2)}</pre></details>;
+  }
+}
+```
+
+### 效果
+
+- 用户看到的是自然语言描述而非 JSON
+- 未知类型保留折叠的原始数据作为兜底
+
+---

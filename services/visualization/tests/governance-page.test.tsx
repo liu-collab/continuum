@@ -58,6 +58,48 @@ const sourceStatus = {
   connectionLimit: null
 };
 
+function createGovernanceDetail(overrides: Record<string, unknown> = {}) {
+  return {
+    executionId: "execution-1",
+    proposalId: "proposal-1",
+    workspaceId: "workspace-1",
+    proposalType: "archive",
+    proposalTypeLabel: "归档",
+    executionStatus: "executed",
+    executionStatusLabel: "已执行",
+    reasonCode: "obsolete",
+    reasonText: "清理旧记忆",
+    deleteReason: null,
+    startedAt: "2026-04-22T00:00:00Z",
+    finishedAt: "2026-04-22T00:01:00Z",
+    sourceService: "retrieval-runtime",
+    plannerModel: "memory_llm",
+    plannerConfidence: 0.9,
+    verifierRequired: false,
+    verifierModel: null,
+    verifierDecision: null,
+    verifierConfidence: null,
+    verifierNotes: null,
+    verificationBlocked: false,
+    verificationBlockedReason: null,
+    targetSummary: "memory-1",
+    targetRecordIds: ["memory-1"],
+    resultSummary: null,
+    errorMessage: null,
+    policyVersion: "memory-governance-v1",
+    suggestedChanges: {},
+    evidence: {},
+    targets: [
+      {
+        recordId: "memory-1",
+        conflictId: null,
+        role: "target"
+      }
+    ],
+    ...overrides
+  };
+}
+
 describe("governance page", () => {
   it("uses client navigation links for execution cards", async () => {
     getGovernanceHistoryMock.mockResolvedValue({
@@ -112,44 +154,7 @@ describe("governance page", () => {
       sourceStatus
     });
     getGovernanceExecutionDetailMock.mockResolvedValue({
-      detail: {
-        executionId: "execution-1",
-        proposalId: "proposal-1",
-        workspaceId: "workspace-1",
-        proposalType: "archive",
-        proposalTypeLabel: "归档",
-        executionStatus: "executed",
-        executionStatusLabel: "已执行",
-        reasonCode: "obsolete",
-        reasonText: "清理旧记忆",
-        deleteReason: null,
-        startedAt: "2026-04-22T00:00:00Z",
-        finishedAt: "2026-04-22T00:01:00Z",
-        sourceService: "retrieval-runtime",
-        plannerModel: "memory_llm",
-        plannerConfidence: 0.9,
-        verifierRequired: false,
-        verifierModel: null,
-        verifierDecision: null,
-        verifierConfidence: null,
-        verifierNotes: null,
-        verificationBlocked: false,
-        verificationBlockedReason: null,
-        targetSummary: "memory-1",
-        targetRecordIds: ["memory-1"],
-        resultSummary: null,
-        errorMessage: null,
-        policyVersion: "memory-governance-v1",
-        suggestedChanges: {},
-        evidence: {},
-        targets: [
-          {
-            recordId: "memory-1",
-            conflictId: null,
-            role: "target"
-          }
-        ]
-      },
+      detail: createGovernanceDetail(),
       status: sourceStatus
     });
     fetchRuntimeGovernanceConfigMock.mockResolvedValue({
@@ -165,5 +170,70 @@ describe("governance page", () => {
     render(element);
 
     expect(screen.getByTitle("memory-1")).toHaveAttribute("href", "/memories/memory-1");
+  });
+
+  it("formats known governance evidence instead of showing raw JSON", async () => {
+    getGovernanceHistoryMock.mockResolvedValue({
+      items: [],
+      total: 1,
+      sourceStatus
+    });
+    getGovernanceExecutionDetailMock.mockResolvedValue({
+      detail: createGovernanceDetail({
+        proposalType: "delete",
+        proposalTypeLabel: "删除",
+        evidence: {
+          delete_reason: "replaced by newer state"
+        }
+      }),
+      status: sourceStatus
+    });
+    fetchRuntimeGovernanceConfigMock.mockResolvedValue({
+      governance: null,
+      status: sourceStatus
+    });
+
+    const element = await GovernancePage({
+      searchParams: Promise.resolve({
+        execution_id: "execution-1"
+      })
+    });
+    render(element);
+
+    expect(screen.getByTestId("governance-evidence-formatted")).toHaveTextContent("这次治理会删除目标记忆");
+    expect(screen.getByTestId("governance-evidence-formatted")).toHaveTextContent("replaced by newer state");
+    expect(screen.queryByText(/delete_reason/)).not.toBeInTheDocument();
+  });
+
+  it("keeps raw evidence collapsed for unknown proposal types", async () => {
+    getGovernanceHistoryMock.mockResolvedValue({
+      items: [],
+      total: 1,
+      sourceStatus
+    });
+    getGovernanceExecutionDetailMock.mockResolvedValue({
+      detail: createGovernanceDetail({
+        proposalType: "custom_action",
+        proposalTypeLabel: "自定义动作",
+        evidence: {
+          custom_field: "custom value"
+        }
+      }),
+      status: sourceStatus
+    });
+    fetchRuntimeGovernanceConfigMock.mockResolvedValue({
+      governance: null,
+      status: sourceStatus
+    });
+
+    const element = await GovernancePage({
+      searchParams: Promise.resolve({
+        execution_id: "execution-1"
+      })
+    });
+    render(element);
+
+    expect(screen.getByTestId("governance-evidence-raw")).toHaveTextContent("查看原始证据");
+    expect(screen.getByTestId("governance-evidence-raw")).toHaveTextContent("custom_field");
   });
 });

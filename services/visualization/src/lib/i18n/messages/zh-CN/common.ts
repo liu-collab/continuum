@@ -330,6 +330,16 @@ const zhCommon = {
         maxActions: "最大动作数",
         minutes: "分钟",
         configure: "配置"
+      },
+      evidenceFormatted: {
+        empty: "当前提案没有记录额外证据。",
+        merge: "这次治理会合并 {count} 条来源记忆。",
+        archive: "这次治理会归档目标记忆。原因：{reason}",
+        delete: "这次治理会删除目标记忆。原因：{reason}",
+        summarize: "这次治理会把 {count} 条来源记忆收敛为摘要。",
+        missingReason: "未记录原因",
+        rawSummary: "查看原始证据",
+        unknown: "当前提案类型还没有专用说明，以下为原始证据。"
       }
     },
     docs: {

@@ -330,6 +330,16 @@ const enCommon = {
         maxActions: "Max actions",
         minutes: "minutes",
         configure: "Configure"
+      },
+      evidenceFormatted: {
+        empty: "No extra evidence was recorded for this proposal.",
+        merge: "This governance action merges {count} source memories.",
+        archive: "This governance action archives the target memory. Reason: {reason}",
+        delete: "This governance action deletes the target memory. Reason: {reason}",
+        summarize: "This governance action condenses {count} source memories into a summary.",
+        missingReason: "No reason recorded",
+        rawSummary: "View raw evidence",
+        unknown: "This proposal type does not have a dedicated explanation yet. Raw evidence is shown below."
       }
     },
     docs: {

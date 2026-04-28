@@ -10,9 +10,12 @@ import { HealthModalButton } from "@/components/health-modal";
 import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/memory-catalog/service";
+import type { GovernanceExecutionDetail } from "@/lib/contracts";
 import { formatDebugReference, formatTimestamp, formatWorkspaceReference, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
 import { getServerTranslator } from "@/lib/i18n/server";
 import { fetchRuntimeGovernanceConfig } from "@/lib/server/runtime-observe-client";
+
+type TFunction = (key: string, variables?: Record<string, string | number>) => string;
 
 function parseSearchParams(input: Record<string, string | string[] | undefined>) {
   const valueOf = (key: string) => {
@@ -48,6 +51,91 @@ function targetReferenceLink(
     >
       {label}
     </Link>
+  );
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function readEvidenceReason(evidence: GovernanceExecutionDetail["evidence"], ...keys: string[]) {
+  for (const key of keys) {
+    const value = evidence[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function hasEvidence(evidence: GovernanceExecutionDetail["evidence"]) {
+  return Object.keys(evidence).length > 0;
+}
+
+function GovernanceEvidence({
+  proposalType,
+  evidence,
+  t
+}: {
+  proposalType: string;
+  evidence: GovernanceExecutionDetail["evidence"];
+  t: TFunction;
+}) {
+  if (!hasEvidence(evidence)) {
+    return (
+      <p className="text-[14px] leading-[1.43] text-muted" data-testid="governance-evidence-empty">
+        {t("governance.evidenceFormatted.empty")}
+      </p>
+    );
+  }
+
+  if (proposalType === "merge") {
+    const mergedFrom = readStringList(evidence["merged_from"] ?? evidence["mergedFrom"]);
+    return (
+      <p className="text-[14px] leading-[1.43] text-muted" data-testid="governance-evidence-formatted">
+        {t("governance.evidenceFormatted.merge", { count: mergedFrom.length })}
+      </p>
+    );
+  }
+
+  if (proposalType === "archive") {
+    const reason = readEvidenceReason(evidence, "archive_reason", "archiveReason", "reason");
+    return (
+      <p className="text-[14px] leading-[1.43] text-muted" data-testid="governance-evidence-formatted">
+        {t("governance.evidenceFormatted.archive", { reason: reason ?? t("governance.evidenceFormatted.missingReason") })}
+      </p>
+    );
+  }
+
+  if (proposalType === "delete") {
+    const reason = readEvidenceReason(evidence, "delete_reason", "deleteReason", "reason");
+    return (
+      <div className="notice notice-warning" data-testid="governance-evidence-formatted">
+        {t("governance.evidenceFormatted.delete", { reason: reason ?? t("governance.evidenceFormatted.missingReason") })}
+      </div>
+    );
+  }
+
+  if (proposalType === "summarize") {
+    const sourceRecordIds = readStringList(evidence["source_record_ids"] ?? evidence["sourceRecordIds"]);
+    return (
+      <p className="text-[14px] leading-[1.43] text-muted" data-testid="governance-evidence-formatted">
+        {t("governance.evidenceFormatted.summarize", { count: sourceRecordIds.length })}
+      </p>
+    );
+  }
+
+  return (
+    <details className="record-card" data-testid="governance-evidence-raw">
+      <summary className="cursor-pointer text-[17px] font-semibold leading-[1.24] text-text">
+        {t("governance.evidenceFormatted.rawSummary")}
+      </summary>
+      <p className="mt-3 text-[14px] leading-[1.43] text-muted">
+        {t("governance.evidenceFormatted.unknown")}
+      </p>
+      <pre className="quiet-code mt-4">{JSON.stringify(evidence, null, 2)}</pre>
+    </details>
   );
 }
 
@@ -260,7 +348,11 @@ export default async function GovernancePage({
                       </div>
                       <div>
                         <div className="section-kicker mb-3">{t("governance.evidence")}</div>
-                        <pre className="quiet-code">{JSON.stringify(detailResponse.detail.evidence, null, 2)}</pre>
+                        <GovernanceEvidence
+                          proposalType={detailResponse.detail.proposalType}
+                          evidence={detailResponse.detail.evidence}
+                          t={t}
+                        />
                       </div>
                     </div>
                   </details>
