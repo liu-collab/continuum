@@ -6,6 +6,11 @@ import { ValidationError } from "./errors.js";
 import { hostAdapters } from "./host-adapters/index.js";
 import { finalizeTurnInputSchema, prepareContextInputSchema } from "./host-adapters/types.js";
 import type { RetrievalRuntimeService } from "./runtime-service.js";
+import {
+  resolveRuntimeGovernanceConfigPath,
+  runtimeGovernanceConfigUpdateSchema,
+  writeRuntimeGovernanceConfigFile,
+} from "./runtime-config.js";
 import { observeRunsQuerySchema } from "./api/schemas.js";
 
 const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
@@ -118,6 +123,34 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
   app.get("/v1/runtime/dependency-status", async (request) =>
     withRequestLogContext(request, {}, () => runtimeService.getDependencies()),
   );
+  app.get("/v1/runtime/config", async (request) =>
+    withRequestLogContext(request, {}, () => ({
+      governance: runtimeService.getRuntimeGovernanceConfig(),
+    })),
+  );
+  app.put("/v1/runtime/config", async (request) => {
+    const payloadSchema = z.object({
+      governance: runtimeGovernanceConfigUpdateSchema.optional(),
+    });
+    const parsed = payloadSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new ValidationError("Invalid runtime config payload", parsed.error.flatten());
+    }
+
+    return withRequestLogContext(request, {}, async () => {
+      const update = parsed.data.governance ?? {};
+      const next = {
+        ...runtimeService.getRuntimeGovernanceConfig(),
+        ...update,
+      };
+      await writeRuntimeGovernanceConfigFile(resolveRuntimeGovernanceConfigPath(), next);
+      runtimeService.updateRuntimeGovernanceConfig(update);
+      return {
+        ok: true,
+        governance: next,
+      };
+    });
+  });
   app.post("/v1/runtime/dependency-status/embeddings/check", async (request) =>
     withRequestLogContext(request, { dependency: "embeddings" }, () => runtimeService.checkEmbeddings()),
   );

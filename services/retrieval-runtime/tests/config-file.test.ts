@@ -19,6 +19,10 @@ import {
   readRequiredJsonConfigFile,
 } from "../src/config-file.js";
 import { ConfigurationError } from "../src/errors.js";
+import {
+  resolveRuntimeGovernanceConfig,
+  writeRuntimeGovernanceConfigFile,
+} from "../src/runtime-config.js";
 
 describe("config file helper", () => {
   const tempDirs: string[] = [];
@@ -340,6 +344,34 @@ describe("config file helper", () => {
       baseUrl: "https://file.example.test/v1",
       model: "claude-haiku-4-5-20251001",
       timeoutMs: 2500,
+    });
+  });
+
+  it("loads runtime governance config from managed file over env defaults", async () => {
+    const configPath = tempConfigPath("runtime-config.json");
+    await writeRuntimeGovernanceConfigFile(configPath, {
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4,
+    });
+
+    expect(
+      resolveRuntimeGovernanceConfig({
+        CONTINUUM_RUNTIME_CONFIG_PATH: configPath,
+        WRITEBACK_MAINTENANCE_ENABLED: false,
+        WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+        WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+      }),
+    ).toEqual({
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4,
     });
   });
 });

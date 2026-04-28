@@ -244,6 +244,23 @@ export const runtimeErrorResponseSchema = z.object({
   }),
 });
 
+export const runtimeGovernanceConfigSchema = z.object({
+  WRITEBACK_MAINTENANCE_ENABLED: z.boolean(),
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: z.number().int(),
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: z.boolean(),
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: z.boolean(),
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: z.number().int(),
+});
+
+export const runtimeConfigResultSchema = z.object({
+  governance: runtimeGovernanceConfigSchema,
+});
+
+export const runtimeConfigUpdateResultSchema = z.object({
+  ok: z.literal(true),
+  governance: runtimeGovernanceConfigSchema,
+});
+
 export type SessionStartRequest = z.infer<typeof sessionStartRequestSchema>;
 export type PrepareContextRequest = z.infer<typeof prepareContextRequestSchema>;
 export type FinalizeTurnRequest = z.infer<typeof finalizeTurnRequestSchema>;
@@ -255,3 +272,6 @@ export type WriteProjectionStatusResult = z.infer<typeof writeProjectionStatusRe
 export type DependencyStatusSnapshot = z.infer<typeof dependencyStatusSnapshotSchema>;
 export type DependencyProbeResult = z.infer<typeof dependencyProbeResultSchema>;
 export type HealthEndpointResult = z.infer<typeof healthEndpointSchema>;
+export type RuntimeGovernanceConfig = z.infer<typeof runtimeGovernanceConfigSchema>;
+export type RuntimeConfigResult = z.infer<typeof runtimeConfigResultSchema>;
+export type RuntimeConfigUpdateResult = z.infer<typeof runtimeConfigUpdateResultSchema>;

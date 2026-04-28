@@ -28,6 +28,33 @@ const runtimeCalls = {
     detail: "memory llm request completed",
     last_checked_at: "now",
   })),
+  getRuntimeConfig: vi.fn(async () => ({
+    governance: {
+      WRITEBACK_MAINTENANCE_ENABLED: false,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+    },
+  })),
+  updateRuntimeConfig: vi.fn(async (payload: {
+    governance?: {
+      WRITEBACK_MAINTENANCE_ENABLED?: boolean;
+      WRITEBACK_MAINTENANCE_INTERVAL_MS?: number;
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED?: boolean;
+      WRITEBACK_GOVERNANCE_SHADOW_MODE?: boolean;
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS?: number;
+    };
+  }) => ({
+    ok: true as const,
+    governance: {
+      WRITEBACK_MAINTENANCE_ENABLED: payload.governance?.WRITEBACK_MAINTENANCE_ENABLED ?? false,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: payload.governance?.WRITEBACK_MAINTENANCE_INTERVAL_MS ?? 900000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: payload.governance?.WRITEBACK_GOVERNANCE_VERIFY_ENABLED ?? true,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: payload.governance?.WRITEBACK_GOVERNANCE_SHADOW_MODE ?? false,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: payload.governance?.WRITEBACK_MAINTENANCE_MAX_ACTIONS ?? 10,
+    },
+  })),
   sessionStartContext: vi.fn(async () => null),
   prepareContext: vi.fn(async () => null),
   finalizeTurn: vi.fn(async () => null)
@@ -584,6 +611,71 @@ describe("health routes", () => {
     }
   });
 
+  it("proxies governance runtime config to retrieval-runtime", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const readResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/runtime/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(readResponse.statusCode).toBe(200);
+      expect(readResponse.json()).toMatchObject({
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: false,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+        },
+      });
+
+      const writeResponse = await app.inject({
+        method: "PUT",
+        url: "/v1/agent/runtime/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          governance: {
+            WRITEBACK_MAINTENANCE_ENABLED: true,
+            WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+            WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+            WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+            WRITEBACK_MAINTENANCE_MAX_ACTIONS: 5,
+          },
+        },
+      });
+
+      expect(writeResponse.statusCode).toBe(200);
+      expect(runtimeCalls.updateRuntimeConfig).toHaveBeenCalledWith({
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: true,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+          WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+          WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 5,
+        },
+      });
+      expect(writeResponse.json()).toMatchObject({
+        ok: true,
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: true,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 5,
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("proxies an active embedding health check", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");
@@ -994,4 +1086,3 @@ describe("health routes", () => {
     }
   });
 });
-

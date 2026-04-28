@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import pino, { type Logger } from "pino";
 import { describe, expect, it } from "vitest";
 
@@ -3440,6 +3444,11 @@ describe("retrieval-runtime service", () => {
   });
 
   it("serves public HTTP endpoints with stable response shapes", async () => {
+    const previousRuntimeConfigPath = process.env.CONTINUUM_RUNTIME_CONFIG_PATH;
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-config-"));
+    process.env.CONTINUUM_RUNTIME_CONFIG_PATH = path.join(tempDir, "runtime-config.json");
+
+    try {
     const { service } = createRuntime();
     const app = createApp(service);
 
@@ -3492,11 +3501,30 @@ describe("retrieval-runtime service", () => {
       method: "POST",
       url: "/v1/runtime/dependency-status/memory-llm/check",
     });
+    const runtimeConfigResponse = await app.inject({
+      method: "GET",
+      url: "/v1/runtime/config",
+    });
+    const updateRuntimeConfigResponse = await app.inject({
+      method: "PUT",
+      url: "/v1/runtime/config",
+      payload: {
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: true,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 30000,
+          WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+          WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 3,
+        },
+      },
+    });
 
     expect(prepareResponse.statusCode).toBe(200);
     expect(finalizeResponse.statusCode).toBe(200);
     expect(embeddingCheckResponse.statusCode).toBe(200);
     expect(memoryLlmCheckResponse.statusCode).toBe(200);
+    expect(runtimeConfigResponse.statusCode).toBe(200);
+    expect(updateRuntimeConfigResponse.statusCode).toBe(200);
     expect(livenessResponse.json()).toEqual({ status: "alive" });
     expect(readinessResponse.json()).toEqual({ status: "ready" });
     expect(dependenciesResponse.json()).toHaveProperty("read_model");
@@ -3508,8 +3536,29 @@ describe("retrieval-runtime service", () => {
       name: "memory_llm",
       status: "unavailable",
     });
+    expect(runtimeConfigResponse.json()).toMatchObject({
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: false,
+      },
+    });
+    expect(updateRuntimeConfigResponse.json()).toMatchObject({
+      ok: true,
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: true,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 3,
+      },
+    });
     expect(prepareResponse.json().injection_block.memory_summary).toBeTruthy();
     expect(finalizeResponse.json().write_back_candidates.length).toBeGreaterThan(0);
+    } finally {
+      if (previousRuntimeConfigPath === undefined) {
+        delete process.env.CONTINUUM_RUNTIME_CONFIG_PATH;
+      } else {
+        process.env.CONTINUUM_RUNTIME_CONFIG_PATH = previousRuntimeConfigPath;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("adds request and trace context to runtime logs", async () => {

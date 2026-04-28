@@ -320,6 +320,16 @@ const dictionaries = {
         merge: "合并",
         resolve_conflict: "解决冲突",
         summarize: "摘要收敛"
+      },
+      autoConfig: {
+        title: "自动治理配置",
+        status: "自动治理",
+        interval: "扫描间隔",
+        verifier: "Verifier",
+        shadow: "Shadow",
+        maxActions: "最大动作数",
+        minutes: "分钟",
+        configure: "配置"
       }
     },
     docs: {
@@ -1059,6 +1069,16 @@ const dictionaries = {
         merge: "Merge",
         resolve_conflict: "Resolve conflict",
         summarize: "Summarize"
+      },
+      autoConfig: {
+        title: "Automatic governance config",
+        status: "Automatic governance",
+        interval: "Scan interval",
+        verifier: "Verifier",
+        shadow: "Shadow",
+        maxActions: "Max actions",
+        minutes: "minutes",
+        configure: "Configure"
       }
     },
     docs: {

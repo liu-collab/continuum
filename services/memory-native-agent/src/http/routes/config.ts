@@ -103,6 +103,18 @@ const updateConfigSchema = z.object({
   }).optional(),
 });
 
+const runtimeGovernanceConfigUpdateSchema = z.object({
+  WRITEBACK_MAINTENANCE_ENABLED: z.boolean().optional(),
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: z.number().int().min(30_000).optional(),
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: z.boolean().optional(),
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: z.boolean().optional(),
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: z.number().int().min(1).max(20).optional(),
+}).strict();
+
+const updateRuntimeConfigSchema = z.object({
+  governance: runtimeGovernanceConfigUpdateSchema.optional(),
+});
+
 function formatZodIssues(error: z.ZodError) {
   return error.issues
     .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
@@ -457,6 +469,25 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     return result;
   });
 
+  app.get("/v1/agent/runtime/config", async () => {
+    return app.runtimeState.memoryClient.getRuntimeConfig();
+  });
+
+  app.put("/v1/agent/runtime/config", async (request, reply) => {
+    const parsed = updateRuntimeConfigSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: "invalid_runtime_config_payload",
+          message: formatZodIssues(parsed.error),
+        },
+      });
+    }
+
+    return app.runtimeState.memoryClient.updateRuntimeConfig(parsed.data);
+  });
+
   app.post("/v1/agent/dependency-status/memory-llm/check", async () => {
     const managedConfig = await readJson<{
       baseUrl?: string;
@@ -505,4 +536,3 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
-

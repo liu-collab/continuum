@@ -12,6 +12,10 @@ import type {
   WritebackPlanner,
 } from "./memory-orchestrator/index.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
+import {
+  pickRuntimeGovernanceConfig,
+  type RuntimeGovernanceConfig,
+} from "./runtime-config.js";
 import { nowIso } from "./shared/utils.js";
 import { matchesHistoryReference } from "./shared/utils.js";
 import type {
@@ -246,6 +250,7 @@ export class RetrievalRuntimeService {
   private readonly memoryOrchestrator?: MemoryOrchestrator;
   private readonly maintenanceWorker?: WritebackMaintenanceWorker;
   private readonly storageClient?: StorageWritebackClient;
+  private runtimeGovernanceConfig: RuntimeGovernanceConfig;
   private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
   private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
   private readonly recentInjectionContexts = new Map<string, {
@@ -323,6 +328,7 @@ export class RetrievalRuntimeService {
       this.embeddingTimeoutMs =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number" ? embeddingTimeoutMsOrMemoryOrchestrator : 800;
       this.memoryLlmTimeoutMs = configOrTriggerEngine.MEMORY_LLM_TIMEOUT_MS;
+      this.runtimeGovernanceConfig = pickRuntimeGovernanceConfig(configOrTriggerEngine);
       this.memoryOrchestrator =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
           ? memoryOrchestratorOrMaintenanceWorker as MemoryOrchestrator | undefined
@@ -353,6 +359,13 @@ export class RetrievalRuntimeService {
         ? finalizeIdempotencyCacheOrEmbeddingTimeoutMs
         : 800;
     this.memoryLlmTimeoutMs = this.embeddingTimeoutMs;
+    this.runtimeGovernanceConfig = {
+      WRITEBACK_MAINTENANCE_ENABLED: false,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 15 * 60 * 1000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+    };
     this.memoryOrchestrator =
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? embeddingTimeoutMsOrMemoryOrchestrator as MemoryOrchestrator | undefined
@@ -387,6 +400,19 @@ export class RetrievalRuntimeService {
       workspaceId: input?.workspace_id,
       forced: input?.force ?? false,
     });
+  }
+
+  getRuntimeGovernanceConfig(): RuntimeGovernanceConfig {
+    return this.maintenanceWorker?.getRuntimeConfig() ?? { ...this.runtimeGovernanceConfig };
+  }
+
+  updateRuntimeGovernanceConfig(config: Partial<RuntimeGovernanceConfig>): RuntimeGovernanceConfig {
+    this.runtimeGovernanceConfig = {
+      ...this.runtimeGovernanceConfig,
+      ...config,
+    };
+    this.maintenanceWorker?.updateRuntimeConfig(config);
+    return this.getRuntimeGovernanceConfig();
   }
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {

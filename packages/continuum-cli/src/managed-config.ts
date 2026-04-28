@@ -55,6 +55,10 @@ export function continuumManagedMemoryLlmConfigPath() {
   return path.join(continuumManagedDir(), "memory-llm-config.json");
 }
 
+export function continuumManagedRuntimeConfigPath() {
+  return path.join(continuumManagedDir(), "runtime-config.json");
+}
+
 export function managedMnaProviderConfigPath(mnaHomeDir: string) {
   return path.join(mnaHomeDir, "config.json");
 }

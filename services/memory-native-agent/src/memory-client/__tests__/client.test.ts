@@ -290,6 +290,57 @@ describe("memory client", () => {
     });
   });
 
+  it("reads and updates runtime governance config", async () => {
+    const runtime = await startMockRuntime((app) => {
+      app.get("/v1/runtime/config", async () => ({
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: false,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+          WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+          WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+        },
+      }));
+      app.put("/v1/runtime/config", async (request) => ({
+        ok: true,
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: Boolean(
+            (request.body as { governance?: { WRITEBACK_MAINTENANCE_ENABLED?: boolean } }).governance
+              ?.WRITEBACK_MAINTENANCE_ENABLED,
+          ),
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+          WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+          WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 5,
+        },
+      }));
+    });
+    startedApps.push(runtime.app);
+
+    const client = new MemoryClient({ baseUrl: runtime.baseUrl });
+    await expect(client.getRuntimeConfig()).resolves.toMatchObject({
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: false,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+      },
+    });
+
+    await expect(
+      client.updateRuntimeConfig({
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: true,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: true,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 5,
+      },
+    });
+  });
+
   it("reads write projection status with schema validation", async () => {
     const runtime = await startMockRuntime((app) => {
       app.post("/v1/runtime/write-projection-status", async () => ({
@@ -342,4 +393,3 @@ describe("memory client", () => {
     });
   });
 });
-

@@ -134,6 +134,12 @@
     "providerStatus": "模型提供方状态",
     "embeddingStatus": "向量依赖状态",
     "memoryLlmStatus": "记忆模型状态",
+    "governanceTitle": "自动治理",
+    "governanceEnabled": "启用自动治理",
+    "governanceVerifyEnabled": "Verifier 二次校验",
+    "governanceShadowMode": "Shadow 模式",
+    "governanceIntervalMinutes": "扫描间隔（分钟）",
+    "governanceMaxActions": "每次扫描最大动作数",
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
@@ -174,7 +180,9 @@
       "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
       "memoryLlmFollowUnsupported": "当前聊天主模型不能直接同步为记忆模型，请改为独立配置。",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS 需要是正整数。",
-      "memoryLlmMaxTokensInvalid": "memory llm 最大输出 token 需要是正整数。"
+      "memoryLlmMaxTokensInvalid": "memory llm 最大输出 token 需要是正整数。",
+      "governanceIntervalInvalid": "自动治理扫描间隔需要是大于 0 的整数分钟。",
+      "governanceMaxActionsInvalid": "每次扫描最大动作数需要是 1 到 20 之间的整数。"
     }
   },
   "costBar": {

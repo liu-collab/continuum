@@ -43,6 +43,16 @@ const baseConfig = {
   },
 };
 
+const baseRuntimeConfig = {
+  governance: {
+    WRITEBACK_MAINTENANCE_ENABLED: false,
+    WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+    WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+    WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+    WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+  },
+};
+
 describe("SettingsModal", () => {
   it("asks the user to save before running embedding health check on unsaved changes", async () => {
     const user = userEvent.setup();
@@ -533,6 +543,53 @@ describe("SettingsModal", () => {
         },
       }),
     );
+  });
+
+  it("saves automatic governance config with runtime settings", async () => {
+    const user = userEvent.setup();
+    const onSaveGovernanceConfig = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          runtimeConfig={baseRuntimeConfig}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onSaveGovernanceConfig={onSaveGovernanceConfig}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const governanceConfig = screen.getByTestId("governance-config");
+    await user.click(within(governanceConfig).getByLabelText("启用自动治理"));
+    await user.click(within(governanceConfig).getByLabelText("Verifier 二次校验"));
+    await user.click(within(governanceConfig).getByLabelText("Shadow 模式"));
+    await user.clear(within(governanceConfig).getByPlaceholderText("扫描间隔（分钟）"));
+    await user.type(within(governanceConfig).getByPlaceholderText("扫描间隔（分钟）"), "5");
+    await user.clear(within(governanceConfig).getByPlaceholderText("每次扫描最大动作数"));
+    await user.type(within(governanceConfig).getByPlaceholderText("每次扫描最大动作数"), "4");
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveGovernanceConfig).toHaveBeenCalledWith({
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4,
+    });
   });
 });
 

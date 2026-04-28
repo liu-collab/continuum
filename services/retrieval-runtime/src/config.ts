@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ConfigurationError } from "./errors.js";
+import { resolveRuntimeGovernanceConfig } from "./runtime-config.js";
 
 const booleanCoerceSchema = z
   .union([z.boolean(), z.string()])
@@ -36,6 +37,7 @@ const envSchema = z.object({
   EMBEDDING_CACHE_MAX_ENTRIES: z.coerce.number().int().min(0).default(1000),
   CONTINUUM_EMBEDDING_CONFIG_PATH: z.string().optional(),
   CONTINUUM_MEMORY_LLM_CONFIG_PATH: z.string().optional(),
+  CONTINUUM_RUNTIME_CONFIG_PATH: z.string().optional(),
   MEMORY_LLM_BASE_URL: z.string().url("MEMORY_LLM_BASE_URL must be a valid URL").optional(),
   MEMORY_LLM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   MEMORY_LLM_API_KEY: z.string().optional(),
@@ -112,5 +114,16 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new ConfigurationError("Invalid retrieval-runtime configuration", parsed.error.flatten());
   }
 
-  return parsed.data;
+  const runtimeGovernanceConfig = resolveRuntimeGovernanceConfig(parsed.data);
+  const merged = {
+    ...parsed.data,
+    ...runtimeGovernanceConfig,
+  };
+  const reparsed = envSchema.safeParse(merged);
+
+  if (!reparsed.success) {
+    throw new ConfigurationError("Invalid retrieval-runtime managed configuration", reparsed.error.flatten());
+  }
+
+  return reparsed.data;
 }

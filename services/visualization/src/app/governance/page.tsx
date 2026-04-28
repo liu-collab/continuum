@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { EmptyState } from "@/components/empty-state";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
@@ -7,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/memory-catalog/service";
 import { formatDebugReference, formatTimestamp, formatWorkspaceReference, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
 import { getServerTranslator } from "@/lib/i18n/server";
+import { fetchRuntimeGovernanceConfig } from "@/lib/server/runtime-observe-client";
 
 function parseSearchParams(input: Record<string, string | string[] | undefined>) {
   const valueOf = (key: string) => {
@@ -40,7 +43,18 @@ export default async function GovernancePage({
   const detailResponse = selectedId
     ? await getGovernanceExecutionDetail(selectedId)
     : { detail: null, status: response.sourceStatus };
+  const runtimeConfigResponse = await fetchRuntimeGovernanceConfig({ locale });
   const activeCount = [params.workspaceId, params.proposalType, params.executionStatus, params.executionId].filter(Boolean).length;
+  const governanceConfig = runtimeConfigResponse.governance;
+  const governanceSummary = governanceConfig
+    ? [
+        `${t("governance.autoConfig.status")}: ${governanceConfig.WRITEBACK_MAINTENANCE_ENABLED ? t("common.yes") : t("common.noValue")}`,
+        `${t("governance.autoConfig.interval")}: ${Math.max(1, Math.round(governanceConfig.WRITEBACK_MAINTENANCE_INTERVAL_MS / 60000))} ${t("governance.autoConfig.minutes")}`,
+        `${t("governance.autoConfig.verifier")}: ${governanceConfig.WRITEBACK_GOVERNANCE_VERIFY_ENABLED ? t("common.yes") : t("common.noValue")}`,
+        `${t("governance.autoConfig.shadow")}: ${governanceConfig.WRITEBACK_GOVERNANCE_SHADOW_MODE ? t("common.yes") : t("common.noValue")}`,
+        `${t("governance.autoConfig.maxActions")}: ${governanceConfig.WRITEBACK_MAINTENANCE_MAX_ACTIONS}`
+      ]
+    : [runtimeConfigResponse.status.detail ?? t("common.unavailable")];
 
   return (
     <div className="app-page">
@@ -83,6 +97,15 @@ export default async function GovernancePage({
               </FilterModalButton>
               <HealthModalButton sources={[response.sourceStatus, detailResponse.status]} label={t("common.dataSource")} />
             </div>
+          </div>
+          <div className="notice notice-info mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-text">{t("governance.autoConfig.title")}</div>
+              <p className="mt-1 text-sm text-muted">{governanceSummary.join(" | ")}</p>
+            </div>
+            <Link href="/agent?settings=governance" className="btn-outline">
+              {t("governance.autoConfig.configure")}
+            </Link>
           </div>
         </div>
       </section>

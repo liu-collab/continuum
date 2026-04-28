@@ -464,6 +464,86 @@ export default async function AgentSessionPage({ params }: { params: Promise<{ s
 
 ---
 
+## 优化十一：治理配置入口与 retrieval-runtime 配置 API
+
+**状态：已完成**
+
+### 问题
+
+自动治理（MaintenanceWorker 定期用 LLM 扫描、规划、执行）有多项可配置参数，但全部埋藏在 retrieval-runtime 的环境变量中，用户没有任何 UI 入口：
+
+| 参数 | 作用 |
+|---|---|
+| `WRITEBACK_MAINTENANCE_ENABLED` | 是否启用自动治理 |
+| `WRITEBACK_MAINTENANCE_INTERVAL_MS` | 扫描间隔 |
+| `WRITEBACK_GOVERNANCE_VERIFY_ENABLED` | 是否启用 verifier 二次校验 |
+| `WRITEBACK_GOVERNANCE_SHADOW_MODE` | 是否只统计不执行（调试/审计用） |
+| `WRITEBACK_MAINTENANCE_MAX_ACTIONS` | 每次扫描最多执行多少动作 |
+
+同时，Agent 设置面板中的"写回模型"标签具有误导性——这个 `memory_llm` 同时驱动 writeback 和 governance，但面板上完全没有提到治理。
+
+根本原因是 retrieval-runtime 没有等价于 MNA `GET/PUT /v1/agent/config` 的配置端点，前端无法读写 runtime 配置。
+
+### 方案
+
+**（a）retrieval-runtime 增加配置 API：**
+
+```typescript
+// retrieval-runtime/src/api/routes/config.ts
+
+// GET /v1/runtime/config — 返回当前治理相关配置（脱敏）
+// PUT /v1/runtime/config — 更新可编辑配置子集
+
+const editableConfigSchema = z.object({
+  WRITEBACK_MAINTENANCE_ENABLED: z.boolean().optional(),
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: z.number().min(30_000).optional(),
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: z.boolean().optional(),
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: z.boolean().optional(),
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: z.number().min(1).max(20).optional(),
+});
+
+// 修改后持久化到托管配置文件，和 embedding/memory_llm 配置同目录
+// ~/.continuum/managed/runtime-config.json
+```
+
+runtime 启动时从配置文件加载，`PUT` 后热更新（MaintenanceWorker 下次循环生效）。
+
+**（b）Agent 设置面板增加治理配置区：**
+
+在现有 Agent 设置面板（`agent/_components/settings-panel.tsx`）中增加一个分节：
+
+```
+设置面板
+  ├── 主模型（已有）
+  ├── 审批/计划模式（已有）
+  ├── 记忆模型 / Memory LLM  ← 改名，加说明"用于记忆写入与自动治理"
+  │     base_url / model / api_key / protocol / timeout / effort
+  ├── Embedding（已有）
+  ├── MCP（已有）
+  └── 自动治理 [新增]
+        ├── 启用自动治理         toggle
+        ├── 扫描间隔（分钟）       number
+        ├── Verifier 二次校验     toggle
+        ├── Shadow 模式（调试用）  toggle
+        └── 每次扫描最大动作数     number
+```
+
+**（c）`/governance` 页面增加快速入口：**
+
+治理页面顶部增加一个状态条，显示当前治理配置摘要和"配置"按钮，点击跳转到 Agent 设置面板的治理分区：
+
+```
+自动治理：已启用  |  扫描间隔：5 分钟  |  Verifier：已启用  |  [配置]
+```
+
+### 效果
+
+- 用户不需要理解环境变量就能控制自动治理行为
+- "写回模型"正名为"记忆模型"，和治理的关系透明化
+- runtime 配置 API 为后续扩展（如 runtime 其他参数的页面化管理）打基础
+
+---
+
 ## 实施优先级
 
 | 优先级 | 优化项 | 理由 |

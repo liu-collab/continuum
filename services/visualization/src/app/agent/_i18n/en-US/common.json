@@ -134,6 +134,12 @@
     "providerStatus": "provider status",
     "embeddingStatus": "embedding status",
     "memoryLlmStatus": "memory llm status",
+    "governanceTitle": "Automatic governance",
+    "governanceEnabled": "Enable automatic governance",
+    "governanceVerifyEnabled": "Verifier second pass",
+    "governanceShadowMode": "Shadow mode",
+    "governanceIntervalMinutes": "Scan interval (minutes)",
+    "governanceMaxActions": "Max actions per scan",
     "providerModel": "provider model",
     "providerBaseUrl": "provider base_url",
     "providerApiKey": "provider api_key",
@@ -174,7 +180,9 @@
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
       "memoryLlmFollowUnsupported": "The current primary chat model cannot be mirrored directly as the memory model. Switch to custom mode.",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS must be a positive integer.",
-      "memoryLlmMaxTokensInvalid": "memory llm max output tokens must be a positive integer."
+      "memoryLlmMaxTokensInvalid": "memory llm max output tokens must be a positive integer.",
+      "governanceIntervalInvalid": "Automatic governance scan interval must be a positive integer number of minutes.",
+      "governanceMaxActionsInvalid": "Max actions per scan must be an integer between 1 and 20."
     }
   },
   "costBar": {

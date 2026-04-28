@@ -48,6 +48,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof client.getMetrics>> | null>(null);
   const [dependencyStatus, setDependencyStatus] = useState<Awaited<ReturnType<typeof client.getDependencyStatus>> | null>(null);
   const [agentConfig, setAgentConfig] = useState<Awaited<ReturnType<typeof client.getConfig>> | null>(null);
+  const [runtimeConfig, setRuntimeConfig] = useState<Awaited<ReturnType<typeof client.getRuntimeConfig>> | null>(null);
   const [mcpState, setMcpState] = useState<Awaited<ReturnType<typeof client.getMcpServers>> | null>(null);
   const [promptInspector, setPromptInspector] = useState<MnaPromptInspectorResponse | null>(null);
   const [promptInspectorOpen, setPromptInspectorOpen] = useState(false);
@@ -273,6 +274,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function refreshAgentConfig() {
     setAgentConfig(await client.getConfig());
+  }
+
+  async function refreshRuntimeConfig() {
+    setRuntimeConfig(await client.getRuntimeConfig());
   }
 
   async function refreshMcpState() {
@@ -521,6 +526,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       refreshMetrics(),
       refreshDependencyStatus(),
       refreshAgentConfig(),
+      refreshRuntimeConfig(),
       refreshMcpState()
     ]);
 
@@ -731,6 +737,18 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     await refreshMcpState();
   }
 
+  async function updateGovernanceConfig(payload: {
+    WRITEBACK_MAINTENANCE_ENABLED?: boolean;
+    WRITEBACK_MAINTENANCE_INTERVAL_MS?: number;
+    WRITEBACK_GOVERNANCE_VERIFY_ENABLED?: boolean;
+    WRITEBACK_GOVERNANCE_SHADOW_MODE?: boolean;
+    WRITEBACK_MAINTENANCE_MAX_ACTIONS?: number;
+  }) {
+    await client.updateRuntimeConfig({ governance: payload });
+    await refreshRuntimeConfig();
+    await refreshDependencyStatus();
+  }
+
   async function checkEmbeddings() {
     const result = await client.checkEmbeddings();
     setDependencyStatus((current) => {
@@ -804,6 +822,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     metrics,
     dependencyStatus,
     agentConfig,
+    runtimeConfig,
     mcpState,
     promptInspector,
     promptInspectorOpen,
@@ -818,11 +837,13 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     deleteSession,
     updateProvider,
     updateRuntimeConfig,
+    updateGovernanceConfig,
     checkEmbeddings,
     checkMemoryLlm,
     refreshMetrics,
     refreshDependencyStatus,
     refreshAgentConfig,
+    refreshRuntimeConfig,
     refreshMcpState,
     refreshWorkspaceList,
     refreshSkillList,

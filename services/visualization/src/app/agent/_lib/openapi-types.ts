@@ -352,6 +352,18 @@ export type MnaAgentConfigResponse = {
   };
 };
 
+export type MnaRuntimeGovernanceConfig = {
+  WRITEBACK_MAINTENANCE_ENABLED: boolean;
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: number;
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: boolean;
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: boolean;
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: number;
+};
+
+export type MnaRuntimeConfigResponse = {
+  governance: MnaRuntimeGovernanceConfig;
+};
+
 export type MnaWsSessionStartedEvent = {
   kind: "session_started";
   session_id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { EmptyState } from "@/components/empty-state";
@@ -47,6 +47,12 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
     taskId: workspace.state.activeTask?.taskId ?? null,
     turnId: workspace.activeTurn?.turnId ?? null
   });
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("settings") === "governance") {
+      setSettingsOpen(true);
+    }
+  }, []);
 
   if (workspace.state.bootstrapStatus === "loading") {
     return (
@@ -183,6 +189,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         config={workspace.agentConfig}
+        runtimeConfig={workspace.runtimeConfig}
         dependencyStatus={workspace.dependencyStatus}
         memoryMode={workspace.state.session?.memory_mode ?? "workspace_plus_global"}
         onMemoryModeChange={(value) => {
@@ -190,6 +197,9 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         }}
         onSaveRuntime={(payload) => {
           return workspace.updateRuntimeConfig(payload);
+        }}
+        onSaveGovernanceConfig={(payload) => {
+          return workspace.updateGovernanceConfig(payload);
         }}
         onCheckEmbeddings={() => {
           return workspace.checkEmbeddings();

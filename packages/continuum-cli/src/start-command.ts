@@ -756,6 +756,8 @@ async function startStackContainer(
     `CONTINUUM_EMBEDDING_CONFIG_PATH=${embeddingConfigPath}`,
     "-e",
     `CONTINUUM_MEMORY_LLM_CONFIG_PATH=${memoryLlmConfigPath}`,
+    "-e",
+    "CONTINUUM_RUNTIME_CONFIG_PATH=/opt/continuum/managed/runtime-config.json",
   ];
 
   if (publishVisualizationPort) {

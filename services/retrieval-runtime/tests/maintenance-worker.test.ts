@@ -602,6 +602,47 @@ describe("WritebackMaintenanceWorker", () => {
     expect(storage.governanceBatches).toHaveLength(0);
   });
 
+  it("applies updated governance config on the next maintenance run", async () => {
+    const record = makeRecord("runtime-shadow-archive", "旧任务状态", 3);
+    const sibling = makeRecord("runtime-shadow-related", "新任务状态", 4);
+    const storage = new RecordingStorageClient([record], [sibling]);
+    const planner = new StubPlanner(() => ({
+      actions: [
+        {
+          type: "archive",
+          record_id: record.id,
+          reason: "superseded by newer record",
+        },
+      ],
+    }));
+
+    const repository = new InMemoryRuntimeRepository();
+    const logger = pino({ enabled: false });
+    const guard = new DependencyGuard(repository, logger);
+    const worker = new WritebackMaintenanceWorker(
+      repository,
+      storage,
+      planner,
+      undefined,
+      guard,
+      makeConfig({ WRITEBACK_GOVERNANCE_SHADOW_MODE: false }),
+      logger,
+    );
+
+    worker.updateRuntimeConfig({
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 1,
+    });
+    const summary = await worker.runOnce({ workspaceId, forced: true });
+
+    expect(summary.actions_applied).toBe(1);
+    expect(storage.governanceBatches).toHaveLength(0);
+    expect(worker.getRuntimeConfig()).toMatchObject({
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 1,
+    });
+  });
+
   it("passes recently rejected proposals into governance planner", async () => {
     const seed = makeRecord("seed-rejected", "默认使用中文输出", 4);
     const related = makeRecord("rel-rejected", "偏好中文输出", 3);

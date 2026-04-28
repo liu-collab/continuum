@@ -16,6 +16,8 @@ import type {
   MnaMetricsResponse,
   MnaPickWorkspaceResponse,
   MnaPromptInspectorResponse,
+  MnaRuntimeConfigResponse,
+  MnaRuntimeGovernanceConfig,
   MnaServerEventEnvelope,
   MnaSessionDetailResponse,
   MnaSessionListResponse,
@@ -308,6 +310,19 @@ export class MnaClient {
   }) {
     return this.requestJson<{ ok: true }>("/v1/agent/config", {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getRuntimeConfig() {
+    return this.requestJson<MnaRuntimeConfigResponse>("/v1/agent/runtime/config");
+  }
+
+  async updateRuntimeConfig(payload: {
+    governance?: Partial<MnaRuntimeGovernanceConfig>;
+  }) {
+    return this.requestJson<{ ok: true; governance: MnaRuntimeGovernanceConfig }>("/v1/agent/runtime/config", {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
   }

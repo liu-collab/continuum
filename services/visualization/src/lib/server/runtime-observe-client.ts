@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SourceStatus } from "@/lib/contracts";
 import { getAppConfig } from "@/lib/env";
 import {
   asRecord,
@@ -165,6 +166,19 @@ export type RuntimeDependencyRecord = {
   status: string;
   detail: string;
   checkedAt: string;
+};
+
+export type RuntimeGovernanceConfig = {
+  WRITEBACK_MAINTENANCE_ENABLED: boolean;
+  WRITEBACK_MAINTENANCE_INTERVAL_MS: number;
+  WRITEBACK_GOVERNANCE_VERIFY_ENABLED: boolean;
+  WRITEBACK_GOVERNANCE_SHADOW_MODE: boolean;
+  WRITEBACK_MAINTENANCE_MAX_ACTIONS: number;
+};
+
+export type RuntimeGovernanceConfigResponse = {
+  status: SourceStatus;
+  governance: RuntimeGovernanceConfig | null;
 };
 
 function isDefined<T>(value: T | null | undefined): value is T {
@@ -524,6 +538,82 @@ function mapDependencyStatus(value: unknown, locale: AppLocale = DEFAULT_APP_LOC
       };
     })
     .filter(isDefined);
+}
+
+function mapRuntimeGovernanceConfig(value: unknown): RuntimeGovernanceConfig | null {
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const enabled = pickBoolean(record, "WRITEBACK_MAINTENANCE_ENABLED");
+  const intervalMs = pickNumber(record, "WRITEBACK_MAINTENANCE_INTERVAL_MS");
+  const verifyEnabled = pickBoolean(record, "WRITEBACK_GOVERNANCE_VERIFY_ENABLED");
+  const shadowMode = pickBoolean(record, "WRITEBACK_GOVERNANCE_SHADOW_MODE");
+  const maxActions = pickNumber(record, "WRITEBACK_MAINTENANCE_MAX_ACTIONS");
+
+  if (
+    enabled === undefined ||
+    intervalMs === undefined ||
+    verifyEnabled === undefined ||
+    shadowMode === undefined ||
+    maxActions === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    WRITEBACK_MAINTENANCE_ENABLED: enabled,
+    WRITEBACK_MAINTENANCE_INTERVAL_MS: intervalMs,
+    WRITEBACK_GOVERNANCE_VERIFY_ENABLED: verifyEnabled,
+    WRITEBACK_GOVERNANCE_SHADOW_MODE: shadowMode,
+    WRITEBACK_MAINTENANCE_MAX_ACTIONS: maxActions
+  };
+}
+
+export async function fetchRuntimeGovernanceConfig(
+  options: { locale?: AppLocale } = {}
+): Promise<RuntimeGovernanceConfigResponse> {
+  const { values } = getAppConfig();
+  const locale = options.locale ?? DEFAULT_APP_LOCALE;
+  const t = createTranslator(locale);
+  const response = await fetchJsonFromSource<unknown>({
+    sourceName: "runtime_config_api",
+    sourceLabel: t("service.sources.runtimeObserveApi"),
+    url: values.RUNTIME_API_BASE_URL
+      ? `${values.RUNTIME_API_BASE_URL}/v1/runtime/config`
+      : undefined,
+    timeoutMs: values.RUNTIME_API_TIMEOUT_MS,
+    locale
+  });
+
+  if (!response.ok || !response.data) {
+    return {
+      status: response.status,
+      governance: null
+    };
+  }
+
+  const root = asRecord(unwrapData(response.data));
+  const governance = mapRuntimeGovernanceConfig(root?.governance);
+
+  if (!governance) {
+    return {
+      status: {
+        ...response.status,
+        status: "partial",
+        lastError: t("service.upstream.nonObjectPayload"),
+        detail: t("service.upstream.nonObjectPayload")
+      },
+      governance: null
+    };
+  }
+
+  return {
+    status: response.status,
+    governance
+  };
 }
 
 export async function fetchRuntimeMetrics(options: { locale?: AppLocale } = {}) {

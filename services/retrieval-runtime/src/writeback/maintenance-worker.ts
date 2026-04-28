@@ -13,6 +13,7 @@ import type {
   GovernanceVerifier,
 } from "../memory-orchestrator/index.js";
 import type { RuntimeRepository } from "../observability/runtime-repository.js";
+import type { RuntimeGovernanceConfig } from "../runtime-config.js";
 import type {
   GovernanceExecutionBatch,
   GovernanceExecutionItem,
@@ -78,6 +79,7 @@ export class WritebackMaintenanceWorker {
   private stopped = true;
   private sweepRunning = false;
   private readonly workspaceLocks = new Set<string>();
+  private runtimeConfig: RuntimeGovernanceConfig;
 
   constructor(
     private readonly repository: RuntimeRepository,
@@ -90,13 +92,47 @@ export class WritebackMaintenanceWorker {
     private readonly relationDiscoverer?: RelationDiscoverer,
     private readonly evolutionPlanner?: EvolutionPlanner,
     private readonly writebackEngine?: Pick<WritebackEngine, "assessAndSubmitCandidates">,
-  ) {}
+  ) {
+    this.runtimeConfig = this.pickRuntimeConfig(config);
+  }
+
+  updateRuntimeConfig(config: Partial<RuntimeGovernanceConfig>): void {
+    const wasEnabled = this.runtimeConfig.WRITEBACK_MAINTENANCE_ENABLED;
+    this.runtimeConfig = {
+      ...this.runtimeConfig,
+      ...config,
+    };
+
+    if (!this.runtimeConfig.WRITEBACK_MAINTENANCE_ENABLED) {
+      if (this.timer) {
+        clearTimeout(this.timer);
+        this.timer = null;
+      }
+      this.stopped = true;
+      return;
+    }
+
+    if (!wasEnabled && this.stopped) {
+      this.start();
+      return;
+    }
+
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+      this.scheduleNext();
+    }
+  }
+
+  getRuntimeConfig(): RuntimeGovernanceConfig {
+    return { ...this.runtimeConfig };
+  }
 
   start(): void {
     if (this.timer) {
       return;
     }
-    if (!this.config.WRITEBACK_MAINTENANCE_ENABLED) {
+    if (!this.runtimeConfig.WRITEBACK_MAINTENANCE_ENABLED) {
       return;
     }
     this.stopped = false;
@@ -112,7 +148,7 @@ export class WritebackMaintenanceWorker {
   }
 
   private scheduleNext(): void {
-    if (this.stopped || !this.config.WRITEBACK_MAINTENANCE_ENABLED || this.timer) {
+    if (this.stopped || !this.runtimeConfig.WRITEBACK_MAINTENANCE_ENABLED || this.timer) {
       return;
     }
 
@@ -125,7 +161,7 @@ export class WritebackMaintenanceWorker {
         .finally(() => {
           this.scheduleNext();
         });
-    }, this.config.WRITEBACK_MAINTENANCE_INTERVAL_MS);
+    }, this.runtimeConfig.WRITEBACK_MAINTENANCE_INTERVAL_MS);
   }
 
   async runOnce(options: MaintenanceWorkerOptions = {}): Promise<MaintenanceRunSummary> {
@@ -387,7 +423,7 @@ export class WritebackMaintenanceWorker {
     });
 
     return {
-      actions: mergedActions.slice(0, this.config.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
+      actions: mergedActions.slice(0, this.runtimeConfig.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
       notes: plan.notes,
     };
   }
@@ -590,7 +626,7 @@ export class WritebackMaintenanceWorker {
 
   private capPlan(plan: GovernancePlan): GovernancePlan {
     return {
-      actions: plan.actions.slice(0, this.config.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
+      actions: plan.actions.slice(0, this.runtimeConfig.WRITEBACK_MAINTENANCE_MAX_ACTIONS),
       notes: plan.notes,
     };
   }
@@ -738,7 +774,7 @@ export class WritebackMaintenanceWorker {
       return outcome;
     }
 
-    if (this.config.WRITEBACK_GOVERNANCE_SHADOW_MODE) {
+    if (this.runtimeConfig.WRITEBACK_GOVERNANCE_SHADOW_MODE) {
       outcome.applied += items.length;
       this.logger.info(
         { workspace_id: workspaceId, item_count: items.length },
@@ -792,7 +828,7 @@ export class WritebackMaintenanceWorker {
       return base;
     }
 
-    if (!this.config.WRITEBACK_GOVERNANCE_VERIFY_ENABLED) {
+    if (!this.runtimeConfig.WRITEBACK_GOVERNANCE_VERIFY_ENABLED) {
       this.logger.warn({ action_type: action.type }, "governance verifier disabled, marking high-impact action as blocked");
       return {
         ...base,
@@ -1046,5 +1082,15 @@ export class WritebackMaintenanceWorker {
     } finally {
       this.workspaceLocks.delete(workspaceId);
     }
+  }
+
+  private pickRuntimeConfig(config: AppConfig): RuntimeGovernanceConfig {
+    return {
+      WRITEBACK_MAINTENANCE_ENABLED: config.WRITEBACK_MAINTENANCE_ENABLED,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: config.WRITEBACK_MAINTENANCE_INTERVAL_MS,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: config.WRITEBACK_GOVERNANCE_VERIFY_ENABLED,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: config.WRITEBACK_GOVERNANCE_SHADOW_MODE,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: config.WRITEBACK_MAINTENANCE_MAX_ACTIONS,
+    };
   }
 }

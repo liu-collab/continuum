@@ -15,6 +15,8 @@ import {
   prepareContextRequestSchema,
   prepareContextResultSchema,
   runtimeErrorResponseSchema,
+  runtimeConfigResultSchema,
+  runtimeConfigUpdateResultSchema,
   sessionStartRequestSchema,
   sessionStartResultSchema,
   writeProjectionStatusRequestSchema,
@@ -26,6 +28,9 @@ import {
   type HealthEndpointResult,
   type PrepareContextRequest,
   type PrepareContextResult,
+  type RuntimeConfigResult,
+  type RuntimeConfigUpdateResult,
+  type RuntimeGovernanceConfig,
   type SessionStartRequest,
   type SessionStartResult,
   type WriteProjectionStatusRequest,
@@ -42,7 +47,7 @@ type MemoryClientLogger = {
 };
 
 type RequestOptions<TResponse> = {
-  method: "GET" | "POST";
+  method: "GET" | "POST" | "PUT";
   path: string;
   timeoutMs: number;
   responseSchema: z.ZodType<TResponse>;
@@ -52,6 +57,7 @@ type RequestOptions<TResponse> = {
     | "prepare_context"
     | "finalize_turn"
     | "dependency_status"
+    | "runtime_config"
     | "healthz"
     | "write_projection_status";
   phase?: string;
@@ -241,6 +247,27 @@ export class MemoryClient {
       timeoutMs: this.requestTimeoutMs,
       responseSchema: healthEndpointSchema,
       operation: "healthz",
+    });
+  }
+
+  async getRuntimeConfig(): Promise<RuntimeConfigResult> {
+    return this.requestJson({
+      method: "GET",
+      path: "/v1/runtime/config",
+      timeoutMs: this.requestTimeoutMs,
+      responseSchema: runtimeConfigResultSchema,
+      operation: "runtime_config",
+    });
+  }
+
+  async updateRuntimeConfig(payload: { governance?: Partial<RuntimeGovernanceConfig> }): Promise<RuntimeConfigUpdateResult> {
+    return this.requestJson({
+      method: "PUT",
+      path: "/v1/runtime/config",
+      timeoutMs: this.requestTimeoutMs,
+      responseSchema: runtimeConfigUpdateResultSchema,
+      body: payload,
+      operation: "runtime_config",
     });
   }
 

@@ -51,8 +51,7 @@ export class HttpMemoryGovernancePlanner implements GovernancePlanner {
     ]);
     const allowedConflictIds = new Set<string>(input.open_conflicts.map((conflict) => conflict.id));
     const actions = parsed.data.actions
-      .filter((action) => isActionReferencingKnownIds(action, allowedRecordIds, allowedConflictIds))
-      .slice(0, this.config.WRITEBACK_MAINTENANCE_MAX_ACTIONS);
+      .filter((action) => isActionReferencingKnownIds(action, allowedRecordIds, allowedConflictIds));
 
     return {
       actions,
