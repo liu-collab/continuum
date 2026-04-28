@@ -41,4 +41,24 @@ describe("visualization design compliance", () => {
 
     expect(source).not.toMatch(/\b(?:border|bg|text)-(?:rose|amber|emerald)-\d+/);
   });
+
+  it("tokenizes audited hardcoded CSS colors", () => {
+    const css = readSource("src/app/globals.css");
+    const modal = readSource("src/components/modal.tsx");
+
+    expect(css).toContain("--surface-active: var(--surface-pearl);");
+    expect(css).toContain("--cyan-bg: var(--surface-pearl);");
+    expect(css).toContain("--emerald-bg: var(--surface-pearl);");
+    expect(css).toContain("--record-active-fill:");
+    expect(css).toContain("--nav-link-default:");
+    expect(css).toContain("--nav-border:");
+    expect(css).not.toContain("--surface-active: #f2f2f5");
+    expect(css).not.toContain("--cyan-bg: #f2f7ff");
+    expect(css).not.toContain("--emerald-bg: #f2f7ff");
+    expect(css).not.toContain("background: #f2f7ff");
+    expect(css).not.toContain("rgba(255, 255, 255, 0.84)");
+    expect(css).not.toContain("rgba(255, 255, 255, 0.14)");
+    expect(modal).not.toContain("bg-black/35");
+    expect(modal).toContain("bg-[var(--modal-backdrop)]");
+  });
 });

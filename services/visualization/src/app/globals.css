@@ -23,6 +23,12 @@
   --surface-black: #000000;
   --surface-chip-translucent: rgba(210, 210, 215, 0.64);
   --product-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px 0;
+  --record-active-fill: color-mix(in srgb, var(--primary) 5%, var(--canvas));
+  --nav-link-default: color-mix(in srgb, var(--body-on-dark) 84%, transparent);
+  --nav-border: color-mix(in srgb, var(--body-on-dark) 14%, transparent);
+  --nav-border-hover: color-mix(in srgb, var(--body-on-dark) 26%, transparent);
+  --nav-utility-text: color-mix(in srgb, var(--body-on-dark) 88%, transparent);
+  --modal-backdrop: color-mix(in srgb, var(--surface-black) 35%, transparent);
 
   --bg: var(--canvas-parchment);
   --bg-raised: var(--canvas);
@@ -30,7 +36,7 @@
   --surface: var(--canvas);
   --surface-muted: var(--canvas-parchment);
   --surface-hover: var(--surface-pearl);
-  --surface-active: #f2f2f5;
+  --surface-active: var(--surface-pearl);
   --border: var(--hairline);
   --border-hover: var(--primary);
   --border-strong: rgba(0, 0, 0, 0.12);
@@ -43,9 +49,9 @@
   --amber-bg: var(--surface-pearl);
   --cyan: var(--primary);
   --cyan-dim: var(--primary-focus);
-  --cyan-bg: #f2f7ff;
+  --cyan-bg: var(--surface-pearl);
   --emerald: var(--primary);
-  --emerald-bg: #f2f7ff;
+  --emerald-bg: var(--surface-pearl);
   --rose: var(--ink);
   --rose-bg: var(--canvas-parchment);
   --radius-xs: 5px;
@@ -138,7 +144,7 @@ a {
   }
 
   .global-nav-link {
-    color: rgba(255, 255, 255, 0.84);
+    color: var(--nav-link-default);
     font-size: 12px;
     font-weight: 400;
     line-height: 1;
@@ -469,7 +475,7 @@ a {
 
   .record-link-active {
     border-color: var(--primary-focus);
-    background: #f2f7ff;
+    background: var(--record-active-fill);
   }
 
   .detail-grid {

@@ -876,3 +876,20 @@ body { letter-spacing: -0.374px; }
 | `bg-rose-50` / `bg-amber-100` 等 | `var(--surface-pearl)` 或 `var(--canvas-parchment)` |
 
 ---
+
+### 修复二十一：消除硬编码 Hex/RGBA，使用设计 Token
+
+**状态：已完成**
+
+#### 问题
+
+| 位置 | 硬编码值 | 应改为 |
+|---|---|---|
+| `globals.css` `--surface-active` | `#f2f2f5` | `var(--surface-pearl)` |
+| `globals.css` `--cyan-bg` / `--emerald-bg` | `#f2f7ff` | `var(--surface-pearl)` |
+| `globals.css` `.record-link-active` | `#f2f7ff` | 定义为 `--record-active-fill` 变量 |
+| `globals.css` 导航文字 | `rgba(255,255,255,0.84)` | 定义为 `--nav-link-default` |
+| `globals.css` 导航边框 | `rgba(255,255,255,0.14)` | 定义为 `--nav-border` |
+| `confirm-dialog.tsx` modal 背景 | `bg-black/35` | `var(--surface-black)` 加 opacity |
+
+---

@@ -37,7 +37,7 @@ export function Modal({ open, onClose, title, description, size = "md", children
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-10 backdrop-blur-[20px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--modal-backdrop)] px-4 py-10 backdrop-blur-[20px]"
       onClick={onClose}
     >
       <div
