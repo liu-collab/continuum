@@ -1,4 +1,5 @@
 import { DashboardDiagnosis, DashboardDiagnosisCard, DashboardMetric } from "@/lib/contracts";
+import { resolveDashboardThresholds, type DashboardThresholds } from "@/lib/dashboard-thresholds";
 import { formatMetricValue } from "@/lib/format";
 import { createTranslator, joinLocalizedList, type AppLocale } from "@/lib/i18n/messages";
 
@@ -18,7 +19,8 @@ export function buildDashboardDiagnosis(
   retrievalMetrics: DashboardMetric[],
   storageMetrics: DashboardMetric[],
   degradedSources: string[],
-  locale: AppLocale = "zh-CN"
+  locale: AppLocale = "zh-CN",
+  thresholds: DashboardThresholds = resolveDashboardThresholds()
 ): DashboardDiagnosis {
   const t = createTranslator(locale);
 
@@ -37,7 +39,7 @@ export function buildDashboardDiagnosis(
   const recallP95 = retrievalMetrics.find((item) => item.key === "recall_p95_ms")?.value ?? null;
   const writeP95 = storageMetrics.find((item) => item.key === "write_p95_ms")?.value ?? null;
 
-  if (emptyRecall !== null && emptyRecall >= 0.35) {
+  if (emptyRecall !== null && emptyRecall >= thresholds.emptyRecall.danger) {
     return {
       title: t("service.dashboard.diagnosisRecallTitle"),
       summary: t("service.dashboard.diagnosisRecallSummary"),
@@ -45,7 +47,7 @@ export function buildDashboardDiagnosis(
     };
   }
 
-  if (conflictRate !== null && conflictRate >= 0.15) {
+  if (conflictRate !== null && conflictRate >= thresholds.conflictRate.danger) {
     return {
       title: t("service.dashboard.diagnosisMemoryQualityTitle"),
       summary: t("service.dashboard.diagnosisMemoryQualitySummary"),
@@ -53,7 +55,7 @@ export function buildDashboardDiagnosis(
     };
   }
 
-  if ((recallP95 ?? 0) >= 1200 || (writeP95 ?? 0) >= 1500) {
+  if ((recallP95 ?? 0) >= thresholds.recallP95.danger || (writeP95 ?? 0) >= thresholds.writeP95.danger) {
     return {
       title: t("service.dashboard.diagnosisLatencyTitle"),
       summary: t("service.dashboard.diagnosisLatencySummary"),
@@ -75,7 +77,8 @@ export function buildDiagnosisCards(
   storageTrend: ReturnType<typeof estimateStorageTrend>,
   governanceTrend: ReturnType<typeof computeGovernanceWindowTrend>,
   degradedSources: string[],
-  locale: AppLocale = "zh-CN"
+  locale: AppLocale = "zh-CN",
+  thresholds: DashboardThresholds = resolveDashboardThresholds()
 ) {
   const t = createTranslator(locale);
   const emptyRecall = retrievalMetrics.find((item) => item.key === "empty_recall_rate")?.value ?? null;
@@ -97,10 +100,10 @@ export function buildDiagnosisCards(
         ? t("service.dashboard.cards.emptyRecallDegraded", {
             sources: joinLocalizedList(locale, degradedSources)
           })
-        : emptyRecall !== null && emptyRecall >= 0.35
+        : emptyRecall !== null && emptyRecall >= thresholds.emptyRecall.danger
           ? t("service.dashboard.cards.emptyRecallWarning")
           : t("service.dashboard.cards.emptyRecallOk"),
-      degradedSources.length > 0 ? "danger" : emptyRecall !== null && emptyRecall >= 0.35 ? "warning" : "info"
+      degradedSources.length > 0 ? "danger" : emptyRecall !== null && emptyRecall >= thresholds.emptyRecall.danger ? "warning" : "info"
     ),
     diagnosisCard(
       "scope_mix",
@@ -114,42 +117,42 @@ export function buildDiagnosisCards(
               workspace: formatMetricValue(workspaceShare, "percent", locale)
             })
           : t("service.dashboard.cards.scopeInsufficient"),
-      workspaceOnlyRate === 1 ? "info" : globalShare !== null && globalShare > 0.6 ? "warning" : "info"
+      workspaceOnlyRate === 1 ? "info" : globalShare !== null && globalShare > thresholds.globalScopeShareCardWarning ? "warning" : "info"
     ),
     diagnosisCard(
       "writeback_backlog",
       "storage",
       t("service.dashboard.cards.backlogTitle"),
-      storageTrend.backlog.current !== null && storageTrend.backlog.current > 5
+      storageTrend.backlog.current !== null && storageTrend.backlog.current > thresholds.writebackBacklog.warning
         ? t("service.dashboard.cards.backlogWarning")
         : t("service.dashboard.cards.backlogOk"),
-      storageTrend.backlog.current !== null && storageTrend.backlog.current > 5 ? "warning" : "info"
+      storageTrend.backlog.current !== null && storageTrend.backlog.current > thresholds.writebackBacklog.warning ? "warning" : "info"
     ),
     diagnosisCard(
       "conflict_pressure",
       "storage",
       t("service.dashboard.cards.conflictTitle"),
-      conflictRate !== null && conflictRate >= 0.15
+      conflictRate !== null && conflictRate >= thresholds.conflictRate.danger
         ? t("service.dashboard.cards.conflictWarning")
         : t("service.dashboard.cards.conflictOk"),
-      conflictRate !== null && conflictRate >= 0.15 ? "warning" : "info"
+      conflictRate !== null && conflictRate >= thresholds.conflictRate.danger ? "warning" : "info"
     ),
     diagnosisCard(
       "governance_execution",
       "storage",
       t("service.dashboard.cards.governanceTitle"),
-      governanceRetryRate !== null && governanceRetryRate >= 0.15
+      governanceRetryRate !== null && governanceRetryRate >= thresholds.governanceRetry.danger
         ? t("service.dashboard.cards.governanceRetryWarning")
-        : governanceSuccessRate !== null && governanceSuccessRate < 0.8
+        : governanceSuccessRate !== null && governanceSuccessRate < thresholds.governanceExecutionSuccess.warning
           ? t("service.dashboard.cards.governanceSuccessWarning")
           : governanceTrend.recallHitRateAfterGovernance.current !== null
             ? t("service.dashboard.cards.governanceRecallHit", {
                 rate: formatMetricValue(governanceTrend.recallHitRateAfterGovernance.current, "percent", locale)
               })
             : t("service.dashboard.cards.governanceOk"),
-      governanceRetryRate !== null && governanceRetryRate >= 0.15
+      governanceRetryRate !== null && governanceRetryRate >= thresholds.governanceRetry.danger
         ? "warning"
-        : governanceSuccessRate !== null && governanceSuccessRate < 0.8
+        : governanceSuccessRate !== null && governanceSuccessRate < thresholds.governanceExecutionSuccess.warning
           ? "warning"
           : "info"
     )

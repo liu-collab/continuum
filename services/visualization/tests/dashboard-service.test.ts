@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildDashboardDiagnosis,
@@ -8,20 +8,20 @@ import {
 } from "@/features/dashboard/service";
 import { DashboardMetric } from "@/lib/contracts";
 
-import { vi } from "vitest";
-
 const {
   fetchRuntimeMetricsMock,
   fetchRuntimeRunsMock,
   fetchStorageMetricsMock,
   fetchStorageWriteJobsMock,
-  fetchGovernanceExecutionsMock
+  fetchGovernanceExecutionsMock,
+  dashboardConfigValues
 } = vi.hoisted(() => ({
   fetchRuntimeMetricsMock: vi.fn<() => Promise<any>>(),
   fetchRuntimeRunsMock: vi.fn<() => Promise<any>>(),
   fetchStorageMetricsMock: vi.fn<() => Promise<any>>(),
   fetchStorageWriteJobsMock: vi.fn<() => Promise<any>>(),
-  fetchGovernanceExecutionsMock: vi.fn<() => Promise<any>>()
+  fetchGovernanceExecutionsMock: vi.fn<() => Promise<any>>(),
+  dashboardConfigValues: {} as Record<string, number>
 }));
 
 fetchRuntimeMetricsMock.mockImplementation(async () => ({
@@ -157,7 +157,8 @@ vi.mock("@/lib/cache", () => ({
 vi.mock("@/lib/env", () => ({
   getAppConfig: () => ({
     values: {
-      DASHBOARD_CACHE_MS: 1000
+      DASHBOARD_CACHE_MS: 1000,
+      ...dashboardConfigValues
     }
   })
 }));
@@ -189,6 +190,12 @@ function createMetric(key: string, value: number | null): DashboardMetric {
   };
 }
 
+afterEach(() => {
+  for (const key of Object.keys(dashboardConfigValues)) {
+    delete dashboardConfigValues[key];
+  }
+});
+
 describe("dashboard diagnosis", () => {
   it("prioritizes degraded sources", () => {
     const diagnosis = buildDashboardDiagnosis([], [], ["Runtime observe API"]);
@@ -215,6 +222,42 @@ describe("dashboard diagnosis", () => {
     );
 
     expect(diagnosis.severity).toBe("info");
+  });
+
+  it("uses configured dashboard thresholds when building diagnosis from service data", async () => {
+    dashboardConfigValues.DASHBOARD_EMPTY_RECALL_DANGER_THRESHOLD = 0.5;
+    fetchRuntimeMetricsMock.mockResolvedValueOnce({
+      status: {
+        name: "runtime_api",
+        label: "Runtime observe API",
+        kind: "dependency",
+        status: "healthy",
+        checkedAt: "2026-04-16T00:00:00Z",
+        lastCheckedAt: "2026-04-16T00:00:00Z",
+        lastOkAt: "2026-04-16T00:00:00Z",
+        lastError: null,
+        responseTimeMs: 25,
+        detail: null
+      },
+      metrics: {
+        triggerRate: 0.8,
+        recallHitRate: 0.7,
+        emptyRecallRate: 0.41,
+        injectionRate: 0.6,
+        trimRate: 0.1,
+        recallP95Ms: 200,
+        injectionP95Ms: 50,
+        writeBackSubmitRate: 0.4,
+        outboxPendingCount: 1,
+        outboxDeadLetterCount: 0,
+        outboxSubmitLatencyMs: 25
+      }
+    });
+
+    const result = await getDashboard("30m");
+
+    expect(result.retrievalMetrics.find((item) => item.key === "empty_recall_rate")?.severity).toBe("warning");
+    expect(result.diagnosis.severity).toBe("info");
   });
 });
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { dashboardThresholdDefaults, dashboardThresholdEnvKeys } from "@/lib/dashboard-thresholds";
+
 const identifierSchema = z
   .string()
   .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be a valid SQL identifier");
@@ -27,8 +29,14 @@ const envSchema = z.object({
   HEALTH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   SOURCE_HEALTH_CACHE_MS: z.coerce.number().int().positive().default(8000),
   DASHBOARD_REFRESH_MS: z.coerce.number().int().positive().default(30000),
-  DASHBOARD_CACHE_MS: z.coerce.number().int().positive().default(20000)
-});
+  DASHBOARD_CACHE_MS: z.coerce.number().int().positive().default(20000),
+  ...Object.fromEntries(
+    dashboardThresholdEnvKeys.map((key) => [
+      key,
+      z.coerce.number().default(dashboardThresholdDefaults[key])
+    ])
+  )
+} satisfies z.ZodRawShape);
 
 type RawEnv = {
   NEXT_PUBLIC_APP_NAME?: string;
@@ -52,7 +60,7 @@ type RawEnv = {
   SOURCE_HEALTH_CACHE_MS?: string;
   DASHBOARD_REFRESH_MS?: string;
   DASHBOARD_CACHE_MS?: string;
-};
+} & Partial<Record<(typeof dashboardThresholdEnvKeys)[number], string>>;
 
 export type AppConfig = {
   values: z.infer<typeof envSchema>;
@@ -85,7 +93,8 @@ function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
     HEALTH_POLL_INTERVAL_MS: env.HEALTH_POLL_INTERVAL_MS,
     SOURCE_HEALTH_CACHE_MS: env.SOURCE_HEALTH_CACHE_MS,
     DASHBOARD_REFRESH_MS: env.DASHBOARD_REFRESH_MS,
-    DASHBOARD_CACHE_MS: env.DASHBOARD_CACHE_MS
+    DASHBOARD_CACHE_MS: env.DASHBOARD_CACHE_MS,
+    ...Object.fromEntries(dashboardThresholdEnvKeys.map((key) => [key, env[key]]))
   };
 }
 
