@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import React from "react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { ConfirmAction } from "@/components/confirm-action";
 import { SelectField } from "@/components/select-field";
@@ -11,6 +11,7 @@ import { useAppI18n } from "@/lib/i18n/client";
 
 type GovernanceAction = "confirm" | "invalidate" | "archive" | "delete";
 const destructiveActions = new Set<GovernanceAction>(["invalidate", "archive", "delete"]);
+const AUTO_REFRESH_SECONDS = 10;
 
 type GovernancePanelProps = {
   detail: MemoryCatalogDetail;
@@ -26,8 +27,24 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
   const [versionId, setVersionId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pendingActionAt, setPendingActionAt] = useState<string | null>(null);
+  const [refreshCountdown, setRefreshCountdown] = useState(0);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (refreshCountdown <= 0) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRefreshCountdown((current) => Math.max(current - 1, 0));
+
+      if (refreshCountdown === 1) {
+        startTransition(() => router.refresh());
+      }
+    }, 1_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [refreshCountdown, router, startTransition]);
 
   function clearFeedback() {
     setMessage(null);
@@ -35,11 +52,12 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
   }
 
   function markRefreshPending() {
-    setPendingActionAt(new Date().toISOString());
+    setRefreshCountdown(AUTO_REFRESH_SECONDS);
+  }
 
-    window.setTimeout(() => {
-      startTransition(() => router.refresh());
-    }, 10_000);
+  function refreshNow() {
+    setRefreshCountdown(0);
+    startTransition(() => router.refresh());
   }
 
   async function requestJson(url: string, method: "POST" | "PATCH", body: Record<string, unknown>) {
@@ -80,7 +98,6 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         action: t(`memories.governancePanel.actions.${action}`)
       }));
       markRefreshPending();
-      startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
@@ -110,7 +127,6 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
 
       setMessage(payload?.message ?? t("memories.governancePanel.submitted.edit"));
       markRefreshPending();
-      startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : t("memories.governancePanel.errors.editFailed"));
     }
@@ -141,7 +157,6 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
 
       setMessage(payload?.message ?? t("memories.governancePanel.submitted.restore"));
       markRefreshPending();
-      startTransition(() => router.refresh());
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : t("memories.governancePanel.errors.restoreFailed"));
     }
@@ -158,9 +173,16 @@ export function GovernancePanel({ detail }: GovernancePanelProps) {
         </div>
       </div>
 
-      {pendingActionAt ? (
-        <div className="notice notice-warning mt-3">
-          {t("memories.governancePanel.pendingRefresh")}
+      {refreshCountdown > 0 ? (
+        <div className="notice notice-info mt-3 flex flex-wrap items-center justify-between gap-3" role="status">
+          <span>
+            {t("memories.governancePanel.pendingRefresh", {
+              seconds: refreshCountdown
+            })}
+          </span>
+          <button type="button" className="btn-outline" onClick={refreshNow} disabled={isPending}>
+            {t("memories.governancePanel.refreshNow")}
+          </button>
         </div>
       ) : null}
 

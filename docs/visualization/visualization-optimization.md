@@ -676,3 +676,37 @@ export function ConfirmAction({
 - `ConfirmAction` 可复用于其他页面的类似场景
 
 ---
+
+### 优化十四：治理操作后实时反馈替代硬等 10 秒
+
+**状态：已完成**
+
+### 问题
+
+GovernancePanel 执行 confirm/invalidate 后硬等 10 秒无 UI 反馈：
+
+```typescript
+setTimeout(() => startTransition(() => refresh()), 10_000);
+```
+
+用户不知道操作是否已生效、何时会刷新。
+
+### 方案
+
+改为轮询倒计时 + 可提前刷新：
+
+```tsx
+{refreshCountdown > 0 && (
+  <div className="notice notice-info">
+    操作已提交，{refreshCountdown} 秒后自动刷新
+    <button onClick={refresh} className="ml-2 underline">立即刷新</button>
+  </div>
+)}
+```
+
+### 效果
+
+- 用户知道操作状态和预期刷新时间
+- 可以手动提前刷新，不用死等
+
+---

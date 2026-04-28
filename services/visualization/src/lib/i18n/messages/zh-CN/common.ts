@@ -202,7 +202,8 @@ const zhCommon = {
       governancePanel: {
         title: "治理",
         description: "填写原因后执行动作。",
-        pendingRefresh: "已提交，读模型刷新中，10 秒后自动再刷新。",
+        pendingRefresh: "操作已提交，{seconds} 秒后自动刷新读模型。",
+        refreshNow: "立即刷新",
         reason: "原因",
         reasonPlaceholder: "说明为什么需要执行这次治理动作。",
         quickActions: "快捷动作",

@@ -202,7 +202,8 @@ const enCommon = {
       governancePanel: {
         title: "Governance",
         description: "Provide a reason, then run an action.",
-        pendingRefresh: "Submitted. The read model is refreshing and will refresh again automatically in 10 seconds.",
+        pendingRefresh: "Submitted. The read model will refresh automatically in {seconds} seconds.",
+        refreshNow: "Refresh now",
         reason: "Reason",
         reasonPlaceholder: "Explain why this governance action is needed.",
         quickActions: "Quick actions",

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -52,8 +52,16 @@ function createMemoryDetail(): MemoryCatalogDetail {
   };
 }
 
+async function flushPendingPromises() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("GovernancePanel", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     refresh.mockReset();
   });
@@ -107,5 +115,52 @@ describe("GovernancePanel", () => {
         })
       );
     });
+  });
+
+  it("shows refresh countdown after a governance action and supports immediate refresh", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: "confirmed" })
+    } as Response);
+
+    render(<GovernancePanel detail={createMemoryDetail()} />);
+
+    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), "人工复核通过");
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("10 秒后自动刷新读模型");
+    expect(refresh).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "立即刷新" }));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("automatically refreshes when the countdown reaches zero", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: "confirmed" })
+    } as Response);
+
+    render(<GovernancePanel detail={createMemoryDetail()} />);
+
+    fireEvent.change(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), {
+      target: { value: "人工复核通过" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    await flushPendingPromises();
+
+    expect(screen.getByRole("status")).toHaveTextContent("10 秒后自动刷新读模型");
+
+    for (let index = 0; index < 10; index += 1) {
+      await act(async () => {
+        vi.advanceTimersByTime(1_000);
+      });
+    }
+
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
