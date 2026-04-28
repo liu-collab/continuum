@@ -790,3 +790,38 @@ function formatEvidence(type: string, evidence: Record<string, unknown>, t: Tran
 - 首页可以到达所有功能模块
 
 ---
+
+## 设计合规
+
+DESIGN.md（Apple 风格稿）定义了完整的颜色、字体、间距、圆角、阴影体系。以下为全局 + 各页面的偏差审计结果。
+
+### 修复十八：全局字间距对齐设计稿
+
+**状态：已完成**
+
+#### 问题
+
+设计稿为每个字体层级指定了精确的 letter-spacing，当前全局均为 0：
+
+| 设计 Token | 字号/字重 | 设计 letter-spacing | CSS 实际 |
+|---|---|---|---|
+| `hero-display` | 56px/600 | -0.28px | 0 |
+| `display-md` | 34px/600 | -0.374px | 0 |
+| `body-strong` | 17px/600 | -0.374px | 0 |
+| `body` | 17px/400 | -0.374px | 0 |
+| `caption` / `caption-strong` | 14px | -0.224px | 0 |
+| `nav-link` | 12px/400 | -0.12px | 0 |
+
+"Apple tight"的紧致标题感完全丢失。
+
+#### 方案
+
+```css
+body { letter-spacing: -0.374px; }
+.tile-title, .page-title { letter-spacing: -0.28px; }
+.tile-subtitle, .page-lead { letter-spacing: 0.196px; }
+.section-kicker, .section-label, .eyebrow { letter-spacing: -0.224px; }
+.global-nav-link { letter-spacing: -0.12px; }
+```
+
+---
