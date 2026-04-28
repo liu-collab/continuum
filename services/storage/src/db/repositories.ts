@@ -259,34 +259,60 @@ function createWriteJobRepository(session: DbSession): WriteJobRepository {
     },
 
     async enqueueMany(inputs) {
-      const jobs: MemoryWriteJob[] = [];
-      for (const input of inputs) {
-        const existing = await this.findByIdempotencyKey(input.idempotency_key);
-        if (existing) {
-          jobs.push(existing);
-          continue;
-        }
+      if (inputs.length === 0) {
+        return [];
+      }
 
-        const result = await session.query(
-          `
+      const result = await session.query(
+        `
+          with input_rows as (
+            select *
+            from unnest(
+              $1::text[],
+              $2::uuid[],
+              $3::uuid[],
+              $4::text[],
+              $5::text[],
+              $6::text[]
+            ) as input_rows(idempotency_key, workspace_id, user_id, candidate_json_text, candidate_hash, source_service)
+          ),
+          inserted as (
             insert into ${table}
               (idempotency_key, workspace_id, user_id, candidate_json, candidate_hash, source_service, job_status)
-            values
-              ($1, $2, $3, $4::jsonb, $5, $6, 'queued')
+            select
+              idempotency_key,
+              workspace_id,
+              user_id,
+              candidate_json_text::jsonb,
+              candidate_hash,
+              source_service,
+              'queued'
+            from input_rows
+            on conflict (idempotency_key) do nothing
             returning *
-          `,
-          [
-            input.idempotency_key,
-            input.candidate.workspace_id,
-            input.candidate.user_id ?? null,
-            JSON.stringify(input.candidate),
-            input.candidate_hash,
-            input.source_service,
-          ],
-        );
-        jobs.push(mapWriteJob(requireRow(result.rows[0], "memory_write_jobs enqueueMany insert")));
-      }
-      return jobs;
+          )
+          select *
+          from ${table}
+          where idempotency_key = any($1::text[])
+          order by array_position($1::text[], idempotency_key)
+        `,
+        [
+          inputs.map((input) => input.idempotency_key),
+          inputs.map((input) => input.candidate.workspace_id),
+          inputs.map((input) => input.candidate.user_id ?? null),
+          inputs.map((input) => JSON.stringify(input.candidate)),
+          inputs.map((input) => input.candidate_hash),
+          inputs.map((input) => input.source_service),
+        ],
+      );
+
+      const byIdempotencyKey = new Map(result.rows.map((row) => [String(row.idempotency_key), mapWriteJob(row)]));
+      return inputs.map((input) =>
+        requireMappedRow(
+          byIdempotencyKey.get(input.idempotency_key),
+          "memory_write_jobs enqueueMany result",
+        ),
+      );
     },
 
     async findById(id) {
@@ -1672,6 +1698,17 @@ function requireRow(
   row: Record<string, unknown> | undefined,
   label: string,
 ): Record<string, unknown> {
+  if (!row) {
+    throw new Error(`expected row for ${label}`);
+  }
+
+  return row;
+}
+
+function requireMappedRow<T>(
+  row: T | undefined,
+  label: string,
+): T {
   if (!row) {
     throw new Error(`expected row for ${label}`);
   }

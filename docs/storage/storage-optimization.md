@@ -72,6 +72,8 @@ while (active) {
 
 ## 优化二：`enqueueMany` 批量写入用单条 INSERT 替代循环
 
+**状态：已完成**
+
 ### 问题
 
 `enqueueMany()` 在循环中逐条调用 `enqueue()`，每条都是独立的 INSERT + idempotency 查询：

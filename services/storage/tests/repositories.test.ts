@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MemoryRecord, ReadModelEntry } from "../src/contracts.js";
 import { createRepositories, snapshotRecord } from "../src/db/repositories.js";
+import { buildCandidate } from "./memory-repositories.js";
 
 type RecordedQuery = {
   text: string;
@@ -146,5 +147,65 @@ describe("storage repositories", () => {
     expect(upsertQuery?.values?.[18]).toBe("ok");
     expect(upsertQuery?.values?.[19]).toBe("2026-04-21T00:00:00.000Z");
     expect(upsertQuery?.values?.[20]).toBe(1);
+  });
+
+  it("uses one batch query for enqueueMany", async () => {
+    const queries: RecordedQuery[] = [];
+    const now = "2026-04-22T00:00:00.000Z";
+    const session = {
+      privateSchema: "storage_private",
+      sharedSchema: "storage_shared_v1",
+      async query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]) {
+        queries.push({ text, values });
+        const keys = Array.isArray(values?.[0]) ? values[0] as string[] : [];
+        const candidates = Array.isArray(values?.[3]) ? values[3] as string[] : [];
+        return {
+          rows: keys.map((key, index) => ({
+            id: `job-${index + 1}`,
+            idempotency_key: key,
+            workspace_id: "11111111-1111-4111-8111-111111111111",
+            user_id: "22222222-2222-4222-8222-222222222222",
+            candidate_json: JSON.parse(candidates[index] ?? "{}"),
+            candidate_hash: `hash-${index + 1}`,
+            source_service: "retrieval-runtime",
+            job_status: "queued",
+            result_record_id: null,
+            result_status: null,
+            error_code: null,
+            error_message: null,
+            retry_count: 0,
+            received_at: now,
+            started_at: null,
+            finished_at: null,
+          })) as unknown as T[],
+          rowCount: keys.length,
+        };
+      },
+    };
+
+    const repositories = createRepositories({
+      session: () => session,
+      withTransaction: async <T>(callback: (tx: typeof session) => Promise<T>) => callback(session),
+    } as never);
+
+    const jobs = await repositories.jobs.enqueueMany([
+      {
+        idempotency_key: "batch-key-1",
+        candidate_hash: "hash-1",
+        source_service: "retrieval-runtime",
+        candidate: buildCandidate({ idempotency_key: "batch-key-1" }),
+      },
+      {
+        idempotency_key: "batch-key-2",
+        candidate_hash: "hash-2",
+        source_service: "retrieval-runtime",
+        candidate: buildCandidate({ idempotency_key: "batch-key-2" }),
+      },
+    ]);
+
+    expect(queries).toHaveLength(1);
+    expect(queries[0]?.text).toContain("from unnest");
+    expect(queries[0]?.text).toContain("on conflict (idempotency_key) do nothing");
+    expect(jobs.map((job) => job.idempotency_key)).toEqual(["batch-key-1", "batch-key-2"]);
   });
 });
