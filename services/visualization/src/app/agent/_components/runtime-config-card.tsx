@@ -162,7 +162,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
     <section className="panel p-5" data-testid="runtime-config-summary-card">
       <div>
         <p className="section-kicker">{t("runtimeConfig.eyebrow")}</p>
-        <h2 className="mt-2 text-[21px] font-semibold leading-[1.19] text-text">{t("runtimeConfig.title")}</h2>
+        <h2 className="headline-display mt-2 text-[21px] font-semibold leading-[1.19] text-text">{t("runtimeConfig.title")}</h2>
       </div>
 
       <div className="mt-4 grid gap-3">

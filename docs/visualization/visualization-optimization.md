@@ -941,3 +941,40 @@ body { letter-spacing: -0.374px; }
 ```
 
 ---
+
+### 修复二十五：标题使用 SF Pro Display 字体
+
+**状态：已完成**
+
+#### 问题
+
+15+ 处页面中 `text-[21px] font-semibold`、`text-[34px] font-semibold` 等 Tailwind 类继承 body 的 `SF Pro Text`。设计稿规定标题用 `SF Pro Display`。
+
+#### 方案
+
+增加工具类并全局替换：
+
+```css
+.headline-display {
+  font-family: "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+```
+
+涉及文件：`page.tsx`、`dashboard/page.tsx`、`memories/page.tsx`、`memories/[id]/page.tsx`、`runs/page.tsx`、`governance/page.tsx`、`session-list.tsx`、`empty-state.tsx`。
+
+---
+
+## 设计合规优先级
+
+| 优先级 | 优化项 | 影响范围 |
+|---|---|---|
+| **P1** | 修复十八（字间距） | 全局，标题松散感消失 |
+| **P1** | 修复十九（消除 weight 500） | 3 处 |
+| **P1** | 修复二十（移除第二强调色） | 6 文件 8 处 |
+| **P2** | 修复二十一（硬编码颜色 Token 化） | 7 处 |
+| **P2** | 修复二十二（font-size 对齐） | 3 处 |
+| **P2** | 修复二十四（active scale 0.95） | 1 处 |
+| **P2** | 修复二十五（标题字体） | 15+ 处 |
+| **P3** | 修复二十三（消除 UI 阴影） | 1 处 |
+
+每项优化独立可实施、独立可验证。

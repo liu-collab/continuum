@@ -37,7 +37,7 @@ export function MetricCard({ metric, locale = DEFAULT_APP_LOCALE, severityLabel 
       </div>
       <div
         className={cn(
-        "mt-6 text-[40px] font-semibold leading-[1.1] text-text",
+        "headline-display mt-6 text-[40px] font-semibold leading-[1.1] text-text",
           metric.severity === "unknown" && "text-muted"
         )}
       >

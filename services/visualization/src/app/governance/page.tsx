@@ -277,7 +277,7 @@ export default async function GovernancePage({
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="section-kicker">{t("governance.detailKicker")}</div>
-                        <h2 className="mt-3 text-[34px] font-semibold leading-[1.12] text-text">
+                        <h2 className="headline-display mt-3 text-[34px] font-semibold leading-[1.12] text-text">
                           {detailResponse.detail.proposalTypeLabel}
                         </h2>
                         <p className="mt-4 text-[17px] leading-[1.47] text-muted">
@@ -338,7 +338,7 @@ export default async function GovernancePage({
                   </section>
 
                   <details className="panel p-6">
-                    <summary className="cursor-pointer text-[21px] font-semibold leading-[1.19] text-text">
+                    <summary className="headline-display cursor-pointer text-[21px] font-semibold leading-[1.19] text-text">
                       {t("governance.evidenceSummary")}
                     </summary>
                     <div className="detail-grid mt-5">

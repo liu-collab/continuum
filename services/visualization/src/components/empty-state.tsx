@@ -39,7 +39,7 @@ export function EmptyState({ title, description, testId, className, style }: Emp
       }}>
         <span style={{ color: "var(--primary)", fontSize: "17px" }}>-</span>
       </div>
-      <h3 className="text-[21px] font-semibold leading-tight text-text">{title}</h3>
+      <h3 className="headline-display text-[21px] font-semibold leading-tight text-text">{title}</h3>
       {description ? (
         <p className="mt-2 max-w-md text-[17px] leading-[1.47] text-muted">{description}</p>
       ) : null}

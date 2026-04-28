@@ -50,7 +50,7 @@ export function Modal({ open, onClose, title, description, size = "md", children
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div className="min-w-0">
-            <div className="text-[21px] font-semibold leading-tight text-text">
+            <div className="headline-display text-[21px] font-semibold leading-tight text-text">
               {title}
             </div>
             {description ? (

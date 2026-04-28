@@ -79,7 +79,7 @@ export default async function HomePage() {
                   <div className="icon-button mb-5">
                     <Icon className="h-5 w-5" />
                   </div>
-                  <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{t(entry.titleKey)}</h3>
+                  <h3 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">{t(entry.titleKey)}</h3>
                   <p className="mt-3 text-[17px] leading-[1.47] text-muted">{t(entry.descriptionKey)}</p>
                 </Link>
               );

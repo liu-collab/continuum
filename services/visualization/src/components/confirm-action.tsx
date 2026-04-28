@@ -78,7 +78,7 @@ export function ConfirmAction({
                 <AlertTriangle className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <h3 id={titleId} className="text-[21px] font-semibold leading-[1.19] text-text">
+                <h3 id={titleId} className="headline-display text-[21px] font-semibold leading-[1.19] text-text">
                   {title}
                 </h3>
                 <p id={descriptionId} className="mt-2 text-[14px] leading-[1.43] text-muted">

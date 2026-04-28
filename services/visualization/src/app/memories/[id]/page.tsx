@@ -82,7 +82,7 @@ export default async function MemoryDetailPage({
           <div className="detail-grid">
             <section className="panel p-6">
               <div className="section-kicker">{t("memories.detail.status")}</div>
-              <p className="mt-4 text-[21px] font-semibold leading-[1.19] text-text">
+              <p className="headline-display mt-4 text-[21px] font-semibold leading-[1.19] text-text">
                 {detail.statusExplanation}
               </p>
               <p className="mt-3 text-[17px] leading-[1.47] text-muted">
@@ -184,7 +184,7 @@ export default async function MemoryDetailPage({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{item.proposalTypeLabel}</h3>
+                      <h3 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">{item.proposalTypeLabel}</h3>
                       <p className="mt-2 text-[17px] leading-[1.47] text-muted">{item.reasonText}</p>
                     </div>
                     <StatusBadge tone={governanceStatusTone(item.executionStatus)}>

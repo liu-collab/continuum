@@ -85,4 +85,32 @@ describe("visualization design compliance", () => {
     expect(css).toMatch(/\.record-link:active\s*\{[\s\S]*transform:\s*scale\(0\.95\);/);
     expect(css).not.toMatch(/\.record-link:active\s*\{[\s\S]*transform:\s*scale\(0\.99\);/);
   });
+
+  it("uses the display font utility on audited large headings", () => {
+    const css = readSource("src/app/globals.css");
+    const auditedFiles = [
+      "src/app/page.tsx",
+      "src/app/dashboard/page.tsx",
+      "src/app/memories/page.tsx",
+      "src/app/memories/[id]/page.tsx",
+      "src/app/runs/page.tsx",
+      "src/app/governance/page.tsx",
+      "src/app/agent/_components/runtime-config-card.tsx",
+      "src/components/confirm-action.tsx",
+      "src/components/empty-state.tsx",
+      "src/components/metric-card.tsx",
+      "src/components/modal.tsx"
+    ];
+
+    expect(css).toMatch(/\.headline-display\s*\{[\s\S]*font-family:\s*"SF Pro Display"/);
+
+    for (const file of auditedFiles) {
+      const headingLines = readSource(file)
+        .split("\n")
+        .filter((line) => /text-\[(?:21|34|40)px\].*font-semibold|font-semibold.*text-\[(?:21|34|40)px\]/.test(line));
+
+      expect(headingLines, file).not.toEqual([]);
+      expect(headingLines.every((line) => line.includes("headline-display")), file).toBe(true);
+    }
+  });
 });

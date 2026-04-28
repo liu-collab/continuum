@@ -118,7 +118,7 @@ export default async function RunsPage({
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <div className="section-kicker">{t("runs.selectedKicker")}</div>
-                        <h2 className="mt-3 break-all text-[34px] font-semibold leading-[1.12] text-text">
+                        <h2 className="headline-display mt-3 break-all text-[34px] font-semibold leading-[1.12] text-text">
                           {formatRunTraceTitle(selectedTurn.turn.createdAt, locale)}
                         </h2>
                         <p className="mt-4 text-[17px] leading-[1.47] text-muted">
@@ -146,7 +146,7 @@ export default async function RunsPage({
                     {selectedTurn.phaseNarratives.map((phase, index) => (
                       <div key={`${phase.key}-${index}-${phase.title}`} className="panel p-6">
                         <div className="flex items-start justify-between gap-4">
-                          <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{phase.title}</h3>
+                          <h3 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">{phase.title}</h3>
                           <StatusBadge tone="neutral">{phase.key}</StatusBadge>
                         </div>
                         <p className="mt-3 text-[17px] leading-[1.47] text-muted">{phase.summary}</p>

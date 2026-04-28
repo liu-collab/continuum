@@ -91,7 +91,7 @@ export default async function DashboardPage({
             <div className="panel p-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-[21px] font-semibold leading-[1.19] text-text">
+                  <h2 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">
                     {response.diagnosis.title}
                   </h2>
                   <p className="mt-3 text-[17px] leading-[1.47] text-muted">
@@ -107,7 +107,7 @@ export default async function DashboardPage({
             <section className="panel p-6" aria-labelledby="dashboard-source-heading">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 id="dashboard-source-heading" className="text-[21px] font-semibold leading-[1.19] text-text">
+                  <h2 id="dashboard-source-heading" className="headline-display text-[21px] font-semibold leading-[1.19] text-text">
                     {t("dashboard.sourceTitle")}
                   </h2>
                   <p className="mt-2 text-[14px] leading-[1.43] text-muted">
@@ -269,7 +269,7 @@ function DiagnosisCard({ card, t }: { card: DashboardDiagnosisCard; t: TFunction
     <div className="panel p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{card.title}</h3>
+          <h3 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">{card.title}</h3>
           <p className="mt-1 text-[14px] leading-[1.43] text-muted">{card.source}</p>
         </div>
         <StatusBadge tone={dashboardSeverityTone(card.severity)}>{t(`enums.severity.${card.severity}`)}</StatusBadge>

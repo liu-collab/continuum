@@ -130,7 +130,7 @@ export default async function MemoriesPage({
                 className={`record-link ${view.active ? "record-link-active" : ""}`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h3 className="text-[21px] font-semibold leading-[1.19] text-text">{view.label}</h3>
+                  <h3 className="headline-display text-[21px] font-semibold leading-[1.19] text-text">{view.label}</h3>
                   {view.active ? <StatusBadge tone="success">{t("memories.active")}</StatusBadge> : null}
                 </div>
                 <p className="mt-3 text-[17px] leading-[1.47] text-muted">{view.description}</p>
@@ -177,7 +177,7 @@ function SummaryCard({
   return (
     <div className="panel p-6">
       <div className="text-[14px] font-semibold leading-[1.29] text-muted-foreground">{label}</div>
-      <div className="mt-4 text-[40px] font-semibold leading-[1.1] text-text">{value}</div>
+      <div className="headline-display mt-4 text-[40px] font-semibold leading-[1.1] text-text">{value}</div>
       {tone === "warning" ? <div className="notice notice-warning mt-4">{reviewLabel}</div> : null}
     </div>
   );
