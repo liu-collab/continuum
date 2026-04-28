@@ -81,4 +81,36 @@ describe("PromptInspector", () => {
     expect(screen.getByText("task_switch")).toBeInTheDocument();
     expect(screen.getByText("任务切换时命中了相关偏好")).toBeInTheDocument();
   });
+
+  it("keeps raw payload readable inside scrollable panes", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <PromptInspector
+          open
+          onClose={vi.fn()}
+          payload={{
+            turn_id: "turn-raw",
+            provider_id: "ollama",
+            model: "qwen2.5-coder",
+            round: 1,
+            messages: Array.from({ length: 40 }, (_, index) => ({
+              role: "system",
+              content: `system prompt line ${index}`,
+            })),
+            prompt_segments: [],
+            phase_results: [],
+            budget_plan: null,
+            plan: null,
+            plan_revisions: [],
+            trace_spans: [],
+            evaluation: [],
+            tools: [],
+          }}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("prompt-inspector-meta-pane")).toHaveClass("overflow-auto");
+    expect(screen.getByTestId("prompt-inspector-raw-payload")).toHaveClass("max-h-[32rem]", "overflow-auto");
+  });
 });

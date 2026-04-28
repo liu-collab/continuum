@@ -50,8 +50,11 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[0.8fr_1.2fr]">
-          <div className="min-h-[22rem] border-r px-5 py-4">
+        <div className="grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[0.8fr_1.2fr]">
+          <div
+            data-testid="prompt-inspector-meta-pane"
+            className="min-h-0 overflow-auto border-b px-5 py-4 lg:border-b-0 lg:border-r"
+          >
             <div className="section-kicker">
               {t("promptInspector.meta")}
             </div>
@@ -103,11 +106,16 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
 
             <details className="mt-6 rounded-[var(--radius-lg)] border border-[var(--hairline)] bg-[var(--canvas)] p-4">
               <summary className="cursor-pointer text-sm font-semibold text-foreground">raw payload</summary>
-              <pre className="quiet-code mt-3">{JSON.stringify({ messages: payload?.messages ?? [], tools: payload?.tools ?? [] }, null, 2)}</pre>
+              <pre
+                data-testid="prompt-inspector-raw-payload"
+                className="quiet-code mt-3 max-h-[32rem] overflow-auto"
+              >
+                {JSON.stringify({ messages: payload?.messages ?? [], tools: payload?.tools ?? [] }, null, 2)}
+              </pre>
             </details>
           </div>
 
-          <div className="min-h-[22rem] overflow-auto px-5 py-4">
+          <div className="min-h-0 overflow-auto px-5 py-4">
             <dl className="space-y-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">{t("promptInspector.finalPrompt")}</dt>

@@ -305,7 +305,16 @@
     },
     "memory_writeback_incomplete": {
       "title": "Memory was not saved",
-      "description": "This reply is unaffected."
+      "description": "The memory writeback flow did not complete. This reply is unaffected.",
+      "reasons": {
+        "runtime_timeout": "The memory runtime timed out. This reply is unaffected.",
+        "runtime_unavailable": "The memory runtime is currently unavailable. This reply is unaffected.",
+        "storage_write_failed": "Memory storage failed to save the writeback. This reply is unaffected.",
+        "network_error": "The memory service connection failed. This reply is unaffected.",
+        "invalid_request": "The memory writeback request was malformed. This reply is unaffected.",
+        "invalid_response": "The memory runtime returned an invalid response. This reply is unaffected.",
+        "unknown": "The memory writeback flow failed unexpectedly. This reply is unaffected."
+      }
     },
     "tool_denied_path": {
       "title": "Tool path denied",

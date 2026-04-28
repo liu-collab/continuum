@@ -234,7 +234,8 @@ describe("agent event reducer", () => {
         scope: "turn",
         turn_id: "turn-writeback",
         code: "memory_writeback_incomplete",
-        message: "memory request timed out after 10000ms"
+        message: "memory request timed out after 10000ms",
+        reason: "runtime_timeout"
       }
     });
 
@@ -244,7 +245,8 @@ describe("agent event reducer", () => {
     expect(state.turns[0]?.errors).toEqual([
       {
         code: "memory_writeback_incomplete",
-        message: "memory request timed out after 10000ms"
+        message: "memory request timed out after 10000ms",
+        reason: "runtime_timeout"
       }
     ]);
   });

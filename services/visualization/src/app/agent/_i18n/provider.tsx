@@ -28,7 +28,7 @@ type AgentI18nValue = {
   formatSessionTitle(id: string): string;
   formatPhaseLabel(phase: string): string;
   formatFinishReasonLabel(finishReason: string): string;
-  formatAgentError(code: string, fallbackMessage?: string | null): {
+  formatAgentError(code: string, fallbackMessage?: string | null, reason?: string): {
     title: string;
     description: string;
   };
@@ -83,8 +83,8 @@ export function AgentI18nProvider({
     formatFinishReasonLabel(finishReason) {
       return formatFinishReason(locale, finishReason);
     },
-    formatAgentError(code, fallbackMessage) {
-      return formatAgentError(locale, code, fallbackMessage);
+    formatAgentError(code, fallbackMessage, reason) {
+      return formatAgentError(locale, code, fallbackMessage, reason);
     }
   };
 

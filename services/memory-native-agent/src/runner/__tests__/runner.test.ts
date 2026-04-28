@@ -479,11 +479,100 @@ describe("AgentRunner", () => {
       "turn",
       expect.objectContaining({
         code: "memory_writeback_incomplete",
-        message: "runtime timeout",
+        message: "memory writeback incomplete",
+        reason: "runtime_timeout",
       }),
       "turn-writeback-error",
     );
     expect(io.emitError.mock.calls.some((call) => call[0] === "session" && call[1]?.code === "memory_writeback_incomplete")).toBe(false);
+  });
+
+  it("emits degraded writeback results as non-terminal turn errors", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    memoryClient.finalizeTurn.mockResolvedValueOnce({
+      trace_id: "trace-finalize-storage-down",
+      write_back_candidates: [
+        {
+          workspace_id: "550e8400-e29b-41d4-a716-446655440000",
+          user_id: "550e8400-e29b-41d4-a716-446655440001",
+          task_id: null,
+          session_id: "session-001",
+          scope: "workspace",
+          candidate_type: "fact_preference",
+          summary: "用户偏好默认中文输出。",
+          details: {},
+          importance: 7,
+          confidence: 0.9,
+          write_reason: "用户明确要求记住偏好。",
+          source: {
+            source_type: "turn",
+            source_ref: "turn-writeback-storage-down",
+            service_name: "memory-native-agent",
+          },
+          idempotency_key: "cand-storage-down",
+        },
+      ],
+      submitted_jobs: [
+        {
+          candidate_summary: "用户偏好默认中文输出。",
+          status: "dependency_unavailable",
+          reason: "storage unavailable",
+        },
+      ],
+      memory_mode: "workspace_plus_global",
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: false,
+      degraded: true,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "unavailable", detail: "storage unavailable", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat: async function* () {
+          yield { type: "text_delta", text: "好的。" } as const;
+          yield {
+            type: "end",
+            finish_reason: "stop",
+            usage: {
+              prompt_tokens: 1,
+              completion_tokens: 1,
+            },
+          } as const;
+        },
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config: createConfig(),
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("记住这个偏好", "turn-writeback-storage-down");
+    await Promise.resolve();
+
+    expect(io.emitTurnEnd).toHaveBeenCalledWith("turn-writeback-storage-down", "stop");
+    expect(io.emitError).toHaveBeenCalledWith(
+      "turn",
+      expect.objectContaining({
+        code: "memory_writeback_incomplete",
+        message: "memory writeback incomplete",
+        reason: "storage_write_failed",
+      }),
+      "turn-writeback-storage-down",
+    );
   });
 
   it("emits a session error once when store writes fail but still completes the turn", async () => {

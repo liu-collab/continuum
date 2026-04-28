@@ -500,6 +500,7 @@ function createRunnerIo(state: MnaRuntimeState, session: SessionState): RunnerIO
         scope,
         code: err.code ?? "unknown",
         message: err.message,
+        ...(err.reason ? { reason: err.reason } : {}),
         ...(scope === "turn" && turnId ? { turn_id: turnId } : {}),
       });
     },

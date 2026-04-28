@@ -28,7 +28,14 @@ import {
 import { RuntimeTracer, type RuntimeSpan } from "../trace/runtime-tracer.js";
 import { tierMemoryInjection } from "./memory-tiering.js";
 import { toPromptSegmentView, type PromptSegmentView } from "./prompt-segments.js";
-import { shouldFinalizeTurn, summarizeToolResults } from "./writeback-decider.js";
+import {
+  classifyMemoryWritebackError,
+  classifyMemoryWritebackResult,
+  createMemoryWritebackIncompleteError,
+  shouldFinalizeTurn,
+  summarizeToolResults,
+  type MemoryWritebackIncompleteReason,
+} from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
 import type { FinalizeTurnResult, MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
 import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
@@ -94,7 +101,7 @@ export interface RunnerIO {
   emitEvaluation?(turnId: string, event: EvaluationEvent): void;
   emitTrace?(turnId: string, spans: RuntimeSpan[]): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
-  emitError(scope: "turn" | "session", err: Error & { code?: string }, turnId?: string): void;
+  emitError(scope: "turn" | "session", err: Error & { code?: string; reason?: MemoryWritebackIncompleteReason }, turnId?: string): void;
   recordPrepareContextLatency?(phase: Phase, latencyMs: number): void;
   recordProviderCall?(providerKey: string): void;
   recordProviderFirstTokenLatency?(providerKey: string, latencyMs: number): void;
@@ -596,12 +603,22 @@ export class AgentRunner {
         memory_mode: this.deps.config.memory.mode,
       }).catch((error) => {
         finalizeSpan.finish("error");
-        this.deps.io.emitError("turn", Object.assign(error instanceof Error ? error : new Error(String(error)), {
-          code: "memory_writeback_incomplete",
-        }), turnId);
+        this.deps.io.emitError(
+          "turn",
+          createMemoryWritebackIncompleteError(classifyMemoryWritebackError(error)),
+          turnId,
+        );
       }).then((response) => {
         if (!response) {
           return;
+        }
+        const incompleteReason = classifyMemoryWritebackResult(response);
+        if (incompleteReason) {
+          this.deps.io.emitError(
+            "turn",
+            createMemoryWritebackIncompleteError(incompleteReason),
+            turnId,
+          );
         }
         const residentJobs = response?.submitted_jobs
           ?.filter((job, index) => {

@@ -152,7 +152,7 @@ function AssistantMessageBubble({
   const meta = readContinuumMeta(message);
   const turnId = meta?.turnId ?? message.id;
   const hasRenderableParts = message.content.length > 0;
-  const errorContents = meta?.errors.map((item) => formatAgentError(item.code, null)) ?? [];
+  const errorContents = meta?.errors.map((item) => formatAgentError(item.code, null, item.reason)) ?? [];
 
   return (
     <div className="flex justify-start">

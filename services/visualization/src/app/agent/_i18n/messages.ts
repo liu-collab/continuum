@@ -63,9 +63,13 @@ export function formatFinishReason(locale: AgentLocale, finishReason: string) {
   return translateMessage(locale, `finishReasons.${finishReason}`);
 }
 
-export function formatAgentError(locale: AgentLocale, code: string, fallbackMessage?: string | null) {
+export function formatAgentError(locale: AgentLocale, code: string, fallbackMessage?: string | null, reason?: string) {
   const title = translateMessage(locale, `errors.${code}.title`);
-  const description = translateMessage(locale, `errors.${code}.description`);
+  const reasonDescription = reason ? translateMessage(locale, `errors.${code}.reasons.${reason}`) : null;
+  const description =
+    reasonDescription && reasonDescription !== `errors.${code}.reasons.${reason}`
+      ? reasonDescription
+      : translateMessage(locale, `errors.${code}.description`);
   const fallbackTitle = fallbackMessage === null ? translateMessage(locale, "errors.unknown.title") : (fallbackMessage ?? code);
   const fallbackDescription = fallbackMessage === null
     ? translateMessage(locale, "errors.unknown.description")

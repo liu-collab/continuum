@@ -44,6 +44,7 @@ export type AgentTurnState = {
   errors: Array<{
     code: string;
     message: string;
+    reason?: string;
   }>;
   taskLabel: string | null;
   plan: {
@@ -417,7 +418,7 @@ function reduceServerEvent(state: AgentState, event: MnaServerEventEnvelope): Ag
       return event.scope === "turn"
         ? {
             ...state,
-            turns: attachErrorToTurn(state.turns, event.turn_id, event.code, event.message)
+            turns: attachErrorToTurn(state.turns, event.turn_id, event.code, event.message, event.reason)
           }
         : {
             ...state,
@@ -502,9 +503,15 @@ function dedupePhases(phases: AgentTurnState["phases"]) {
   });
 }
 
-function attachErrorToTurn(turns: AgentTurnState[], turnId: string | undefined, code: string, message: string) {
+function attachErrorToTurn(
+  turns: AgentTurnState[],
+  turnId: string | undefined,
+  code: string,
+  message: string,
+  reason?: string,
+) {
   if (turnId) {
-    return upsertTurn(turns, turnId, (turn) => appendTurnError(turn, code, message));
+    return upsertTurn(turns, turnId, (turn) => appendTurnError(turn, code, message, reason));
   }
 
   const latest = turns.at(-1);
@@ -512,14 +519,14 @@ function attachErrorToTurn(turns: AgentTurnState[], turnId: string | undefined, 
     return turns;
   }
 
-  return turns.map((turn) => (turn.turnId === latest.turnId ? appendTurnError(turn, code, message) : turn));
+  return turns.map((turn) => (turn.turnId === latest.turnId ? appendTurnError(turn, code, message, reason) : turn));
 }
 
-function appendTurnError(turn: AgentTurnState, code: string, message: string): AgentTurnState {
+function appendTurnError(turn: AgentTurnState, code: string, message: string, reason?: string): AgentTurnState {
   return {
     ...turn,
     status: isNonTerminalTurnError(code) ? turn.status : "error",
-    errors: [...turn.errors, { code, message }]
+    errors: [...turn.errors, { code, message, ...(reason ? { reason } : {}) }]
   };
 }
 

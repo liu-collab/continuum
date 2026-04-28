@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { summarizeToolResults } from "../writeback-decider.js";
+import { MemoryBadRequestError, MemoryTimeoutError, MemoryUnavailableError } from "../../memory-client/index.js";
+import {
+  classifyMemoryWritebackError,
+  classifyMemoryWritebackResult,
+  summarizeToolResults,
+} from "../writeback-decider.js";
 import { Conversation } from "../conversation.js";
 
 describe("turn loop helpers", () => {
@@ -14,6 +19,40 @@ describe("turn loop helpers", () => {
     ]);
 
     expect(summary).toContain("以下摘要来自外部工具输出");
+  });
+
+  it("classifies writeback failures into safe UI reasons", () => {
+    expect(classifyMemoryWritebackError(new MemoryTimeoutError("memory request timed out after 10000ms"))).toBe("runtime_timeout");
+    expect(classifyMemoryWritebackError(new MemoryUnavailableError("failed to reach retrieval-runtime"))).toBe("network_error");
+    expect(classifyMemoryWritebackError(new MemoryUnavailableError("retrieval-runtime returned HTTP 503", { statusCode: 503 }))).toBe("runtime_unavailable");
+    expect(classifyMemoryWritebackError(new MemoryBadRequestError("Invalid finalize-turn payload", { statusCode: 400 }))).toBe("invalid_request");
+    expect(classifyMemoryWritebackError(new Error("storage request POST /v1/storage/write-back-candidates failed with 500"))).toBe("storage_write_failed");
+  });
+
+  it("classifies degraded writeback results as storage write failures", () => {
+    expect(classifyMemoryWritebackResult({
+      trace_id: "trace-finalize",
+      write_back_candidates: [],
+      submitted_jobs: [
+        {
+          candidate_summary: "用户偏好默认中文输出。",
+          status: "dependency_unavailable",
+          reason: "storage unavailable",
+        },
+      ],
+      memory_mode: "workspace_plus_global",
+      candidate_count: 1,
+      filtered_count: 0,
+      filtered_reasons: [],
+      writeback_submitted: false,
+      degraded: true,
+      dependency_status: {
+        read_model: { name: "read_model", status: "healthy", detail: "", last_checked_at: "now" },
+        embeddings: { name: "embeddings", status: "healthy", detail: "", last_checked_at: "now" },
+        storage_writeback: { name: "storage_writeback", status: "unavailable", detail: "storage unavailable", last_checked_at: "now" },
+        memory_llm: { name: "memory_llm", status: "healthy", detail: "", last_checked_at: "now" },
+      },
+    })).toBe("storage_write_failed");
   });
 
   it("wraps tool output with trust boundary tags", () => {

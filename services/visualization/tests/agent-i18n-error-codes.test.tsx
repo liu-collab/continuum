@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { translateMessage } from "@/app/agent/_i18n/messages";
+import { formatAgentError, translateMessage } from "@/app/agent/_i18n/messages";
 
 const errorCodes = [
   "token_invalid",
@@ -24,6 +24,16 @@ const errorCodes = [
   "api_version_mismatch"
 ] as const;
 
+const writebackReasons = [
+  "runtime_timeout",
+  "runtime_unavailable",
+  "storage_write_failed",
+  "network_error",
+  "invalid_request",
+  "invalid_response",
+  "unknown",
+] as const;
+
 describe("agent i18n error resources", () => {
   it.each(errorCodes)("provides zh-CN title and description for %s", (code) => {
     expect(translateMessage("zh-CN", `errors.${code}.title`)).not.toBe(`errors.${code}.title`);
@@ -33,5 +43,21 @@ describe("agent i18n error resources", () => {
   it.each(errorCodes)("provides en-US title and description for %s", (code) => {
     expect(translateMessage("en-US", `errors.${code}.title`)).not.toBe(`errors.${code}.title`);
     expect(translateMessage("en-US", `errors.${code}.description`)).not.toBe(`errors.${code}.description`);
+  });
+
+  it.each(writebackReasons)("formats zh-CN memory writeback reason %s", (reason) => {
+    const content = formatAgentError("zh-CN", "memory_writeback_incomplete", null, reason);
+
+    expect(content.title).toBe("记忆保存未完成");
+    expect(content.description).not.toBe(`errors.memory_writeback_incomplete.reasons.${reason}`);
+    expect(content.description).toContain("本轮回复不受影响");
+  });
+
+  it.each(writebackReasons)("formats en-US memory writeback reason %s", (reason) => {
+    const content = formatAgentError("en-US", "memory_writeback_incomplete", null, reason);
+
+    expect(content.title).toBe("Memory was not saved");
+    expect(content.description).not.toBe(`errors.memory_writeback_incomplete.reasons.${reason}`);
+    expect(content.description).toContain("This reply is unaffected");
   });
 });

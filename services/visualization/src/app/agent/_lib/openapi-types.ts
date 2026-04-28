@@ -475,6 +475,7 @@ export type MnaWsErrorEvent = {
   turn_id?: string;
   code: string;
   message: string;
+  reason?: string;
 };
 
 export type MnaWsToolConfirmEvent = {

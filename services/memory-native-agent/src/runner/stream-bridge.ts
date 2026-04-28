@@ -1,12 +1,17 @@
 import type { ChatChunk, ToolCall } from "../providers/types.js";
 import type { ToolResult } from "../tools/index.js";
+import type { MemoryWritebackIncompleteReason } from "./writeback-decider.js";
 
 export interface StreamBridgeSink {
   emitAssistantDelta(turnId: string, text: string): void;
   emitToolCallStart(turnId: string, call: ToolCall): void;
   emitToolCallResult(callId: string, result: ToolResult): void;
   emitTurnEnd(turnId: string, finishReason: string): void;
-  emitError(scope: "turn" | "session", error: Error & { code?: string }, turnId?: string): void;
+  emitError(
+    scope: "turn" | "session",
+    error: Error & { code?: string; reason?: MemoryWritebackIncompleteReason },
+    turnId?: string,
+  ): void;
 }
 
 export interface StreamBridgeOptions {

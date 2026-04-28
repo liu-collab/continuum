@@ -305,7 +305,16 @@
     },
     "memory_writeback_incomplete": {
       "title": "记忆保存未完成",
-      "description": "不影响本轮回复。"
+      "description": "写回链路未完成，不影响本轮回复。",
+      "reasons": {
+        "runtime_timeout": "记忆运行时响应超时，本轮回复不受影响。",
+        "runtime_unavailable": "记忆运行时当前不可用，本轮回复不受影响。",
+        "storage_write_failed": "记忆存储写入失败，本轮回复不受影响。",
+        "network_error": "记忆服务连接失败，本轮回复不受影响。",
+        "invalid_request": "记忆写回请求格式不正确，本轮回复不受影响。",
+        "invalid_response": "记忆运行时返回的数据格式异常，本轮回复不受影响。",
+        "unknown": "记忆写回链路异常，本轮回复不受影响。"
+      }
     },
     "tool_denied_path": {
       "title": "工具路径被拒绝",
