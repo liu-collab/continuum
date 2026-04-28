@@ -13,6 +13,7 @@ import { ConflictResolutionError, NotFoundError } from "../errors.js";
 import { snapshotRecord, type StorageRepositories } from "../db/repositories.js";
 
 type RecordUpdatePatch = Parameters<StorageRepositories["records"]["updateRecord"]>[1];
+type ManualUpdateFields = RecordUpdatePatch | ((existing: MemoryRecord) => RecordUpdatePatch);
 
 export class GovernanceEngine {
   constructor(private readonly repositories: StorageRepositories) {}
@@ -80,14 +81,21 @@ export class GovernanceEngine {
     const archivedAt = new Date().toISOString();
     return this.applyManualAction({
       recordId,
-      updateFields: {
+      updateFields: (existing) => ({
         status: "archived",
         archived_at: archivedAt,
-      },
+        details_json: {
+          ...existing.details_json,
+          invalidation_reason: input.reason,
+          invalidated_by: input.actor.actor_id,
+          invalidated_at: archivedAt,
+        },
+      }),
       actionType: "invalidate",
       actionPayload: {
         reason: input.reason,
         resulting_status: "archived",
+        invalidated_at: archivedAt,
       },
       changeType: "archive",
       actor: input.actor,
@@ -152,7 +160,7 @@ export class GovernanceEngine {
 
   private async applyManualAction(input: {
     recordId: string;
-    updateFields: RecordUpdatePatch;
+    updateFields: ManualUpdateFields;
     actionType: string;
     actionPayload: Record<string, unknown>;
     changeType: string;
@@ -166,7 +174,11 @@ export class GovernanceEngine {
         throw new NotFoundError("memory record not found", { recordId: input.recordId });
       }
 
-      const updated = await tx.records.updateRecord(input.recordId, input.updateFields);
+      const updateFields =
+        typeof input.updateFields === "function"
+          ? input.updateFields(existing)
+          : input.updateFields;
+      const updated = await tx.records.updateRecord(input.recordId, updateFields);
 
       await tx.records.appendVersion({
         record_id: updated.id,

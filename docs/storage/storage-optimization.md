@@ -324,6 +324,8 @@ export function snapshotRecord(record: MemoryRecord): Record<string, unknown> {
 
 ## 优化七：`archive` 和 `invalidate` 产生相同的数据库状态
 
+**状态：已完成**
+
 ### 问题
 
 两个动作对数据库产生完全相同的效果：

@@ -167,6 +167,11 @@ describe("governance flow", () => {
 
     expect(record.status).toBe("archived");
     expect(record.archived_at).toBeTruthy();
+    expect(record.details_json).toMatchObject({
+      invalidation_reason: "rule is no longer valid",
+      invalidated_by: "tester",
+      invalidated_at: record.archived_at,
+    });
   });
 
   it("returns versions and merged history for a record", async () => {
