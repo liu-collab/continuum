@@ -126,8 +126,8 @@ export async function assertFixedServicePortsAvailable(
   for (const item of ports) {
     if (!(await probePort(host, item.port))) {
       throw new Error(bilingualMessage(
-        `端口 ${item.port} 已被占用，请先释放该端口或设置 ${item.envName} 环境变量。`,
-        `Port ${item.port} is already in use. Free it first or set ${item.envName}.`,
+        `端口 ${item.port} 已被占用，请先释放该端口或设置 ${item.envName} 环境变量（不是 CLI flag）。`,
+        `Port ${item.port} is already in use. Free it first or set the ${item.envName} environment variable (not a CLI flag).`,
       ));
     }
   }

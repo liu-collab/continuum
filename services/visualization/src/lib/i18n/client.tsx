@@ -32,7 +32,9 @@ export function AppI18nProvider({
   children: ReactNode;
   defaultLocale?: string;
 }) {
-  const [locale, setLocaleState] = useState<AppLocale>(() => resolveAppLocale(defaultLocale));
+  const [locale, setLocaleState] = useState<AppLocale>(() =>
+    resolveAppLocale(defaultLocale ?? (typeof navigator === "undefined" ? null : navigator.language))
+  );
   const setLocale = useCallback((nextLocale: AppLocale) => {
     setLocaleState(nextLocale);
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, nextLocale);

@@ -10,6 +10,7 @@ const maybeWriteUpdateNoticeMock = vi.hoisted(() => vi.fn());
 const runClaudeCommandMock = vi.hoisted(() => vi.fn());
 const runClaudeInstallCommandMock = vi.hoisted(() => vi.fn());
 const runClaudeUninstallCommandMock = vi.hoisted(() => vi.fn());
+const runStartCommandMock = vi.hoisted(() => vi.fn());
 
 readManagedStateMock.mockResolvedValue({
   version: 1,
@@ -65,6 +66,10 @@ vi.mock("../src/version-check.js", () => ({
   runUpdateCommand: runUpdateCommandMock,
 }));
 
+vi.mock("../src/start-command.js", () => ({
+  runStartCommand: runStartCommandMock,
+}));
+
 import { parseArgs } from "../src/args.js";
 import { runCli } from "../src/axis-cli.js";
 import {
@@ -92,6 +97,7 @@ describe("axis cli", () => {
     runClaudeCommandMock.mockReset();
     runClaudeInstallCommandMock.mockReset();
     runClaudeUninstallCommandMock.mockReset();
+    runStartCommandMock.mockReset();
     readManagedStateMock.mockReset();
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -160,6 +166,18 @@ describe("axis cli", () => {
     expect(renderHelp()).toContain("--bind-host HOST");
     expect(renderHelp()).toContain("--embedding-base-url URL");
     expect(renderHelp()).toContain("--provider-kind KIND");
+  });
+
+  it("reports expected start failures without calling them unexpected errors", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    runStartCommandMock.mockRejectedValue(new Error("Docker CLI 未安装或不可用"));
+
+    await expect(runCli(["start"], import.meta.url)).resolves.toBe(1);
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      "Axis CLI 命令失败：Docker CLI 未安装或不可用 | Axis CLI command failed: Docker CLI 未安装或不可用\n",
+    );
+    expect(stderrSpy.mock.calls.map((call) => String(call[0])).join("")).not.toContain("unexpected error");
   });
 
   it("parses the stop command and exposes it in help", () => {

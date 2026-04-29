@@ -62,7 +62,7 @@ describe("runDoctorCommand", () => {
   });
 
   it("returns non-zero when a required port is occupied", async () => {
-    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     runCommandMock.mockImplementation(async (_command: string, args: string[]) => ({
       code: 0,
       stdout: args.includes("version") ? "Client:\n Server:\n" : "Docker version 1\n",
@@ -75,6 +75,10 @@ describe("runDoctorCommand", () => {
     });
 
     await expect(runDoctorCommand()).resolves.toBe(1);
+
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(output).toContain("端口 3002 已被占用");
+    expect(output).toContain("RUNTIME_PORT 环境变量");
   });
 
   it("reports a cross-platform Docker startup hint when daemon is not running", async () => {
@@ -96,5 +100,26 @@ describe("runDoctorCommand", () => {
     expect(output).toContain("Docker 未运行");
     expect(output).toContain("Windows/macOS");
     expect(output).toContain("Docker Engine");
+    expect(output).toContain("axis start");
+  });
+
+  it("prints install guidance when Docker CLI is missing", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    runCommandMock.mockImplementation(async () => ({
+      code: 1,
+      stdout: "",
+      stderr: "not found",
+    }));
+    portAvailableMock.mockResolvedValue(true);
+    statfsMock.mockResolvedValue({
+      bavail: BigInt(3 * 1024 * 1024),
+      bsize: 1024,
+    });
+
+    await expect(runDoctorCommand()).resolves.toBe(1);
+
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(output).toContain("Docker 未安装");
+    expect(output).toContain("Docker Desktop");
   });
 });

@@ -6,7 +6,7 @@ import zhCommon from "./messages/zh-CN/common";
 
 export type AppLocale = "zh-CN" | "en-US";
 
-export const DEFAULT_APP_LOCALE: AppLocale = "zh-CN";
+export const DEFAULT_APP_LOCALE: AppLocale = "en-US";
 export const APP_LOCALE_COOKIE = "axis.locale";
 export const APP_LOCALE_STORAGE_KEY = "axis.locale";
 
@@ -32,7 +32,7 @@ export function resolveAppLocale(preferredLocale?: string | null): AppLocale {
   if (isAppLocale(preferredLocale)) {
     return preferredLocale;
   }
-  return preferredLocale?.toLowerCase().startsWith("en") ? "en-US" : DEFAULT_APP_LOCALE;
+  return preferredLocale?.toLowerCase().startsWith("zh") ? "zh-CN" : DEFAULT_APP_LOCALE;
 }
 
 export function translateMessage(locale: AppLocale, key: string, variables?: Variables) {

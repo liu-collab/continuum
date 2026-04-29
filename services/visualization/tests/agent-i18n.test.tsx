@@ -1,12 +1,13 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 
 import { UntrustedBadge } from "@/app/agent/_components/untrusted-badge";
 import { AppLocaleSwitch } from "@/components/app-locale-switch";
 import { AppI18nProvider, useAppI18n } from "@/lib/i18n/client";
 import { AgentI18nProvider, useAgentI18n } from "@/lib/i18n/agent/provider";
+import { DEFAULT_APP_LOCALE, resolveAppLocale } from "@/lib/i18n/messages";
 
 function SampleLabel() {
   const { t } = useAgentI18n();
@@ -21,6 +22,27 @@ function GlobalApplyLabel() {
 describe("agent i18n", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("defaults to English unless the preferred locale is Chinese", () => {
+    expect(DEFAULT_APP_LOCALE).toBe("en-US");
+    expect(resolveAppLocale()).toBe("en-US");
+    expect(resolveAppLocale("en-GB")).toBe("en-US");
+    expect(resolveAppLocale("fr-FR")).toBe("en-US");
+    expect(resolveAppLocale("zh-Hans-CN")).toBe("zh-CN");
+  });
+
+  it("uses navigator.language when no locale is provided", () => {
+    vi.spyOn(window.navigator, "language", "get").mockReturnValue("zh-CN");
+
+    render(
+      <AppI18nProvider>
+        <GlobalApplyLabel />
+      </AppI18nProvider>
+    );
+
+    expect(screen.getByText("应用")).toBeInTheDocument();
   });
 
   it("uses the provided default locale", () => {

@@ -13,7 +13,7 @@ const envSchema = z.object({
     .default("Structured memory catalog, run trace, and metrics dashboard"),
   NEXT_PUBLIC_MNA_BASE_URL: z.string().url().default("http://127.0.0.1:4193"),
   MNA_INTERNAL_BASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_MNA_DEFAULT_LOCALE: z.enum(["zh-CN", "en-US"]).default("zh-CN"),
+  NEXT_PUBLIC_MNA_DEFAULT_LOCALE: z.enum(["zh-CN", "en-US"]).default("en-US"),
   STORAGE_READ_MODEL_DSN: z.string().optional(),
   STORAGE_READ_MODEL_SCHEMA: identifierSchema.default("storage_shared_v1"),
   STORAGE_READ_MODEL_TABLE: identifierSchema.default("memory_read_model_v1"),

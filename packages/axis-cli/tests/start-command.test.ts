@@ -1376,7 +1376,7 @@ describe("runStartCommand", () => {
 
     await expect(
       assertFixedServicePortsAvailable("127.0.0.1", [{ port: 3001, envName: "STORAGE_PORT" }], probePort),
-    ).rejects.toThrow(/端口 3001 已被占用.*STORAGE_PORT/);
+    ).rejects.toThrow(/端口 3001 已被占用.*STORAGE_PORT 环境变量（不是 CLI flag）/);
   });
 
   it("reuses healthy backend services and only restarts local visualization when ui-dev is enabled", async () => {

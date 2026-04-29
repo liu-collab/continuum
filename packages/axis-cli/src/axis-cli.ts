@@ -33,13 +33,13 @@ export async function runCli(argv: string[], importMetaUrl: string) {
   } catch (error) {
     const message = formatErrorMessage(error);
     process.stderr.write(`${bilingualMessage(
-      `Axis CLI 遇到未预期的错误：${message}`,
-      `Axis CLI encountered an unexpected error: ${message}`,
+      `Axis CLI 命令失败：${message}`,
+      `Axis CLI command failed: ${message}`,
     )}\n`);
     if (process.env.NODE_ENV === "development" && error instanceof Error && error.stack) {
       process.stderr.write(`${error.stack}\n`);
     }
-    process.exit(1);
+    return 1;
   }
 }
 
