@@ -1,7 +1,10 @@
+import { createHash } from "node:crypto";
+
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
+import { SmallCache } from "../shared/small-cache.js";
 import type {
   CandidateMemory,
   PhaseScoringWeights,
@@ -29,6 +32,8 @@ const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
 };
 const OPEN_CONFLICT_SCORE_PENALTY = 0.2;
 const MAX_SEMANTIC_QUERY_TERMS = 48;
+const QUERY_CANDIDATE_CACHE_TTL_MS = 30_000;
+const QUERY_CANDIDATE_CACHE_MAX_ENTRIES = 500;
 
 function recencyScore(updatedAt: string, memoryType: CandidateMemory["memory_type"]): number {
   const ageMs = Date.now() - new Date(updatedAt).getTime();
@@ -168,6 +173,35 @@ function buildRecallQueryExpansion(currentInput: string): string {
   return "用户希望助手以后叫 用户给助手的称呼 助手名字 助手昵称 以后叫";
 }
 
+function stableArray<T extends string>(values: T[]): T[] {
+  return [...values].sort();
+}
+
+function embeddingHash(embedding?: number[]) {
+  if (!embedding || embedding.length === 0) {
+    return null;
+  }
+  return createHash("sha1").update(JSON.stringify(embedding)).digest("hex");
+}
+
+function queryCandidateCacheKey(query: RetrievalQuery) {
+  return JSON.stringify({
+    workspace_id: query.workspace_id,
+    user_id: query.user_id,
+    session_id: query.session_id,
+    task_id: query.task_id ?? null,
+    memory_mode: query.memory_mode,
+    scope_filter: stableArray(query.scope_filter),
+    memory_type_filter: stableArray(query.memory_type_filter),
+    status_filter: stableArray(query.status_filter),
+    importance_threshold: query.importance_threshold,
+    semantic_query_text: normalizeText(query.semantic_query_text),
+    semantic_query_terms: stableArray(query.semantic_query_terms ?? []),
+    semantic_query_embedding: embeddingHash(query.semantic_query_embedding),
+    candidate_limit: query.candidate_limit,
+  });
+}
+
 export function buildRetrievalQuery(
   context: TriggerContext,
   decision: TriggerDecision,
@@ -197,6 +231,11 @@ export function buildRetrievalQuery(
 }
 
 export class QueryEngine {
+  private readonly candidateCache = new SmallCache<string, CandidateMemory[]>({
+    ttlMs: QUERY_CANDIDATE_CACHE_TTL_MS,
+    maxEntries: QUERY_CANDIDATE_CACHE_MAX_ENTRIES,
+  });
+
   constructor(
     private readonly config: AppConfig,
     private readonly repository: ReadModelRepository,
@@ -234,20 +273,27 @@ export class QueryEngine {
       semantic_query_embedding: queryEmbedding,
     };
 
-    const readModelResult = await this.dependencyGuard.run("read_model", this.config.QUERY_TIMEOUT_MS, (signal) =>
-      this.repository.searchCandidates(contextualQuery, signal),
-    );
+    const cacheKey = queryCandidateCacheKey(contextualQuery);
+    let baseCandidates = this.candidateCache.get(cacheKey);
 
-    if (!readModelResult.ok) {
-      return {
-        query: contextualQuery,
-        candidates: [],
-        degraded: true,
-        degradation_reason: readModelResult.error?.code ?? "dependency_unavailable",
-      };
+    if (!baseCandidates) {
+      const readModelResult = await this.dependencyGuard.run("read_model", this.config.QUERY_TIMEOUT_MS, (signal) =>
+        this.repository.searchCandidates(contextualQuery, signal),
+      );
+
+      if (!readModelResult.ok) {
+        return {
+          query: contextualQuery,
+          candidates: [],
+          degraded: true,
+          degradation_reason: readModelResult.error?.code ?? "dependency_unavailable",
+        };
+      }
+
+      baseCandidates = readModelResult.value ?? [];
+      this.candidateCache.set(cacheKey, baseCandidates);
     }
 
-    const baseCandidates = readModelResult.value ?? [];
     if (baseCandidates.length === 0) {
       return { query: contextualQuery, candidates: [], degraded: false };
     }

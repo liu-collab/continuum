@@ -288,6 +288,7 @@ class MutableReadModelRepository extends InMemoryReadModelRepository {
 
 class CountingReadModelRepository extends InMemoryReadModelRepository {
   public availabilityCallCount = 0;
+  public searchCallCount = 0;
 
   override async estimateAvailability(
     query: Parameters<InMemoryReadModelRepository["estimateAvailability"]>[0],
@@ -295,6 +296,14 @@ class CountingReadModelRepository extends InMemoryReadModelRepository {
   ) {
     this.availabilityCallCount += 1;
     return super.estimateAvailability(query, signal);
+  }
+
+  override async searchCandidates(
+    query: Parameters<InMemoryReadModelRepository["searchCandidates"]>[0],
+    signal?: AbortSignal,
+  ) {
+    this.searchCallCount += 1;
+    return super.searchCandidates(query, signal);
   }
 }
 
@@ -828,6 +837,44 @@ describe("retrieval-runtime service", () => {
     });
 
     expect(readModelRepository.availabilityCallCount).toBe(1);
+    expect(first.trace_id).not.toBe(second.trace_id);
+  });
+
+  it("reuses query candidates without reusing prepare responses", async () => {
+    const readModelRepository = new CountingReadModelRepository(sampleRecords);
+    const embeddingsClient = new StubEmbeddingsClient([1, 0, 0]);
+    const { service } = createRuntime({
+      embeddingsClient,
+      readModelRepository,
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const first = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-query-cache-1",
+      phase: "task_start",
+      current_input: "任务继续",
+      memory_mode: "workspace_plus_global",
+    });
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-query-cache-2",
+      phase: "task_start",
+      current_input: "任务继续",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(readModelRepository.searchCallCount).toBe(1);
     expect(first.trace_id).not.toBe(second.trace_id);
   });
 
