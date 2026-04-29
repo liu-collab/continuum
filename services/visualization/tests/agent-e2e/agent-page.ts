@@ -146,8 +146,12 @@ export class AgentPage {
   }
 
   async switchLocale(locale: "zh-CN" | "en-US") {
-    await this.page.getByTestId("agent-locale-select").click();
-    await this.page.getByRole("option", { name: locale === "zh-CN" ? /简体中文|Chinese/i : /English/i }).click();
+    const localeSwitch = this.page.getByTestId("app-locale-select");
+    const targetLabel = locale === "zh-CN" ? "ZH" : "EN";
+    const currentLabel = await localeSwitch.textContent();
+    if (!currentLabel?.includes(targetLabel)) {
+      await localeSwitch.click();
+    }
   }
 
   async applyProviderModel(model: string) {

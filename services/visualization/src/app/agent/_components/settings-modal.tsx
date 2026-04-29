@@ -155,7 +155,7 @@ export function SettingsModal({
   onCheckEmbeddings,
   onCheckMemoryLlm
 }: SettingsModalProps) {
-  const { formatMemoryModeLabel, locale, setLocale, t } = useAgentI18n();
+  const { formatMemoryModeLabel, t } = useAgentI18n();
 
   const [providerKind, setProviderKind] = useState<"openai-compatible" | "anthropic" | "ollama">(
     "openai-compatible"
@@ -632,7 +632,7 @@ export function SettingsModal({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-3">
           <label className="block">
             <span className="text-xs font-semibold text-muted-foreground">{t("modeSwitch.label")}</span>
             <div className="mt-1">
@@ -709,20 +709,6 @@ export function SettingsModal({
               </button>
             </div>
           </div>
-          <label className="block">
-            <span className="text-xs font-semibold text-muted-foreground">{t("localeSwitch.label")}</span>
-            <div className="mt-1">
-              <SelectField
-                testId="agent-locale-select"
-                value={locale}
-                onChange={(value) => setLocale(value as "zh-CN" | "en-US")}
-                options={[
-                  { value: "zh-CN", label: t("localeSwitch.options.zh-CN") },
-                  { value: "en-US", label: t("localeSwitch.options.en-US") }
-                ]}
-              />
-            </div>
-          </label>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
