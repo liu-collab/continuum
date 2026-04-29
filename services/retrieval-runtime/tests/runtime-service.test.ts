@@ -286,6 +286,18 @@ class MutableReadModelRepository extends InMemoryReadModelRepository {
   }
 }
 
+class CountingReadModelRepository extends InMemoryReadModelRepository {
+  public availabilityCallCount = 0;
+
+  override async estimateAvailability(
+    query: Parameters<InMemoryReadModelRepository["estimateAvailability"]>[0],
+    signal?: AbortSignal,
+  ) {
+    this.availabilityCallCount += 1;
+    return super.estimateAvailability(query, signal);
+  }
+}
+
 async function waitForCondition(check: () => boolean, timeoutMs = 1000) {
   const startedAt = Date.now();
   while (!check()) {
@@ -784,6 +796,39 @@ describe("retrieval-runtime service", () => {
 
     expect(plusGlobalResponse.trigger).toBe(true);
     expect(plusGlobalResponse.memory_packet?.records.some((record) => record.scope === "user")).toBe(true);
+  });
+
+  it("reuses preflight availability across phases without reusing trace responses", async () => {
+    const readModelRepository = new CountingReadModelRepository(sampleRecords);
+    const { service } = createRuntime({
+      readModelRepository,
+    });
+
+    const first = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-availability-cache-1",
+      phase: "before_plan",
+      current_input: "继续规划这个任务。",
+      memory_mode: "workspace_plus_global",
+    });
+    const second = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      turn_id: "turn-availability-cache-2",
+      phase: "before_plan",
+      current_input: "继续规划这个任务。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(readModelRepository.availabilityCallCount).toBe(1);
+    expect(first.trace_id).not.toBe(second.trace_id);
   });
 
   it("preflight skips before_plan when only episodic memory is available", async () => {

@@ -3,7 +3,16 @@ import type { Logger } from "pino";
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
 import type { QueryEngine } from "../query/query-engine.js";
-import type { DependencyStatus, MemoryMode, MemoryType, ScopeType, TriggerContext } from "../shared/types.js";
+import { SmallCache } from "../shared/small-cache.js";
+import type {
+  DependencyStatus,
+  MemoryMode,
+  MemoryType,
+  ReadModelAvailability,
+  ReadModelAvailabilityQuery,
+  ScopeType,
+  TriggerContext,
+} from "../shared/types.js";
 import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
 import { buildPhaseMemoryPlan } from "./phase-plan.js";
 
@@ -54,6 +63,8 @@ const SUPPRESS_RECALL_PATTERNS = [
   /forget.*(?:everything|all|it)/i,
 ];
 const ALL_MEMORY_TYPES: MemoryType[] = ["fact_preference", "task_state", "episodic"];
+const AVAILABILITY_CACHE_TTL_MS = 30_000;
+const AVAILABILITY_CACHE_MAX_ENTRIES = 500;
 
 function shouldApplyInputGate(phase: TriggerContext["phase"]) {
   return phase !== "session_start" && phase !== "after_response";
@@ -76,7 +87,30 @@ function isMemorySuppressed(input: string) {
   return SUPPRESS_RECALL_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+function stableArray<T extends string>(values: T[]): T[] {
+  return [...values].sort();
+}
+
+function availabilityCacheKey(query: ReadModelAvailabilityQuery) {
+  return JSON.stringify({
+    workspace_id: query.workspace_id,
+    user_id: query.user_id,
+    session_id: query.session_id,
+    task_id: query.task_id ?? null,
+    memory_mode: query.memory_mode,
+    scope_filter: stableArray(query.scope_filter),
+    memory_type_filter: stableArray(query.memory_type_filter),
+    status_filter: stableArray(query.status_filter),
+    importance_threshold: query.importance_threshold,
+  });
+}
+
 export class RecallPreflight {
+  private readonly availabilityCache = new SmallCache<string, ReadModelAvailability>({
+    ttlMs: AVAILABILITY_CACHE_TTL_MS,
+    maxEntries: AVAILABILITY_CACHE_MAX_ENTRIES,
+  });
+
   constructor(
     private readonly config: AppConfig,
     private readonly queryEngine: QueryEngine,
@@ -132,47 +166,52 @@ export class RecallPreflight {
       };
     }
 
-    const availabilityResult = await this.dependencyGuard.run(
-      "read_model",
-      this.config.QUERY_TIMEOUT_MS,
-      (signal) =>
-        this.queryEngine.estimateAvailability(
-          {
-            workspace_id: context.workspace_id,
-            user_id: context.user_id,
-            session_id: context.session_id,
-            task_id: context.task_id,
-            memory_mode: memoryMode,
-            scope_filter: phasePlan.requested_scopes,
-            memory_type_filter: ALL_MEMORY_TYPES,
-            status_filter: ["active"],
-            importance_threshold: phasePlan.importance_threshold,
-          },
-          signal,
-        ),
-    );
-
-    if (!availabilityResult.ok || !availabilityResult.value) {
-      this.logger.warn(
-        {
-          phase: context.phase,
-          reason: availabilityResult.error?.message,
-        },
-        "recall preflight availability estimate degraded, continuing with normal recall",
+    const availabilityQuery: ReadModelAvailabilityQuery = {
+      workspace_id: context.workspace_id,
+      user_id: context.user_id,
+      session_id: context.session_id,
+      task_id: context.task_id,
+      memory_mode: memoryMode,
+      scope_filter: phasePlan.requested_scopes,
+      memory_type_filter: ALL_MEMORY_TYPES,
+      status_filter: ["active"],
+      importance_threshold: phasePlan.importance_threshold,
+    };
+    const cacheKey = availabilityCacheKey(availabilityQuery);
+    const cachedAvailability = this.availabilityCache.get(cacheKey);
+    let availability = cachedAvailability;
+    if (!availability) {
+      const availabilityResult = await this.dependencyGuard.run(
+        "read_model",
+        this.config.QUERY_TIMEOUT_MS,
+        (signal) => this.queryEngine.estimateAvailability(availabilityQuery, signal),
       );
-      return {
-        should_continue: true,
-        requested_scopes: phasePlan.requested_scopes,
-        requested_memory_types: phasePlan.requested_memory_types,
-        scope_reason: phasePlan.scope_reason,
-        importance_threshold: phasePlan.importance_threshold,
-        degraded: true,
-        degradation_reason: availabilityResult.error?.code ?? "read_model_unavailable",
-        dependency_status: availabilityResult.status,
-      };
+
+      if (!availabilityResult.ok || !availabilityResult.value) {
+        this.logger.warn(
+          {
+            phase: context.phase,
+            reason: availabilityResult.error?.message,
+          },
+          "recall preflight availability estimate degraded, continuing with normal recall",
+        );
+        return {
+          should_continue: true,
+          requested_scopes: phasePlan.requested_scopes,
+          requested_memory_types: phasePlan.requested_memory_types,
+          scope_reason: phasePlan.scope_reason,
+          importance_threshold: phasePlan.importance_threshold,
+          degraded: true,
+          degradation_reason: availabilityResult.error?.code ?? "read_model_unavailable",
+          dependency_status: availabilityResult.status,
+        };
+      }
+
+      availability = availabilityResult.value;
+      this.availabilityCache.set(cacheKey, availability);
     }
 
-    if (availabilityResult.value.total_count === 0) {
+    if (availability.total_count === 0) {
       return {
         should_continue: false,
         reason: "no_visible_candidates",
@@ -185,7 +224,7 @@ export class RecallPreflight {
     }
 
     const effectiveTypes = phasePlan.requested_memory_types.filter(
-      (type) => (availabilityResult.value?.type_distribution[type] ?? 0) > 0,
+      (type) => (availability.type_distribution[type] ?? 0) > 0,
     );
     if (effectiveTypes.length === 0) {
       return {
@@ -205,8 +244,8 @@ export class RecallPreflight {
       requested_memory_types: effectiveTypes,
       scope_reason: phasePlan.scope_reason,
       importance_threshold: phasePlan.importance_threshold,
-      available_candidate_count: availabilityResult.value.total_count,
-      type_distribution: availabilityResult.value.type_distribution,
+      available_candidate_count: availability.total_count,
+      type_distribution: availability.type_distribution,
     };
   }
 }

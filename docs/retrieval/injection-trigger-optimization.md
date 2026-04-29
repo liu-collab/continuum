@@ -365,7 +365,7 @@ const SUPPRESS_RECALL_PATTERNS = [
 | 读模型 availability 统计 | done | `npx vitest run tests/runtime-service.test.ts` |
 | 预检查询索引 | done | `npm run check` in `services/storage` |
 | preflight 观测记录 | done | `npx vitest run tests/runtime-service.test.ts` |
-| availability 短 TTL 缓存 | pending | - |
+| availability 短 TTL 缓存 | done | `npm run check` + `npx vitest run tests/runtime-service.test.ts` in `services/retrieval-runtime` |
 | 注入预算透传 | done | `npm run check` + targeted vitest in `services/retrieval-runtime` and `services/memory-native-agent` |
 | embedding 熔断 | pending | - |
 | query 候选缓存 | pending | - |
