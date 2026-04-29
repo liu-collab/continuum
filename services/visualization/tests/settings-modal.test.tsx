@@ -53,6 +53,10 @@ const baseRuntimeConfig = {
   },
 };
 
+async function openAdvancedSettings(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId("advanced-settings-toggle"));
+}
+
 describe("SettingsModal", () => {
   it("uses a detected OpenAI API key env hint in the setup wizard", async () => {
     const user = userEvent.setup();
@@ -232,6 +236,83 @@ describe("SettingsModal", () => {
     );
   });
 
+  it("defaults embedding and memory llm to the primary model path for OpenAI users", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "gpt-4.1-mini",
+              base_url: "https://api.openai.com/v1",
+              api_key: "openai-key",
+              effort: null,
+              max_tokens: null,
+            },
+            embedding: {
+              base_url: null,
+              model: null,
+              api_key: null,
+            },
+            memory_llm: {
+              base_url: null,
+              model: "claude-haiku-4-5-20251001",
+              api_key: null,
+              protocol: "openai-compatible",
+              timeout_ms: 15000,
+              effort: null,
+              max_tokens: null,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.queryByTestId("embedding-config")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("memory-model-config")).not.toBeInTheDocument();
+
+    await openAdvancedSettings(user);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("EMBEDDING_MODEL")).toHaveValue("text-embedding-3-small");
+    });
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        embedding: expect.objectContaining({
+          base_url: "https://api.openai.com/v1",
+          model: "text-embedding-3-small",
+        }),
+        memory_llm: expect.objectContaining({
+          base_url: "https://api.openai.com/v1",
+          model: "gpt-4.1-mini",
+          api_key: "openai-key",
+          protocol: "openai-compatible",
+        }),
+      }),
+    );
+  });
+
   it("asks the user to save before running embedding health check on unsaved changes", async () => {
     const user = userEvent.setup();
 
@@ -268,6 +349,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     await user.clear(screen.getByPlaceholderText("EMBEDDING_MODEL"));
     await user.type(screen.getByPlaceholderText("EMBEDDING_MODEL"), "text-embedding-v4");
     await user.click(screen.getByTestId("runtime-config-check-embeddings"));
@@ -320,6 +402,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
     await user.type(screen.getByPlaceholderText("MEMORY_LLM_MODEL"), "claude-sonnet-4-5");
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
@@ -382,6 +465,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
@@ -462,6 +546,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
     await user.click(screen.getByTestId("runtime-config-save"));
 
@@ -512,6 +597,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
     expect(onCheckMemoryLlm).toHaveBeenCalledTimes(1);
@@ -520,7 +606,9 @@ describe("SettingsModal", () => {
     );
   });
 
-  it("shows memory llm protocol options and keeps saved protocol", () => {
+  it("shows memory llm protocol options and keeps saved protocol", async () => {
+    const user = userEvent.setup();
+
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <SettingsModal
@@ -543,11 +631,14 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     expect(screen.getByRole("button", { name: "MEMORY_LLM_PROTOCOL" })).toHaveTextContent("Anthropic");
     expect(screen.getByTestId("memory-model-mode-select")).toBeInTheDocument();
   });
 
-  it("detects mirrored memory model config and defaults to same-as-primary mode", () => {
+  it("detects mirrored memory model config and defaults to same-as-primary mode", async () => {
+    const user = userEvent.setup();
+
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <SettingsModal
@@ -581,6 +672,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
     expect(screen.queryByPlaceholderText("MEMORY_LLM_MODEL")).not.toBeInTheDocument();
   });
@@ -611,6 +703,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     const primaryConfig = screen.getByTestId("primary-model-config");
     const memoryConfig = screen.getByTestId("memory-model-config");
 
@@ -667,6 +760,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
+    await openAdvancedSettings(user);
     await user.click(screen.getByTestId("memory-model-mode-select"));
     await user.click(screen.getByRole("option", { name: "与聊天主模型一致" }));
     await user.click(screen.getByTestId("runtime-config-save"));

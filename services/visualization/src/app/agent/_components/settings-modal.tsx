@@ -198,6 +198,33 @@ function normalizeOptionalNumber(value: number | null | undefined) {
   return value ? String(value) : "";
 }
 
+function resolveDefaultEmbeddingConfig(kind: ProviderKind, baseUrl: string | null | undefined) {
+  if (kind === "ollama") {
+    return {
+      baseUrl: normalizeText(baseUrl) || "http://127.0.0.1:11434",
+      model: "nomic-embed-text",
+    };
+  }
+
+  if (kind === "openai-compatible" && normalizeText(baseUrl).includes("api.openai.com")) {
+    return {
+      baseUrl: "https://api.openai.com/v1",
+      model: "text-embedding-3-small",
+    };
+  }
+
+  return null;
+}
+
+function hasCustomMemoryLlmConfig(config: MnaAgentConfigResponse) {
+  const baseUrl = normalizeText(config.memory_llm.base_url);
+  const apiKey = normalizeText(config.memory_llm.api_key);
+  const effort = config.memory_llm.effort ?? "";
+  const maxTokens = normalizeOptionalNumber(config.memory_llm.max_tokens);
+
+  return Boolean(baseUrl || apiKey || effort || maxTokens);
+}
+
 function buildEffortOptions(t: (key: string) => string) {
   return [
     { value: "", label: t("runtimeConfig.effortDisabled") },
@@ -259,6 +286,7 @@ export function SettingsModal({
   const [saving, setSaving] = useState(false);
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
   const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
   const [setupProviderId, setSetupProviderId] = useState<SetupProviderId>("openai");
   const [setupApiKey, setSetupApiKey] = useState("");
@@ -315,13 +343,18 @@ export function SettingsModal({
       && (config.memory_llm.effort ?? "") === (config.provider.effort ?? "")
       && normalizeOptionalNumber(config.memory_llm.max_tokens) === normalizeOptionalNumber(config.provider.max_tokens),
     );
-    setMemoryModelMode(matchesPrimaryModel ? "same_as_primary" : "custom");
+    setMemoryModelMode(
+      mirroredProtocol && (matchesPrimaryModel || !hasCustomMemoryLlmConfig(config))
+        ? "same_as_primary"
+        : "custom",
+    );
     setMcpServers(config.mcp?.servers ?? []);
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
     setCheckingEmbeddings(false);
     setCheckingMemoryLlm(false);
+    setAdvancedSettingsOpen(false);
   }, [config, open]);
 
   useEffect(() => {
@@ -359,6 +392,16 @@ export function SettingsModal({
       setMemoryModelMode("custom");
     }
   }, [canMirrorPrimaryModel, memoryModelMode]);
+
+  useEffect(() => {
+    const defaultEmbedding = resolveDefaultEmbeddingConfig(currentProviderKind, providerBaseUrl);
+    if (!defaultEmbedding) {
+      return;
+    }
+
+    setEmbeddingBaseUrl((current) => current.trim() ? current : defaultEmbedding.baseUrl);
+    setEmbeddingModel((current) => current.trim() ? current : defaultEmbedding.model);
+  }, [currentProviderKind, providerBaseUrl]);
 
   useEffect(() => {
     if (!open || !setupWizard) {
@@ -1048,7 +1091,19 @@ export function SettingsModal({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="btn-outline"
+            aria-expanded={advancedSettingsOpen}
+            data-testid="advanced-settings-toggle"
+            onClick={() => setAdvancedSettingsOpen((current) => !current)}
+          >
+            {advancedSettingsOpen ? t("runtimeConfig.hideAdvancedSettings") : t("runtimeConfig.advancedSettings")}
+          </button>
+        </div>
+
+        <div className={`grid gap-4 ${advancedSettingsOpen ? "md:grid-cols-3" : "md:grid-cols-1"}`}>
           <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="primary-model-config">
             <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.providerTitle")}</div>
             <label className="block">
@@ -1121,130 +1176,134 @@ export function SettingsModal({
             </label>
           </div>
 
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="embedding-config">
-            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingBaseUrl")}</span>
-              <input
-                value={embeddingBaseUrl}
-                onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
-                placeholder={t("runtimeConfig.embeddingBaseUrl")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingModel")}</span>
-              <input
-                value={embeddingModel}
-                onChange={(event) => setEmbeddingModel(event.target.value)}
-                placeholder={t("runtimeConfig.embeddingModel")}
-                className="field mt-1"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingApiKey")}</span>
-              <input
-                type="password"
-                value={embeddingApiKey}
-                onChange={(event) => setEmbeddingApiKey(event.target.value)}
-                placeholder={t("runtimeConfig.embeddingApiKey")}
-                className="field mt-1"
-              />
-            </label>
-          </div>
-
-          <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="memory-model-config">
-            <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMode")}</span>
-              <SelectField
-                value={memoryModelMode}
-                testId="memory-model-mode-select"
-                onChange={(value) => setMemoryModelMode(value as MemoryModelMode)}
-                options={[
-                  ...(canMirrorPrimaryModel
-                    ? [{ value: "same_as_primary", label: t("runtimeConfig.memoryLlmModeOptions.same_as_primary") }]
-                    : []),
-                  { value: "custom", label: t("runtimeConfig.memoryLlmModeOptions.custom") }
-                ]}
-              />
-            </label>
-            {memoryModelMode === "custom" ? (
-              <>
+          {advancedSettingsOpen ? (
+            <>
+              <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="embedding-config">
+                <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
                 <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingBaseUrl")}</span>
+                  <input
+                    value={embeddingBaseUrl}
+                    onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
+                    placeholder={t("runtimeConfig.embeddingBaseUrl")}
+                    className="field mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingModel")}</span>
+                  <input
+                    value={embeddingModel}
+                    onChange={(event) => setEmbeddingModel(event.target.value)}
+                    placeholder={t("runtimeConfig.embeddingModel")}
+                    className="field mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingApiKey")}</span>
+                  <input
+                    type="password"
+                    value={embeddingApiKey}
+                    onChange={(event) => setEmbeddingApiKey(event.target.value)}
+                    placeholder={t("runtimeConfig.embeddingApiKey")}
+                    className="field mt-1"
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="memory-model-config">
+                <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMode")}</span>
                   <SelectField
-                    value={memoryLlmProtocol}
-                    onChange={(value) => setMemoryLlmProtocol(value as "anthropic" | "openai-compatible")}
+                    value={memoryModelMode}
+                    testId="memory-model-mode-select"
+                    onChange={(value) => setMemoryModelMode(value as MemoryModelMode)}
                     options={[
-                      { value: "openai-compatible", label: t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible") },
-                      { value: "anthropic", label: t("runtimeConfig.memoryLlmProtocolOptions.anthropic") }
+                      ...(canMirrorPrimaryModel
+                        ? [{ value: "same_as_primary", label: t("runtimeConfig.memoryLlmModeOptions.same_as_primary") }]
+                        : []),
+                      { value: "custom", label: t("runtimeConfig.memoryLlmModeOptions.custom") }
                     ]}
                   />
                 </label>
+                {memoryModelMode === "custom" ? (
+                  <>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
+                      <SelectField
+                        value={memoryLlmProtocol}
+                        onChange={(value) => setMemoryLlmProtocol(value as "anthropic" | "openai-compatible")}
+                        options={[
+                          { value: "openai-compatible", label: t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible") },
+                          { value: "anthropic", label: t("runtimeConfig.memoryLlmProtocolOptions.anthropic") }
+                        ]}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
+                      <input
+                        value={memoryLlmBaseUrl}
+                        onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
+                        placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
+                        className="field mt-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
+                      <input
+                        value={memoryLlmModel}
+                        onChange={(event) => setMemoryLlmModel(event.target.value)}
+                        placeholder={t("runtimeConfig.memoryLlmModel")}
+                        className="field mt-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
+                      <input
+                        type="password"
+                        value={memoryLlmApiKey}
+                        onChange={(event) => setMemoryLlmApiKey(event.target.value)}
+                        placeholder={t("runtimeConfig.memoryLlmApiKey")}
+                        className="field mt-1"
+                      />
+                    </label>
+                  </>
+                ) : null}
                 <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
                   <input
-                    value={memoryLlmBaseUrl}
-                    onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
-                    placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
-                    className="field mt-1"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
-                  <input
-                    value={memoryLlmModel}
-                    onChange={(event) => setMemoryLlmModel(event.target.value)}
-                    placeholder={t("runtimeConfig.memoryLlmModel")}
-                    className="field mt-1"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
-                  <input
-                    type="password"
-                    value={memoryLlmApiKey}
-                    onChange={(event) => setMemoryLlmApiKey(event.target.value)}
-                    placeholder={t("runtimeConfig.memoryLlmApiKey")}
-                    className="field mt-1"
-                  />
-                </label>
-              </>
-            ) : null}
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
-              <input
-                value={memoryLlmTimeoutMs}
-                onChange={(event) => setMemoryLlmTimeoutMs(event.target.value)}
-                placeholder={t("runtimeConfig.memoryLlmTimeoutMs")}
-                className="field mt-1"
-                inputMode="numeric"
-              />
-            </label>
-            {memoryModelMode === "custom" ? (
-              <>
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
-                  <SelectField
-                    value={memoryLlmEffort}
-                    onChange={(value) => setMemoryLlmEffort(value as typeof memoryLlmEffort)}
-                    options={buildEffortOptions(t)}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
-                  <input
-                    value={memoryLlmMaxTokens}
-                    onChange={(event) => setMemoryLlmMaxTokens(event.target.value)}
-                    placeholder={t("runtimeConfig.memoryLlmMaxTokens")}
+                    value={memoryLlmTimeoutMs}
+                    onChange={(event) => setMemoryLlmTimeoutMs(event.target.value)}
+                    placeholder={t("runtimeConfig.memoryLlmTimeoutMs")}
                     className="field mt-1"
                     inputMode="numeric"
                   />
                 </label>
-              </>
-            ) : null}
-          </div>
+                {memoryModelMode === "custom" ? (
+                  <>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
+                      <SelectField
+                        value={memoryLlmEffort}
+                        onChange={(value) => setMemoryLlmEffort(value as typeof memoryLlmEffort)}
+                        options={buildEffortOptions(t)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMaxTokens")}</span>
+                      <input
+                        value={memoryLlmMaxTokens}
+                        onChange={(event) => setMemoryLlmMaxTokens(event.target.value)}
+                        placeholder={t("runtimeConfig.memoryLlmMaxTokens")}
+                        className="field mt-1"
+                        inputMode="numeric"
+                      />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
 
         <div className="space-y-4 rounded-lg border bg-surface-muted/20 p-4" data-testid="governance-config">

@@ -170,6 +170,8 @@
     },
     "memoryLlmEffort": "记忆模型思考模式",
     "memoryLlmMaxTokens": "记忆模型最大输出 token",
+    "advancedSettings": "高级设置",
+    "hideAdvancedSettings": "收起高级设置",
     "effortDisabled": "关闭",
     "effortOptions": {
       "low": "低",

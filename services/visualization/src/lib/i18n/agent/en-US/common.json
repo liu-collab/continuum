@@ -170,6 +170,8 @@
     },
     "memoryLlmEffort": "Memory model reasoning effort",
     "memoryLlmMaxTokens": "Memory model max output tokens",
+    "advancedSettings": "Advanced settings",
+    "hideAdvancedSettings": "Hide advanced settings",
     "effortDisabled": "Disabled",
     "effortOptions": {
       "low": "Low",
