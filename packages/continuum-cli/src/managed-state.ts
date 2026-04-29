@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { pathExists } from "./utils.js";
+import { pathExists, safeJsonParse } from "./utils.js";
 
 export type ManagedServiceRecord = {
   name: string;
@@ -68,7 +68,8 @@ export async function readManagedState(): Promise<ContinuumManagedState> {
     };
   }
 
-  return JSON.parse(await readFile(continuumStatePath(), "utf8")) as ContinuumManagedState;
+  const filePath = continuumStatePath();
+  return safeJsonParse<ContinuumManagedState>(filePath, await readFile(filePath, "utf8"));
 }
 
 export async function writeManagedState(state: ContinuumManagedState) {

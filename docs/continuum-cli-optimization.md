@@ -42,6 +42,8 @@ export function resolveDatabasePassword(): string {
 
 ## 优化二：JSON 解析统一增加 try-catch 保护
 
+**状态：已完成**
+
 ### 问题
 
 7 处 `JSON.parse()` 无异常保护：

@@ -187,13 +187,22 @@ async function outputsExist(baseDir, outputs) {
   return true;
 }
 
+function safeJsonParse(filePath, raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`配置文件损坏: ${filePath}\n请删除该文件后重新运行。\n${message}`);
+  }
+}
+
 export async function readBuildState() {
   if (!(await pathExists(BUILD_STATE_PATH))) {
     return createDefaultBuildState();
   }
 
   const content = await readFile(BUILD_STATE_PATH, "utf8");
-  const parsed = JSON.parse(content);
+  const parsed = safeJsonParse(BUILD_STATE_PATH, content);
   if (parsed.version !== BUILD_STATE_VERSION) {
     return createDefaultBuildState();
   }

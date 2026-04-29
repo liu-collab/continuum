@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { pathExists } from "./utils.js";
+import { pathExists, safeJsonParse } from "./utils.js";
 
 export async function readCliVersion() {
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -18,7 +18,7 @@ export async function readCliVersion() {
     (await resolveExistingPath(packageJsonCandidates))
     ?? fallbackPackageJsonPath;
   const content = await readFile(packageJsonPath, "utf8");
-  const parsed = JSON.parse(content) as { version?: unknown };
+  const parsed = safeJsonParse<{ version?: unknown }>(packageJsonPath, content);
 
   if (typeof parsed.version !== "string" || parsed.version.trim().length === 0) {
     throw new Error(`continuum package version is missing: ${packageJsonPath}`);

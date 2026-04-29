@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   CONTINUUM_MNA_PROVIDER_API_KEY_ENV,
+  continuumManagedEmbeddingConfigPath,
   managedMnaProviderConfigPath,
   managedMnaProviderSecretPath,
+  readManagedEmbeddingConfig,
   readManagedMnaProviderConfig,
   writeManagedMnaProviderConfig,
 } from "../src/managed-config.js";
@@ -142,5 +144,35 @@ describe("managed mna provider config", () => {
       baseUrl: "http://localhost:8090/v1",
       apiKey: "legacy-inline-key",
     });
+  });
+
+  it("reports a clear error when a managed JSON config is corrupted", async () => {
+    const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
+    process.env.HOME = tempHome;
+    process.env.USERPROFILE = tempHome;
+
+    try {
+      const configPath = continuumManagedEmbeddingConfigPath();
+      await mkdir(path.dirname(configPath), { recursive: true });
+      await writeFile(configPath, "{bad json", "utf8");
+
+      await expect(readManagedEmbeddingConfig()).rejects.toMatchObject({
+        code: "config_corrupted",
+        filePath: configPath,
+        hint: "请删除该文件后重新运行",
+      });
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = originalUserProfile;
+      }
+    }
   });
 });

@@ -50,7 +50,7 @@ export async function fetchJson(
     return {
       ok: response.ok,
       status: response.status,
-      body: text ? safeJsonParse(text) : undefined,
+      body: text ? parseJsonResponse(text) : undefined,
     };
   } catch (error) {
     return {
@@ -62,11 +62,46 @@ export async function fetchJson(
   }
 }
 
-export function safeJsonParse(text: string): unknown {
+export function parseJsonResponse(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
     return text;
+  }
+}
+
+export class AppError extends Error {
+  readonly code: string;
+  readonly hint?: string;
+  readonly filePath?: string;
+
+  constructor(
+    message: string,
+    options: {
+      code: string;
+      hint?: string;
+      filePath?: string;
+      cause?: unknown;
+    },
+  ) {
+    super(message, { cause: options.cause });
+    this.name = "AppError";
+    this.code = options.code;
+    this.hint = options.hint;
+    this.filePath = options.filePath;
+  }
+}
+
+export function safeJsonParse<T>(filePath: string, raw: string): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    throw new AppError(`配置文件损坏: ${filePath}`, {
+      code: "config_corrupted",
+      hint: "请删除该文件后重新运行",
+      filePath,
+      cause: error,
+    });
   }
 }
 

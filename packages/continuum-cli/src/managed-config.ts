@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { continuumManagedDir } from "./managed-state.js";
 import type { ManagedMnaProviderConfig } from "./mna-provider-config.js";
-import { pathExists } from "./utils.js";
+import { pathExists, safeJsonParse } from "./utils.js";
 
 export type ManagedEmbeddingConfig = {
   version: 1;
@@ -74,7 +74,7 @@ export async function readManagedEmbeddingConfig(): Promise<ManagedEmbeddingConf
   }
 
   const content = await readFile(filePath, "utf8");
-  return JSON.parse(content) as ManagedEmbeddingConfig;
+  return safeJsonParse<ManagedEmbeddingConfig>(filePath, content);
 }
 
 export async function writeManagedEmbeddingConfig(config: ManagedEmbeddingConfig) {
@@ -90,7 +90,7 @@ export async function readManagedWritebackLlmConfig(): Promise<ManagedWritebackL
   }
 
   const content = await readFile(filePath, "utf8");
-  return JSON.parse(content) as ManagedWritebackLlmConfig;
+  return safeJsonParse<ManagedWritebackLlmConfig>(filePath, content);
 }
 
 export async function writeManagedWritebackLlmConfig(config: ManagedWritebackLlmConfig) {
@@ -106,7 +106,7 @@ export async function readManagedMemoryLlmConfig(): Promise<ManagedWritebackLlmC
   }
 
   const content = await readFile(filePath, "utf8");
-  return JSON.parse(content) as ManagedWritebackLlmConfig;
+  return safeJsonParse<ManagedWritebackLlmConfig>(filePath, content);
 }
 
 export async function writeManagedMemoryLlmConfig(config: ManagedWritebackLlmConfig) {
@@ -172,9 +172,9 @@ export async function readManagedMnaProviderConfig(
   }
 
   const content = await readFile(filePath, "utf8");
-  const payload = JSON.parse(content) as ManagedProviderOverride;
+  const payload = safeJsonParse<ManagedProviderOverride>(filePath, content);
   const secretPayload = (await pathExists(secretPath))
-    ? (JSON.parse(await readFile(secretPath, "utf8")) as ManagedMnaProviderSecret)
+    ? safeJsonParse<ManagedMnaProviderSecret>(secretPath, await readFile(secretPath, "utf8"))
     : null;
   const provider = payload.provider;
   if (!provider) {
