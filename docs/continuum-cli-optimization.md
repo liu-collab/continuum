@@ -292,6 +292,8 @@ function normalizeOptions(raw: ParsedArgs): ParsedArgs {
 
 ## 优化九：`codex` 命令严格子命令匹配
 
+**状态：已完成**
+
 ### 问题
 
 ```typescript

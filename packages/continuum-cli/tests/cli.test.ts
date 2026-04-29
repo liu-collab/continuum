@@ -24,6 +24,16 @@ vi.mock("../src/managed-state.js", async (importOriginal) => {
   };
 });
 
+const codexUseMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../src/codex-command.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/codex-command.js")>();
+  return {
+    ...actual,
+    runCodexUseCommand: codexUseMock,
+  };
+});
+
 import { parseArgs } from "../src/args.js";
 import { runCli } from "../src/continuum-cli.js";
 import {
@@ -42,6 +52,7 @@ describe("continuum cli", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     getManagedMnaStatusMock.mockReset();
+    codexUseMock.mockReset();
     readManagedStateMock.mockReset();
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -172,6 +183,17 @@ describe("continuum cli", () => {
     expect(renderHelp()).toContain("continuum codex uninstall");
     expect(renderHelp()).toContain("cleanup legacy MCP registration");
     expect(renderHelp()).toContain("continuum codex use");
+  });
+
+  it("rejects unknown codex subcommands", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    const exitCode = await runCli(["codex", "foo"], import.meta.url);
+
+    expect(exitCode).toBe(1);
+    expect(stderrSpy).toHaveBeenCalledWith("未知的 codex 子命令: foo\n");
+    expect(stderrSpy).toHaveBeenCalledWith("可用: install, uninstall, use\n");
+    expect(codexUseMock).not.toHaveBeenCalled();
   });
 
   it("parses the mna command and exposes it in help", () => {

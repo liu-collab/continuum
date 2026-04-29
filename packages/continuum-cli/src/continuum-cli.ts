@@ -17,6 +17,8 @@ import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
 import { readCliVersion } from "./version.js";
 
+const CODEX_VALID_SUBCOMMANDS = new Set(["install", "uninstall", "use"]);
+
 export async function runCli(argv: string[], importMetaUrl: string) {
   if (
     argv.length === 1
@@ -68,17 +70,24 @@ export async function runCli(argv: string[], importMetaUrl: string) {
     return 0;
   }
 
-  if (primary === "codex" && secondary === "install") {
-    await runCodexInstallCommand(parsed.options, importMetaUrl);
-    return 0;
-  }
-
-  if (primary === "codex" && secondary === "uninstall") {
-    await runCodexUninstallCommand(parsed.options);
-    return 0;
-  }
-
   if (primary === "codex") {
+    const subcommand = secondary ?? "use";
+    if (!CODEX_VALID_SUBCOMMANDS.has(subcommand)) {
+      process.stderr.write(`未知的 codex 子命令: ${subcommand}\n`);
+      process.stderr.write(`可用: ${[...CODEX_VALID_SUBCOMMANDS].join(", ")}\n`);
+      return 1;
+    }
+
+    if (subcommand === "install") {
+      await runCodexInstallCommand(parsed.options, importMetaUrl);
+      return 0;
+    }
+
+    if (subcommand === "uninstall") {
+      await runCodexUninstallCommand(parsed.options);
+      return 0;
+    }
+
     await runCodexUseCommand(parsed.options, importMetaUrl);
     return 0;
   }
