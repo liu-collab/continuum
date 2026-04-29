@@ -1,5 +1,8 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
+import os from "node:os";
+import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +14,7 @@ vi.mock("node:child_process", () => ({
 
 import {
   runCommand,
+  rewriteClaudePluginCommands,
   terminateProcess,
   uninstallCodexMcpServer,
   waitForHealthy,
@@ -141,5 +145,35 @@ describe("axis utils", () => {
     ).resolves.toEqual({
       version: "1.2.3",
     });
+  });
+
+  it("rewrites Claude plugin commands in bootstrap and MCP config", async () => {
+    const pluginDir = await mkdtemp(path.join(os.tmpdir(), "axis-plugin-"));
+
+    try {
+      await mkdir(path.join(pluginDir, "bin"), { recursive: true });
+      await writeFile(
+        path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs"),
+        [
+          `const runtime = process.env.MEMORY_RUNTIME_START_COMMAND ?? "old runtime";`,
+          `const mcp = process.env.MEMORY_MCP_COMMAND ?? "old mcp";`,
+        ].join("\n"),
+        "utf8",
+      );
+      await writeFile(
+        path.join(pluginDir, ".mcp.json"),
+        JSON.stringify({ mcpServers: { memory: { env: {} } } }, null, 2),
+        "utf8",
+      );
+
+      await rewriteClaudePluginCommands(pluginDir, "axis-agent@0.1.0");
+
+      await expect(readFile(path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs"), "utf8"))
+        .resolves.toContain("npx -y -p axis-agent@0.1.0 axis runtime");
+      await expect(readFile(path.join(pluginDir, ".mcp.json"), "utf8"))
+        .resolves.toContain("npx -y -p axis-agent@0.1.0 axis mcp-server");
+    } finally {
+      await rm(pluginDir, { recursive: true, force: true });
+    }
   });
 });

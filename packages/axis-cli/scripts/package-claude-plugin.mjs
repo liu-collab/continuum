@@ -3,7 +3,7 @@
 import { createWriteStream } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile, access } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import yazl from "yazl";
 
@@ -18,6 +18,19 @@ const vendorPluginDir = path.join(
 );
 const releaseDir = path.join(packageDir, "dist", "release");
 const pluginStageDir = path.join(releaseDir, "axis-claude-plugin");
+const utilsModulePath = path.join(packageDir, "dist", "src", "utils.js");
+
+async function loadRewriteClaudePluginCommands() {
+  try {
+    const { rewriteClaudePluginCommands } = await import(pathToFileURL(utilsModulePath).href);
+    return rewriteClaudePluginCommands;
+  } catch (error) {
+    throw new Error(
+      `compiled utils not found: ${utilsModulePath}. Run "npm run build" before packaging the Claude plugin.`,
+      { cause: error },
+    );
+  }
+}
 
 async function ensureVendorPlugin() {
   try {
@@ -69,41 +82,9 @@ async function zipDirectory(sourceDir, targetFile) {
   await closePromise;
 }
 
-async function rewritePluginArtifacts(stageDir, packageName, version) {
-  const runtimeCommand = `npx -y -p ${packageName}@${version} axis runtime`;
-  const mcpCommand = `npx -y -p ${packageName}@${version} axis mcp-server`;
-
-  const bootstrapPath = path.join(stageDir, "bin", "memory-runtime-bootstrap.mjs");
-  const bootstrapContent = await readFile(bootstrapPath, "utf8");
-  await writeFile(
-    bootstrapPath,
-    bootstrapContent
-      .replace(
-        /process\.env\.MEMORY_RUNTIME_START_COMMAND \?\? ".*?"/,
-        `process.env.MEMORY_RUNTIME_START_COMMAND ?? "${runtimeCommand}"`,
-      )
-      .replace(
-        /process\.env\.MEMORY_MCP_COMMAND \?\? ".*?"/,
-        `process.env.MEMORY_MCP_COMMAND ?? "${mcpCommand}"`,
-      ),
-    "utf8",
-  );
-
-  const mcpConfigPath = path.join(stageDir, ".mcp.json");
-  const mcpConfig = JSON.parse(await readFile(mcpConfigPath, "utf8"));
-
-  if (!mcpConfig.mcpServers) {
-    mcpConfig.mcpServers = {};
-  }
-  if (!mcpConfig.mcpServers.memory) {
-    mcpConfig.mcpServers.memory = { env: {} };
-  }
-  if (!mcpConfig.mcpServers.memory.env) {
-    mcpConfig.mcpServers.memory.env = {};
-  }
-  mcpConfig.mcpServers.memory.env.MEMORY_MCP_COMMAND = mcpCommand;
-  await writeFile(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), "utf8");
-
+async function rewritePluginArtifacts(stageDir, packageSpecifier, version) {
+  const rewriteClaudePluginCommands = await loadRewriteClaudePluginCommands();
+  await rewriteClaudePluginCommands(stageDir, packageSpecifier);
   const pluginManifestPath = path.join(stageDir, ".claude-plugin", "plugin.json");
   const pluginManifest = JSON.parse(await readFile(pluginManifestPath, "utf8"));
   pluginManifest.version = version;
@@ -117,7 +98,7 @@ async function main() {
   await ensureVendorPlugin();
   await rm(pluginStageDir, { recursive: true, force: true });
   await cp(vendorPluginDir, pluginStageDir, { recursive: true });
-  await rewritePluginArtifacts(pluginStageDir, packageJson.name, packageJson.version);
+  await rewritePluginArtifacts(pluginStageDir, `${packageJson.name}@${packageJson.version}`, packageJson.version);
   await zipDirectory(pluginStageDir, zipPath);
 
   console.log(zipPath);

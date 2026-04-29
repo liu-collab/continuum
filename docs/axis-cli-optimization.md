@@ -373,6 +373,8 @@ export async function waitForHealthy(
 
 ## 优化十一：消除 `rewriteClaudePluginCommands` 重复
 
+**状态：已完成**
+
 ### 问题
 
 `utils.ts:rewriteClaudePluginCommands` 和 `package-claude-plugin.mjs:rewritePluginArtifacts` 实现了相同的正则替换逻辑。
