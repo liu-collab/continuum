@@ -1,12 +1,17 @@
 import os from "node:os";
 import path from "node:path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 async function writeFixtureFile(filePath: string, content = "") {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf8");
+}
+
+function packageRootFromTestFile() {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
 
 async function createCliFixture(rootDir: string) {
@@ -122,7 +127,6 @@ describe("build state planning", () => {
   it("skips cli rebuild when inputs and dist outputs are unchanged", async () => {
     const rootDir = path.join(tempHome, "repo");
     const packageDir = await createCliFixture(rootDir);
-    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
     const { planCliBuild, writeBuildState } = await import("../scripts/build-state.mjs");
 
     const initialPlan = await planCliBuild(packageDir);
@@ -141,7 +145,6 @@ describe("build state planning", () => {
   it("only rebuilds changed vendor services and skips visualization rebuild for public-only changes", async () => {
     const rootDir = path.join(tempHome, "repo");
     const packageDir = await createVendorFixture(rootDir);
-    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
     const { planVendorBuild, writeBuildState } = await import("../scripts/build-state.mjs");
 
     const initialPlan = await planVendorBuild(packageDir);
@@ -169,7 +172,6 @@ describe("build state planning", () => {
   it("rebuilds visualization when the repository doc changes", async () => {
     const rootDir = path.join(tempHome, "repo");
     const packageDir = await createVendorFixture(rootDir);
-    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
     const { planVendorBuild, writeBuildState } = await import("../scripts/build-state.mjs");
 
     const initialPlan = await planVendorBuild(packageDir);
@@ -185,7 +187,6 @@ describe("build state planning", () => {
   it("rebuilds stack image when required vendor runtime files are incomplete", async () => {
     const rootDir = path.join(tempHome, "repo");
     const packageDir = await createVendorFixture(rootDir);
-    // @ts-expect-error helper script is executed directly and not part of the package ts build graph
     const { planVendorBuild, planStackImageBuild, writeBuildState } = await import("../scripts/build-state.mjs");
 
     const vendorPlan = await planVendorBuild(packageDir);
@@ -201,5 +202,20 @@ describe("build state planning", () => {
     await rm(path.join(packageDir, "vendor", "runtime", "node_modules"), { recursive: true, force: true });
     const incompleteImagePlan = await planStackImageBuild(packageDir);
     expect(incompleteImagePlan.needsBuild).toBe(true);
+  });
+
+  it("keeps build-state declaration exports aligned with script exports", async () => {
+    const script = await readFile(
+      path.join(packageRootFromTestFile(), "scripts", "build-state.mjs"),
+      "utf8",
+    );
+    const declarations = await readFile(
+      path.join(packageRootFromTestFile(), "scripts", "build-state.d.ts"),
+      "utf8",
+    );
+    const scriptExports = [...script.matchAll(/export\s+async\s+function\s+(\w+)/g)].map((match) => match[1]);
+    const declarationExports = [...declarations.matchAll(/export\s+function\s+(\w+)/g)].map((match) => match[1]);
+
+    expect(declarationExports.sort()).toEqual(scriptExports.sort());
   });
 });

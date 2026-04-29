@@ -1,16 +1,57 @@
+// @ts-check
+
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+/**
+ * @typedef {{ hash: string }} HashRecord
+ * @typedef {{
+ *   version: number;
+ *   cli: HashRecord | null;
+ *   image: HashRecord | null;
+ *   vendor: {
+ *     entries: Record<string, string>;
+ *     builds: Record<string, string>;
+ *   };
+ * }} BuildState
+ * @typedef {{
+ *   currentState: BuildState;
+ *   nextState: BuildState;
+ *   hash: string;
+ *   needsBuild: boolean;
+ * }} BuildPlan
+ * @typedef {{
+ *   currentState: BuildState;
+ *   nextState: BuildState;
+ *   changedEntries: string[];
+ *   buildServices: string[];
+ *   needsRefresh: boolean;
+ * }} VendorBuildPlan
+ * @typedef {{ baseDir: string; entries: string[]; label: string }} InputGroup
+ * @typedef {{ absolutePath: string; relativePath: string }} CollectedFile
+ * @typedef {{
+ *   serviceDir: string;
+ *   buildInputs: string[];
+ *   entryInputs: string[];
+ *   buildOutputs: string[];
+ *   vendorOutputs: string[];
+ *   sharedBuildInputs?: InputGroup[];
+ *   sharedEntryInputs?: InputGroup[];
+ * }} ServiceDefinition
+ */
+
 const BUILD_STATE_VERSION = 2;
 const BUILD_STATE_DIR = path.join(os.homedir(), ".axis", "build-state");
 const BUILD_STATE_PATH = path.join(BUILD_STATE_DIR, "axis-cli.json");
 
+/** @param {string} packageDir */
 function repoRootFromPackageDir(packageDir) {
   return path.resolve(packageDir, "..", "..");
 }
 
+/** @returns {BuildState} */
 function createDefaultBuildState() {
   return {
     version: BUILD_STATE_VERSION,
@@ -23,6 +64,7 @@ function createDefaultBuildState() {
   };
 }
 
+/** @param {string} targetPath */
 async function pathExists(targetPath) {
   try {
     await stat(targetPath);
@@ -32,10 +74,16 @@ async function pathExists(targetPath) {
   }
 }
 
+/** @param {string} targetPath */
 async function readDirEntries(targetPath) {
   return readdir(targetPath, { withFileTypes: true });
 }
 
+/**
+ * @param {string} baseDir
+ * @param {string} relativePath
+ * @param {CollectedFile[]} output
+ */
 async function collectFiles(baseDir, relativePath, output) {
   const absolutePath = path.join(baseDir, relativePath);
   if (!(await pathExists(absolutePath))) {
@@ -58,10 +106,13 @@ async function collectFiles(baseDir, relativePath, output) {
   });
 }
 
+/** @param {InputGroup[]} groups */
 async function hashInputGroups(groups) {
+  /** @type {CollectedFile[]} */
   const files = [];
   for (const group of groups) {
     for (const entry of group.entries) {
+      /** @type {CollectedFile[]} */
       const groupFiles = [];
       await collectFiles(group.baseDir, entry, groupFiles);
       for (const file of groupFiles) {
@@ -87,10 +138,15 @@ async function hashInputGroups(groups) {
   return hash.digest("hex");
 }
 
+/**
+ * @param {string} baseDir
+ * @param {string[]} entries
+ */
 async function hashInputs(baseDir, entries) {
   return hashInputGroups([{ label: ".", baseDir, entries }]);
 }
 
+/** @param {string} packageDir */
 async function hashStackInputs(packageDir) {
   return hashInputGroups([
     {
@@ -101,6 +157,10 @@ async function hashStackInputs(packageDir) {
   ]);
 }
 
+/**
+ * @param {string} packageDir
+ * @returns {Record<string, ServiceDefinition>}
+ */
 function serviceDefinitions(packageDir) {
   const repoRoot = repoRootFromPackageDir(packageDir);
   return {
@@ -178,6 +238,10 @@ function serviceDefinitions(packageDir) {
   };
 }
 
+/**
+ * @param {string} baseDir
+ * @param {string[]} outputs
+ */
 async function outputsExist(baseDir, outputs) {
   for (const output of outputs) {
     if (!(await pathExists(path.isAbsolute(output) ? output : path.join(baseDir, output)))) {
@@ -187,6 +251,11 @@ async function outputsExist(baseDir, outputs) {
   return true;
 }
 
+/**
+ * @param {string} filePath
+ * @param {string} raw
+ * @returns {Partial<BuildState> & { version?: number }}
+ */
 function safeJsonParse(filePath, raw) {
   try {
     return JSON.parse(raw);
@@ -196,6 +265,7 @@ function safeJsonParse(filePath, raw) {
   }
 }
 
+/** @returns {Promise<BuildState>} */
 export async function readBuildState() {
   if (!(await pathExists(BUILD_STATE_PATH))) {
     return createDefaultBuildState();
@@ -224,6 +294,7 @@ export async function readBuildState() {
   };
 }
 
+/** @param {BuildState} nextState */
 export async function writeBuildState(nextState) {
   await mkdir(BUILD_STATE_DIR, { recursive: true });
   await writeFile(
@@ -245,6 +316,10 @@ export async function writeBuildState(nextState) {
   );
 }
 
+/**
+ * @param {string} packageDir
+ * @returns {Promise<BuildPlan>}
+ */
 export async function planCliBuild(packageDir) {
   const state = await readBuildState();
   const hash = await hashInputs(packageDir, ["src", "package.json", "tsconfig.json"]);
@@ -263,17 +338,28 @@ export async function planCliBuild(packageDir) {
   };
 }
 
+/**
+ * @param {string} packageDir
+ * @returns {Promise<VendorBuildPlan>}
+ */
 export async function planVendorBuild(packageDir) {
   const state = await readBuildState();
   const definitions = serviceDefinitions(packageDir);
   const serviceNames = Object.keys(definitions);
+  /** @type {Record<string, string>} */
   const entryHashes = {};
+  /** @type {Record<string, string>} */
   const buildHashes = {};
+  /** @type {string[]} */
   const changedEntries = [];
+  /** @type {string[]} */
   const buildServices = [];
 
   for (const serviceName of serviceNames) {
     const definition = definitions[serviceName];
+    if (!definition) {
+      continue;
+    }
     const entryHash = await hashInputGroups([
       {
         label: serviceName,
@@ -343,6 +429,10 @@ export async function planVendorBuild(packageDir) {
   };
 }
 
+/**
+ * @param {string} packageDir
+ * @returns {Promise<BuildPlan>}
+ */
 export async function planStackImageBuild(packageDir) {
   const state = await readBuildState();
   const hash = createHash("sha256")

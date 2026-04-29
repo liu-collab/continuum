@@ -399,6 +399,8 @@ import { rewriteClaudePluginCommands } from "../dist/src/utils.js";
 
 ## 优化十二：`build-state.d.ts` 自动生成替代手写
 
+**状态：已完成**
+
 ### 问题
 
 `scripts/build-state.d.ts`（94 行）手写对应 `scripts/build-state.mjs`（375 行），签名漂移无检测。

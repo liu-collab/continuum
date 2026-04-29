@@ -11,10 +11,12 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowJs": true,
+    "checkJs": true,
     "resolveJsonModule": true,
     "rootDir": ".",
     "outDir": "dist",
     "types": ["node", "pg", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/build-state.mjs"]
 }
