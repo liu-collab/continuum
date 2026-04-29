@@ -23,6 +23,12 @@ export function resolveDockerDesktopPath(env: NodeJS.ProcessEnv = process.env) {
   return env.CONTINUUM_DOCKER_DESKTOP_PATH ?? DEFAULT_DOCKER_DESKTOP_PATH;
 }
 
+export function buildDockerHostGatewayArgs(platform: NodeJS.Platform = process.platform) {
+  return platform === "linux"
+    ? ["--add-host", "host.docker.internal:host-gateway"]
+    : [];
+}
+
 export async function ensureDockerInstalled(options: DockerLifecycleOptions = {}) {
   const platform = options.platform ?? process.platform;
 

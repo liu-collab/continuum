@@ -225,6 +225,8 @@ if (process.platform === "linux") {
 
 ## 优化七：`host.docker.internal` Linux 兼容
 
+**状态：已完成**
+
 ### 问题
 
 `start-command.ts` 中使用 `host.docker.internal` 让 MNA 连接容器内的服务。此主机名仅 Docker Desktop 支持，Linux Docker Engine 不可用。

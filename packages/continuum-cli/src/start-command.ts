@@ -44,6 +44,7 @@ import {
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
 import {
+  buildDockerHostGatewayArgs,
   buildStackImage,
   cleanupManagedStackContainer,
   ensureDockerDaemonReady,
@@ -352,6 +353,7 @@ async function startStackContainer(
     `CONTINUUM_MEMORY_LLM_CONFIG_PATH=${memoryLlmConfigPath}`,
     "-e",
     "CONTINUUM_RUNTIME_CONFIG_PATH=/opt/continuum/managed/runtime-config.json",
+    ...buildDockerHostGatewayArgs(),
   ];
 
   if (publishVisualizationPort) {

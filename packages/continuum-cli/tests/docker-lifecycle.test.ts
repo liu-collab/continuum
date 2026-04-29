@@ -27,6 +27,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import {
+  buildDockerHostGatewayArgs,
   ensureDockerDaemonReady,
   ensureDockerInstalled,
   resolveDockerDesktopPath,
@@ -47,6 +48,15 @@ describe("docker lifecycle", () => {
         CONTINUUM_DOCKER_DESKTOP_PATH: "D:/Docker/Docker Desktop.exe",
       }),
     ).toBe("D:/Docker/Docker Desktop.exe");
+  });
+
+  it("adds host-gateway mapping for Linux Docker Engine only", () => {
+    expect(buildDockerHostGatewayArgs("linux")).toEqual([
+      "--add-host",
+      "host.docker.internal:host-gateway",
+    ]);
+    expect(buildDockerHostGatewayArgs("win32")).toEqual([]);
+    expect(buildDockerHostGatewayArgs("darwin")).toEqual([]);
   });
 
   it("does not install Docker Desktop on Linux when docker CLI is missing", async () => {
