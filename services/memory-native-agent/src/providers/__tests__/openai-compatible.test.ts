@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OpenAICompatibleProvider } from "../openai-compatible.js";
@@ -241,9 +243,12 @@ describe("OpenAICompatibleProvider", () => {
   it("throws timeout errors when the first token never arrives", async () => {
     let requestCount = 0;
     const server = await startProviderMock((app) => {
-      app.post("/v1/chat/completions", async () => {
+      app.post("/v1/chat/completions", async (_request, reply) => {
         requestCount += 1;
-        return new Promise(() => undefined);
+        const stream = new Readable({ read() {} });
+        reply.raw.on("close", () => stream.destroy());
+        reply.header("content-type", "text/event-stream");
+        return reply.send(stream);
       });
     });
     apps.push(server.app);

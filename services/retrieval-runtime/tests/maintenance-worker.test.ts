@@ -944,8 +944,9 @@ describe("WritebackMaintenanceWorker", () => {
   });
 
   it("archives expired session episodic memories during maintenance", async () => {
-    const expired = makeSessionEpisodicRecord("session-old", "2026-04-01T00:00:00.000Z");
-    const fresh = makeSessionEpisodicRecord("session-fresh", "2026-04-22T00:00:00.000Z");
+    const ttlMs = 7 * 24 * 60 * 60 * 1000;
+    const expired = makeSessionEpisodicRecord("session-old", new Date(Date.now() - ttlMs - 60_000).toISOString());
+    const fresh = makeSessionEpisodicRecord("session-fresh", new Date(Date.now() - 60_000).toISOString());
     const storage = new RecordingStorageClient([expired, fresh], []);
     const planner = new StubPlanner(() => ({ actions: [] }));
 
@@ -959,7 +960,7 @@ describe("WritebackMaintenanceWorker", () => {
       undefined,
       guard,
       makeConfig({
-        WRITEBACK_SESSION_EPISODIC_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+        WRITEBACK_SESSION_EPISODIC_TTL_MS: ttlMs,
       }),
       logger,
     );

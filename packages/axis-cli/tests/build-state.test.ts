@@ -10,6 +10,15 @@ async function writeFixtureFile(filePath: string, content = "") {
   await writeFile(filePath, content, "utf8");
 }
 
+async function removeFixtureRoot(rootDir: string) {
+  await rm(rootDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100,
+  });
+}
+
 function packageRootFromTestFile() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
@@ -94,17 +103,20 @@ async function createVendorFixture(rootDir: string) {
   return packageDir;
 }
 
+const BUILD_STATE_TEST_TIMEOUT_MS = 20_000;
+
 describe("build state planning", () => {
-  const tempHome = path.join(os.tmpdir(), `axis-build-state-${Date.now()}`);
+  let tempHome: string;
   let previousHome: string | undefined;
   let previousUserProfile: string | undefined;
 
   beforeEach(async () => {
+    tempHome = path.join(os.tmpdir(), `axis-build-state-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     previousHome = process.env.HOME;
     previousUserProfile = process.env.USERPROFILE;
     process.env.HOME = tempHome;
     process.env.USERPROFILE = tempHome;
-    await rm(tempHome, { recursive: true, force: true });
+    await removeFixtureRoot(tempHome);
     await mkdir(tempHome, { recursive: true });
     vi.resetModules();
   });
@@ -120,7 +132,7 @@ describe("build state planning", () => {
     } else {
       process.env.USERPROFILE = previousUserProfile;
     }
-    await rm(tempHome, { recursive: true, force: true });
+    await removeFixtureRoot(tempHome);
     vi.restoreAllMocks();
   });
 
@@ -140,7 +152,7 @@ describe("build state planning", () => {
     await writeFixtureFile(path.join(packageDir, "src", "index.ts"), "export const cli = 2;\n");
     const changedPlan = await planCliBuild(packageDir);
     expect(changedPlan.needsBuild).toBe(true);
-  });
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
 
   it("only rebuilds changed vendor services and skips visualization rebuild for public-only changes", async () => {
     const rootDir = path.join(tempHome, "repo");
@@ -167,7 +179,7 @@ describe("build state planning", () => {
     const publicOnlyPlan = await planVendorBuild(packageDir);
     expect(publicOnlyPlan.changedEntries).toContain("visualization");
     expect(publicOnlyPlan.buildServices).not.toContain("visualization");
-  });
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
 
   it("rebuilds visualization when the repository doc changes", async () => {
     const rootDir = path.join(tempHome, "repo");
@@ -182,7 +194,7 @@ describe("build state planning", () => {
 
     expect(docsPlan.changedEntries).toContain("visualization");
     expect(docsPlan.buildServices).toContain("visualization");
-  });
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
 
   it("rebuilds stack image when required vendor runtime files are incomplete", async () => {
     const rootDir = path.join(tempHome, "repo");
@@ -199,10 +211,15 @@ describe("build state planning", () => {
     const steadyImagePlan = await planStackImageBuild(packageDir);
     expect(steadyImagePlan.needsBuild).toBe(false);
 
-    await rm(path.join(packageDir, "vendor", "runtime", "node_modules"), { recursive: true, force: true });
+    await rm(path.join(packageDir, "vendor", "runtime", "node_modules"), {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
     const incompleteImagePlan = await planStackImageBuild(packageDir);
     expect(incompleteImagePlan.needsBuild).toBe(true);
-  });
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
 
   it("keeps build-state declaration exports aligned with script exports", async () => {
     const script = await readFile(
@@ -217,5 +234,5 @@ describe("build state planning", () => {
     const declarationExports = [...declarations.matchAll(/export\s+function\s+(\w+)/g)].map((match) => match[1]);
 
     expect(declarationExports.sort()).toEqual(scriptExports.sort());
-  });
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
 });

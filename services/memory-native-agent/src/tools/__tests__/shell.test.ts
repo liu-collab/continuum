@@ -66,6 +66,7 @@ describe("shell_exec tool", () => {
         name: "shell_exec",
         args: {
           command,
+          timeout_ms: 2_000,
         },
       },
       context,
@@ -166,6 +167,7 @@ describe("shell_exec tool", () => {
         args: {
           command,
           max_output_bytes: 256,
+          timeout_ms: 5_000,
         },
       },
       context,
