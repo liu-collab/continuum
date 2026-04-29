@@ -167,7 +167,7 @@ npm run start
 npm run build
 $env:HOST = "127.0.0.1"
 $env:PORT = "3102"
-node bin/continuum-runtime.mjs
+node bin/axis-runtime.mjs
 ```
 
 ## 环境变量
@@ -188,14 +188,14 @@ node bin/continuum-runtime.mjs
   控制嵌入请求的本地短缓存；任一项设为 `0` 时关闭缓存
 - `FINALIZE_IDEMPOTENCY_TTL_MS` / `FINALIZE_IDEMPOTENCY_MAX_ENTRIES`
   控制 `finalize-turn`（结束当前轮）响应的本地幂等缓存，用来避免短时间重复提交重复执行
-- `CONTINUUM_EMBEDDING_CONFIG_PATH` / `CONTINUUM_MEMORY_LLM_CONFIG_PATH`
+- `AXIS_EMBEDDING_CONFIG_PATH` / `AXIS_MEMORY_LLM_CONFIG_PATH`
   读取托管的 JSON 配置对象；文件里的有效字段会覆盖同名环境变量
 - `QUERY_TIMEOUT_MS` / `EMBEDDING_TIMEOUT_MS` / `STORAGE_TIMEOUT_MS`
   所有跨服务调用都有限时
 
-托管配置文件适合放模型连接这类不希望散落在环境变量里的配置。`CONTINUUM_EMBEDDING_CONFIG_PATH` 和 `CONTINUUM_MEMORY_LLM_CONFIG_PATH` 都指向本地 `JSON`（配置对象）文件；文件里只读取当前支持的字段，空值或非法值会被忽略。同一字段同时出现在 `.env` 和配置文件时，配置文件里的有效值优先。
+托管配置文件适合放模型连接这类不希望散落在环境变量里的配置。`AXIS_EMBEDDING_CONFIG_PATH` 和 `AXIS_MEMORY_LLM_CONFIG_PATH` 都指向本地 `JSON`（配置对象）文件；文件里只读取当前支持的字段，空值或非法值会被忽略。同一字段同时出现在 `.env` 和配置文件时，配置文件里的有效值优先。
 
-`CONTINUUM_EMBEDDING_CONFIG_PATH` 指向的配置对象示例：
+`AXIS_EMBEDDING_CONFIG_PATH` 指向的配置对象示例：
 
 ```json
 {
@@ -206,7 +206,7 @@ node bin/continuum-runtime.mjs
 }
 ```
 
-`CONTINUUM_MEMORY_LLM_CONFIG_PATH` 指向的配置对象示例：
+`AXIS_MEMORY_LLM_CONFIG_PATH` 指向的配置对象示例：
 
 ```json
 {
@@ -352,7 +352,7 @@ $env:MEMORY_RUNTIME_BASE_URL = "http://127.0.0.1:3002"
 $env:MEMORY_WORKSPACE_ID = "550e8400-e29b-41d4-a716-446655440000"
 $env:MEMORY_USER_ID = "550e8400-e29b-41d4-a716-446655440001"
 $env:MEMORY_SESSION_ID = "550e8400-e29b-41d4-a716-446655440002"
-node bin/continuum-mcp-server.mjs
+node bin/axis-mcp-server.mjs
 ```
 
 三类输入都会先转成统一的 `TriggerContext`（触发上下文）或 `FinalizeTurnInput`（回合结束输入），查询、注入、写回层不感知宿主细节。

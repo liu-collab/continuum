@@ -12,7 +12,7 @@ import type { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/uti
 
 import type { AgentTurnState, AgentToolCallState } from "./event-reducer";
 
-export type ContinuumToolCallArtifact = {
+export type AxisToolCallArtifact = {
   status: AgentToolCallState["status"];
   argsPreview: string;
   outputPreview: string;
@@ -20,8 +20,8 @@ export type ContinuumToolCallArtifact = {
   artifactRef: string | null;
 };
 
-export type ContinuumAssistantCustomMeta = {
-  kind: "continuum";
+export type AxisAssistantCustomMeta = {
+  kind: "axis";
   role: "user" | "assistant";
   turnId: string;
   finishReason: AgentTurnState["finishReason"];
@@ -35,19 +35,19 @@ export type ContinuumAssistantCustomMeta = {
   traceSpans: AgentTurnState["traceSpans"];
 };
 
-type CreateContinuumThreadStoreInput = {
+type CreateAxisThreadStoreInput = {
   turns: AgentTurnState[];
   isRunning: boolean;
   onSend(text: string): void;
   onAbort(): void;
 };
 
-export function createContinuumThreadStore({
+export function createAxisThreadStore({
   turns,
   isRunning,
   onSend,
   onAbort
-}: CreateContinuumThreadStoreInput): ExternalStoreAdapter<ThreadMessage> {
+}: CreateAxisThreadStoreInput): ExternalStoreAdapter<ThreadMessage> {
   return {
     messages: turns.flatMap((turn, index) => createTurnMessages(turn, index)),
     isRunning,
@@ -67,7 +67,7 @@ export function createContinuumThreadStore({
 function createTurnMessages(turn: AgentTurnState, index: number): ThreadMessage[] {
   const createdAt = new Date(index * 1000);
   const commonMeta = {
-    kind: "continuum" as const,
+    kind: "axis" as const,
     turnId: turn.turnId,
     finishReason: turn.finishReason,
     promptAvailable: turn.promptAvailable,
@@ -89,10 +89,10 @@ function createTurnMessages(turn: AgentTurnState, index: number): ThreadMessage[
       attachments: [],
       metadata: {
         custom: {
-          continuum: {
+          axis: {
             ...commonMeta,
             role: "user"
-          } satisfies ContinuumAssistantCustomMeta
+          } satisfies AxisAssistantCustomMeta
         }
       }
     },
@@ -108,10 +108,10 @@ function createTurnMessages(turn: AgentTurnState, index: number): ThreadMessage[
         unstable_data: [],
         steps: [],
         custom: {
-          continuum: {
+          axis: {
             ...commonMeta,
             role: "assistant"
-          } satisfies ContinuumAssistantCustomMeta
+          } satisfies AxisAssistantCustomMeta
         }
       }
     }
@@ -149,7 +149,7 @@ function createAssistantContent(turn: AgentTurnState): ThreadAssistantMessage["c
         outputPreview: call.outputPreview,
         trustLevel: call.trustLevel,
         artifactRef: call.artifactRef
-      } satisfies ContinuumToolCallArtifact
+      } satisfies AxisToolCallArtifact
     });
   }
 
@@ -245,16 +245,16 @@ function isReadonlyJsonObject(value: unknown): value is ReadonlyJSONObject {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) && isReadonlyJsonValue(value);
 }
 
-export function readContinuumMeta(message: ThreadMessage): ContinuumAssistantCustomMeta | null {
-  const candidate = message.metadata.custom["continuum"];
+export function readAxisMeta(message: ThreadMessage): AxisAssistantCustomMeta | null {
+  const candidate = message.metadata.custom["axis"];
   if (!candidate || typeof candidate !== "object") {
     return null;
   }
 
-  const value = candidate as Partial<ContinuumAssistantCustomMeta>;
-  if (value.kind !== "continuum" || !value.turnId || !value.role) {
+  const value = candidate as Partial<AxisAssistantCustomMeta>;
+  if (value.kind !== "axis" || !value.turnId || !value.role) {
     return null;
   }
 
-  return value as ContinuumAssistantCustomMeta;
+  return value as AxisAssistantCustomMeta;
 }

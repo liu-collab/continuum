@@ -1,5 +1,5 @@
 {
-  "description": "Continuum memory hooks for session restore, prompt injection, and writeback.",
+  "description": "Axis memory hooks for session restore, prompt injection, and writeback.",
   "hooks": {
     "SessionStart": [
       {

@@ -25,10 +25,10 @@ type UseAgentWorkspaceOptions = {
   uiLocale: AgentLocale;
 };
 
-const FILE_TREE_PATH_STORAGE_KEY = "continuum.agent.fileTree.path";
-const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "continuum.agent.fileTree.selectedFile";
-const FILE_TREE_WORKSPACE_STORAGE_KEY = "continuum.agent.fileTree.workspace";
-const LAST_SESSION_ID_STORAGE_KEY = "continuum.agent.lastSessionId";
+const FILE_TREE_PATH_STORAGE_KEY = "axis.agent.fileTree.path";
+const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "axis.agent.fileTree.selectedFile";
+const FILE_TREE_WORKSPACE_STORAGE_KEY = "axis.agent.fileTree.workspace";
+const LAST_SESSION_ID_STORAGE_KEY = "axis.agent.lastSessionId";
 
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const router = useRouter();

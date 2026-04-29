@@ -46,7 +46,7 @@ describe("OpenAICompatibleProvider", () => {
       { type: "text_delta", text: "，世界" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 11, completion_tokens: 7 } },
     ]);
-    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=openai-compatible)");
+    expect(requestUserAgent).toBe("axis-mna/0.1.0 (+provider=openai-compatible)");
   });
 
   it("buffers tool call arguments until a complete call is available", async () => {

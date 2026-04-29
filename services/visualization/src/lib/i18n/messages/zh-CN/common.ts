@@ -8,7 +8,7 @@ const zhCommon = {
       }
     },
     layout: {
-      metadataTitle: "Continuum · 观测台",
+      metadataTitle: "Axis · 观测台",
       metadataDescription: "Agent 记忆运行时观测看板。",
       navAria: "全局导航",
       nav: {

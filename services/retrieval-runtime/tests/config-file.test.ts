@@ -359,7 +359,7 @@ describe("config file helper", () => {
 
     expect(
       resolveRuntimeGovernanceConfig({
-        CONTINUUM_RUNTIME_CONFIG_PATH: configPath,
+        AXIS_RUNTIME_CONFIG_PATH: configPath,
         WRITEBACK_MAINTENANCE_ENABLED: false,
         WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
         WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,

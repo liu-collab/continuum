@@ -94,7 +94,7 @@ describe("memory llm config migration script", () => {
 
   it("renames the managed config path key", () => {
     expect(migrateMemoryLlmConfigText("WRITEBACK_LLM_CONFIG_PATH=memory-llm.json")).toBe(
-      "CONTINUUM_MEMORY_LLM_CONFIG_PATH=memory-llm.json",
+      "AXIS_MEMORY_LLM_CONFIG_PATH=memory-llm.json",
     );
   });
 

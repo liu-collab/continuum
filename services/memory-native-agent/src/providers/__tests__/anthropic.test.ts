@@ -47,7 +47,7 @@ describe("AnthropicProvider", () => {
       { type: "text_delta", text: "，Anthropic" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 13, completion_tokens: 8 } },
     ]);
-    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=anthropic)");
+    expect(requestUserAgent).toBe("axis-mna/0.1.0 (+provider=anthropic)");
   });
 
   it("buffers tool_use input until a complete JSON object can be emitted", async () => {

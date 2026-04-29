@@ -38,7 +38,7 @@ export const DEFAULT_RAW_CONFIG = {
   },
   provider: {
     kind: "demo",
-    model: "continuum-demo",
+    model: "axis-demo",
     base_url: DEFAULT_DEMO_PROVIDER_BASE_URL,
     temperature: 0.2,
     effort: null as "low" | "medium" | "high" | "xhigh" | "max" | null,

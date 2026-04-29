@@ -89,7 +89,7 @@ function decideToolCall(normalizedInput: string, messages: ChatMessage[]): ToolC
       name: "fs_write",
       args: {
         path: "demo-note.txt",
-        content: "这是 Continuum demo provider 写入的示例内容。\n",
+        content: "这是 Axis demo provider 写入的示例内容。\n",
       },
     };
   }

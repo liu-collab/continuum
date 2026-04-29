@@ -8,7 +8,7 @@ import process from "node:process";
 
 const DEFAULT_MEMORY_CONFIG_PATH = path.join(
   os.homedir(),
-  ".continuum",
+  ".axis",
   "managed",
   "memory-llm-config.json",
 );

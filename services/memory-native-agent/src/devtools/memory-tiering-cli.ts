@@ -197,7 +197,7 @@ async function readToken(explicitPath?: string): Promise<string> {
   const candidates = [
     explicitPath,
     process.env.MNA_TOKEN_PATH,
-    path.join(os.homedir(), ".continuum", "managed", "mna", "token.txt"),
+    path.join(os.homedir(), ".axis", "managed", "mna", "token.txt"),
     path.join(os.homedir(), ".mna", "token.txt"),
   ].filter((value): value is string => Boolean(value && value.trim()));
 

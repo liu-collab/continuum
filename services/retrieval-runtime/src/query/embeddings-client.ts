@@ -75,7 +75,7 @@ export class CachedEmbeddingsClient implements EmbeddingsClient, EmbeddingCacheP
     private readonly config: Pick<AppConfig,
       | "EMBEDDING_BASE_URL"
       | "EMBEDDING_MODEL"
-      | "CONTINUUM_EMBEDDING_CONFIG_PATH"
+      | "AXIS_EMBEDDING_CONFIG_PATH"
       | "EMBEDDING_CACHE_TTL_MS"
       | "EMBEDDING_CACHE_MAX_ENTRIES"
     >,

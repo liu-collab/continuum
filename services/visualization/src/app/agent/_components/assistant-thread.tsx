@@ -26,9 +26,9 @@ import { StatusBadge } from "@/components/status-badge";
 
 import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import {
-  createContinuumThreadStore,
-  readContinuumMeta,
-  type ContinuumToolCallArtifact
+  createAxisThreadStore,
+  readAxisMeta,
+  type AxisToolCallArtifact
 } from "../_lib/assistant-ui-adapter";
 import type { AgentTurnState } from "../_lib/event-reducer";
 
@@ -52,7 +52,7 @@ export function AssistantThread({
   const isRunning = turns.some((turn) => turn.status === "streaming");
   const store = useMemo(
     () =>
-      createContinuumThreadStore({
+      createAxisThreadStore({
         turns,
         isRunning,
         onSend,
@@ -122,7 +122,7 @@ export function AssistantThread({
 
 function UserMessageBubble({ message }: { message: MessageState }) {
   const { t } = useAgentI18n();
-  const meta = readContinuumMeta(message);
+  const meta = readAxisMeta(message);
   const turnId = meta?.turnId ?? message.id;
   const content = getMessageText(message);
 
@@ -161,7 +161,7 @@ function AssistantMessageBubble({
   onOpenPrompt(turnId: string): void;
 }) {
   const { formatAgentError, formatFinishReasonLabel, formatPhaseLabel, t } = useAgentI18n();
-  const meta = readContinuumMeta(message);
+  const meta = readAxisMeta(message);
   const turnId = meta?.turnId ?? message.id;
   const hasRenderableParts = message.content.length > 0;
   const errorContents = meta?.errors.map((item) => formatAgentError(item.code, null, item.reason)) ?? [];
@@ -353,17 +353,17 @@ function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, u
   );
 }
 
-function readToolArtifact(value: unknown): ContinuumToolCallArtifact | null {
+function readToolArtifact(value: unknown): AxisToolCallArtifact | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
-  const artifact = value as Partial<ContinuumToolCallArtifact>;
+  const artifact = value as Partial<AxisToolCallArtifact>;
   if (!artifact.status || !artifact.argsPreview) {
     return null;
   }
 
-  return artifact as ContinuumToolCallArtifact;
+  return artifact as AxisToolCallArtifact;
 }
 
 function getMessageText(message: MessageState) {

@@ -8,7 +8,7 @@
         "mcp"
       ],
       "env": {
-        "MEMORY_MCP_COMMAND": "continuum-mcp-server"
+        "MEMORY_MCP_COMMAND": "axis-mcp-server"
       }
     }
   }

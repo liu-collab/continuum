@@ -519,7 +519,7 @@ const editableConfigSchema = z.object({
 });
 
 // 修改后持久化到托管配置文件，和 embedding/memory_llm 配置同目录
-// ~/.continuum/managed/runtime-config.json
+// ~/.axis/managed/runtime-config.json
 ```
 
 runtime 启动时从配置文件加载，`PUT` 后热更新（MaintenanceWorker 下次循环生效）。

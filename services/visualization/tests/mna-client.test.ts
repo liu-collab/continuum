@@ -140,7 +140,7 @@ describe("MnaClient", () => {
         json: async () => ({
           provider: {
             kind: "demo",
-            model: "continuum-demo",
+            model: "axis-demo",
             base_url: null,
             api_key: null,
             temperature: null,

@@ -8,7 +8,7 @@
   },
   "workspace": {
     "offlineTitle": "agent 离线",
-    "offlineDescription": "请先启动 memory-native-agent，然后刷新页面。建议命令：`continuum start`。",
+    "offlineDescription": "请先启动 memory-native-agent，然后刷新页面。建议命令：`axis start`。",
     "bootstrap": {
       "loadingTitle": "正在初始化",
       "loading": "正在初始化 agent 连接。",

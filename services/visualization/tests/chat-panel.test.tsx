@@ -355,7 +355,7 @@ describe("ChatPanel", () => {
     expect(screen.queryByText("Injection Banner")).not.toBeInTheDocument();
   });
 
-  it("shows the selected provider model beside the Continuum Agent title", () => {
+  it("shows the selected provider model beside the Axis Agent title", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
@@ -372,7 +372,7 @@ describe("ChatPanel", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByText("Continuum Agent")).toBeInTheDocument();
+    expect(screen.getByText("Axis Agent")).toBeInTheDocument();
     expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · gpt-5.4");
   });
 

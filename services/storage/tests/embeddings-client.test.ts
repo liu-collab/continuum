@@ -23,7 +23,7 @@ const baseConfig = {
   embedding_base_url: "https://api.openai.com/v1",
   embedding_api_key: "test-key",
   embedding_model: "text-embedding-3-small",
-  continuum_embedding_config_path: undefined,
+  axis_embedding_config_path: undefined,
   redis_url: undefined,
 };
 
@@ -119,7 +119,7 @@ describe("storage embeddings client", () => {
       const client = new HttpEmbeddingsClient({
         ...baseConfig,
         embedding_base_url: undefined,
-        continuum_embedding_config_path: configPath,
+        axis_embedding_config_path: configPath,
       });
 
       expect(client.isConfigured()).toBe(true);

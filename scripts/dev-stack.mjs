@@ -186,7 +186,7 @@ function spawnService(spec) {
 }
 
 function printSummary() {
-  process.stdout.write("Continuum 开发栈已启动。\n");
+  process.stdout.write("Axis 开发栈已启动。\n");
   process.stdout.write(`storage: ${sharedEnv.STORAGE_API_BASE_URL}\n`);
   process.stdout.write(`retrieval-runtime: ${sharedEnv.RUNTIME_API_BASE_URL}\n`);
   process.stdout.write(`visualization: ${defaultVisualizationUrl}\n`);
@@ -195,7 +195,7 @@ function printSummary() {
 }
 
 try {
-  if (process.env.CONTINUUM_DEV_SKIP_MIGRATE !== "1") {
+  if (process.env.AXIS_DEV_SKIP_MIGRATE !== "1") {
     runBlockingStep(
       "storage:migrate",
       path.join(repoRoot, "services", "storage"),

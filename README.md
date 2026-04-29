@@ -1,10 +1,10 @@
-# Continuum
+# Axis
 
 Persistent memory layer for AI coding agents — keeps preferences, task state, and context alive across sessions.
 
-[![GitHub Repo stars](https://img.shields.io/github/stars/liu-collab/continuum?style=social)](https://github.com/liu-collab/continuum/stargazers)
-[![npm version](https://img.shields.io/npm/v/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
-[![npm downloads](https://img.shields.io/npm/dm/%40jiankarlin%2Fcontinuum)](https://www.npmjs.com/package/@jiankarlin/continuum)
+[![GitHub Repo stars](https://img.shields.io/github/stars/liu-collab/axis?style=social)](https://github.com/liu-collab/axis/stargazers)
+[![npm version](https://img.shields.io/npm/v/axis-agent)](https://www.npmjs.com/package/axis-agent)
+[![npm downloads](https://img.shields.io/npm/dm/axis-agent)](https://www.npmjs.com/package/axis-agent)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 [中文文档](./README_CN.md)
@@ -13,7 +13,7 @@ Persistent memory layer for AI coding agents — keeps preferences, task state, 
 
 AI coding agents are powerful, but every session is a blank slate. Close the terminal and your preferences, conventions, and task progress are gone.
 
-Continuum pulls memory out of the model and into a dedicated system layer. The model doesn't have to remember everything — the system injects the right context at the right time.
+Axis pulls memory out of the model and into a dedicated system layer. The model doesn't have to remember everything — the system injects the right context at the right time.
 
 The bigger picture: **a main model shouldn't work alone**. It should be surrounded by auxiliary models, each handling what it's best at — summarization, retrieval, injection timing, context pruning. The main model focuses on decisions and generation; the auxiliary layer ensures it always has clean, complete context.
 
@@ -104,13 +104,13 @@ LLM has no tools — memory is the only source, used directly. That's the theore
 ### Install the CLI
 
 ```bash
-npm install -g @jiankarlin/continuum
+npm install -g axis-agent
 ```
 
 ### Start all services
 
 ```bash
-continuum start \
+axis start \
   --embedding-base-url https://api.openai.com/v1 \
   --embedding-model text-embedding-3-small
 ```
@@ -127,16 +127,16 @@ Launches a single Docker container with PostgreSQL + pgvector, storage, retrieva
 ### Connect hosts
 
 ```bash
-continuum claude install   # Claude Code
-continuum codex            # Codex
+axis claude install   # Claude Code
+axis codex            # Codex
 ```
 
 ### Other commands
 
 ```bash
-continuum status    # check running services
-continuum ui        # open the dashboard
-continuum stop      # shut everything down
+axis status    # check running services
+axis ui        # open the dashboard
+axis stop      # shut everything down
 ```
 
 ## Development
@@ -160,7 +160,7 @@ services/
   visualization/        # Next.js dashboard
   memory-native-agent/  # reference host adapter
 packages/
-  continuum-cli/        # CLI tooling and distribution
+  axis-cli/        # CLI tooling and distribution
 ```
 
 ### Running tests
@@ -184,11 +184,11 @@ The goal stays the same: the main model always has clean, complete context. No m
 
 ## Platform Support
 
-`continuum start` currently supports **Windows** (requires Docker Desktop). Other platforms can run services manually or via Docker Compose.
+`axis start` currently supports **Windows** (requires Docker Desktop). Other platforms can run services manually or via Docker Compose.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liu-collab/continuum&type=Date)](https://star-history.com/#liu-collab/continuum&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=liu-collab/axis&type=Date)](https://star-history.com/#liu-collab/axis&Date)
 
 ## License
 

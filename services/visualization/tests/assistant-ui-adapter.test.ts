@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  createContinuumThreadStore,
-  readContinuumMeta
+  createAxisThreadStore,
+  readAxisMeta
 } from "@/app/agent/_lib/assistant-ui-adapter";
 import type { AgentTurnState } from "@/app/agent/_lib/event-reducer";
 
@@ -29,7 +29,7 @@ function createTurn(overrides: Partial<AgentTurnState> = {}): AgentTurnState {
 
 describe("assistant-ui adapter", () => {
   it("maps a turn into user and assistant messages with metadata", () => {
-    const store = createContinuumThreadStore({
+    const store = createAxisThreadStore({
       turns: [
         createTurn({
           injection: {
@@ -63,14 +63,14 @@ describe("assistant-ui adapter", () => {
       role: "assistant"
     });
 
-    const assistantMeta = readContinuumMeta(store.messages?.[1]!);
+    const assistantMeta = readAxisMeta(store.messages?.[1]!);
     expect(assistantMeta?.turnId).toBe("turn-1");
     expect(assistantMeta?.injection?.memory_summary).toBe("恢复了 2 条工作区偏好");
     expect(assistantMeta?.phases[0]?.phase).toBe("before_response");
   });
 
   it("maps tool calls into assistant-ui tool-call parts", () => {
-    const store = createContinuumThreadStore({
+    const store = createAxisThreadStore({
       turns: [
         createTurn({
           turnId: "turn-tool",
@@ -109,7 +109,7 @@ describe("assistant-ui adapter", () => {
   });
 
   it("maps streaming and error turns to assistant-ui statuses", () => {
-    const store = createContinuumThreadStore({
+    const store = createAxisThreadStore({
       turns: [
         createTurn({
           turnId: "turn-stream",
@@ -146,7 +146,7 @@ describe("assistant-ui adapter", () => {
 
   it("extracts user text from append messages before forwarding", async () => {
     const onSend = vi.fn();
-    const store = createContinuumThreadStore({
+    const store = createAxisThreadStore({
       turns: [],
       isRunning: false,
       onSend,

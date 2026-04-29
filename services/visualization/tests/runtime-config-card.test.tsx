@@ -9,7 +9,7 @@ import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 const baseConfig = {
   provider: {
     kind: "demo" as const,
-    model: "continuum-demo",
+    model: "axis-demo",
     base_url: null,
     api_key: null,
     temperature: null,

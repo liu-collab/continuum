@@ -22,7 +22,7 @@ export type RuntimeGovernanceConfig = {
 };
 
 export type RuntimeGovernanceConfigSource = Partial<RuntimeGovernanceConfig> & {
-  CONTINUUM_RUNTIME_CONFIG_PATH?: string;
+  AXIS_RUNTIME_CONFIG_PATH?: string;
 };
 
 export const runtimeGovernanceConfigUpdateSchema = z.object({
@@ -57,8 +57,8 @@ const runtimeGovernanceConfigFieldMap: ConfigSourceFieldMap<
 export function resolveRuntimeGovernanceConfigPath(
   source: RuntimeGovernanceConfigSource = process.env as RuntimeGovernanceConfigSource,
 ) {
-  return readOptionalConfigString(source.CONTINUUM_RUNTIME_CONFIG_PATH)
-    ?? path.join(os.homedir(), ".continuum", "managed", "runtime-config.json");
+  return readOptionalConfigString(source.AXIS_RUNTIME_CONFIG_PATH)
+    ?? path.join(os.homedir(), ".axis", "managed", "runtime-config.json");
 }
 
 export function resolveRuntimeGovernanceConfig(

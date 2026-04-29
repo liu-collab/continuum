@@ -1,5 +1,5 @@
 {
-  "name": "continuum-repo",
+  "name": "axis-repo",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -7,10 +7,10 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "node ./scripts/continuum-root.mjs start",
-    "stop": "node ./scripts/continuum-root.mjs stop",
-    "status": "node ./scripts/continuum-root.mjs status",
-    "ui": "node ./scripts/continuum-root.mjs ui",
+    "start": "node ./scripts/axis-root.mjs start",
+    "stop": "node ./scripts/axis-root.mjs stop",
+    "status": "node ./scripts/axis-root.mjs status",
+    "ui": "node ./scripts/axis-root.mjs ui",
     "dev": "node ./scripts/dev-stack.mjs"
   }
 }

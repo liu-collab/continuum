@@ -167,7 +167,7 @@ export function ChatPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="truncate text-base font-semibold text-foreground">Continuum Agent</div>
+            <div className="truncate text-base font-semibold text-foreground">Axis Agent</div>
             {providerLabel ? (
               <div
                 data-testid="chat-provider-model"

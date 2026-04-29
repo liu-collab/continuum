@@ -15,7 +15,7 @@ type CachedDependencyStatus = {
 };
 
 export function resolveManagedDependencyStatusPath(app: RuntimeFastifyInstance) {
-  return process.env.CONTINUUM_DEPENDENCY_STATUS_PATH?.trim()
+  return process.env.AXIS_DEPENDENCY_STATUS_PATH?.trim()
     || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "dependency-status-cache.json");
 }
 

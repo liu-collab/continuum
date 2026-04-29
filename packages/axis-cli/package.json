@@ -1,0 +1,46 @@
+{
+  "name": "axis-agent",
+  "version": "0.1.0",
+  "description": "Axis delivery CLI for status, UI, Claude plugin install, and Codex launch.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "axis": "./bin/axis.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "vendor/",
+    "README.md",
+    "RELEASE.md"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "ensure:vendor": "node ./scripts/ensure-vendor.mjs",
+    "package:claude-plugin": "node ./scripts/package-claude-plugin.mjs",
+    "prepare:vendor": "node ./scripts/prepare-vendor.mjs",
+    "release:bundle": "npm run release:verify && npm run package:claude-plugin",
+    "release:verify": "npm run prepare:vendor && npm run check && npm run build && npm test",
+    "prepack": "npm run prepare:vendor && npm run check && npm run build && npm test",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "axis-repo": "file:../..",
+    "pg": "^8.13.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.20.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1",
+    "yazl": "^3.3.1"
+  }
+}

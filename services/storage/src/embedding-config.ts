@@ -4,7 +4,7 @@ type EmbeddingConfigSource = {
   embedding_base_url?: string | undefined;
   embedding_model?: string | undefined;
   embedding_api_key?: string | undefined;
-  continuum_embedding_config_path?: string | undefined;
+  axis_embedding_config_path?: string | undefined;
 };
 
 export type StorageEmbeddingConfig = {
@@ -68,7 +68,7 @@ export function resolveStorageEmbeddingConfig(source: EmbeddingConfigSource): St
     ...(envBaseUrl ? { baseUrl: envBaseUrl } : {}),
     ...(envModel ? { model: envModel } : {}),
     ...(envApiKey ? { apiKey: envApiKey } : {}),
-    ...readManagedEmbeddingConfig(readNonEmpty(source.continuum_embedding_config_path)),
+    ...readManagedEmbeddingConfig(readNonEmpty(source.axis_embedding_config_path)),
   };
 }
 

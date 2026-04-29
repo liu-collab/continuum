@@ -21,7 +21,7 @@ const configSchema = z.object({
   EMBEDDING_BASE_URL: z.string().trim().optional().transform((value) => value || undefined),
   EMBEDDING_API_KEY: z.string().trim().optional().transform((value) => value || undefined),
   EMBEDDING_MODEL: z.string().trim().default("text-embedding-3-small"),
-  CONTINUUM_EMBEDDING_CONFIG_PATH: z.string().trim().optional().transform((value) => value || undefined),
+  AXIS_EMBEDDING_CONFIG_PATH: z.string().trim().optional().transform((value) => value || undefined),
   REDIS_URL: z.string().trim().optional().transform((value) => value || undefined),
 });
 
@@ -39,7 +39,7 @@ export type StorageConfig = {
   embedding_base_url?: string | undefined;
   embedding_api_key?: string | undefined;
   embedding_model: string;
-  continuum_embedding_config_path?: string | undefined;
+  axis_embedding_config_path?: string | undefined;
   redis_url?: string | undefined;
 };
 
@@ -68,7 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): StorageConfig 
     embedding_base_url: parsed.data.EMBEDDING_BASE_URL,
     embedding_api_key: parsed.data.EMBEDDING_API_KEY,
     embedding_model: parsed.data.EMBEDDING_MODEL,
-    continuum_embedding_config_path: parsed.data.CONTINUUM_EMBEDDING_CONFIG_PATH,
+    axis_embedding_config_path: parsed.data.AXIS_EMBEDDING_CONFIG_PATH,
     redis_url: parsed.data.REDIS_URL,
   };
 }

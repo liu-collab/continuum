@@ -122,12 +122,12 @@ function formatZodIssues(error: z.ZodError) {
 }
 
 function resolveManagedEmbeddingConfigPath(app: RuntimeFastifyInstance) {
-  return process.env.CONTINUUM_EMBEDDING_CONFIG_PATH?.trim()
+  return process.env.AXIS_EMBEDDING_CONFIG_PATH?.trim()
     || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
 }
 
 function resolveManagedMemoryLlmConfigPath(app: RuntimeFastifyInstance) {
-  return process.env.CONTINUUM_MEMORY_LLM_CONFIG_PATH?.trim()
+  return process.env.AXIS_MEMORY_LLM_CONFIG_PATH?.trim()
     || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "memory-llm-config.json");
 }
 

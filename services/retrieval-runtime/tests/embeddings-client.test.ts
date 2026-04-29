@@ -292,7 +292,7 @@ describe("retrieval-runtime embeddings client", () => {
         EMBEDDING_MODEL: "text-embedding-3-small",
         EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
         EMBEDDING_CACHE_MAX_ENTRIES: 1000,
-        CONTINUUM_EMBEDDING_CONFIG_PATH: configPath,
+        AXIS_EMBEDDING_CONFIG_PATH: configPath,
         MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
         MEMORY_LLM_PROTOCOL: "openai-compatible",
         MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -366,7 +366,7 @@ describe("retrieval-runtime embeddings client", () => {
 
   it("reads managed memory llm config from a shared file", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-writeback-"));
-    const configPath = path.join(tempDir, "writeback-llm-config.json");
+    const configPath = path.join(tempDir, "memory-llm-config.json");
     fs.writeFileSync(
       configPath,
       JSON.stringify({
@@ -383,7 +383,7 @@ describe("retrieval-runtime embeddings client", () => {
     try {
       const resolved = resolveRuntimeWritebackLlmConfig({
         MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
-        CONTINUUM_MEMORY_LLM_CONFIG_PATH: configPath,
+        AXIS_MEMORY_LLM_CONFIG_PATH: configPath,
       });
 
       expect(resolved).toEqual({
@@ -395,7 +395,7 @@ describe("retrieval-runtime embeddings client", () => {
       });
       expect(
         hasCompleteRuntimeWritebackLlmConfig({
-          CONTINUUM_MEMORY_LLM_CONFIG_PATH: configPath,
+          AXIS_MEMORY_LLM_CONFIG_PATH: configPath,
         }),
       ).toBe(true);
     } finally {

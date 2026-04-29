@@ -37,7 +37,7 @@ type AgentI18nValue = {
   };
 };
 
-const AGENT_LOCALE_STORAGE_KEY = "continuum.agent.locale";
+const AGENT_LOCALE_STORAGE_KEY = "axis.agent.locale";
 
 export function AgentI18nProvider({
   children,

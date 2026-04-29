@@ -22,7 +22,7 @@ async function pickWorkspaceDirectoryOnWindows(): Promise<string | null> {
     "Add-Type -AssemblyName System.Drawing",
     "[System.Windows.Forms.Application]::EnableVisualStyles()",
     "$owner = New-Object System.Windows.Forms.Form",
-    "$owner.Text = 'Continuum'",
+    "$owner.Text = 'Axis'",
     "$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen",
     "$owner.Size = New-Object System.Drawing.Size(1, 1)",
     "$owner.ShowInTaskbar = $false",

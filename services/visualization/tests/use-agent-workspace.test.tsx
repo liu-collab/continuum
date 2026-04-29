@@ -254,7 +254,7 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent");
-    window.localStorage.setItem("continuum.agent.lastSessionId", "recent-session");
+    window.localStorage.setItem("axis.agent.lastSessionId", "recent-session");
 
     render(<HookProbe />);
 

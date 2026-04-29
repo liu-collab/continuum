@@ -10,7 +10,7 @@ type EmbeddingConfigSource = {
   EMBEDDING_BASE_URL?: string;
   EMBEDDING_MODEL?: string;
   EMBEDDING_API_KEY?: string;
-  CONTINUUM_EMBEDDING_CONFIG_PATH?: string;
+  AXIS_EMBEDDING_CONFIG_PATH?: string;
 };
 
 export type RuntimeEmbeddingConfig = {
@@ -35,7 +35,7 @@ export function resolveRuntimeEmbeddingConfig(source: EmbeddingConfigSource): Ru
   return readLayeredMappedJsonConfigFields<RuntimeEmbeddingConfig, EmbeddingConfigSource>(
     source,
     embeddingConfigFieldMap,
-    source.CONTINUUM_EMBEDDING_CONFIG_PATH,
+    source.AXIS_EMBEDDING_CONFIG_PATH,
     embeddingConfigReaders,
   );
 }

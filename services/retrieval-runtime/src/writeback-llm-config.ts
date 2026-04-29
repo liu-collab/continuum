@@ -15,7 +15,7 @@ type WritebackLlmConfigSource = {
   MEMORY_LLM_PROTOCOL?: string;
   MEMORY_LLM_EFFORT?: string;
   MEMORY_LLM_MAX_TOKENS?: number | string;
-  CONTINUUM_MEMORY_LLM_CONFIG_PATH?: string;
+  AXIS_MEMORY_LLM_CONFIG_PATH?: string;
 };
 
 export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible";
@@ -93,7 +93,7 @@ export function resolveRuntimeWritebackLlmConfig(
   return readLayeredMappedJsonConfigFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(
     source,
     writebackLlmConfigFieldMap,
-    source.CONTINUUM_MEMORY_LLM_CONFIG_PATH,
+    source.AXIS_MEMORY_LLM_CONFIG_PATH,
     writebackLlmConfigReaders,
   );
 }

@@ -39,7 +39,7 @@ describe("OllamaProvider", () => {
       { type: "text_delta", text: "，Ollama" },
       { type: "end", finish_reason: "stop", usage: { prompt_tokens: 4, completion_tokens: 5 } },
     ]);
-    expect(requestUserAgent).toBe("continuum-mna/0.1.0 (+provider=ollama)");
+    expect(requestUserAgent).toBe("axis-mna/0.1.0 (+provider=ollama)");
   });
 
   it("emits tool calls when Ollama returns tool_calls blocks", async () => {

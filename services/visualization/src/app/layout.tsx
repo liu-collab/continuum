@@ -45,7 +45,7 @@ export default async function RootLayout({
             <header className="global-nav">
               <div className="global-nav-inner">
                 <Link href={"/" as Route} className="global-nav-link font-semibold">
-                  Continuum
+                  Axis
                 </Link>
                 <nav className="global-nav-links" aria-label={t("layout.navAria")}>
                   {navigation.map((item) => (

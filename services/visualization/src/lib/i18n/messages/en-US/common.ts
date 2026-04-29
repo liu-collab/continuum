@@ -8,7 +8,7 @@ const enCommon = {
       }
     },
     layout: {
-      metadataTitle: "Continuum · Observatory",
+      metadataTitle: "Axis · Observatory",
       metadataDescription: "Agent memory runtime observability dashboard.",
       navAria: "Global navigation",
       nav: {

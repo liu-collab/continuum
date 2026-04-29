@@ -1,8 +1,8 @@
 {
-  "name": "@jiankarlin/memory-native-agent",
+  "name": "@axis/memory-native-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Continuum memory native agent service.",
+  "description": "Axis memory native agent service.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {

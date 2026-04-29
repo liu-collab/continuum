@@ -21,7 +21,7 @@ vi.mock("@/lib/env", () => ({
   getAppConfig: () => ({
     values: {
       MNA_INTERNAL_BASE_URL: "http://host.docker.internal:4193",
-      MNA_TOKEN_PATH: "~/.continuum/managed/mna/token.txt",
+      MNA_TOKEN_PATH: "~/.axis/managed/mna/token.txt",
     },
     issues: [],
   }),

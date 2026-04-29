@@ -7,8 +7,8 @@ import zhCommon from "./messages/zh-CN/common";
 export type AppLocale = "zh-CN" | "en-US";
 
 export const DEFAULT_APP_LOCALE: AppLocale = "zh-CN";
-export const APP_LOCALE_COOKIE = "continuum.locale";
-export const APP_LOCALE_STORAGE_KEY = "continuum.locale";
+export const APP_LOCALE_COOKIE = "axis.locale";
+export const APP_LOCALE_STORAGE_KEY = "axis.locale";
 
 type Primitive = string | number;
 type Variables = Record<string, Primitive>;

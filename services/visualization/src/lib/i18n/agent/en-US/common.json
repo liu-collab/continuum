@@ -8,7 +8,7 @@
   },
   "workspace": {
     "offlineTitle": "Agent offline",
-    "offlineDescription": "Start memory-native-agent first, then refresh this page. Suggested command: `continuum start`.",
+    "offlineDescription": "Start memory-native-agent first, then refresh this page. Suggested command: `axis start`.",
     "bootstrap": {
       "loadingTitle": "Initializing",
       "loading": "Initializing the agent connection.",

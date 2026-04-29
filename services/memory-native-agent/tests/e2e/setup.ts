@@ -116,7 +116,7 @@ const RUNTIME_BASE_CONFIG = {
   HOST: "127.0.0.1",
   PORT: 0,
   LOG_LEVEL: "silent",
-  DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:5432/continuum_test",
+  DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:5432/axis_test",
   READ_MODEL_SCHEMA: "storage_shared_v1",
   READ_MODEL_TABLE: "memory_read_model_v1",
   RUNTIME_SCHEMA: "runtime_private",

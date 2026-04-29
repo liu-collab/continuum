@@ -1,8 +1,8 @@
 {
-  "name": "continuum",
+  "name": "axis",
   "version": "0.1.0",
-  "description": "Continuum plugin for Claude Code memory recovery and writeback.",
+  "description": "Axis plugin for Claude Code memory recovery and writeback.",
   "author": {
-    "name": "continuum"
+    "name": "axis"
   }
 }

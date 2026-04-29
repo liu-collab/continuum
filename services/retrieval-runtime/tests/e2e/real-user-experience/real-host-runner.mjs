@@ -377,7 +377,7 @@ function seedTaskSpecificFiles(cwd, task) {
 
 function seedProjectWorkspace(cwd) {
   const pkg = {
-    name: "continuum-real-ux-ab-workspace",
+    name: "axis-real-ux-ab-workspace",
     version: "1.0.0",
     type: "module",
     scripts: {
@@ -394,7 +394,7 @@ function seedProjectWorkspace(cwd) {
   writeFileSync(
     path.join(cwd, "README.md"),
     [
-      "# Continuum AB Workspace",
+      "# Axis AB Workspace",
       "",
       "Node.js ESM project using `.mjs` extension and Vitest for testing.",
       "Do NOT add Jest or CommonJS files.",
@@ -424,7 +424,7 @@ function seedProjectWorkspace(cwd) {
 }
 
 function createClaudeWorkspace(memoryEnabled, task) {
-  const tmpDir = mkdtempSync(path.join(os.tmpdir(), "continuum-claude-ab-"));
+  const tmpDir = mkdtempSync(path.join(os.tmpdir(), "axis-claude-ab-"));
 
   if (memoryEnabled) {
     const claudeDir = path.join(tmpDir, ".claude");
@@ -479,12 +479,12 @@ function createClaudeWorkspace(memoryEnabled, task) {
 
   const mdContent = memoryEnabled
     ? [
-        "# Continuum real UX A/B workspace",
+        "# Axis real UX A/B workspace",
         "",
         buildSeedMemoryBlock(task),
         "",
       ].join("\n")
-    : "# Continuum real UX A/B workspace\n";
+    : "# Axis real UX A/B workspace\n";
 
   writeFileSync(
     path.join(tmpDir, "CLAUDE.md"),
@@ -564,7 +564,7 @@ export async function runClaudeAnswer({
 }
 
 function createCodexHome() {
-  const codexHome = mkdtempSync(path.join(os.tmpdir(), "continuum-codex-ab-"));
+  const codexHome = mkdtempSync(path.join(os.tmpdir(), "axis-codex-ab-"));
   seedCodexHome(codexHome);
   return {
     codexHome,
@@ -812,7 +812,7 @@ function seedCodexWorkspace(cwd, memoryEnabled, task) {
   seedProjectWorkspace(cwd);
   seedTaskSpecificFiles(cwd, task);
 
-  const mdLines = ["# Continuum real UX A/B workspace"];
+  const mdLines = ["# Axis real UX A/B workspace"];
   if (memoryEnabled) {
     mdLines.push("");
     mdLines.push(buildCodexMemoryInstructions());
@@ -878,7 +878,7 @@ export async function runCodexAnswer({
     MEMORY_MODE: task.memory_mode,
   };
   const workspace = mkdtempSync(
-    path.join(os.tmpdir(), "continuum-codex-workspace-"),
+    path.join(os.tmpdir(), "axis-codex-workspace-"),
   );
   let preparedMemoryContext = "";
   let memoryDelivery = noCodexMemoryDelivery();

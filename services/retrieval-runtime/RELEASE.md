@@ -77,12 +77,12 @@ npm run test:real-user-experience
 用户安装、统一命令、页面启动、Claude 插件安装、Codex 启动编排，已经移到：
 
 ```text
-packages/continuum-cli
+packages/axis-cli
 ```
 
 也就是说：
 
-- 面向用户的 npm 包：`@jiankarlin/continuum`
+- 面向用户的 npm 包：`axis-agent`
 - 这一层：内部服务和宿主适配源产物
 
 ## 6. Claude 插件打包在哪里做
@@ -90,7 +90,7 @@ packages/continuum-cli
 Claude 插件 zip 的正式打包入口已经移到：
 
 ```text
-packages/continuum-cli
+packages/axis-cli
 ```
 
 如果只是查看插件源文件，仍然看这里：

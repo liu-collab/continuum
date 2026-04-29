@@ -30,7 +30,7 @@ export function buildBaseUrl(baseUrl: string, pathname: string): URL {
 }
 
 export function buildProviderUserAgent(providerId: string): string {
-  return `continuum-mna/${MNA_VERSION} (+provider=${providerId})`;
+  return `axis-mna/${MNA_VERSION} (+provider=${providerId})`;
 }
 
 export function emptyUsage(): Usage {

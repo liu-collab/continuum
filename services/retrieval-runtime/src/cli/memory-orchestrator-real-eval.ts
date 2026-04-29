@@ -11,7 +11,7 @@ import { buildEvalCases } from "./memory-orchestrator-real-eval-cases.js";
 
 export const DEFAULT_MODEL = "gpt-5.3-codex-spark";
 export const DEFAULT_OUTPUT_BASE = path.resolve("docs", "memory-orchestrator-real-llm-eval");
-export const DEFAULT_MANAGED_CONFIG_PATH = path.join(os.homedir(), ".continuum", "managed", "mna", "config.json");
+export const DEFAULT_MANAGED_CONFIG_PATH = path.join(os.homedir(), ".axis", "managed", "mna", "config.json");
 /**
  * 按指标区分的通过阈值。
  * 不同指标的评分特性不同：

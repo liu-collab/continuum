@@ -11,7 +11,7 @@ const mappings = new Map([
   ["WRITEBACK_LLM_TIMEOUT_MS", "MEMORY_LLM_TIMEOUT_MS"],
   ["WRITEBACK_LLM_EFFORT", "MEMORY_LLM_EFFORT"],
   ["WRITEBACK_LLM_MAX_TOKENS", "MEMORY_LLM_MAX_TOKENS"],
-  ["WRITEBACK_LLM_CONFIG_PATH", "CONTINUUM_MEMORY_LLM_CONFIG_PATH"],
+  ["WRITEBACK_LLM_CONFIG_PATH", "AXIS_MEMORY_LLM_CONFIG_PATH"],
 ]);
 
 export type MemoryLlmConfigFileMigrationResult = {
@@ -54,7 +54,7 @@ class MemoryLlmConfigMigrationError extends Error {
     readonly originalError: unknown,
     readonly rollbackErrors: readonly MemoryLlmConfigRollbackError[] = [],
   ) {
-    super(`failed ${filePath}: ${errorMessage(originalError)}`);
+    super(buildMigrationErrorMessage(filePath, originalError, rollbackErrors));
   }
 }
 
@@ -277,6 +277,25 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function buildMigrationErrorMessage(
+  filePath: string,
+  originalError: unknown,
+  rollbackErrors: readonly MemoryLlmConfigRollbackError[],
+) {
+  const baseMessage = `failed ${filePath}: ${errorMessage(originalError)}`;
+  if (rollbackErrors.length === 0) {
+    return baseMessage;
+  }
+
+  return [
+    baseMessage,
+    "rollback failed:",
+    rollbackErrors
+      .map((rollbackError) => `${rollbackError.filePath}: ${errorMessage(rollbackError.error)}`)
+      .join("; "),
+  ].join(" ");
+}
+
 function rollbackMigrations(
   attemptedWrites: readonly MemoryLlmConfigFileMigrationSnapshot[],
   fileSystem: MemoryLlmConfigMigrationFileSystem,
@@ -303,13 +322,7 @@ function formatMigrationError(error: unknown) {
     return error.message;
   }
 
-  return [
-    error.message,
-    "rollback failed:",
-    error.rollbackErrors
-      .map((rollbackError) => `${rollbackError.filePath}: ${errorMessage(rollbackError.error)}`)
-      .join("; "),
-  ].join(" ");
+  return error.message;
 }
 
 function isMainModule() {

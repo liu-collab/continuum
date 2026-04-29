@@ -1,197 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <circle cx="32" cy="32" r="24" fill="#ffffff" stroke="#e0e0e0" stroke-width="1" />
 
-  <g transform="translate(34 34)">
-    <g transform="rotate(-18)">
-      <ellipse
-        cx="0"
-        cy="0"
-        rx="19.5"
-        ry="10.2"
-        fill="none"
-        stroke="#0066cc"
-        stroke-opacity="0.16"
-        stroke-width="1.15"
-      />
-      <g>
-        <animateTransform
-          attributeName="transform"
-          type="rotate"
-          from="0 0 0"
-          to="360 0 0"
-          dur="11.5s"
-          repeatCount="indefinite"
-        />
-        <ellipse
-          cx="0"
-          cy="0"
-          rx="19.5"
-          ry="10.2"
-          fill="none"
-          stroke="#0066cc"
-          stroke-width="4.8"
-          stroke-linecap="round"
-          pathLength="100"
-          stroke-dasharray="42 58"
-          stroke-dashoffset="12"
-        />
-      </g>
-    </g>
+  <path id="track1" d="M 54,32 A 22,8.5 -18 0 1 10,32 A 22,8.5 -18 0 1 54,32" fill="none" stroke="#0066cc" stroke-opacity="0.2" stroke-width="0.8"/>
+  <path id="track2" d="M 49,32 A 17,6.2 35 0 1 15,32 A 17,6.2 35 0 1 49,32" fill="none" stroke="#8b5cf6" stroke-opacity="0.22" stroke-width="0.8"/>
+  <path id="track3" d="M 43,32 A 11,4.5 -50 0 1 21,32 A 11,4.5 -50 0 1 43,32" fill="none" stroke="#f59e0b" stroke-opacity="0.26" stroke-width="0.8"/>
 
-    <g transform="rotate(67)">
-      <ellipse
-        cx="0"
-        cy="0"
-        rx="18.2"
-        ry="7.4"
-        fill="none"
-        stroke="#0066cc"
-        stroke-opacity="0.15"
-        stroke-width="1.05"
-      />
-      <g>
-        <animateTransform
-          attributeName="transform"
-          type="rotate"
-          from="0 0 0"
-          to="-360 0 0"
-          dur="14s"
-          repeatCount="indefinite"
-        />
-        <ellipse
-          cx="0"
-          cy="0"
-          rx="18.2"
-          ry="7.4"
-          fill="none"
-          stroke="#2997ff"
-          stroke-width="3"
-          stroke-linecap="round"
-          opacity="0.96"
-          pathLength="100"
-          stroke-dasharray="34 66"
-          stroke-dashoffset="54"
-        />
-      </g>
-    </g>
-
-    <g opacity="0.98">
-      <g transform="rotate(18)">
-        <ellipse
-          cx="0"
-          cy="0"
-          rx="11.2"
-          ry="6.2"
-          fill="none"
-          stroke="#0066cc"
-          stroke-opacity="0.13"
-          stroke-width="0.95"
-        />
-        <g>
-          <animateTransform
-            attributeName="transform"
-            type="rotate"
-            from="0 0 0"
-            to="360 0 0"
-            dur="8.2s"
-            repeatCount="indefinite"
-          />
-          <ellipse
-            cx="0"
-            cy="0"
-            rx="11.2"
-            ry="6.2"
-            fill="none"
-            stroke="#0066cc"
-            stroke-width="3.2"
-            stroke-linecap="round"
-            pathLength="100"
-            stroke-dasharray="26 74"
-            stroke-dashoffset="8"
-          />
-        </g>
-      </g>
-
-      <g transform="rotate(-43)">
-        <ellipse
-          cx="0"
-          cy="0"
-          rx="8.6"
-          ry="4.1"
-          fill="none"
-          stroke="#0066cc"
-          stroke-opacity="0.12"
-          stroke-width="0.9"
-        />
-        <g>
-          <animateTransform
-            attributeName="transform"
-            type="rotate"
-            from="0 0 0"
-            to="-360 0 0"
-            dur="6.5s"
-            repeatCount="indefinite"
-          />
-          <ellipse
-            cx="0"
-            cy="0"
-            rx="8.6"
-            ry="4.1"
-            fill="none"
-            stroke="#2997ff"
-            stroke-width="2.7"
-            stroke-linecap="round"
-            opacity="0.96"
-            pathLength="100"
-            stroke-dasharray="22 78"
-            stroke-dashoffset="48"
-          />
-        </g>
-      </g>
-
-      <g transform="rotate(71)">
-        <ellipse
-          cx="0"
-          cy="0"
-          rx="5.9"
-          ry="2.7"
-          fill="none"
-          stroke="#0066cc"
-          stroke-opacity="0.11"
-          stroke-width="0.85"
-        />
-        <g>
-          <animateTransform
-            attributeName="transform"
-            type="rotate"
-            from="0 0 0"
-            to="360 0 0"
-            dur="4.8s"
-            repeatCount="indefinite"
-          />
-          <ellipse
-            cx="0"
-            cy="0"
-            rx="5.9"
-            ry="2.7"
-            fill="none"
-            stroke="#2997ff"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            opacity="0.95"
-            pathLength="100"
-            stroke-dasharray="18 82"
-            stroke-dashoffset="18"
-          />
-        </g>
-      </g>
-    </g>
-  </g>
-
-  <circle cx="34" cy="34" r="4.8" fill="#0066cc">
-    <animate attributeName="r" values="4.6;5.2;4.6" dur="3.6s" repeatCount="indefinite" />
-    <animate attributeName="opacity" values="0.92;1;0.92" dur="3.6s" repeatCount="indefinite" />
+  <circle r="2.2" fill="#0066cc">
+    <animateMotion dur="11s" repeatCount="indefinite"><mpath href="#track1"/></animateMotion>
+  </circle>
+  <circle r="1.9" fill="#8b5cf6">
+    <animateMotion dur="8s" repeatCount="indefinite"><mpath href="#track2"/></animateMotion>
+  </circle>
+  <circle r="1.7" fill="#f59e0b">
+    <animateMotion dur="6s" repeatCount="indefinite"><mpath href="#track3"/></animateMotion>
   </circle>
 
-  <circle cx="34" cy="34" r="9.5" fill="none" stroke="#0066cc" stroke-opacity="0.16" stroke-width="1.5" />
+  <!-- ripple 1 -->
+  <circle cx="32" cy="32" r="5" fill="none" stroke="#0066cc" stroke-opacity="0" stroke-width="1.2">
+    <animate attributeName="r" values="5;12;5" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-opacity" values="0.35;0;0" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- ripple 2 -->
+  <circle cx="32" cy="32" r="5" fill="none" stroke="#0066cc" stroke-opacity="0" stroke-width="0.8">
+    <animate attributeName="r" values="5;12;5" dur="3s" begin="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-opacity" values="0.25;0;0" dur="3s" begin="1.5s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- center breathing -->
+  <circle cx="32" cy="32" r="5.8" fill="#0066cc">
+    <animate attributeName="r" values="4;6.5;4" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.75;1;0.75" dur="3s" repeatCount="indefinite"/>
+  </circle>
 </svg>
