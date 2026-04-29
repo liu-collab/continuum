@@ -194,11 +194,11 @@
       "description": "尚未配置聊天主模型。完成这 3 步后，就可以开始对话。",
       "steps": {
         "1": "1. 选择提供商",
-        "2": "2. 输入 API Key",
+        "2": "2. 填写连接信息",
         "3": "3. 确认模型"
       },
       "providerStepTitle": "选择提供商",
-      "apiKeyStepTitle": "输入 API Key",
+      "apiKeyStepTitle": "填写 API Key 和 base_url",
       "modelStepTitle": "确认模型名",
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "sk-...",

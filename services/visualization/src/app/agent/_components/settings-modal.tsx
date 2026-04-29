@@ -635,6 +635,11 @@ export function SettingsModal({
       return;
     }
 
+    if (setupStep === 2 && !setupBaseUrl.trim()) {
+      setErrorMessage(t("runtimeConfig.errors.providerBaseUrlRequired"));
+      return;
+    }
+
     setErrorMessage(null);
     setSetupStep((current) => (current < 3 ? ((current + 1) as SetupWizardStep) : current));
   }
@@ -899,6 +904,17 @@ export function SettingsModal({
                   {t("runtimeConfig.setupWizard.ollamaNoApiKey")}
                 </div>
               )}
+              <label className="block">
+                <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
+                <input
+                  aria-label={t("runtimeConfig.providerBaseUrl")}
+                  value={setupBaseUrl}
+                  onChange={(event) => setSetupBaseUrl(event.target.value)}
+                  placeholder={t("runtimeConfig.providerBaseUrl")}
+                  className="field mt-1"
+                  data-testid="setup-provider-base-url"
+                />
+              </label>
             </div>
           ) : null}
 
@@ -915,17 +931,6 @@ export function SettingsModal({
                   onChange={(event) => setSetupModel(event.target.value)}
                   placeholder={t("runtimeConfig.providerModel")}
                   className="field mt-1"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
-                <input
-                  aria-label={t("runtimeConfig.providerBaseUrl")}
-                  value={setupBaseUrl}
-                  onChange={(event) => setSetupBaseUrl(event.target.value)}
-                  placeholder={t("runtimeConfig.providerBaseUrl")}
-                  className="field mt-1"
-                  data-testid="setup-provider-base-url"
                 />
               </label>
             </div>

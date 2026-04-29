@@ -214,14 +214,15 @@ describe("SettingsModal", () => {
     await user.click(screen.getByTestId("setup-provider-custom"));
     await user.click(screen.getByTestId("setup-wizard-next"));
     await user.type(screen.getByLabelText("API Key"), "sk-custom");
-    await user.click(screen.getByTestId("setup-wizard-next"));
-    await user.clear(screen.getByLabelText("模型名"));
-    await user.type(screen.getByLabelText("模型名"), "qwen-plus");
+    expect(screen.getByLabelText("provider base_url")).toHaveValue("https://api.example.com/v1");
     await user.clear(screen.getByLabelText("provider base_url"));
     await user.type(
       screen.getByLabelText("provider base_url"),
       "https://dashscope.aliyuncs.com/compatible-mode/v1",
     );
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.clear(screen.getByLabelText("模型名"));
+    await user.type(screen.getByLabelText("模型名"), "qwen-plus");
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
@@ -274,9 +275,9 @@ describe("SettingsModal", () => {
     await user.click(screen.getByTestId("setup-provider-openai"));
     await user.click(screen.getByTestId("setup-wizard-next"));
     await user.type(screen.getByLabelText("API Key"), "sk-router");
-    await user.click(screen.getByTestId("setup-wizard-next"));
     await user.clear(screen.getByLabelText("provider base_url"));
     await user.type(screen.getByLabelText("provider base_url"), "https://openrouter.ai/api/v1");
+    await user.click(screen.getByTestId("setup-wizard-next"));
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
