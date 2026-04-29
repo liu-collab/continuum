@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -12,31 +11,8 @@ import {
 } from "./managed-state.js";
 import { stopManagedMna } from "./mna-command.js";
 import { stopLegacyAxisProcesses } from "./process-cleanup.js";
-import { spawnCrossPlatform, terminateProcess } from "./utils.js";
-
-async function runForegroundQuiet(command: string, args: string[]) {
-  await new Promise<void>((resolve, reject) => {
-    let stderr = "";
-    const child = spawnCrossPlatform(command, args, {
-      stdio: ["ignore", "ignore", "pipe"],
-      env: process.env,
-    });
-
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      const detail = stderr.trim();
-      reject(new Error(`command failed: ${command} ${args.join(" ")}${detail ? `\n${detail}` : ""}`));
-    });
-    child.on("error", reject);
-  });
-}
+import { removeDockerContainer } from "./docker-lifecycle.js";
+import { terminateProcess } from "./utils.js";
 
 async function removePathIfExists(targetPath: string) {
   await rm(targetPath, {
@@ -94,17 +70,16 @@ export async function runStopCommand() {
   }
 
   try {
-    await runForegroundQuiet("docker", ["rm", "-f", containerName]);
-    process.stdout.write(`已停止并移除容器: ${containerName}\n`);
+    const removed = await removeDockerContainer(containerName);
+    process.stdout.write(
+      removed
+        ? `已停止并移除容器: ${containerName}\n`
+        : `容器不存在，跳过清理: ${containerName}\n`,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-
-    if (message.includes("No such container")) {
-      process.stdout.write(`容器不存在，跳过清理: ${containerName}\n`);
-    } else {
-      process.stderr.write(`停止容器失败: ${message}\n`);
-      containerCleanupError = error instanceof Error ? error : new Error(message);
-    }
+    process.stderr.write(`停止容器失败: ${message}\n`);
+    containerCleanupError = error instanceof Error ? error : new Error(message);
   }
 
   await clearManagedRuntimeState();

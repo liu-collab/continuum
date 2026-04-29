@@ -461,6 +461,8 @@ Embedding 和 Memory LLM 都走同一个合并路径。
 
 ## 优化十四：Docker 错误处理从字符串匹配改为 exit code 判断
 
+**状态：已完成**
+
 ### 问题
 
 ```typescript

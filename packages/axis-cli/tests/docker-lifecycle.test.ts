@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const runForegroundMock = vi.hoisted(() => vi.fn());
 const runForegroundQuietMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
+const runCommandMock = vi.hoisted(() => vi.fn());
 const spawnMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/managed-process.js", () => ({
@@ -15,6 +16,7 @@ vi.mock("../src/utils.js", async (importOriginal) => {
   return {
     ...actual,
     pathExists: pathExistsMock,
+    runCommand: runCommandMock,
   };
 });
 
@@ -28,8 +30,10 @@ vi.mock("node:child_process", async (importOriginal) => {
 
 import {
   buildDockerHostGatewayArgs,
+  cleanupManagedStackContainer,
   ensureDockerDaemonReady,
   ensureDockerInstalled,
+  isDockerMissingContainerResult,
   resolveDockerDesktopPath,
 } from "../src/docker-lifecycle.js";
 
@@ -39,6 +43,7 @@ describe("docker lifecycle", () => {
     runForegroundMock.mockReset();
     runForegroundQuietMock.mockReset();
     pathExistsMock.mockReset();
+    runCommandMock.mockReset();
     spawnMock.mockReset();
   });
 
@@ -57,6 +62,21 @@ describe("docker lifecycle", () => {
     ]);
     expect(buildDockerHostGatewayArgs("win32")).toEqual([]);
     expect(buildDockerHostGatewayArgs("darwin")).toEqual([]);
+  });
+
+  it("detects missing docker containers across supported CLI outputs", async () => {
+    expect(isDockerMissingContainerResult({ code: 1, stderr: "Error: No such container: axis-stack" })).toBe(true);
+    expect(isDockerMissingContainerResult({ code: 1, stderr: "container axis-stack not found" })).toBe(true);
+    expect(isDockerMissingContainerResult({ code: 1, stderr: "" })).toBe(true);
+    expect(isDockerMissingContainerResult({ code: 2, stderr: "permission denied" })).toBe(false);
+
+    runCommandMock.mockResolvedValueOnce({
+      code: 1,
+      stdout: "",
+      stderr: "",
+    });
+
+    await expect(cleanupManagedStackContainer()).resolves.toBe(false);
   });
 
   it("does not install Docker Desktop on Linux when docker CLI is missing", async () => {

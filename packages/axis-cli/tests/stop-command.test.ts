@@ -7,6 +7,7 @@ const readManagedStateMock = vi.hoisted(() => vi.fn());
 const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const stopManagedMnaMock = vi.hoisted(() => vi.fn());
 const stopLegacyAxisProcessesMock = vi.hoisted(() => vi.fn());
+const removeDockerContainerMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -43,6 +44,10 @@ vi.mock("../src/process-cleanup.js", () => ({
   stopLegacyAxisProcesses: stopLegacyAxisProcessesMock,
 }));
 
+vi.mock("../src/docker-lifecycle.js", () => ({
+  removeDockerContainer: removeDockerContainerMock,
+}));
+
 import { runStopCommand } from "../src/stop-command.js";
 
 function mockSpawnExit(exitCode: number) {
@@ -70,6 +75,7 @@ describe("runStopCommand", () => {
     writeManagedStateMock.mockReset();
     stopManagedMnaMock.mockReset();
     stopLegacyAxisProcessesMock.mockReset();
+    removeDockerContainerMock.mockReset();
   });
 
   it("clears managed runtime residue but keeps persisted config files untouched", async () => {
@@ -88,6 +94,7 @@ describe("runStopCommand", () => {
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
     stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
 
@@ -136,6 +143,7 @@ describe("runStopCommand", () => {
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
     stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
 
@@ -144,7 +152,7 @@ describe("runStopCommand", () => {
   });
 
   it("still clears local runtime residue before surfacing docker removal failures", async () => {
-    mockSpawnExit(1);
+    mockSpawnExit(0);
     rmMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -158,6 +166,7 @@ describe("runStopCommand", () => {
     });
     stopManagedMnaMock.mockResolvedValue(true);
     stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockRejectedValue(new Error("docker rm -f axis-stack failed with exit code 2"));
 
     await expect(runStopCommand()).rejects.toThrow(/docker rm -f axis-stack/);
     expect(rmMock).toHaveBeenCalledTimes(4);
@@ -169,28 +178,7 @@ describe("runStopCommand", () => {
   });
 
   it("treats missing containers as a successful stop and still clears runtime residue", async () => {
-    spawnMock.mockImplementation(() => {
-      let stderrHandler: ((chunk: string) => void) | undefined;
-      return {
-        stderr: {
-          on(event: string, handler: (chunk: string) => void) {
-            if (event === "data") {
-              stderrHandler = handler;
-            }
-            return this;
-          },
-        },
-        on(event: string, handler: (code?: number) => void) {
-          if (event === "exit") {
-            setImmediate(() => {
-              stderrHandler?.("Error response from daemon: No such container: axis-stack");
-              handler(1);
-            });
-          }
-          return this;
-        },
-      };
-    });
+    mockSpawnExit(0);
     rmMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -205,6 +193,7 @@ describe("runStopCommand", () => {
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
     stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockResolvedValue(false);
 
     await expect(runStopCommand()).resolves.toBeUndefined();
     expect(rmMock).toHaveBeenCalledTimes(4);
@@ -232,6 +221,7 @@ describe("runStopCommand", () => {
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
     stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
 

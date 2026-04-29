@@ -9,7 +9,7 @@ import {
   DEFAULT_MANAGED_STACK_IMAGE,
 } from "./managed-state.js";
 import { runForeground, runForegroundQuiet } from "./managed-process.js";
-import { pathExists, vendorPath } from "./utils.js";
+import { pathExists, runCommand, vendorPath } from "./utils.js";
 
 const STAGE_DIR_NAME = "stack-stage";
 const DEFAULT_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
@@ -93,22 +93,48 @@ export async function ensureDockerDaemonReady(options: DockerLifecycleOptions = 
 }
 
 export async function stopLegacyPostgresContainer() {
-  await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER]).catch(
-    () => undefined,
+  await removeDockerContainer(DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER).catch(() => undefined);
+}
+
+type DockerCommandResult = {
+  code: number;
+  stdout: string;
+  stderr: string;
+};
+
+export function isDockerMissingContainerResult(result: Pick<DockerCommandResult, "code" | "stderr">) {
+  const stderr = result.stderr.trim();
+  return (
+    stderr.includes("No such container")
+    || stderr.includes("not found")
+    || (result.code === 1 && stderr.length === 0)
   );
 }
 
-export async function cleanupManagedStackContainer() {
-  try {
-    await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]);
+function buildDockerRemoveError(containerName: string, result: DockerCommandResult) {
+  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  return new Error(output || `docker rm -f ${containerName} failed with exit code ${result.code}`);
+}
+
+export async function removeDockerContainer(containerName: string) {
+  const result = await runCommand("docker", ["rm", "-f", containerName], {
+    captureOutput: true,
+    env: process.env,
+  });
+
+  if (result.code === 0) {
     return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("No such container")) {
-      return false;
-    }
-    throw error;
   }
+
+  if (isDockerMissingContainerResult(result)) {
+    return false;
+  }
+
+  throw buildDockerRemoveError(containerName, result);
+}
+
+export async function cleanupManagedStackContainer() {
+  return removeDockerContainer(DEFAULT_MANAGED_STACK_CONTAINER);
 }
 
 export async function prepareStackContext(packageRoot: string, includeVisualization = true) {
