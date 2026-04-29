@@ -72,7 +72,7 @@
     "connectionLabel": "连接",
     "connectionClosedTitle": "连接已关闭",
     "connectionClosedDescription": "请先恢复 `memory-native-agent`，然后再继续发送消息。",
-    "providerNotConfiguredTitle": "尚未配置聊天主模型",
+    "providerNotConfiguredTitle": "尚未配置主模型",
     "providerNotConfiguredDescription": "请先在设置面板中配置 provider，配置完成后就可以继续发送消息。",
     "configureProvider": "配置模型",
     "embeddingNotConfiguredTitle": "尚未配置向量检索",
@@ -128,7 +128,7 @@
     "memoryLlmTitle": "记忆模型",
     "memoryLlmMode": "记忆模型来源",
     "memoryLlmModeOptions": {
-      "same_as_primary": "与聊天主模型一致",
+      "same_as_primary": "与主模型一致",
       "custom": "独立配置"
     },
     "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
@@ -136,7 +136,7 @@
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY（可选）",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
-    "providerTitle": "聊天主模型",
+    "providerTitle": "主模型",
     "providerKind": "类型",
     "mcpTitle": "MCP 服务配置",
     "mcpAdd": "新增 MCP 服务",
@@ -190,8 +190,8 @@
     },
     "save": "保存配置",
     "setupWizard": {
-      "title": "配置聊天模型",
-      "description": "尚未配置聊天主模型。完成这 3 步后，就可以开始对话。",
+      "title": "配置主模型",
+      "description": "尚未配置主模型。完成这 3 步后，就可以开始对话。",
       "steps": {
         "1": "1. 选择提供商",
         "2": "2. 填写连接信息",
@@ -223,7 +223,7 @@
       "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
       "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
-      "memoryLlmFollowUnsupported": "当前聊天主模型不能直接同步为记忆模型，请改为独立配置。",
+      "memoryLlmFollowUnsupported": "当前主模型不能直接同步为记忆模型，请改为独立配置。",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS 需要是正整数。",
       "memoryLlmMaxTokensInvalid": "memory llm 最大输出 token 需要是正整数。",
       "governanceIntervalInvalid": "自动治理扫描间隔需要是大于 0 的整数分钟。",

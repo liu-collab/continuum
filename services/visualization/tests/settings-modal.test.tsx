@@ -154,7 +154,7 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByText("配置聊天模型")).toBeInTheDocument();
+    expect(screen.getByText("配置主模型")).toBeInTheDocument();
     expect(screen.getByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
     await user.click(screen.getByTestId("setup-provider-deepseek"));
     await user.click(screen.getByTestId("setup-wizard-next"));
@@ -410,7 +410,7 @@ describe("SettingsModal", () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText("EMBEDDING_MODEL")).toHaveValue("text-embedding-3-small");
     });
-    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(
@@ -582,7 +582,7 @@ describe("SettingsModal", () => {
     );
 
     await openAdvancedSettings(user);
-    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
     expect(onCheckMemoryLlm).toHaveBeenCalledTimes(1);
@@ -789,7 +789,7 @@ describe("SettingsModal", () => {
     );
 
     await openAdvancedSettings(user);
-    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与聊天主模型一致");
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
     expect(screen.queryByPlaceholderText("MEMORY_LLM_MODEL")).not.toBeInTheDocument();
   });
 
@@ -850,7 +850,7 @@ describe("SettingsModal", () => {
     );
   });
 
-  it("can save the memory model as the same config as the primary chat model", async () => {
+  it("can save the memory model as the same config as the primary model", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
 
@@ -878,7 +878,7 @@ describe("SettingsModal", () => {
 
     await openAdvancedSettings(user);
     await user.click(screen.getByTestId("memory-model-mode-select"));
-    await user.click(screen.getByRole("option", { name: "与聊天主模型一致" }));
+    await user.click(screen.getByRole("option", { name: "与主模型一致" }));
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(

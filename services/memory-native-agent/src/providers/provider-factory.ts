@@ -12,7 +12,7 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
     return new MisconfiguredProvider({
       kind: config.kind,
       model: config.model,
-      detail: "尚未配置聊天主模型。请在 Agent 页面的设置面板中配置 provider。 | Primary chat model is not configured. Configure a provider in Agent settings.",
+      detail: "尚未配置主模型。请在 Agent 页面的设置面板中配置 provider。 | Primary model is not configured. Configure a provider in Agent settings.",
     });
   }
 

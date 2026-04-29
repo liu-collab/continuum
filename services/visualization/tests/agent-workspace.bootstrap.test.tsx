@@ -270,7 +270,7 @@ describe("AgentWorkspace bootstrap states", () => {
     );
 
     expect(await screen.findByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
-    expect(screen.getByText("尚未配置聊天主模型。完成这 3 步后，就可以开始对话。")).toBeInTheDocument();
+    expect(screen.getByText("尚未配置主模型。完成这 3 步后，就可以开始对话。")).toBeInTheDocument();
   });
 
   it("renders two-column workspace and header dependency badges after bootstrap succeeds", () => {
@@ -400,8 +400,8 @@ describe("AgentWorkspace bootstrap states", () => {
       </AgentI18nProvider>
     );
 
-    expect(screen.getByText("openai · deepseek-chat")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · deepseek-chat");
+    expect(screen.getByText("OpenAI-compatible · deepseek-chat")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("OpenAI-compatible · deepseek-chat");
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
     expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "unknown");

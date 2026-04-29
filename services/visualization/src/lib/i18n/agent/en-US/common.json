@@ -72,7 +72,7 @@
     "connectionLabel": "Connection",
     "connectionClosedTitle": "Connection closed",
     "connectionClosedDescription": "Restore `memory-native-agent` before sending more messages.",
-    "providerNotConfiguredTitle": "Primary chat model is not configured",
+    "providerNotConfiguredTitle": "Primary model is not configured",
     "providerNotConfiguredDescription": "Configure a provider in settings before sending messages.",
     "configureProvider": "Configure model",
     "embeddingNotConfiguredTitle": "Memory retrieval is not configured",
@@ -128,7 +128,7 @@
     "memoryLlmTitle": "Memory model",
     "memoryLlmMode": "Memory model source",
     "memoryLlmModeOptions": {
-      "same_as_primary": "Same as primary chat model",
+      "same_as_primary": "Same as primary model",
       "custom": "Custom"
     },
     "memoryLlmBaseUrl": "MEMORY_LLM_BASE_URL",
@@ -136,7 +136,7 @@
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY (optional)",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
-    "providerTitle": "Primary chat model",
+    "providerTitle": "Primary model",
     "providerKind": "Kind",
     "mcpTitle": "MCP server config",
     "mcpAdd": "Add MCP server",
@@ -190,8 +190,8 @@
     },
     "save": "Save config",
     "setupWizard": {
-      "title": "Configure chat model",
-      "description": "The primary chat model is not configured yet. Complete these 3 steps to start chatting.",
+      "title": "Configure primary model",
+      "description": "The primary model is not configured yet. Complete these 3 steps to start chatting.",
       "steps": {
         "1": "1. Choose provider",
         "2": "2. Enter connection",
@@ -223,7 +223,7 @@
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
-      "memoryLlmFollowUnsupported": "The current primary chat model cannot be mirrored directly as the memory model. Switch to custom mode.",
+      "memoryLlmFollowUnsupported": "The current primary model cannot be mirrored directly as the memory model. Switch to custom mode.",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS must be a positive integer.",
       "memoryLlmMaxTokensInvalid": "memory llm max output tokens must be a positive integer.",
       "governanceIntervalInvalid": "Automatic governance scan interval must be a positive integer number of minutes.",
