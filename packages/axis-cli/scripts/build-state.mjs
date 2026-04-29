@@ -233,7 +233,19 @@ function serviceDefinitions(packageDir) {
       buildInputs: ["bin", "src", "scripts", "package.json", "package-lock.json", "tsconfig.json"],
       entryInputs: ["bin", "src", "scripts", "package.json", "package-lock.json", "tsconfig.json", "README.md"],
       buildOutputs: ["dist/src/index.js"],
-      vendorOutputs: [path.join(packageDir, "vendor", "memory-native-agent", "bin", "mna-server.mjs")],
+      vendorOutputs: [
+        path.join(packageDir, "vendor", "memory-native-agent", "bin", "mna-server.mjs"),
+        path.join(
+          packageDir,
+          "vendor",
+          "memory-native-agent",
+          "node_modules",
+          "yaml",
+          "dist",
+          "doc",
+          "directives.js",
+        ),
+      ],
     },
   };
 }

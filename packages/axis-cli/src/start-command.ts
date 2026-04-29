@@ -57,9 +57,11 @@ import {
   cleanupManagedStackContainer,
   ensureDockerDaemonReady,
   ensureDockerInstalled,
+  isDockerContainerRunning,
   prepareStackContext,
   pruneDanglingDockerImages,
   saveDockerContainerLogs,
+  stopLegacyContinuumStackContainer,
   stopLegacyPostgresContainer,
 } from "./docker-lifecycle.js";
 import { npmCommand, runForeground } from "./managed-process.js";
@@ -488,7 +490,8 @@ export async function runStartCommand(
   const runtimeUrl = buildServiceUrl(accessibleHost, runtimePort);
   const uiUrl = buildServiceUrl(accessibleHost, visualizationPort);
   const uiDevBackendHealthy = uiDev
-    ? await managedBackendIsHealthy(storageUrl, runtimeUrl)
+    ? await isDockerContainerRunning(DEFAULT_MANAGED_STACK_CONTAINER)
+      && await managedBackendIsHealthy(storageUrl, runtimeUrl)
     : false;
   const providerConfigured = await isPrimaryProviderConfigured(options);
   const localManagedConfigPath = axisManagedConfigPath();
@@ -545,11 +548,7 @@ export async function runStartCommand(
   }
 
   const buildState = await loadBuildStateHelpers(packageRoot);
-  const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const databasePassword = resolveDatabasePasswordFromState(initialManagedState);
-  const readModelDsn =
-    process.env.STORAGE_READ_MODEL_DSN
-    ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const stackManagedConfigPath = "/opt/axis/managed/config.json";
   const stackManagedSecretsPath = "/opt/axis/managed/secrets.json";
   await migrateManagedConfigFiles();
@@ -583,7 +582,12 @@ export async function runStartCommand(
   writeProgressDone("Docker 检查完成。", "Docker check completed.");
   await stopLegacyAxisProcesses();
   await stopLegacyPostgresContainer();
+  await stopLegacyContinuumStackContainer();
   await stopManagedVisualizationDevServer().catch(() => undefined);
+  const postgresPort = await resolveManagedPostgresPort(options, bindHost);
+  const readModelDsn =
+    process.env.STORAGE_READ_MODEL_DSN
+    ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
 
   const vendorRefresh = uiDev
     ? { refreshed: false, visualizationNeedsBuild: false }

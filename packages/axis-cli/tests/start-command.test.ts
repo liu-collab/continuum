@@ -129,24 +129,47 @@ vi.mock("../src/build-state-loader.js", () => ({
 import { resolveManagedPostgresPort, runStartCommand } from "../src/start-command.js";
 import { assertFixedServicePortsAvailable } from "../src/port-utils.js";
 
-function mockSuccessfulSpawn() {
-  spawnMock.mockImplementation(() => ({
-    on(event: string, handler: (code?: number) => void) {
-      if (event === "exit") {
-        setImmediate(() => handler(0));
-      }
-      return this;
-    },
-    once(event: string, handler: (code?: number) => void) {
-      if (event === "exit") {
-        setImmediate(() => handler(0));
-      }
-      return this;
-    },
-    unref() {
-      return undefined;
-    },
-  }));
+function mockSuccessfulSpawn(options: { axisStackRunning?: boolean } = {}) {
+  const axisStackRunning = options.axisStackRunning ?? true;
+  spawnMock.mockImplementation((command: string, args: string[] = []) => {
+    const isDockerInspectAxisStack =
+      command === "cmd"
+      && args.includes("docker")
+      && args.includes("inspect")
+      && args.includes("axis-stack");
+    return {
+      stdout: {
+        setEncoding: vi.fn(),
+        on(event: string, handler: (chunk: string) => void) {
+          if (event === "data" && isDockerInspectAxisStack) {
+            setImmediate(() => handler(`${axisStackRunning ? "true" : "false"}\n`));
+          }
+          return this;
+        },
+      },
+      stderr: {
+        setEncoding: vi.fn(),
+        on() {
+          return this;
+        },
+      },
+      on(event: string, handler: (code?: number) => void) {
+        if (event === "exit") {
+          setImmediate(() => handler(0));
+        }
+        return this;
+      },
+      once(event: string, handler: (code?: number) => void) {
+        if (event === "exit") {
+          setImmediate(() => handler(0));
+        }
+        return this;
+      },
+      unref() {
+        return undefined;
+      },
+    };
+  });
 }
 
 describe("runStartCommand", () => {
@@ -1333,6 +1356,83 @@ describe("runStartCommand", () => {
     expect(dockerRun?.[1]).not.toContain("127.0.0.1:3003:3003");
     expect(startManagedMnaMock).toHaveBeenCalled();
     expect(uiDevSpawn).toBeDefined();
+  });
+
+  it("does not reuse healthy-looking ui-dev backend when axis-stack is not running", async () => {
+    mockSuccessfulSpawn({ axisStackRunning: false });
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({ "ui-dev": true }, import.meta.url);
+
+    const spawnCommands = spawnMock.mock.calls.map((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return [command, ...args].join(" ");
+    });
+
+    expect(stopLegacyAxisProcessesMock).toHaveBeenCalled();
+    expect(planStackImageBuildMock).toHaveBeenCalled();
+    expect(spawnCommands.some((command) => command.includes("docker run"))).toBe(true);
   });
 
   it("falls back to the next available managed postgres port when default is unavailable", async () => {

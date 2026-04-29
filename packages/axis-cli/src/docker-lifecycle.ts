@@ -18,6 +18,7 @@ import { pathExists, runCommand, vendorPath } from "./utils.js";
 const STAGE_DIR_NAME = "stack-stage";
 const WINDOWS_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
 const DARWIN_DOCKER_DESKTOP_PATH = "/Applications/Docker.app/Contents/MacOS/Docker";
+const LEGACY_CONTINUUM_STACK_CONTAINER = "continuum-stack";
 
 type DockerLifecycleOptions = {
   platform?: NodeJS.Platform;
@@ -276,6 +277,10 @@ export async function stopLegacyPostgresContainer() {
   await removeDockerContainer(DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER).catch(() => undefined);
 }
 
+export async function stopLegacyContinuumStackContainer() {
+  await removeDockerContainer(LEGACY_CONTINUUM_STACK_CONTAINER).catch(() => undefined);
+}
+
 type DockerCommandResult = {
   code: number;
   stdout: string;
@@ -325,6 +330,16 @@ export async function removeDockerContainer(containerName: string) {
 
 export async function cleanupManagedStackContainer() {
   return removeDockerContainer(DEFAULT_MANAGED_STACK_CONTAINER);
+}
+
+export async function isDockerContainerRunning(containerName = DEFAULT_MANAGED_STACK_CONTAINER) {
+  const result = await runCommand("docker", ["inspect", "-f", "{{.State.Running}}", containerName], {
+    captureOutput: true,
+    env: process.env,
+    timeoutMs: 2_000,
+  }).catch(() => null);
+
+  return result?.code === 0 && result.stdout.trim() === "true";
 }
 
 export async function saveDockerContainerLogs(

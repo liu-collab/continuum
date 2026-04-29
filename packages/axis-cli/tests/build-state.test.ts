@@ -97,6 +97,10 @@ async function createVendorFixture(rootDir: string) {
   await writeFixtureFile(path.join(vendorRoot, "visualization", "standalone", "server.js"), "export {};\n");
   await writeFixtureFile(path.join(vendorRoot, "visualization", "standalone", "package.json"), "{\"name\":\"viz\"}\n");
   await writeFixtureFile(path.join(vendorRoot, "memory-native-agent", "bin", "mna-server.mjs"), "console.log('mna');\n");
+  await writeFixtureFile(
+    path.join(vendorRoot, "memory-native-agent", "node_modules", "yaml", "dist", "doc", "directives.js"),
+    "export {};\n",
+  );
   await writeFixtureFile(path.join(vendorRoot, "stack", "Dockerfile"), "FROM node:22\n");
   await writeFixtureFile(path.join(vendorRoot, "stack", "entrypoint.mjs"), "console.log('entry');\n");
 
@@ -194,6 +198,29 @@ describe("build state planning", () => {
 
     expect(docsPlan.changedEntries).toContain("visualization");
     expect(docsPlan.buildServices).toContain("visualization");
+  }, BUILD_STATE_TEST_TIMEOUT_MS);
+
+  it("refreshes memory-native-agent vendor when the yaml runtime doc file is missing", async () => {
+    const rootDir = path.join(tempHome, "repo");
+    const packageDir = await createVendorFixture(rootDir);
+    const { planVendorBuild, writeBuildState } = await import("../scripts/build-state.mjs");
+
+    const initialPlan = await planVendorBuild(packageDir);
+    await writeBuildState(initialPlan.nextState);
+
+    await rm(
+      path.join(packageDir, "vendor", "memory-native-agent", "node_modules", "yaml", "dist", "doc"),
+      {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      },
+    );
+    const missingYamlDocPlan = await planVendorBuild(packageDir);
+
+    expect(missingYamlDocPlan.changedEntries).toContain("memory-native-agent");
+    expect(missingYamlDocPlan.buildServices).not.toContain("memory-native-agent");
   }, BUILD_STATE_TEST_TIMEOUT_MS);
 
   it("rebuilds stack image when required vendor runtime files are incomplete", async () => {

@@ -45,10 +45,12 @@ import {
   ensureDockerDaemonReady,
   ensureDockerInstalled,
   isDockerMissingContainerResult,
+  isDockerContainerRunning,
   pruneDanglingDockerImages,
   removeDockerImage,
   resolveDockerDesktopPath,
   saveDockerContainerLogs,
+  stopLegacyContinuumStackContainer,
 } from "../src/docker-lifecycle.js";
 
 describe("docker lifecycle", () => {
@@ -99,6 +101,45 @@ describe("docker lifecycle", () => {
     });
 
     await expect(cleanupManagedStackContainer()).resolves.toBe(false);
+  });
+
+  it("detects whether the managed Docker container is running", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 0,
+      stdout: "true\n",
+      stderr: "",
+    });
+
+    await expect(isDockerContainerRunning("axis-stack")).resolves.toBe(true);
+    expect(runCommandMock).toHaveBeenCalledWith(
+      "docker",
+      ["inspect", "-f", "{{.State.Running}}", "axis-stack"],
+      expect.objectContaining({
+        captureOutput: true,
+        timeoutMs: 2_000,
+      }),
+    );
+  });
+
+  it("treats missing managed Docker containers as not running", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 1,
+      stdout: "",
+      stderr: "No such container: axis-stack",
+    });
+
+    await expect(isDockerContainerRunning("axis-stack")).resolves.toBe(false);
+  });
+
+  it("removes the legacy continuum stack container before a managed start", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    await expect(stopLegacyContinuumStackContainer()).resolves.toBeUndefined();
+    expect(runCommandMock).toHaveBeenCalledWith("docker", ["rm", "-f", "continuum-stack"], expect.any(Object));
   });
 
   it("does not install Docker Desktop on Linux when docker CLI is missing", async () => {

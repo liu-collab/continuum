@@ -44,7 +44,6 @@ function shouldRemoveGeneratedArtifact(name) {
     || name === "tests"
     || name === "example"
     || name === "examples"
-    || name === "doc"
     || name === "docs"
     || name === "coverage"
     || name === "bench"
