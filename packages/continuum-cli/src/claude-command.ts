@@ -19,7 +19,7 @@ export async function runClaudeInstallCommand(
     typeof options["plugin-dir"] === "string"
       ? options["plugin-dir"]
       : defaultClaudePluginInstallDir();
-  const force = options.force === true || options.force === "true";
+  const force = options.force === true;
   const packageSpecifier =
     typeof options.package === "string" ? options.package : "@jiankarlin/continuum@latest";
 

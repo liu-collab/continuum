@@ -3,8 +3,34 @@ export type ParsedCommand = {
   options: Record<string, string | boolean>;
 };
 
+const BOOLEAN_FLAGS = new Set([
+  "open",
+  "json",
+  "strict",
+  "force",
+  "ui-dev",
+  "ensure-runtime",
+  "skip-git-repo-check",
+  "rotate",
+]);
+
 function normalizeOptionName(token: string) {
   return token.replace(/^--/, "").trim();
+}
+
+function normalizeOptions(options: Record<string, string | boolean>) {
+  const normalized = { ...options };
+
+  for (const key of BOOLEAN_FLAGS) {
+    const value = normalized[key];
+    if (value === "true") {
+      normalized[key] = true;
+    } else if (value === "false") {
+      normalized[key] = false;
+    }
+  }
+
+  return normalized;
 }
 
 export function parseArgs(argv: string[]): ParsedCommand {
@@ -34,5 +60,5 @@ export function parseArgs(argv: string[]): ParsedCommand {
     index += 1;
   }
 
-  return { command, options };
+  return { command, options: normalizeOptions(options) };
 }

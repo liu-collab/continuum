@@ -399,7 +399,7 @@ export async function runMnaCommand(
   if (subcommand === "token") {
     const homeDir = parseMnaHome(options);
     const tokenPath = path.join(homeDir, "token.txt");
-    if (options.rotate === true || options.rotate === "true") {
+    if (options.rotate === true) {
       process.stdout.write("token 轮换依赖 memory-native-agent 重新启动后自生成，当前请执行 `continuum mna stop` 后再执行 `continuum mna start`。\n");
       return 0;
     }

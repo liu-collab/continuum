@@ -67,8 +67,7 @@ export async function runCodexUseCommand(
     typeof options["runtime-url"] === "string"
       ? options["runtime-url"]
       : process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
-  const ensureRuntime =
-    !(options["ensure-runtime"] === "false" || options["ensure-runtime"] === false);
+  const ensureRuntime = options["ensure-runtime"] !== false;
   const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime`;
   const codexHome = resolveCodexHome(options);
 

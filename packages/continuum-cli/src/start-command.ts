@@ -374,9 +374,9 @@ export async function runStartCommand(
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
-  const uiDev = options["ui-dev"] === true || options["ui-dev"] === "true";
+  const uiDev = options["ui-dev"] === true;
   const initialManagedState = await readManagedState();
-  const open = options.open === true || options.open === "true";
+  const open = options.open === true;
   const storageUrl = `http://${accessibleHost}:3001`;
   const runtimeUrl = `http://${accessibleHost}:3002`;
   const uiUrl = `http://${accessibleHost}:3003`;

@@ -57,6 +57,26 @@ describe("continuum cli", () => {
     expect(parsed.options["runtime-url"]).toBe("http://127.0.0.1:3002");
   });
 
+  it("normalizes boolean option values", () => {
+    const parsed = parseArgs([
+      "codex",
+      "use",
+      "--json",
+      "false",
+      "--strict",
+      "true",
+      "--ensure-runtime",
+      "false",
+      "--runtime-url",
+      "http://127.0.0.1:3002",
+    ]);
+
+    expect(parsed.options.json).toBe(false);
+    expect(parsed.options.strict).toBe(true);
+    expect(parsed.options["ensure-runtime"]).toBe(false);
+    expect(parsed.options["runtime-url"]).toBe("http://127.0.0.1:3002");
+  });
+
   it("parses the start command and exposes it in help", () => {
     const parsed = parseArgs([
       "start",

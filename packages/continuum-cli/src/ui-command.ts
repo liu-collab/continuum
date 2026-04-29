@@ -22,7 +22,7 @@ export async function runUiCommand(
   const explicitUrl = typeof options.url === "string" ? options.url : undefined;
   if (explicitUrl) {
     process.stdout.write(`visualization url ${explicitUrl}\n`);
-    if (options.open === true || options.open === "true") {
+    if (options.open === true) {
       await openBrowser(explicitUrl);
     }
     return;
@@ -46,7 +46,7 @@ export async function runUiCommand(
 
   if (defaultUiHealthy) {
     process.stdout.write(`visualization url ${DEFAULT_UI_URL}\n`);
-    if (options.open === true || options.open === "true") {
+    if (options.open === true) {
       await openBrowser(DEFAULT_UI_URL);
     }
     return;
@@ -64,7 +64,7 @@ export async function runUiCommand(
 
   const port = typeof options.port === "string" ? options.port : "3003";
   const host = typeof options.host === "string" ? options.host : "127.0.0.1";
-  const open = options.open === true || options.open === "true";
+  const open = options.open === true;
   const runtimeUrl =
     typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
   const storageUrl =

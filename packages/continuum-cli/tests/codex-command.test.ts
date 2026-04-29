@@ -87,7 +87,7 @@ describe("continuum codex commands", () => {
         "runtime-url": "http://127.0.0.1:3002",
         "client-command": "codex --remote ws://127.0.0.1:3788",
         "app-server-command": "codex app-server --listen ws://127.0.0.1:3777",
-        "ensure-runtime": "false",
+        "ensure-runtime": false,
       },
       import.meta.url,
     );

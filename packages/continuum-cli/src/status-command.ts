@@ -159,8 +159,8 @@ export async function runStatusCommand(options: Record<string, string | boolean>
       : managedDatabaseUrl ?? process.env.DATABASE_URL;
   const timeoutMs =
     typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
-  const strict = options.strict === true || options.strict === "true";
-  const json = options.json === true || options.json === "true";
+  const strict = options.strict === true;
+  const json = options.json === true;
 
   const mnaStatus = await getManagedMnaStatus(options);
   const results = await Promise.all([

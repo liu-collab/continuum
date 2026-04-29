@@ -250,6 +250,8 @@ if (process.platform === "linux") {
 
 ## 优化八：Boolean 参数归一化
 
+**状态：已完成**
+
 ### 问题
 
 每处 boolean 判断都需要双重检查：
