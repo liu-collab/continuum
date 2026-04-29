@@ -6,16 +6,20 @@ import {
   runCodexUninstallCommand,
   runCodexUseCommand,
 } from "./codex-command.js";
+import { runDoctorCommand } from "./doctor-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runMnaCommand } from "./mna-command.js";
 import { bilingualMessage, formatErrorMessage } from "./messages.js";
+import { runRestartCommand } from "./restart-command.js";
 import { runRuntimeCommand } from "./runtime-command.js";
 import { runStartCommand } from "./start-command.js";
 import { runStopCommand } from "./stop-command.js";
 import { runStatusCommand } from "./status-command.js";
+import { runUninstallCommand } from "./uninstall-command.js";
 import { runUiCommand } from "./ui-command.js";
 import { readCliVersion } from "./version.js";
+import { runUpdateCommand } from "./version-check.js";
 
 const CODEX_VALID_SUBCOMMANDS = new Set(["uninstall", "use"]);
 
@@ -61,6 +65,10 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
     return runStatusCommand(parsed.options);
   }
 
+  if (primary === "doctor") {
+    return runDoctorCommand();
+  }
+
   if (primary === "ui") {
     await runUiCommand(parsed.options, importMetaUrl);
     return 0;
@@ -73,6 +81,19 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
 
   if (primary === "stop") {
     await runStopCommand();
+    return 0;
+  }
+
+  if (primary === "restart") {
+    return runRestartCommand(secondary);
+  }
+
+  if (primary === "uninstall") {
+    return runUninstallCommand(parsed.options);
+  }
+
+  if (primary === "update") {
+    await runUpdateCommand();
     return 0;
   }
 

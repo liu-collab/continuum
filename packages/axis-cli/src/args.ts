@@ -9,6 +9,7 @@ const BOOLEAN_FLAGS = new Set([
   "strict",
   "force",
   "ui-dev",
+  "daemon",
   "ensure-runtime",
   "skip-git-repo-check",
   "rotate",

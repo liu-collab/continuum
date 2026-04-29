@@ -1044,11 +1044,12 @@ a {
 
 .agent-markdown pre,
 .agent-doc pre {
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   background: var(--surface-pearl);
-  padding: 14px 16px;
+  padding: 38px 16px 14px;
 }
 
 .agent-markdown pre code,
@@ -1056,6 +1057,24 @@ a {
   border: none;
   background: transparent;
   padding: 0;
+}
+
+.agent-code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-height: 24px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 2px 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.agent-code-copy:hover {
+  color: var(--text);
 }
 
 .agent-markdown blockquote,

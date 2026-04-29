@@ -1,10 +1,11 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import path from "node:path";
 import process from "node:process";
 
 import {
+  axisLogsDir,
   axisHomeDir,
   DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_STACK_CONTAINER,
@@ -212,6 +213,25 @@ export async function cleanupManagedStackContainer() {
   return removeDockerContainer(DEFAULT_MANAGED_STACK_CONTAINER);
 }
 
+export async function saveDockerContainerLogs(
+  containerName = DEFAULT_MANAGED_STACK_CONTAINER,
+  logPath = path.join(axisLogsDir(), "startup-failure.log"),
+) {
+  const result = await runCommand("docker", ["logs", containerName], {
+    captureOutput: true,
+    env: process.env,
+    timeoutMs: 10_000,
+  });
+  const content = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  if (!content) {
+    return false;
+  }
+
+  await mkdir(path.dirname(logPath), { recursive: true });
+  await writeFile(logPath, `${content}\n`, "utf8");
+  return true;
+}
+
 export async function removeDockerImage(imageName = DEFAULT_MANAGED_STACK_IMAGE) {
   const result = await runCommand("docker", ["rmi", imageName], {
     captureOutput: true,
@@ -241,6 +261,29 @@ export async function removeDockerImage(imageName = DEFAULT_MANAGED_STACK_IMAGE)
       : bilingualMessage(
           `docker rmi ${imageName} 失败，退出码 ${result.code}`,
           `docker rmi ${imageName} failed with exit code ${result.code}`,
+        ),
+  );
+}
+
+export async function pruneDanglingDockerImages() {
+  const result = await runCommand("docker", ["image", "prune", "-f"], {
+    captureOutput: true,
+    env: process.env,
+  });
+  if (result.code === 0) {
+    return true;
+  }
+
+  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  throw new Error(
+    output
+      ? bilingualMessage(
+          `清理 dangling Docker 镜像失败。${output}`,
+          `Failed to prune dangling Docker images. ${output}`,
+        )
+      : bilingualMessage(
+          `docker image prune -f 失败，退出码 ${result.code}`,
+          `docker image prune -f failed with exit code ${result.code}`,
         ),
   );
 }

@@ -14,6 +14,7 @@ import {
 } from "./managed-state.js";
 import { bilingualMessage } from "./messages.js";
 import { getManagedMnaStatus } from "./mna-command.js";
+import { maybeWriteUpdateNotice } from "./version-check.js";
 
 type StatusCheckResult = {
   name: string;
@@ -227,6 +228,7 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   process.stdout.write(`mna token path      ${mnaStatus.tokenPath}\n`);
   process.stdout.write(`mna log path        ${mnaStatus.logPath}\n`);
   process.stdout.write(`mna artifacts path  ${mnaStatus.artifactsPath}\n`);
+  await maybeWriteUpdateNotice().catch(() => undefined);
 
   return exitCode;
 }

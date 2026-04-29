@@ -96,12 +96,20 @@ export default async function MemoryDetailPage({
                 <DetailRow label={t("memories.fields.type")} value={detail.memoryTypeLabel} />
                 <DetailRow label={t("memories.fields.scope")} value={detail.scopeLabel} />
                 <DetailRow label={t("memories.detail.originWorkspace")} value={detail.originWorkspaceLabel} />
-                <DetailRow label={t("memories.detail.importance")} value={detail.importance != null ? String(detail.importance) : t("common.notRecorded")} />
-                <DetailRow label={t("memories.detail.confidence")} value={detail.confidence != null ? String(detail.confidence) : t("common.notRecorded")} />
-                <DetailRow label={t("memories.detail.lastConfirmed")} value={formatTimestamp(detail.lastConfirmedAt, locale)} />
-                <DetailRow label={t("memories.detail.created")} value={formatTimestamp(detail.createdAt, locale)} />
-                <DetailRow label={t("memories.detail.updated")} value={formatTimestamp(detail.updatedAt, locale)} />
               </dl>
+              <details className="mt-5 border-t border-[var(--hairline)] pt-4">
+                <summary className="cursor-pointer text-sm font-semibold text-muted">
+                  {t("memories.detail.technicalDetails")}
+                </summary>
+                <dl className="kv-grid mt-4">
+                  <DetailRow label={t("memories.detail.importance")} value={detail.importance != null ? String(detail.importance) : t("common.notRecorded")} />
+                  <DetailRow label={t("memories.detail.confidence")} value={detail.confidence != null ? String(detail.confidence) : t("common.notRecorded")} />
+                  <DetailRow label={t("memories.detail.lastConfirmed")} value={formatTimestamp(detail.lastConfirmedAt, locale)} />
+                  <DetailRow label={t("memories.detail.created")} value={formatTimestamp(detail.createdAt, locale)} />
+                  <DetailRow label={t("memories.detail.updated")} value={formatTimestamp(detail.updatedAt, locale)} />
+                  <DetailRow label={t("memories.detail.rawDetails")} value={<pre className="quiet-code mt-2 max-h-80 overflow-auto">{detail.detailsFormatted}</pre>} />
+                </dl>
+              </details>
             </section>
           </div>
         </div>

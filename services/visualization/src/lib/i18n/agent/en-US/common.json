@@ -50,6 +50,8 @@
     "injectionReady": "Injection ready",
     "phaseDegradedSkip": "{phase} degraded skip",
     "viewPrompt": "View prompt",
+    "copyCode": "Copy",
+    "copiedCode": "Copied",
     "injectionTitle": "Injection Banner",
     "you": "You",
     "assistant": "Assistant",

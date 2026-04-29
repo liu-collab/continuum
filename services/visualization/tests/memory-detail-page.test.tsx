@@ -102,4 +102,18 @@ describe("memory detail page", () => {
       "/governance?workspace_id=workspace-1&execution_id=execution-1"
     );
   });
+
+  it("keeps technical memory fields collapsed by default", async () => {
+    getMemoryDetailMock.mockResolvedValue(createMemoryDetail());
+
+    const element = await MemoryDetailPage({
+      params: Promise.resolve({ id: "memory-1" })
+    });
+    render(element);
+
+    expect(screen.getByText("技术细节")).toBeInTheDocument();
+    expect(screen.getByText("重要度").closest("details")).toBeInTheDocument();
+    expect(screen.getByText("置信度").closest("details")).toBeInTheDocument();
+    expect(screen.getByText("原始详情").closest("details")).toBeInTheDocument();
+  });
 });

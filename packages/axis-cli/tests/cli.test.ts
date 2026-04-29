@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const getManagedMnaStatusMock = vi.hoisted(() => vi.fn());
 const readManagedStateMock = vi.hoisted(() => vi.fn());
+const runDoctorCommandMock = vi.hoisted(() => vi.fn());
+const runRestartCommandMock = vi.hoisted(() => vi.fn());
+const runUninstallCommandMock = vi.hoisted(() => vi.fn());
+const runUpdateCommandMock = vi.hoisted(() => vi.fn());
+const maybeWriteUpdateNoticeMock = vi.hoisted(() => vi.fn());
 
 readManagedStateMock.mockResolvedValue({
   version: 1,
@@ -34,6 +39,23 @@ vi.mock("../src/codex-command.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../src/doctor-command.js", () => ({
+  runDoctorCommand: runDoctorCommandMock,
+}));
+
+vi.mock("../src/restart-command.js", () => ({
+  runRestartCommand: runRestartCommandMock,
+}));
+
+vi.mock("../src/uninstall-command.js", () => ({
+  runUninstallCommand: runUninstallCommandMock,
+}));
+
+vi.mock("../src/version-check.js", () => ({
+  maybeWriteUpdateNotice: maybeWriteUpdateNoticeMock,
+  runUpdateCommand: runUpdateCommandMock,
+}));
+
 import { parseArgs } from "../src/args.js";
 import { runCli } from "../src/axis-cli.js";
 import {
@@ -53,6 +75,11 @@ describe("axis cli", () => {
     vi.restoreAllMocks();
     getManagedMnaStatusMock.mockReset();
     codexUseMock.mockReset();
+    runDoctorCommandMock.mockReset();
+    runRestartCommandMock.mockReset();
+    runUninstallCommandMock.mockReset();
+    runUpdateCommandMock.mockReset();
+    maybeWriteUpdateNoticeMock.mockReset();
     readManagedStateMock.mockReset();
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -128,6 +155,27 @@ describe("axis cli", () => {
 
     expect(parsed.command).toEqual(["stop"]);
     expect(renderHelp()).toContain("axis stop");
+  });
+
+  it("routes doctor, restart, uninstall, and update commands", async () => {
+    runDoctorCommandMock.mockResolvedValue(0);
+    runRestartCommandMock.mockResolvedValue(0);
+    runUninstallCommandMock.mockResolvedValue(0);
+    runUpdateCommandMock.mockResolvedValue(undefined);
+
+    await expect(runCli(["doctor"], import.meta.url)).resolves.toBe(0);
+    await expect(runCli(["restart", "runtime"], import.meta.url)).resolves.toBe(0);
+    await expect(runCli(["uninstall", "--force"], import.meta.url)).resolves.toBe(0);
+    await expect(runCli(["update"], import.meta.url)).resolves.toBe(0);
+
+    expect(runDoctorCommandMock).toHaveBeenCalled();
+    expect(runRestartCommandMock).toHaveBeenCalledWith("runtime");
+    expect(runUninstallCommandMock).toHaveBeenCalledWith({ force: true });
+    expect(runUpdateCommandMock).toHaveBeenCalled();
+    expect(renderHelp()).toContain("axis doctor");
+    expect(renderHelp()).toContain("axis restart <runtime|storage>");
+    expect(renderHelp()).toContain("axis uninstall");
+    expect(renderHelp()).toContain("axis update");
   });
 
   it("prints the package version for --version", async () => {

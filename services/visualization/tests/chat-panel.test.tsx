@@ -148,6 +148,41 @@ describe("ChatPanel", () => {
     expect(assistantMessage.className).not.toContain("whitespace-pre-wrap");
   });
 
+  it("adds a copy button to assistant code blocks", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[
+            createTurn({
+              turnId: "turn-code",
+              userInput: "给我代码",
+              assistantOutput: "```ts\nconst value = 1;\n```",
+            }),
+          ]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "复制" }));
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("const value = 1;"));
+    expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
+  });
+
   it("renders tool calls inline with the assistant message", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">

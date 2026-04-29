@@ -58,6 +58,8 @@ import {
   ensureDockerDaemonReady,
   ensureDockerInstalled,
   prepareStackContext,
+  pruneDanglingDockerImages,
+  saveDockerContainerLogs,
   stopLegacyPostgresContainer,
 } from "./docker-lifecycle.js";
 import { npmCommand, runForeground } from "./managed-process.js";
@@ -78,6 +80,7 @@ import {
   refreshMemoryNativeAgentVendor,
   refreshVisualizationVendor,
 } from "./vendor-refresh.js";
+import { maybeWriteUpdateNotice } from "./version-check.js";
 
 export { resolveManagedPostgresPort } from "./port-utils.js";
 
@@ -215,6 +218,29 @@ function writeMissingPrimaryProviderWarning() {
   process.stdout.write(`${bilingualMessage(
     "⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。",
     "⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.",
+  )}\n`);
+}
+
+async function writeLegacyContinuumNotice() {
+  const legacyDir = path.join(path.dirname(axisHomeDir()), ".continuum");
+  if (!(await pathExists(legacyDir)) || await pathExists(axisHomeDir())) {
+    return;
+  }
+
+  process.stdout.write(`${bilingualMessage(
+    `检测到旧版 ~/.continuum/ 数据目录。Axis 现在使用 ~/.axis/，如需保留旧数据，请先迁移后再启动。旧目录: ${legacyDir}`,
+    `Detected the legacy ~/.continuum/ data directory. Axis now uses ~/.axis/. Migrate old data before starting if you need to keep it. Legacy directory: ${legacyDir}`,
+  )}\n`);
+}
+
+function writeDaemonNotice(enabled: boolean) {
+  if (!enabled) {
+    return;
+  }
+
+  process.stdout.write(`${bilingualMessage(
+    "daemon 模式已启用，服务会在后台运行。查看状态使用 axis status，查看 mna 日志使用 axis mna logs。",
+    "Daemon mode is enabled. Services run in the background. Use axis status for status and axis mna logs for mna logs.",
   )}\n`);
 }
 
@@ -444,10 +470,12 @@ export async function runStartCommand(
   const storagePort = resolveStoragePort();
   const runtimePort = resolveRuntimePort();
   const visualizationPort = resolveVisualizationPort();
-  const platformUserId = await resolvePlatformUserId();
   const uiDev = options["ui-dev"] === true;
-  const initialManagedState = await readManagedState();
   const open = options.open === true;
+  const daemon = options.daemon === true;
+  await writeLegacyContinuumNotice();
+  const platformUserId = await resolvePlatformUserId();
+  const initialManagedState = await readManagedState();
   const storageUrl = buildServiceUrl(accessibleHost, storagePort);
   const runtimeUrl = buildServiceUrl(accessibleHost, runtimePort);
   const uiUrl = buildServiceUrl(accessibleHost, visualizationPort);
@@ -495,9 +523,11 @@ export async function runStartCommand(
     process.stdout.write(`visualization: ${devServer.url} (dev)\n`);
     process.stdout.write(`log: ${devServer.logPath}\n`);
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    writeDaemonNotice(daemon);
     if (!providerConfigured) {
       writeMissingPrimaryProviderWarning();
     }
+    await maybeWriteUpdateNotice().catch(() => undefined);
 
     if (open) {
       await openBrowser(devServer.url);
@@ -556,6 +586,12 @@ export async function runStartCommand(
     stackImageName = uiDev ? UI_DEV_STACK_IMAGE : DEFAULT_MANAGED_STACK_IMAGE;
     const stageDir = await prepareStackContext(packageRoot, !uiDev);
     await buildStackImage(stageDir, stackImageName);
+    await pruneDanglingDockerImages().catch((error) => {
+      process.stderr.write(`${bilingualMessage(
+        `Docker dangling 镜像清理失败：${error instanceof Error ? error.message : String(error)}`,
+        `Failed to prune dangling Docker images: ${error instanceof Error ? error.message : String(error)}`,
+      )}\n`);
+    });
     if (!uiDev) {
       await buildState.writeBuildState(stackImagePlan.nextState);
     }
@@ -677,6 +713,7 @@ export async function runStartCommand(
       process.stdout.write(`visualization log: ${startedVisualizationLogPath}\n`);
     }
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    writeDaemonNotice(daemon);
     if (!providerConfigured) {
       writeMissingPrimaryProviderWarning();
     }
@@ -691,7 +728,16 @@ export async function runStartCommand(
     if (open) {
       await openBrowser(startedVisualizationUrl);
     }
+    await maybeWriteUpdateNotice().catch(() => undefined);
   } catch (error) {
+    const startupLogPath = path.join(axisLogsDir(), "startup-failure.log");
+    const savedLogs = await saveDockerContainerLogs(DEFAULT_MANAGED_STACK_CONTAINER, startupLogPath).catch(() => false);
+    if (savedLogs) {
+      process.stderr.write(`${bilingualMessage(
+        `已保存启动失败日志: ${startupLogPath}`,
+        `Saved startup failure logs: ${startupLogPath}`,
+      )}\n`);
+    }
     const cleaned = await cleanupManagedStackContainer().catch(() => false);
     if (cleaned) {
       process.stderr.write(`${bilingualMessage(

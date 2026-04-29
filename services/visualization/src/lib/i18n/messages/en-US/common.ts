@@ -188,6 +188,8 @@ const enCommon = {
         status: "Status",
         attributes: "Attributes",
         originWorkspace: "Source folder / workspace",
+        technicalDetails: "Technical details",
+        rawDetails: "Raw details",
         importance: "Importance",
         confidence: "Confidence",
         lastConfirmed: "Last confirmed",

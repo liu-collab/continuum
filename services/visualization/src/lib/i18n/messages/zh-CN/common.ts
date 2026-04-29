@@ -188,6 +188,8 @@ const zhCommon = {
         status: "状态",
         attributes: "属性",
         originWorkspace: "来源文件夹/工作区",
+        technicalDetails: "技术细节",
+        rawDetails: "原始详情",
         importance: "重要度",
         confidence: "置信度",
         lastConfirmed: "最近确认",

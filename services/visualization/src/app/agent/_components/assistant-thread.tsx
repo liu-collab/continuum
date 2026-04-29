@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   AssistantRuntimeProvider,
   MessagePartPrimitive,
@@ -284,9 +284,40 @@ function UserTextPart() {
 
 function AssistantTextPart() {
   const { text } = useMessagePartText();
+  const { t } = useAgentI18n();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+
+    for (const pre of Array.from(root.querySelectorAll("pre"))) {
+      pre.querySelectorAll(".agent-code-copy").forEach((item) => item.remove());
+      const codeText = pre.querySelector("code")?.textContent ?? pre.textContent ?? "";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "agent-code-copy";
+      button.textContent = t("chatPanel.copyCode");
+      button.setAttribute("aria-label", t("chatPanel.copyCode"));
+      button.setAttribute("title", t("chatPanel.copyCode"));
+      button.addEventListener("click", async () => {
+        await navigator.clipboard?.writeText(codeText);
+        button.textContent = t("chatPanel.copiedCode");
+        button.setAttribute("aria-label", t("chatPanel.copiedCode"));
+        window.setTimeout(() => {
+          button.textContent = t("chatPanel.copyCode");
+          button.setAttribute("aria-label", t("chatPanel.copyCode"));
+        }, 1200);
+      });
+      pre.append(button);
+    }
+  }, [t, text]);
 
   return (
     <div
+      ref={rootRef}
       className="agent-markdown text-sm leading-6 text-foreground"
       dangerouslySetInnerHTML={{
         __html: renderAssistantMarkdown(text)

@@ -50,6 +50,8 @@
     "injectionReady": "注入已就绪",
     "phaseDegradedSkip": "{phase} 已降级跳过",
     "viewPrompt": "查看提示词",
+    "copyCode": "复制",
+    "copiedCode": "已复制",
     "injectionTitle": "注入横幅",
     "you": "你",
     "assistant": "助手",

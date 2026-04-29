@@ -1,8 +1,14 @@
 import { spawn } from "node:child_process";
+import { watch } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import process from "node:process";
 
 const children = [];
+const managedProcesses = new Map();
+const controlDir = process.env.AXIS_STACK_CONTROL_DIR ?? "/opt/axis/managed/control";
+const restartRequestPath = path.join(controlDir, "restart-request.txt");
 const sharedEnv = {
   ...process.env,
   NODE_ENV: "production",
@@ -16,6 +22,57 @@ function startProcess(command, args, options = {}) {
   });
   children.push(child);
   return child;
+}
+
+function removeChild(child) {
+  const index = children.indexOf(child);
+  if (index >= 0) {
+    children.splice(index, 1);
+  }
+}
+
+function startManagedProcess(name, command, args, options = {}) {
+  const child = startProcess(command, args, options);
+  managedProcesses.set(name, {
+    command,
+    args,
+    options,
+    child,
+  });
+  child.on("exit", () => {
+    if (managedProcesses.get(name)?.child === child) {
+      stopAll();
+      managedProcesses.get("postgres")?.child.kill("SIGTERM");
+    }
+  });
+  return child;
+}
+
+function waitForProcessExit(child) {
+  return new Promise((resolve) => {
+    child.once("exit", resolve);
+    child.once("error", resolve);
+    setTimeout(resolve, 3000);
+  });
+}
+
+async function restartManagedProcess(name) {
+  const record = managedProcesses.get(name);
+  if (!record) {
+    await writeFile(path.join(controlDir, "restart-last-error.txt"), `unknown service: ${name}\n`, "utf8");
+    return;
+  }
+
+  const previous = record.child;
+  managedProcesses.delete(name);
+  if (!previous.killed) {
+    previous.kill("SIGTERM");
+  }
+  await waitForProcessExit(previous);
+  removeChild(previous);
+
+  const next = startManagedProcess(name, record.command, record.args, record.options);
+  await writeFile(path.join(controlDir, "restart-last-ok.txt"), `${name} ${new Date().toISOString()} pid=${next.pid ?? ""}\n`, "utf8");
 }
 
 function stopAll() {
@@ -71,7 +128,8 @@ async function waitForExit(child, label) {
 }
 
 async function main() {
-  const postgres = startProcess("/usr/local/bin/docker-entrypoint.sh", ["postgres"]);
+  await mkdir(controlDir, { recursive: true });
+  const postgres = startManagedProcess("postgres", "/usr/local/bin/docker-entrypoint.sh", ["postgres"]);
   postgres.on("exit", (code) => {
     process.exit(code ?? 1);
   });
@@ -90,7 +148,7 @@ async function main() {
   await waitForExit(runtimeMigrate, "runtime migration");
   children.pop(); // Remove completed migration from children array
 
-  const storage = startProcess(process.execPath, ["/opt/axis/storage/dist/src/server.js"], {
+  const storage = startManagedProcess("storage", process.execPath, ["/opt/axis/storage/dist/src/server.js"], {
     cwd: "/opt/axis/storage",
     env: {
       ...sharedEnv,
@@ -98,10 +156,10 @@ async function main() {
       HOST: "0.0.0.0",
     },
   });
-  const worker = startProcess(process.execPath, ["/opt/axis/storage/dist/src/worker.js"], {
+  const worker = startManagedProcess("storage-worker", process.execPath, ["/opt/axis/storage/dist/src/worker.js"], {
     cwd: "/opt/axis/storage",
   });
-  const runtime = startProcess(process.execPath, ["/opt/axis/runtime/dist/src/index.js"], {
+  const runtime = startManagedProcess("runtime", process.execPath, ["/opt/axis/runtime/dist/src/index.js"], {
     cwd: "/opt/axis/runtime",
     env: {
       ...sharedEnv,
@@ -111,7 +169,7 @@ async function main() {
   });
   const visualization = process.env.AXIS_DISABLE_STACK_VISUALIZATION === "1"
     ? null
-    : startProcess(process.execPath, ["/opt/axis/visualization-standalone/server.js"], {
+    : startManagedProcess("visualization", process.execPath, ["/opt/axis/visualization-standalone/server.js"], {
         cwd: "/opt/axis/visualization-standalone",
         env: {
           ...sharedEnv,
@@ -120,12 +178,19 @@ async function main() {
         },
       });
 
-  for (const child of [storage, worker, runtime, visualization].filter(Boolean)) {
-    child.on("exit", () => {
-      stopAll();
-      postgres.kill("SIGTERM");
-    });
-  }
+  watch(controlDir, async () => {
+    const request = (await readFile(restartRequestPath, "utf8").catch(() => "")).trim();
+    if (!request) {
+      return;
+    }
+    await rm(restartRequestPath, { force: true }).catch(() => undefined);
+    if (request === "storage") {
+      await restartManagedProcess("storage");
+      await restartManagedProcess("storage-worker");
+      return;
+    }
+    await restartManagedProcess(request);
+  });
 }
 
 void main().catch((error) => {

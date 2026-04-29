@@ -207,10 +207,11 @@ type RunCommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   captureOutput?: boolean;
+  timeoutMs?: number;
 };
 
 export async function runCommand(command: string, args: string[], options: RunCommandOptions = {}) {
-  const { cwd, env, captureOutput = false } = options;
+  const { cwd, env, captureOutput = false, timeoutMs } = options;
 
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawnCrossPlatform(command, args, {
@@ -233,8 +234,40 @@ export async function runCommand(command: string, args: string[], options: RunCo
       });
     }
 
-    child.on("error", reject);
+    let settled = false;
+    const timer = timeoutMs
+      ? setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          child.kill("SIGKILL");
+          resolve({
+            code: 124,
+            stdout,
+            stderr: stderr || `command timed out after ${timeoutMs}ms`,
+          });
+        }, timeoutMs)
+      : null;
+
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+      reject(error);
+    });
     child.on("exit", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
       resolve({
         code: code ?? 1,
         stdout,

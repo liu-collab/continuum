@@ -5,6 +5,17 @@ const runForegroundQuietMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
 const runCommandMock = vi.hoisted(() => vi.fn());
 const spawnMock = vi.hoisted(() => vi.fn());
+const mkdirMock = vi.hoisted(() => vi.fn());
+const writeFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    mkdir: mkdirMock,
+    writeFile: writeFileMock,
+  };
+});
 
 vi.mock("../src/managed-process.js", () => ({
   runForeground: runForegroundMock,
@@ -34,8 +45,10 @@ import {
   ensureDockerDaemonReady,
   ensureDockerInstalled,
   isDockerMissingContainerResult,
+  pruneDanglingDockerImages,
   removeDockerImage,
   resolveDockerDesktopPath,
+  saveDockerContainerLogs,
 } from "../src/docker-lifecycle.js";
 
 describe("docker lifecycle", () => {
@@ -46,6 +59,8 @@ describe("docker lifecycle", () => {
     pathExistsMock.mockReset();
     runCommandMock.mockReset();
     spawnMock.mockReset();
+    mkdirMock.mockReset();
+    writeFileMock.mockReset();
   });
 
   it("resolves Docker Desktop path from env when configured", () => {
@@ -143,5 +158,40 @@ describe("docker lifecycle", () => {
 
     await expect(removeDockerImage()).resolves.toBe(true);
     expect(runCommandMock).toHaveBeenCalledWith("docker", ["rmi", "axis-stack:latest"], expect.any(Object));
+  });
+
+  it("saves docker logs before startup cleanup", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 0,
+      stdout: "storage failed\n",
+      stderr: "",
+    });
+
+    await expect(saveDockerContainerLogs("axis-stack", "C:/tmp/startup-failure.log")).resolves.toBe(true);
+    expect(runCommandMock).toHaveBeenCalledWith(
+      "docker",
+      ["logs", "axis-stack"],
+      expect.objectContaining({ timeoutMs: 10_000 }),
+    );
+    expect(writeFileMock).toHaveBeenCalledWith(
+      "C:/tmp/startup-failure.log",
+      "storage failed\n",
+      "utf8",
+    );
+  });
+
+  it("prunes dangling docker images", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    await expect(pruneDanglingDockerImages()).resolves.toBe(true);
+    expect(runCommandMock).toHaveBeenCalledWith(
+      "docker",
+      ["image", "prune", "-f"],
+      expect.any(Object),
+    );
   });
 });
