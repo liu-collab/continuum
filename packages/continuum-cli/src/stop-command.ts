@@ -12,20 +12,15 @@ import {
 } from "./managed-state.js";
 import { stopManagedMna } from "./mna-command.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
+import { spawnCrossPlatform } from "./utils.js";
 
 async function runForegroundQuiet(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
     let stderr = "";
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/c", command, ...args], {
-            stdio: ["ignore", "ignore", "pipe"],
-            env: process.env,
-          })
-        : spawn(command, args, {
-            stdio: ["ignore", "ignore", "pipe"],
-            env: process.env,
-          });
+    const child = spawnCrossPlatform(command, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      env: process.env,
+    });
 
     child.stderr?.on("data", (chunk) => {
       stderr += String(chunk);

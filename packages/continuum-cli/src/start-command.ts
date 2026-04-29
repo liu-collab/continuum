@@ -12,6 +12,7 @@ import {
   openBrowser,
   packageRootFromImportMeta,
   pathExists,
+  spawnCrossPlatform,
   vendorPath,
 } from "./utils.js";
 import {
@@ -57,18 +58,11 @@ const UI_DEV_PORT_SCAN_LIMIT = 20;
 
 async function runForeground(command: string, args: string[], cwd?: string) {
   await new Promise<void>((resolve, reject) => {
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/c", command, ...args], {
-            cwd,
-            stdio: "inherit",
-            env: process.env,
-          })
-        : spawn(command, args, {
-            cwd,
-            stdio: "inherit",
-            env: process.env,
-          });
+    const child = spawnCrossPlatform(command, args, {
+      cwd,
+      stdio: "inherit",
+      env: process.env,
+    });
 
     child.on("exit", (code) => {
       if (code === 0) {
@@ -83,16 +77,10 @@ async function runForeground(command: string, args: string[], cwd?: string) {
 
 async function runForegroundQuiet(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/c", command, ...args], {
-            stdio: "ignore",
-            env: process.env,
-          })
-        : spawn(command, args, {
-            stdio: "ignore",
-            env: process.env,
-          });
+    const child = spawnCrossPlatform(command, args, {
+      stdio: "ignore",
+      env: process.env,
+    });
 
     child.on("exit", (code) => {
       if (code === 0) {

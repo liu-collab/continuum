@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
   spawn: spawnMock,
 }));
 
-import { uninstallCodexMcpServer } from "../src/utils.js";
+import { runCommand, uninstallCodexMcpServer } from "../src/utils.js";
 
 function createSpawnResult(options: { code: number; stdout?: string; stderr?: string }) {
   const child = new EventEmitter() as EventEmitter & {
@@ -53,5 +53,37 @@ describe("continuum utils", () => {
         codexHome: "C:/tmp/.codex",
       }),
     ).resolves.toBe(false);
+  });
+
+  it("runs commands through the shared cross-platform spawn wrapper", async () => {
+    spawnMock.mockImplementation(() =>
+      createSpawnResult({
+        code: 0,
+        stdout: "ok\n",
+      }),
+    );
+
+    await expect(runCommand("node", ["--version"], { captureOutput: true })).resolves.toMatchObject({
+      code: 0,
+      stdout: "ok\n",
+    });
+
+    if (process.platform === "win32") {
+      expect(spawnMock).toHaveBeenCalledWith(
+        "cmd",
+        ["/c", "node", "--version"],
+        expect.objectContaining({
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      );
+    } else {
+      expect(spawnMock).toHaveBeenCalledWith(
+        "node",
+        ["--version"],
+        expect.objectContaining({
+          stdio: ["ignore", "pipe", "pipe"],
+        }),
+      );
+    }
   });
 });

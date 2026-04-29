@@ -1,5 +1,6 @@
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -122,6 +123,18 @@ export async function openBrowser(url: string) {
   }).unref();
 }
 
+export function spawnCrossPlatform(
+  command: string,
+  args: string[],
+  options: SpawnOptions = {},
+): ChildProcess {
+  if (process.platform === "win32") {
+    return spawn("cmd", ["/c", command, ...args], options);
+  }
+
+  return spawn(command, args, options);
+}
+
 type RunCommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
@@ -132,18 +145,11 @@ export async function runCommand(command: string, args: string[], options: RunCo
   const { cwd, env, captureOutput = false } = options;
 
   return new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
-    const child =
-      process.platform === "win32"
-        ? spawn("cmd", ["/c", command, ...args], {
-            cwd,
-            env,
-            stdio: captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
-          })
-        : spawn(command, args, {
-            cwd,
-            env,
-            stdio: captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
-          });
+    const child = spawnCrossPlatform(command, args, {
+      cwd,
+      env,
+      stdio: captureOutput ? ["ignore", "pipe", "pipe"] : "inherit",
+    });
 
     let stdout = "";
     let stderr = "";

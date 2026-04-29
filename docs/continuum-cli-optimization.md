@@ -87,6 +87,8 @@ export function safeJsonParse<T>(filePath: string, raw: string): T {
 
 ## 优化三：提取跨平台 spawn 工具函数
 
+**状态：已完成**
+
 ### 问题
 
 13+ 处相同的平台分支逻辑：
