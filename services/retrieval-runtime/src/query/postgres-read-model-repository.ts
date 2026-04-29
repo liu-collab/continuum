@@ -3,7 +3,13 @@ import { Pool } from "pg";
 import type { AppConfig } from "../config.js";
 import { TimeoutAppError } from "../errors.js";
 import { quoteIdentifier } from "../db/postgres-utils.js";
-import type { CandidateMemory, RetrievalQuery } from "../shared/types.js";
+import type {
+  CandidateMemory,
+  MemoryType,
+  ReadModelAvailability,
+  ReadModelAvailabilityQuery,
+  RetrievalQuery,
+} from "../shared/types.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
 
 interface MemoryReadModelRow {
@@ -55,6 +61,97 @@ export class PostgresReadModelRepository implements ReadModelRepository {
         allowExitOnIdle: true,
       });
     this.queryTimeoutMs = config.QUERY_TIMEOUT_MS;
+  }
+
+  async estimateAvailability(
+    query: ReadModelAvailabilityQuery,
+    signal?: AbortSignal,
+  ): Promise<ReadModelAvailability> {
+    const tableName = `${quoteIdentifier(this.config.READ_MODEL_SCHEMA)}.${quoteIdentifier(this.config.READ_MODEL_TABLE)}`;
+    const sql = `
+      SELECT memory_type, count(*)::int AS count
+      FROM ${tableName}
+      WHERE status = ANY($1::text[])
+        AND scope = ANY($2::text[])
+        AND memory_type = ANY($3::text[])
+        AND importance >= $4
+        AND (
+          (scope = 'workspace' AND workspace_id = $5::uuid)
+          OR (scope = 'user' AND user_id = $6::uuid)
+          OR (scope = 'task' AND workspace_id = $5::uuid AND $7::uuid IS NOT NULL AND task_id = $7::uuid)
+          OR (scope = 'session' AND workspace_id = $5::uuid AND session_id = $8::uuid)
+        )
+      GROUP BY memory_type
+    `;
+    const values = [
+      query.status_filter,
+      query.scope_filter,
+      query.memory_type_filter,
+      query.importance_threshold,
+      query.workspace_id,
+      query.user_id,
+      query.task_id ?? null,
+      query.session_id,
+    ];
+
+    const client = await this.pool.connect();
+    let clientReleased = false;
+    const abortListener = () => {
+      if (clientReleased) {
+        return;
+      }
+      clientReleased = true;
+      client.release(true);
+    };
+
+    try {
+      if (signal?.aborted) {
+        throw new TimeoutAppError("read_model timed out before availability estimate");
+      }
+
+      signal?.addEventListener("abort", abortListener, { once: true });
+      await client.query("BEGIN");
+      await client.query(`SET LOCAL statement_timeout = ${this.queryTimeoutMs}`);
+      const result = await client.query<{ memory_type: MemoryType; count: number | string }>({
+        text: sql,
+        values,
+      });
+      await client.query("COMMIT");
+
+      const typeDistribution: Partial<Record<MemoryType, number>> = {};
+      for (const row of result.rows) {
+        typeDistribution[row.memory_type] = Number(row.count);
+      }
+
+      return {
+        total_count: Object.values(typeDistribution).reduce((sum, count) => sum + (count ?? 0), 0),
+        type_distribution: typeDistribution,
+      };
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // Ignore rollback failure on aborted connection.
+      }
+      if (signal?.aborted) {
+        throw new TimeoutAppError("read_model timed out during availability estimate");
+      }
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "57014"
+      ) {
+        throw new TimeoutAppError("read_model hit statement_timeout during availability estimate");
+      }
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", abortListener);
+      if (!clientReleased) {
+        clientReleased = true;
+        client.release();
+      }
+    }
   }
 
   async searchCandidates(query: RetrievalQuery, signal?: AbortSignal): Promise<CandidateMemory[]> {

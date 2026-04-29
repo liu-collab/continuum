@@ -27,6 +27,10 @@ export interface TriggerContext {
   source?: string;
   recent_context_summary?: string;
   memory_mode?: MemoryMode;
+  preflight_scopes?: ScopeType[];
+  preflight_memory_types?: MemoryType[];
+  preflight_importance_threshold?: number;
+  injection_token_budget?: number;
 }
 
 export interface RetrievalQuery {
@@ -44,6 +48,23 @@ export interface RetrievalQuery {
   semantic_query_terms?: string[];
   semantic_query_embedding?: number[];
   candidate_limit: number;
+}
+
+export interface ReadModelAvailabilityQuery {
+  workspace_id: string;
+  user_id: string;
+  session_id: string;
+  task_id?: string;
+  memory_mode: MemoryMode;
+  scope_filter: ScopeType[];
+  memory_type_filter: MemoryType[];
+  status_filter: RecordStatus[];
+  importance_threshold: number;
+}
+
+export interface ReadModelAvailability {
+  total_count: number;
+  type_distribution: Partial<Record<MemoryType, number>>;
 }
 
 export interface PhaseScoringWeights {

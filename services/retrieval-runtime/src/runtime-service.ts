@@ -45,6 +45,7 @@ import type {
 import type { EmbeddingCacheProvider, EmbeddingsClient } from "./query/embeddings-client.js";
 import { applyOpenConflictPenalty, compareRankedCandidates } from "./query/query-engine.js";
 import type { QueryEngine } from "./query/query-engine.js";
+import { RecallPreflight, type RecallPreflightSkip } from "./trigger/recall-preflight.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
@@ -250,6 +251,7 @@ export class RetrievalRuntimeService {
   private readonly memoryOrchestrator?: MemoryOrchestrator;
   private readonly maintenanceWorker?: WritebackMaintenanceWorker;
   private readonly storageClient?: StorageWritebackClient;
+  private readonly recallPreflight?: RecallPreflight;
   private runtimeGovernanceConfig: RuntimeGovernanceConfig;
   private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
   private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
@@ -329,6 +331,12 @@ export class RetrievalRuntimeService {
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number" ? embeddingTimeoutMsOrMemoryOrchestrator : 800;
       this.memoryLlmTimeoutMs = configOrTriggerEngine.MEMORY_LLM_TIMEOUT_MS;
       this.runtimeGovernanceConfig = pickRuntimeGovernanceConfig(configOrTriggerEngine);
+      this.recallPreflight = new RecallPreflight(
+        configOrTriggerEngine,
+        this.queryEngine,
+        this.dependencyGuard,
+        this.logger,
+      );
       this.memoryOrchestrator =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
           ? memoryOrchestratorOrMaintenanceWorker as MemoryOrchestrator | undefined
@@ -378,6 +386,7 @@ export class RetrievalRuntimeService {
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? maintenanceWorkerOrStorageClient as StorageWritebackClient | undefined
         : memoryOrchestratorOrMaintenanceWorker as StorageWritebackClient | undefined;
+    this.recallPreflight = undefined;
   }
 
   async runMaintenance(input?: { workspace_id?: string; force?: boolean }): Promise<MaintenanceRunSummary> {
@@ -478,7 +487,25 @@ export class RetrievalRuntimeService {
     });
 
     const triggerStartedAt = Date.now();
-    const decision = await this.triggerEngine.decide(normalizedContext);
+    const preflight = await this.recallPreflight?.evaluate(normalizedContext);
+    if (preflight && !preflight.should_continue) {
+      return this.returnPreflightSkipped({
+        context: normalizedContext,
+        traceId,
+        preflight,
+        triggerStartedAt,
+        turnStartedAt,
+      });
+    }
+    const triggerContext = preflight
+      ? {
+          ...normalizedContext,
+          preflight_scopes: preflight.requested_scopes,
+          preflight_memory_types: preflight.requested_memory_types,
+          preflight_importance_threshold: preflight.importance_threshold,
+        }
+      : normalizedContext;
+    const decision = await this.triggerEngine.decide(triggerContext);
     if (normalizedContext.phase === "before_response") {
       await this.repository.recordMemoryPlanRun({
         trace_id: traceId,
@@ -1223,6 +1250,85 @@ export class RetrievalRuntimeService {
     });
 
     return scheduled;
+  }
+
+  private async returnPreflightSkipped(input: {
+    context: TriggerContext & { memory_mode: MemoryMode };
+    traceId: string;
+    preflight: RecallPreflightSkip;
+    triggerStartedAt: number;
+    turnStartedAt: number;
+  }): Promise<PrepareContextResponse> {
+    const triggerType: TriggerDecision["trigger_type"] = "no_trigger";
+
+    await this.repository.recordTriggerRun({
+      trace_id: input.traceId,
+      phase: input.context.phase,
+      trigger_hit: false,
+      trigger_type: triggerType,
+      trigger_reason: input.preflight.trigger_reason,
+      requested_memory_types: input.preflight.requested_memory_types,
+      memory_mode: input.context.memory_mode,
+      requested_scopes: input.preflight.requested_scopes,
+      scope_reason: input.preflight.scope_reason,
+      importance_threshold: input.preflight.importance_threshold,
+      cooldown_applied: false,
+      duration_ms: Date.now() - input.triggerStartedAt,
+      created_at: nowIso(),
+    });
+
+    await this.repository.recordRecallRun({
+      trace_id: input.traceId,
+      phase: input.context.phase,
+      trigger_hit: false,
+      trigger_type: triggerType,
+      trigger_reason: input.preflight.trigger_reason,
+      memory_mode: input.context.memory_mode,
+      requested_scopes: input.preflight.requested_scopes,
+      matched_scopes: [],
+      scope_hit_counts: {},
+      scope_reason: input.preflight.scope_reason,
+      query_scope: `preflight_skipped:${input.preflight.reason}`,
+      requested_memory_types: input.preflight.requested_memory_types,
+      candidate_count: 0,
+      selected_count: 0,
+      result_state:
+        input.preflight.reason === "no_visible_candidates" || input.preflight.reason === "no_matching_memory_types"
+          ? "empty"
+          : "not_triggered",
+      degraded: false,
+      duration_ms: Date.now() - input.turnStartedAt,
+      created_at: nowIso(),
+    });
+
+    await this.repository.recordInjectionRun({
+      trace_id: input.traceId,
+      phase: input.context.phase,
+      injected: false,
+      injected_count: 0,
+      token_estimate: 0,
+      memory_mode: input.context.memory_mode,
+      requested_scopes: input.preflight.requested_scopes,
+      selected_scopes: [],
+      trimmed_record_ids: [],
+      trim_reasons: [],
+      result_state: "not_triggered",
+      duration_ms: 0,
+      created_at: nowIso(),
+    });
+
+    return {
+      trace_id: input.traceId,
+      trigger: false,
+      trigger_reason: input.preflight.trigger_reason,
+      memory_packet: null,
+      injection_block: null,
+      proactive_recommendations: [],
+      degraded: false,
+      dependency_status: await this.dependencyGuard.snapshot(),
+      budget_used: 0,
+      memory_packet_ids: [],
+    };
   }
 
   private async finalizePreparedContextResponse(input: {

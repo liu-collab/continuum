@@ -9,7 +9,6 @@ import type { ReadModelRepository } from "../query/read-model-repository.js";
 import {
   phaseTriggerReason,
   runtimeMessages,
-  scopePlanReason,
 } from "../shared/messages.js";
 import type {
   MemoryMode,
@@ -20,76 +19,19 @@ import type {
 } from "../shared/types.js";
 import type { Logger } from "pino";
 import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
+import {
+  dedupeScopes,
+  importanceThresholdByPhase,
+  requestedTypesByPhase,
+  scopePlanByPhase,
+} from "./phase-plan.js";
 
 const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
 const SEMANTIC_TRIGGER_MEDIAN_DELTA = 0.15;
 
-function requestedTypesByPhase(phase: TriggerContext["phase"]): MemoryType[] {
-  switch (phase) {
-    case "session_start":
-      return ["fact_preference", "task_state"];
-    case "task_start":
-    case "task_switch":
-      return ["task_state", "episodic", "fact_preference"];
-    case "before_plan":
-      return ["fact_preference", "task_state"];
-    case "before_response":
-      return ["fact_preference", "task_state", "episodic"];
-    case "after_response":
-      return [];
-  }
-}
-
-function dedupeScopes(scopes: ScopeType[]): ScopeType[] {
-  return [...new Set(scopes)];
-}
-
-function scopePlanByPhase(
-  phase: TriggerContext["phase"],
-  hasTask: boolean,
-  memoryMode: MemoryMode,
-): { scopes: ScopeType[]; reason: string } {
-  switch (phase) {
-    case "session_start":
-      return {
-        scopes:
-          memoryMode === "workspace_plus_global"
-            ? ["workspace", "user"]
-            : ["workspace"],
-        reason: scopePlanReason(phase, memoryMode, hasTask),
-      };
-    case "task_start":
-    case "task_switch":
-    case "before_plan":
-      return {
-        scopes: dedupeScopes([
-          "workspace",
-          ...(hasTask ? ["task" as const] : []),
-          ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
-        ]),
-        reason: scopePlanReason(phase, memoryMode, hasTask),
-      };
-    case "before_response":
-      return {
-        scopes: dedupeScopes([
-          "workspace",
-          ...(hasTask ? ["task" as const] : []),
-          "session",
-          ...(memoryMode === "workspace_plus_global" ? ["user" as const] : []),
-        ]),
-        reason: scopePlanReason(phase, memoryMode, hasTask),
-      };
-    case "after_response":
-      return {
-        scopes: [],
-        reason: scopePlanReason(phase, memoryMode, hasTask),
-      };
-  }
-}
-
 function shouldSkipForShortInput(text: string): boolean {
   const normalized = normalizeText(text);
-  return normalized.length < 8 && !matchesHistoryReference(normalized);
+  return normalized.length < 8 && !matchesHistoryReference(normalized) && !hasPreferenceOrTaskStateSignal(normalized);
 }
 
 function hasPreferenceOrTaskStateSignal(text: string): boolean {
@@ -127,11 +69,19 @@ export class TriggerEngine {
 
   async decide(context: TriggerContext): Promise<TriggerDecision> {
     const memoryMode = context.memory_mode ?? "workspace_plus_global";
-    const scopePlan = scopePlanByPhase(
+    const defaultScopePlan = scopePlanByPhase(
       context.phase,
       Boolean(context.task_id),
       memoryMode,
     );
+    const scopePlan = context.preflight_scopes
+      ? {
+          scopes: context.preflight_scopes,
+          reason: defaultScopePlan.reason,
+        }
+      : defaultScopePlan;
+    const baseImportanceThreshold =
+      context.preflight_importance_threshold ?? importanceThresholdByPhase(context.phase, this.config);
 
     if (context.phase === "after_response") {
       return {
@@ -142,13 +92,13 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: [],
         scope_reason: scopePlan.reason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
       };
     }
 
     const normalizedInput = normalizeText(context.current_input).toLowerCase();
-    const requestedMemoryTypes = requestedTypesByPhase(context.phase);
+    const requestedMemoryTypes = context.preflight_memory_types ?? requestedTypesByPhase(context.phase);
     let intentDecision:
       | {
           requestedMemoryTypes: MemoryType[];
@@ -226,27 +176,39 @@ export class TriggerEngine {
             intent_plan_degradation_reason: intentDecision.degradationReason,
           }
         : base;
+    const constrainTypes = (types: MemoryType[]) => {
+      const constrained = types.filter((type) => requestedMemoryTypes.includes(type));
+      return constrained.length > 0 ? constrained : requestedMemoryTypes;
+    };
+    const constrainScopes = (scopes: ScopeType[]) => {
+      const constrained = scopes.filter((scope) => scopePlan.scopes.includes(scope));
+      return constrained.length > 0 ? constrained : scopePlan.scopes;
+    };
     const preservePreferenceRecall =
       context.phase === "before_response" &&
       intentDecision?.needsMemory === false &&
       hasPreferenceOrTaskStateSignal(context.current_input);
-    const intentScopesForSearch = preservePreferenceRecall
-      ? scopePlan.scopes
-      : intentDecision?.needsMemory === false
+    const intentScopesForSearch = constrainScopes(
+      preservePreferenceRecall
         ? scopePlan.scopes
-        : (intentDecision?.requestedScopes ?? scopePlan.scopes);
-    const intentTypesForSearch = preservePreferenceRecall
-      ? [
-          ...new Set([
-            "fact_preference" as const,
-            "task_state" as const,
-            ...requestedMemoryTypes,
-            ...(intentDecision?.requestedMemoryTypes ?? []),
-          ]),
-        ]
-      : intentDecision?.needsMemory === false
-        ? requestedMemoryTypes
-        : (intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes);
+        : intentDecision?.needsMemory === false
+          ? scopePlan.scopes
+          : (intentDecision?.requestedScopes ?? scopePlan.scopes),
+    );
+    const intentTypesForSearch = constrainTypes(
+      preservePreferenceRecall
+        ? [
+            ...new Set([
+              "fact_preference" as const,
+              "task_state" as const,
+              ...requestedMemoryTypes,
+              ...(intentDecision?.requestedMemoryTypes ?? []),
+            ]),
+          ]
+        : intentDecision?.needsMemory === false
+          ? requestedMemoryTypes
+          : (intentDecision?.requestedMemoryTypes ?? requestedMemoryTypes),
+    );
 
     if (context.phase !== "before_response") {
       return {
@@ -257,10 +219,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: scopePlan.scopes,
         scope_reason: scopePlan.reason,
-        importance_threshold:
-          context.phase === "session_start"
-            ? this.config.IMPORTANCE_THRESHOLD_SESSION_START
-            : this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
       };
     }
@@ -274,7 +233,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
       });
     }
@@ -298,13 +257,21 @@ export class TriggerEngine {
         const plannerNeedsMemory = llmDecision.value.needs_memory ?? llmDecision.value.should_search;
         const plannerIntentConfidence = llmDecision.value.intent_confidence ?? (plannerNeedsMemory ? 0.8 : 0.6);
         const plannerIntentReason = llmDecision.value.intent_reason ?? llmDecision.value.reason;
-        const plannerRequestedMemoryTypes = llmDecision.value.requested_memory_types
+        const rawPlannerRequestedMemoryTypes = llmDecision.value.requested_memory_types
           ?.length
             ? llmDecision.value.requested_memory_types
             : intentTypesForSearch;
-        const plannerRequestedScopes = llmDecision.value.requested_scopes?.length
+        const plannerRequestedMemoryTypes =
+          rawPlannerRequestedMemoryTypes.filter((type) => intentTypesForSearch.includes(type));
+        const rawPlannerRequestedScopes = llmDecision.value.requested_scopes?.length
           ? dedupeScopes(llmDecision.value.requested_scopes)
           : intentScopesForSearch;
+        const plannerRequestedScopes =
+          rawPlannerRequestedScopes.filter((scope) => intentScopesForSearch.includes(scope));
+        const effectivePlannerTypes =
+          plannerRequestedMemoryTypes.length > 0 ? plannerRequestedMemoryTypes : intentTypesForSearch;
+        const effectivePlannerScopes =
+          plannerRequestedScopes.length > 0 ? plannerRequestedScopes : intentScopesForSearch;
 
         if (!llmDecision.value.should_search) {
           return {
@@ -315,15 +282,15 @@ export class TriggerEngine {
             memory_mode: memoryMode,
             requested_scopes: intentScopesForSearch,
             scope_reason: scopePlan.reason,
-            importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+            importance_threshold: baseImportanceThreshold,
             cooldown_applied: false,
             llm_used: true,
             llm_decision_reason: llmDecision.value.reason,
             intent_reason: plannerIntentReason,
             intent_confidence: plannerIntentConfidence,
             intent_needs_memory: plannerNeedsMemory,
-            intent_memory_types: plannerRequestedMemoryTypes,
-            intent_scopes: plannerRequestedScopes,
+            intent_memory_types: effectivePlannerTypes,
+            intent_scopes: effectivePlannerScopes,
             intent_plan_attempted: true,
             intent_plan_degraded: false,
             search_plan_attempted: true,
@@ -336,18 +303,13 @@ export class TriggerEngine {
           trigger_type: "llm_recall_judge",
           trigger_reason:
             llmDecision.value.reason || runtimeMessages.llmCandidateScanReason,
-          requested_memory_types: llmDecision.value.requested_memory_types
-            ?.length
-            ? llmDecision.value.requested_memory_types
-            : plannerRequestedMemoryTypes,
+          requested_memory_types: effectivePlannerTypes,
           memory_mode: memoryMode,
-          requested_scopes: llmDecision.value.requested_scopes?.length
-            ? dedupeScopes(llmDecision.value.requested_scopes)
-            : plannerRequestedScopes,
+          requested_scopes: effectivePlannerScopes,
           scope_reason: scopePlan.reason,
           importance_threshold:
             llmDecision.value.importance_threshold ??
-            this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+            baseImportanceThreshold,
           cooldown_applied: false,
           query_hint: llmDecision.value.query_hint,
           candidate_limit: llmDecision.value.candidate_limit,
@@ -356,8 +318,8 @@ export class TriggerEngine {
           intent_reason: plannerIntentReason,
           intent_confidence: plannerIntentConfidence,
           intent_needs_memory: plannerNeedsMemory,
-          intent_memory_types: plannerRequestedMemoryTypes,
-          intent_scopes: plannerRequestedScopes,
+          intent_memory_types: effectivePlannerTypes,
+          intent_scopes: effectivePlannerScopes,
           intent_plan_attempted: true,
           intent_plan_degraded: false,
           search_plan_attempted: true,
@@ -408,7 +370,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
       });
     }
@@ -427,7 +389,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: intentScopesForSearch,
         scope_reason: scopePlan.reason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
         degraded: true,
@@ -459,7 +421,7 @@ export class TriggerEngine {
       memory_mode: memoryMode,
       requested_scopes: intentScopesForSearch,
       scope_reason: scopePlan.reason,
-      importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+      importance_threshold: baseImportanceThreshold,
       cooldown_applied: false,
       semantic_score: semanticScore.score,
     });
@@ -472,6 +434,8 @@ export class TriggerEngine {
     requestedMemoryTypes: MemoryType[],
     scopeReason: string,
   ): Promise<TriggerDecision> {
+    const baseImportanceThreshold =
+      context.preflight_importance_threshold ?? this.config.IMPORTANCE_THRESHOLD_DEFAULT;
     if (shouldSkipForShortInput(context.current_input)) {
       return {
         hit: false,
@@ -481,7 +445,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: requestedScopes,
         scope_reason: scopeReason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
       };
     }
@@ -500,7 +464,7 @@ export class TriggerEngine {
         memory_mode: memoryMode,
         requested_scopes: requestedScopes,
         scope_reason: scopeReason,
-        importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+        importance_threshold: baseImportanceThreshold,
         cooldown_applied: false,
         semantic_score: semanticScore.score,
         degraded: true,
@@ -532,7 +496,7 @@ export class TriggerEngine {
       memory_mode: memoryMode,
       requested_scopes: requestedScopes,
       scope_reason: scopeReason,
-      importance_threshold: this.config.IMPORTANCE_THRESHOLD_DEFAULT,
+      importance_threshold: baseImportanceThreshold,
       cooldown_applied: false,
       semantic_score: semanticScore.score,
     };
@@ -575,7 +539,7 @@ export class TriggerEngine {
             task_id: context.task_id,
             memory_mode: memoryMode,
             scope_filter: requestedScopes,
-            memory_type_filter: ["fact_preference", "task_state", "episodic"],
+            memory_type_filter: context.preflight_memory_types ?? ["fact_preference", "task_state", "episodic"],
             status_filter: ["active"],
             importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
             semantic_query_text: queryText,

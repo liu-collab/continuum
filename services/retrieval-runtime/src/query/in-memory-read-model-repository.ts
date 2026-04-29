@@ -1,4 +1,4 @@
-import type { CandidateMemory, RetrievalQuery } from "../shared/types.js";
+import type { CandidateMemory, ReadModelAvailabilityQuery, RetrievalQuery } from "../shared/types.js";
 import { clamp, cosineSimilarity, normalizeText } from "../shared/utils.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
 
@@ -58,6 +58,41 @@ function compareContextualCandidates(query: RetrievalQuery) {
 
 export class InMemoryReadModelRepository implements ReadModelRepository {
   constructor(private readonly records: CandidateMemory[]) {}
+
+  async estimateAvailability(query: ReadModelAvailabilityQuery, signal?: AbortSignal) {
+    if (signal?.aborted) {
+      throw signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason ?? "aborted"));
+    }
+
+    const matches = this.records
+      .filter((record) => query.status_filter.includes(record.status))
+      .filter((record) => query.scope_filter.includes(record.scope))
+      .filter((record) => {
+        if (record.scope === "workspace") {
+          return record.workspace_id === query.workspace_id;
+        }
+        if (record.scope === "user") {
+          return record.user_id === query.user_id;
+        }
+        if (record.scope === "task") {
+          return record.workspace_id === query.workspace_id && Boolean(query.task_id) && record.task_id === query.task_id;
+        }
+        if (record.scope === "session") {
+          return record.workspace_id === query.workspace_id && record.session_id === query.session_id;
+        }
+        return false;
+      })
+      .filter((record) => query.memory_type_filter.includes(record.memory_type))
+      .filter((record) => record.importance >= query.importance_threshold);
+
+    return {
+      total_count: matches.length,
+      type_distribution: matches.reduce<Partial<Record<CandidateMemory["memory_type"], number>>>((acc, record) => {
+        acc[record.memory_type] = (acc[record.memory_type] ?? 0) + 1;
+        return acc;
+      }, {}),
+    };
+  }
 
   async searchCandidates(query: RetrievalQuery, signal?: AbortSignal): Promise<CandidateMemory[]> {
     if (signal?.aborted) {

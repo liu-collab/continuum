@@ -331,6 +331,19 @@ export function createSchema(config: StorageSchemaConfig) {
       ),
       index("memory_read_model_task_idx").on(table.taskId, table.status),
       index("memory_read_model_updated_idx").on(table.updatedAt),
+      index("memory_read_model_user_preflight_idx").on(
+        table.userId,
+        table.status,
+        table.memoryType,
+        table.importance,
+      ).where(sql`${table.scope} = 'user'`),
+      index("memory_read_model_workspace_preflight_idx").on(
+        table.workspaceId,
+        table.status,
+        table.scope,
+        table.memoryType,
+        table.importance,
+      ).where(sql`${table.scope} in ('workspace', 'task', 'session')`),
     ],
   );
 

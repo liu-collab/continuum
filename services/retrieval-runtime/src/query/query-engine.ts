@@ -2,7 +2,15 @@ import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
 import type { DependencyGuard } from "../dependency/dependency-guard.js";
-import type { CandidateMemory, PhaseScoringWeights, RetrievalQuery, ScopeType, TriggerContext, TriggerDecision } from "../shared/types.js";
+import type {
+  CandidateMemory,
+  PhaseScoringWeights,
+  ReadModelAvailabilityQuery,
+  RetrievalQuery,
+  ScopeType,
+  TriggerContext,
+  TriggerDecision,
+} from "../shared/types.js";
 import { clamp, cosineSimilarity, normalizeText, tokenizeForOverlap, truncateFromTail } from "../shared/utils.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
@@ -196,6 +204,10 @@ export class QueryEngine {
     private readonly dependencyGuard: DependencyGuard,
     private readonly logger: Logger,
   ) {}
+
+  async estimateAvailability(query: ReadModelAvailabilityQuery, signal?: AbortSignal) {
+    return this.repository.estimateAvailability(query, signal);
+  }
 
   async query(context: TriggerContext, decision: TriggerDecision): Promise<QueryEngineResult> {
     const query = buildRetrievalQuery(context, decision, this.config);

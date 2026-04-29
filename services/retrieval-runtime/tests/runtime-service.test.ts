@@ -221,9 +221,12 @@ const sampleRecords: CandidateMemory[] = [
 ];
 
 class StubEmbeddingsClient implements EmbeddingsClient {
+  public callCount = 0;
+
   constructor(private readonly vector: number[] = [1, 0, 0], private readonly shouldFail = false) {}
 
   async embedText(): Promise<number[]> {
+    this.callCount += 1;
     if (this.shouldFail) {
       throw new Error("embeddings unavailable");
     }
@@ -655,6 +658,154 @@ function createMemoryDestination() {
 }
 
 describe("retrieval-runtime service", () => {
+  it("preflight skips empty read model before memory llm and embeddings", async () => {
+    const embeddingsClient = new StubEmbeddingsClient();
+    const recallPlanner = new StubLlmRecallPlanner({
+      should_search: true,
+      reason: "should not be called",
+      requested_scopes: ["workspace", "user"],
+      requested_memory_types: ["fact_preference", "task_state"],
+      importance_threshold: 4,
+      query_hint: "unused",
+      candidate_limit: 4,
+    }, {
+      should_inject: true,
+      reason: "unused",
+      selected_record_ids: [],
+      memory_summary: "unused",
+    });
+    const { service, repository } = createRuntime({
+      records: [],
+      embeddingsClient,
+      llmRecallPlanner: recallPlanner,
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "session_start",
+      current_input: "恢复上下文",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.trigger).toBe(false);
+    expect(response.trigger_reason).toBe("recall_preflight_skipped:no_visible_candidates");
+    expect(response.injection_block).toBeNull();
+    expect(embeddingsClient.callCount).toBe(0);
+    expect(recallPlanner.searchCallCount).toBe(0);
+
+    const runs = await repository.getRuns({ trace_id: response.trace_id });
+    expect(runs.trigger_runs[0]?.trigger_reason).toBe("recall_preflight_skipped:no_visible_candidates");
+    expect(runs.recall_runs[0]?.result_state).toBe("empty");
+    expect(runs.injection_runs[0]?.result_state).toBe("not_triggered");
+  });
+
+  it("preflight skips pure command input but keeps meaningful continuation input", async () => {
+    const commandEmbeddings = new StubEmbeddingsClient();
+    const commandRuntime = createRuntime({
+      embeddingsClient: commandEmbeddings,
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const commandResponse = await commandRuntime.service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "ls",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(commandResponse.trigger).toBe(false);
+    expect(commandResponse.trigger_reason).toBe("recall_preflight_skipped:short_or_command_input");
+    expect(commandEmbeddings.callCount).toBe(0);
+
+    const continuationEmbeddings = new StubEmbeddingsClient();
+    const continuationRuntime = createRuntime({
+      embeddingsClient: continuationEmbeddings,
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const continuationResponse = await continuationRuntime.service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "继续这个任务",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(continuationResponse.trigger_reason).not.toContain("recall_preflight_skipped");
+    expect(continuationEmbeddings.callCount).toBeGreaterThan(0);
+  });
+
+  it("preflight respects memory mode visibility for global user memories", async () => {
+    const onlyUserMemory = [sampleRecords[1]!];
+    const workspaceOnly = createRuntime({
+      records: onlyUserMemory,
+    });
+
+    const workspaceOnlyResponse = await workspaceOnly.service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "上次那个偏好继续沿用。",
+      memory_mode: "workspace_only",
+    });
+
+    expect(workspaceOnlyResponse.trigger).toBe(false);
+    expect(workspaceOnlyResponse.trigger_reason).toBe("recall_preflight_skipped:no_visible_candidates");
+
+    const plusGlobal = createRuntime({
+      records: onlyUserMemory,
+    });
+
+    const plusGlobalResponse = await plusGlobal.service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "上次那个偏好继续沿用。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(plusGlobalResponse.trigger).toBe(true);
+    expect(plusGlobalResponse.memory_packet?.records.some((record) => record.scope === "user")).toBe(true);
+  });
+
+  it("preflight skips before_plan when only episodic memory is available", async () => {
+    const { service } = createRuntime({
+      records: [sampleRecords[3]!],
+    });
+
+    const response = await service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_plan",
+      current_input: "先规划一下下一步。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(response.trigger).toBe(false);
+    expect(response.trigger_reason).toBe("recall_preflight_skipped:no_matching_memory_types");
+  });
+
   it("returns an injection block when history reference trigger hits", async () => {
     const { service } = createRuntime();
 
@@ -3192,7 +3343,7 @@ describe("retrieval-runtime service", () => {
       task_id: ids.task,
       turn_id: "turn-metrics-2",
       phase: "before_response",
-      current_input: "继续。",
+      current_input: "继续这个任务。",
     });
 
     await service.prepareContext({
