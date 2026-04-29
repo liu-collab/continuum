@@ -212,7 +212,7 @@ describe("RuntimeConfigCard", () => {
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前 provider 需要填写 api_key。");
   });
 
-  it("only exposes the three common provider kinds in the selector", async () => {
+  it("exposes the common provider kinds in the selector", async () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <RuntimeConfigCard
@@ -232,7 +232,7 @@ describe("RuntimeConfigCard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "OpenAI-compatible" }));
     const options = screen.getAllByRole("option").map((option) => option.textContent);
-    expect(options).toEqual(["OpenAI-compatible", "anthropic", "ollama"]);
+    expect(options).toEqual(["OpenAI-compatible", "OpenAI Responses", "anthropic", "ollama"]);
   });
 
   it("keeps a hidden provider kind visible when existing config already uses it", async () => {
@@ -255,6 +255,6 @@ describe("RuntimeConfigCard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "record-replay" }));
     const options = screen.getAllByRole("option").map((option) => option.textContent);
-    expect(options).toEqual(["OpenAI-compatible", "anthropic", "ollama", "record-replay"]);
+    expect(options).toEqual(["OpenAI-compatible", "OpenAI Responses", "anthropic", "ollama", "record-replay"]);
   });
 });

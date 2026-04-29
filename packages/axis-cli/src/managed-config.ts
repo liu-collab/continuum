@@ -495,7 +495,7 @@ export async function readManagedMnaProviderConfig(
     return null;
   }
   const kind = String(provider.kind);
-  if (!["openai-compatible", "anthropic", "ollama"].includes(kind)) {
+  if (!["openai-compatible", "openai-responses", "anthropic", "ollama"].includes(kind)) {
     return null;
   }
 

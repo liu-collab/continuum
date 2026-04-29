@@ -430,6 +430,29 @@ provider:
     expect(config.provider.apiKeyEnv).toBe("DEEPSEEK_API_KEY");
   });
 
+  it("allows openai-responses provider env overrides", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        MNA_PROVIDER_KIND: "openai-responses",
+        MNA_PROVIDER_MODEL: "gpt-4.1-mini",
+        MNA_PROVIDER_BASE_URL: "https://api.openai.com/v1",
+        MNA_PROVIDER_API_KEY_ENV: "OPENAI_API_KEY",
+        OPENAI_API_KEY: "demo-key",
+      },
+    });
+
+    expect(config.provider.kind).toBe("openai-responses");
+    expect(config.provider.model).toBe("gpt-4.1-mini");
+    expect(config.provider.baseUrl).toBe("https://api.openai.com/v1");
+    expect(config.provider.apiKeyEnv).toBe("OPENAI_API_KEY");
+  });
+
   it("allows runtime env overrides for managed startup", () => {
     const homeDir = createTempDir("mna-home-");
     const workspaceDir = createTempDir("mna-workspace-");

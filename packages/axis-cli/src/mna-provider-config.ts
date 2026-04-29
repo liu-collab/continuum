@@ -2,7 +2,7 @@ import { bilingualMessage } from "./messages.js";
 
 export type ManagedMnaProviderConfig =
   | {
-      kind: "openai-compatible" | "anthropic";
+      kind: "openai-compatible" | "openai-responses" | "anthropic";
       model: string;
       baseUrl: string;
       apiKey?: string;
@@ -25,7 +25,7 @@ function shouldUseDeepSeekDefaults(model: string, baseUrl: string) {
 }
 
 function isSupportedProviderKind(value: string) {
-  return value === "openai-compatible" || value === "anthropic" || value === "ollama";
+  return value === "openai-compatible" || value === "openai-responses" || value === "anthropic" || value === "ollama";
 }
 
 export function hasManagedMnaProviderOptionOverrides(options: Record<string, string | boolean>) {
@@ -84,6 +84,15 @@ export function resolveManagedMnaProviderConfig(
       model: explicitModel || defaultModel,
       baseUrl: explicitBaseUrl || defaultBaseUrl,
       apiKeyEnv: explicitApiKeyEnv || defaultApiKeyEnv,
+    };
+  }
+
+  if (resolvedKind === "openai-responses") {
+    return {
+      kind: "openai-responses",
+      model: explicitModel || "gpt-4.1-mini",
+      baseUrl: explicitBaseUrl || "https://api.openai.com/v1",
+      apiKeyEnv: explicitApiKeyEnv || "OPENAI_API_KEY",
     };
   }
 

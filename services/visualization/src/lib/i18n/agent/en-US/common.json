@@ -209,7 +209,7 @@
       "back": "Back",
       "ollamaNoApiKey": "Local Ollama does not need an API Key.",
       "providers": {
-        "openai": "Use the official OpenAI API.",
+        "openai": "Use the official OpenAI Responses API.",
         "anthropic": "Use the Anthropic Claude API.",
         "deepseek": "Use the DeepSeek OpenAI-compatible API.",
         "custom": "Use a third-party OpenAI-compatible API.",

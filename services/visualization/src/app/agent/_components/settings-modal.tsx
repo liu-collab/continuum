@@ -130,7 +130,7 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
   {
     id: "openai",
     label: "OpenAI",
-    kind: "openai-compatible",
+    kind: "openai-responses",
     baseUrl: "https://api.openai.com/v1",
     model: "gpt-4.1-mini",
     apiKeyRequired: true,
@@ -214,7 +214,7 @@ function resolveDefaultEmbeddingConfig(kind: ProviderKind, baseUrl: string | nul
     };
   }
 
-  if (kind === "openai-compatible" && normalizeText(baseUrl).includes("api.openai.com")) {
+  if ((kind === "openai-compatible" || kind === "openai-responses") && normalizeText(baseUrl).includes("api.openai.com")) {
     return {
       baseUrl: "https://api.openai.com/v1",
       model: "text-embedding-3-small",
@@ -260,7 +260,7 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const { formatMemoryModeLabel, t } = useAgentI18n();
 
-  const [providerKind, setProviderKind] = useState<"openai-compatible" | "anthropic" | "ollama">(
+  const [providerKind, setProviderKind] = useState<EditableProviderKind>(
     "openai-compatible"
   );
   const [providerKindToSave, setProviderKindToSave] = useState<ProviderKind>("openai-compatible");
@@ -437,12 +437,12 @@ export function SettingsModal({
   }, [open, setupWizard, config?.env_hints?.provider_api_key_env]);
 
   const providerRequiresBaseUrl = useMemo(
-    () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",
+    () => currentProviderKind === "openai-compatible" || currentProviderKind === "openai-responses" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",
     [currentProviderKind],
   );
 
   const providerRequiresApiKey = useMemo(
-    () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic",
+    () => currentProviderKind === "openai-compatible" || currentProviderKind === "openai-responses" || currentProviderKind === "anthropic",
     [currentProviderKind],
   );
 

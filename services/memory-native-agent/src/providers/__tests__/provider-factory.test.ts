@@ -42,6 +42,23 @@ describe("createProvider", () => {
     expect(provider.status?.()).toBeUndefined();
   });
 
+  it("creates an openai-responses provider when configured", () => {
+    const provider = createProvider(
+      {
+        kind: "openai-responses",
+        model: "gpt-4.1-mini",
+        baseUrl: "https://api.openai.com/v1",
+        temperature: 0.2,
+        apiKey: "inline-key",
+      },
+      {},
+    );
+
+    expect(provider.id()).toBe("openai-responses");
+    expect(provider.model()).toBe("gpt-4.1-mini");
+    expect(provider.status?.()).toBeUndefined();
+  });
+
   it("creates a record-replay provider with replay mode and no target provider", () => {
     const provider = createProvider(
       {

@@ -9,7 +9,7 @@ import type { RuntimeFastifyInstance } from "../types.js";
 import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolApprovalMode } from "../state.js";
 import { clearManagedDependencyProbe, writeManagedDependencyProbe } from "./dependency-status-cache.js";
 
-const providerKindSchema = z.enum(["openai-compatible", "anthropic", "ollama", "record-replay"]);
+const providerKindSchema = z.enum(["openai-compatible", "openai-responses", "anthropic", "ollama", "record-replay"]);
 const mcpServerPayloadSchema = z.object({
   name: z.string().trim().min(1),
   transport: z.enum(["stdio", "http"]),
@@ -53,8 +53,8 @@ const providerPayloadSchema = z.object({
   keep_alive: z.union([z.string().trim().min(1), z.number().int().min(0)]).optional(),
 }).superRefine((value, context) => {
   const requiresBaseUrl =
-    value.kind === "openai-compatible" || value.kind === "anthropic" || value.kind === "ollama";
-  const requiresApiKey = value.kind === "openai-compatible" || value.kind === "anthropic";
+    value.kind === "openai-compatible" || value.kind === "openai-responses" || value.kind === "anthropic" || value.kind === "ollama";
+  const requiresApiKey = value.kind === "openai-compatible" || value.kind === "openai-responses" || value.kind === "anthropic";
 
   if (requiresBaseUrl && !value.base_url) {
     context.addIssue({

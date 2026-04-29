@@ -127,6 +127,22 @@ describe("managed mna provider config", () => {
     expect(content.provider.apiKeyEnv).toBeUndefined();
   });
 
+  it("roundtrips openai-responses provider config", async () => {
+    await writeManagedMnaProviderConfig(mnaHome, {
+      kind: "openai-responses",
+      model: "gpt-4.1-mini",
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyEnv: "OPENAI_API_KEY",
+    });
+
+    await expect(readManagedMnaProviderConfig(mnaHome)).resolves.toEqual({
+      kind: "openai-responses",
+      model: "gpt-4.1-mini",
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyEnv: "OPENAI_API_KEY",
+    });
+  });
+
   it("reads legacy camelCase provider fields for backward compatibility", async () => {
     await writeFile(
       managedMnaProviderConfigPath(mnaHome),

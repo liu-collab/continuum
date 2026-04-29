@@ -3,6 +3,7 @@ import { AnthropicProvider } from "./anthropic.js";
 import { MisconfiguredProvider } from "./misconfigured.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
+import { OpenAIResponsesProvider } from "./openai-responses.js";
 import { RecordReplayProvider } from "./record-replay.js";
 import { ProviderAuthError, type IModelProvider } from "./types.js";
 
@@ -35,13 +36,23 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
     });
   }
 
-  if (config.kind === "openai-compatible") {
+  if (config.kind === "openai-compatible" || config.kind === "openai-responses") {
     const apiKey = resolveApiKey(config, env, config.kind);
     if (!apiKey) {
       return new MisconfiguredProvider({
         kind: config.kind,
         model: config.model,
         detail: `provider ${config.kind} 缺少 API key 配置`,
+      });
+    }
+    if (config.kind === "openai-responses") {
+      return new OpenAIResponsesProvider({
+        baseUrl: config.baseUrl,
+        model: config.model,
+        apiKey,
+        organization: config.organization,
+        effort: config.effort ?? undefined,
+        maxTokens: config.maxTokens ?? undefined,
       });
     }
     return new OpenAICompatibleProvider({
@@ -93,15 +104,15 @@ function createRecordReplayTargetProvider(
     kind: targetKind,
   };
 
-  if (targetKind === "openai-compatible" || targetKind === "anthropic") {
+  if (targetKind === "openai-compatible" || targetKind === "openai-responses" || targetKind === "anthropic") {
     targetConfig.apiKeyEnv ??= targetKind === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
   }
 
   return createProvider(targetConfig, env);
 }
 
-function isRecordReplayTargetKind(value: string): value is "openai-compatible" | "anthropic" | "ollama" {
-  return value === "openai-compatible" || value === "anthropic" || value === "ollama";
+function isRecordReplayTargetKind(value: string): value is "openai-compatible" | "openai-responses" | "anthropic" | "ollama" {
+  return value === "openai-compatible" || value === "openai-responses" || value === "anthropic" || value === "ollama";
 }
 
 function resolveRecordReplayMode(env: NodeJS.ProcessEnv): "live" | "record" | "replay" {

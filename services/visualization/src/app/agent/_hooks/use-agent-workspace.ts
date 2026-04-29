@@ -686,7 +686,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function updateRuntimeConfig(payload: {
     provider?: {
-      kind: "not-configured" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
+      kind: "not-configured" | "openai-compatible" | "openai-responses" | "anthropic" | "ollama" | "record-replay";
       model: string;
       base_url?: string;
       api_key?: string;

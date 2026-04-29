@@ -305,7 +305,7 @@ export type MnaDependencyProbeResponse = {
 
 export type MnaAgentConfigResponse = {
   provider: {
-    kind: "not-configured" | "openai-compatible" | "anthropic" | "ollama" | "record-replay";
+    kind: "not-configured" | "openai-compatible" | "openai-responses" | "anthropic" | "ollama" | "record-replay";
     model: string;
     base_url: string | null;
     api_key: string | null;

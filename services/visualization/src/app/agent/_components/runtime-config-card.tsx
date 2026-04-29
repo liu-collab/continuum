@@ -11,6 +11,7 @@ import {
   EDITABLE_PROVIDER_KIND_OPTIONS,
   formatProviderKindLabel,
   isEditableProviderKind,
+  type EditableProviderKind,
   type ProviderKind
 } from "../_lib/provider-kind";
 import { useAgentI18n } from "@/lib/i18n/agent/provider";
@@ -57,7 +58,7 @@ function resolveStatusTone(status: string | undefined) {
 
 export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeConfigCardProps) {
   const { t } = useAgentI18n();
-  const [providerKind, setProviderKind] = useState<"openai-compatible" | "anthropic" | "ollama">(
+  const [providerKind, setProviderKind] = useState<EditableProviderKind>(
     "openai-compatible"
   );
   const [providerKindToSave, setProviderKindToSave] = useState<ProviderKind>("openai-compatible");
@@ -95,7 +96,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
   const providerRequiresBaseUrl = useMemo(
     () => {
       const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
-      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama";
+      return currentProviderKind === "openai-compatible" || currentProviderKind === "openai-responses" || currentProviderKind === "anthropic" || currentProviderKind === "ollama";
     },
     [providerKind, providerKindToSave]
   );
@@ -103,7 +104,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
   const providerRequiresApiKey = useMemo(
     () => {
       const currentProviderKind = isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
-      return currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic";
+      return currentProviderKind === "openai-compatible" || currentProviderKind === "openai-responses" || currentProviderKind === "anthropic";
     },
     [providerKind, providerKindToSave]
   );
@@ -203,7 +204,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
           <SelectField
             value={isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave}
             onChange={(value) => {
-              const nextKind = value as "openai-compatible" | "anthropic" | "ollama";
+              const nextKind = value as EditableProviderKind;
               setProviderKind(nextKind);
               setProviderKindToSave(nextKind);
             }}

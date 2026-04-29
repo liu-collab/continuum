@@ -147,7 +147,7 @@ describe("axis cli", () => {
       "--embedding-model",
       "text-embedding-3-small",
       "--provider-kind",
-      "openai-compatible",
+      "openai-responses",
       "--provider-model",
       "deepseek-chat",
     ]);
@@ -159,13 +159,14 @@ describe("axis cli", () => {
     expect(parsed.options["bind-host"]).toBe("0.0.0.0");
     expect(parsed.options["embedding-base-url"]).toBe("https://api.openai.com/v1");
     expect(parsed.options["embedding-model"]).toBe("text-embedding-3-small");
-    expect(parsed.options["provider-kind"]).toBe("openai-compatible");
+    expect(parsed.options["provider-kind"]).toBe("openai-responses");
     expect(parsed.options["provider-model"]).toBe("deepseek-chat");
     expect(renderHelp()).toContain("axis start");
     expect(renderHelp()).toContain("--ui-dev");
     expect(renderHelp()).toContain("--bind-host HOST");
     expect(renderHelp()).toContain("--embedding-base-url URL");
     expect(renderHelp()).toContain("--provider-kind KIND");
+    expect(renderHelp()).toContain("openai-responses");
   });
 
   it("reports expected start failures without calling them unexpected errors", async () => {

@@ -108,7 +108,7 @@ describe("SettingsModal", () => {
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
       provider: {
-        kind: "openai-compatible",
+        kind: "openai-responses",
         model: "gpt-4.1-mini",
         base_url: "https://api.openai.com/v1",
         api_key_env: "OPENAI_API_KEY",
@@ -281,7 +281,7 @@ describe("SettingsModal", () => {
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
       provider: {
-        kind: "openai-compatible",
+        kind: "openai-responses",
         model: "gpt-4.1-mini",
         base_url: "https://openrouter.ai/api/v1",
         api_key: "sk-router",

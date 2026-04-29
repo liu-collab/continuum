@@ -15,7 +15,7 @@ Windows PowerShell：
 ```powershell
 npm install -g axis-agent
 $env:OPENAI_API_KEY="sk-..."
-axis start --provider-kind openai-compatible --provider-model gpt-4.1-mini --provider-base-url https://api.openai.com/v1 --provider-api-key-env OPENAI_API_KEY
+axis start --provider-kind openai-responses --provider-model gpt-4.1-mini --provider-base-url https://api.openai.com/v1 --provider-api-key-env OPENAI_API_KEY
 axis ui
 ```
 
@@ -24,7 +24,7 @@ macOS / Linux：
 ```bash
 npm install -g axis-agent
 export OPENAI_API_KEY="sk-..."
-axis start --provider-kind openai-compatible --provider-model gpt-4.1-mini --provider-base-url https://api.openai.com/v1 --provider-api-key-env OPENAI_API_KEY
+axis start --provider-kind openai-responses --provider-model gpt-4.1-mini --provider-base-url https://api.openai.com/v1 --provider-api-key-env OPENAI_API_KEY
 axis ui
 ```
 
@@ -212,7 +212,17 @@ axis claude
 
 #### provider（主对话模型）
 
-支持的 kind：`openai-compatible`、`anthropic`、`ollama`、`demo`、`record-replay`。
+支持的 kind：`openai-responses`、`openai-compatible`、`anthropic`、`ollama`、`record-replay`。
+
+| kind | 上游接口 | 工具调用支持 | 适用场景 |
+|---|---|---|---|
+| `openai-responses` | `/v1/responses` | 支持，走 Responses API 的 function call 事件 | OpenAI 官方模型优先使用 |
+| `openai-compatible` | `/v1/chat/completions` | 支持，走 Chat Completions 的 `tool_calls` | 第三方 OpenAI 兼容 API |
+| `anthropic` | `/v1/messages` | 支持，走 Anthropic 的 `tool_use` | Anthropic Claude |
+| `ollama` | `/api/chat` | 支持，取决于本地模型和 Ollama 工具调用能力 | 本地模型 |
+| `record-replay` | 本地 fixture | 测试用 | 确定性回归 |
+
+`base_url` 填到版本路径即可，例如 OpenAI 官方填 `https://api.openai.com/v1`，不要填完整 endpoint。第三方服务如果只兼容 `/v1/chat/completions`，请选择 `openai-compatible`；只有明确支持 `/v1/responses` 时才选择 `openai-responses`。
 
 | 字段 | 环境变量 |
 |---|---|

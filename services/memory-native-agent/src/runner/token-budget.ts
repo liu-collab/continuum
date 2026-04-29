@@ -18,6 +18,7 @@ export function resolveContextMaxTokens(provider: ProviderConfig): number {
     case "anthropic":
       return 200_000;
     case "openai-compatible":
+    case "openai-responses":
       if (/gpt-4\.1|gpt-4o|o3|o4/i.test(provider.model)) {
         return 128_000;
       }
