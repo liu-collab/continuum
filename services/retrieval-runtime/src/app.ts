@@ -170,6 +170,7 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
         task_id: z.string().uuid().optional(),
         recent_context_summary: z.string().optional(),
         memory_mode: memoryModeSchema.optional(),
+        injection_token_budget: z.coerce.number().int().positive().optional(),
       });
     const parsed = payloadSchema.safeParse(request.body);
     if (!parsed.success) {

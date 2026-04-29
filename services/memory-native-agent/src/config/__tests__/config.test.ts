@@ -47,6 +47,7 @@ describe("config loader", () => {
     expect(config.provider.maxTokens).toBeNull();
     expect(config.memory.mode).toBe("workspace_plus_global");
     expect(config.memory.userId).toBe("00000000-0000-4000-8000-000000000001");
+    expect(config.memory.injectionTokenBudget).toBe(1500);
     expect(config.cli.systemPrompt).toBeNull();
     expect(config.tools.maxOutputChars).toBe(8192);
     expect(config.tools.approvalMode).toBe("confirm");
@@ -76,6 +77,7 @@ provider:
   max_tokens: 8192
 memory:
   mode: workspace_only
+  injection_token_budget: 640
 tools:
   max_output_chars: 4096
   shell_exec:
@@ -113,6 +115,7 @@ planning:
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3999");
     expect(config.runtime.requestTimeoutMs).toBe(1200);
     expect(config.memory.mode).toBe("workspace_only");
+    expect(config.memory.injectionTokenBudget).toBe(640);
     expect(config.provider.effort).toBe("high");
     expect(config.provider.maxTokens).toBe(8192);
     expect(config.tools.maxOutputChars).toBe(4096);
@@ -245,6 +248,30 @@ memory:
     });
 
     expect(config.memory.mode).toBe("workspace_plus_global");
+  });
+
+  it("lets memory injection token budget env override config value", () => {
+    const homeDir = createTempDir("mna-home-");
+    const workspaceDir = createTempDir("mna-workspace-");
+    createdRoots.push(homeDir, workspaceDir);
+
+    writeYaml(
+      path.join(homeDir, ".mna", "config.yaml"),
+      `
+memory:
+  injection_token_budget: 640
+`,
+    );
+
+    const config = loadConfig({
+      cwdOverride: workspaceDir,
+      env: {
+        HOME: homeDir,
+        MNA_MEMORY_INJECTION_TOKEN_BUDGET: "320",
+      },
+    });
+
+    expect(config.memory.injectionTokenBudget).toBe(320);
   });
 
   it("loads system prompt files relative to the config file", () => {

@@ -18,6 +18,7 @@ export const prepareContextInputSchema = z.object({
   cwd: z.string().optional(),
   source: z.string().optional(),
   memory_mode: memoryModeSchema.optional(),
+  injection_token_budget: z.coerce.number().int().positive().optional(),
 });
 
 export const finalizeTurnInputSchema = z.object({
@@ -47,6 +48,7 @@ export interface SessionStartRequest {
   task_id?: string;
   recent_context_summary?: string;
   memory_mode?: "workspace_only" | "workspace_plus_global";
+  injection_token_budget?: number;
 }
 
 export interface HostAdapter<TInput> {

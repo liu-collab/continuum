@@ -880,6 +880,7 @@ export class AgentRunner {
         user_id: this.deps.config.memory.userId,
         workspace_id: this.deps.config.memory.workspaceId,
         memory_mode: this.deps.config.memory.mode,
+        injection_token_budget: this.deps.config.memory.injectionTokenBudget,
       });
       return response;
     } catch (error) {
@@ -1038,6 +1039,7 @@ export class AgentRunner {
         cwd: this.deps.config.memory.cwd,
         source: "mna",
         memory_mode: this.deps.config.memory.mode,
+        injection_token_budget: this.deps.config.memory.injectionTokenBudget,
       });
       this.deps.io.recordPrepareContextLatency?.(phase, Date.now() - startedAt);
       span.finish("ok", {

@@ -63,11 +63,15 @@ describe("memory client", () => {
 
   it("injects memory_native_agent host for prepare-context and validates the response", async () => {
     let receivedHost: string | null = null;
+    let receivedInjectionTokenBudget: number | null = null;
 
     const runtime = await startMockRuntime((app) => {
       app.post("/v1/runtime/prepare-context", async (request) => {
         const body = request.body as Record<string, unknown>;
         receivedHost = typeof body.host === "string" ? body.host : null;
+        receivedInjectionTokenBudget = typeof body.injection_token_budget === "number"
+          ? body.injection_token_budget
+          : null;
 
         return {
           trace_id: "trace-prepare",
@@ -103,9 +107,11 @@ describe("memory client", () => {
       turn_id: "turn-1",
       phase: "before_response",
       current_input: "继续上一轮已经确认的约束。",
+      injection_token_budget: 640,
     });
 
     expect(receivedHost).toBe("memory_native_agent");
+    expect(receivedInjectionTokenBudget).toBe(640);
     expect(response.trace_id).toBe("trace-prepare");
     expect(response.injection_block?.memory_summary).toContain("默认用中文");
   });

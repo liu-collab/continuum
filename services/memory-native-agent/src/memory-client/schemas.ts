@@ -45,6 +45,7 @@ export const sessionStartRequestSchema = z.object({
   task_id: z.string().uuid().optional(),
   recent_context_summary: z.string().optional(),
   memory_mode: memoryModeSchema.optional(),
+  injection_token_budget: z.coerce.number().int().positive().optional(),
 });
 
 export const prepareContextRequestSchema = z.object({
@@ -60,6 +61,7 @@ export const prepareContextRequestSchema = z.object({
   cwd: z.string().optional(),
   source: z.string().optional(),
   memory_mode: memoryModeSchema.optional(),
+  injection_token_budget: z.coerce.number().int().positive().optional(),
 });
 
 export const finalizeTurnRequestSchema = z.object({

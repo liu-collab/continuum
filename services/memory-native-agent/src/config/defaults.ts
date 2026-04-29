@@ -13,6 +13,7 @@ export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 export const DEFAULT_UNCONFIGURED_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
 export const DEFAULT_TOOL_MAX_OUTPUT_CHARS = 8_192;
 export const DEFAULT_CONTEXT_RESERVE_TOKENS = 4_096;
+export const DEFAULT_MEMORY_INJECTION_TOKEN_BUDGET = 1_500;
 export const DEFAULT_SKILL_DISCOVERY_PATHS = [
   ".mna/skills",
   ".claude/skills",
@@ -47,6 +48,7 @@ export const DEFAULT_RAW_CONFIG = {
   memory: {
     mode: "workspace_plus_global",
     user_id: null,
+    injection_token_budget: DEFAULT_MEMORY_INJECTION_TOKEN_BUDGET,
   },
   mcp: {
     servers: [] as Array<{

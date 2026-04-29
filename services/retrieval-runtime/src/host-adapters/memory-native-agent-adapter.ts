@@ -20,6 +20,7 @@ export class MemoryNativeAgentAdapter
         cwd: input.cwd,
         source: input.source,
         memory_mode: input.memory_mode,
+        injection_token_budget: input.injection_token_budget,
       };
     }
 
@@ -35,6 +36,7 @@ export class MemoryNativeAgentAdapter
       cwd: input.cwd,
       source: input.source,
       memory_mode: input.memory_mode,
+      injection_token_budget: input.injection_token_budget,
     };
   }
 

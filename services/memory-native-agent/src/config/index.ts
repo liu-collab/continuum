@@ -67,6 +67,7 @@ export interface AgentConfig {
     userId: string;
     workspaceId: string;
     cwd: string;
+    injectionTokenBudget: number;
   };
   mcp: {
     servers: McpServerConfig[];
@@ -307,6 +308,24 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     effectiveConfig = reparsed.data;
   }
 
+  if (env.MNA_MEMORY_INJECTION_TOKEN_BUDGET || env.INJECTION_TOKEN_BUDGET) {
+    const rawBudget = env.MNA_MEMORY_INJECTION_TOKEN_BUDGET?.trim() || env.INJECTION_TOKEN_BUDGET?.trim();
+    const reparsed = mergedConfigSchema.safeParse({
+      ...effectiveConfig,
+      memory: {
+        ...effectiveConfig.memory,
+        injection_token_budget:
+          rawBudget && rawBudget.length > 0
+            ? Number(rawBudget)
+            : effectiveConfig.memory.injection_token_budget,
+      },
+    });
+    if (!reparsed.success) {
+      throw new Error(formatValidationError("Invalid memory env override", reparsed.error));
+    }
+    effectiveConfig = reparsed.data;
+  }
+
   if (
     env.MNA_PROVIDER_KIND
     || env.MNA_PROVIDER_MODEL
@@ -319,19 +338,19 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
   ) {
     const envProviderKind = env.MNA_PROVIDER_KIND?.trim();
     const reparsed = mergedConfigSchema.safeParse({
-      ...parsed.data,
+      ...effectiveConfig,
       provider: {
-        ...parsed.data.provider,
-        kind: (envProviderKind as ProviderKind | undefined) ?? parsed.data.provider.kind,
-        model: env.MNA_PROVIDER_MODEL?.trim() || parsed.data.provider.model,
-        base_url: env.MNA_PROVIDER_BASE_URL?.trim() || parsed.data.provider.base_url,
-        api_key: env.MNA_PROVIDER_API_KEY?.trim() || parsed.data.provider.api_key,
-        api_key_env: env.MNA_PROVIDER_API_KEY_ENV?.trim() || parsed.data.provider.api_key_env,
-        fixture_dir: env.MNA_FIXTURE_DIR?.trim() || parsed.data.provider.fixture_dir,
-        fixture_name: env.MNA_FIXTURE_NAME?.trim() || parsed.data.provider.fixture_name,
+        ...effectiveConfig.provider,
+        kind: (envProviderKind as ProviderKind | undefined) ?? effectiveConfig.provider.kind,
+        model: env.MNA_PROVIDER_MODEL?.trim() || effectiveConfig.provider.model,
+        base_url: env.MNA_PROVIDER_BASE_URL?.trim() || effectiveConfig.provider.base_url,
+        api_key: env.MNA_PROVIDER_API_KEY?.trim() || effectiveConfig.provider.api_key,
+        api_key_env: env.MNA_PROVIDER_API_KEY_ENV?.trim() || effectiveConfig.provider.api_key_env,
+        fixture_dir: env.MNA_FIXTURE_DIR?.trim() || effectiveConfig.provider.fixture_dir,
+        fixture_name: env.MNA_FIXTURE_NAME?.trim() || effectiveConfig.provider.fixture_name,
         record_replay_target:
           (env.MNA_REC_TARGET?.trim() as Exclude<ProviderKind, "record-replay" | "not-configured"> | undefined)
-          ?? parsed.data.provider.record_replay_target,
+          ?? effectiveConfig.provider.record_replay_target,
       },
     });
     if (!reparsed.success) {
@@ -372,6 +391,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
       userId,
       workspaceId,
       cwd: normalizedCwd,
+      injectionTokenBudget: effectiveConfig.memory.injection_token_budget,
     },
     mcp: {
       servers: effectiveConfig.mcp.servers.map((server) => ({

@@ -737,6 +737,7 @@ export class RetrievalRuntimeService {
             injectionStartedAt: Date.now(),
             dependencyStatus: await this.dependencyGuard.snapshot(),
             proactiveRecommendations,
+            injectionTokenBudget: normalizedContext.injection_token_budget,
             turnIndex,
             recentlyFilteredCandidates,
             recentlySoftMarkedCandidates,
@@ -806,7 +807,9 @@ export class RetrievalRuntimeService {
     });
 
     const injectionStartedAt = Date.now();
-    const injectionBlock = this.injectionEngine.build(packet);
+    const injectionBlock = this.injectionEngine.build(packet, {
+      tokenBudget: normalizedContext.injection_token_budget,
+    });
 
     await this.repository.recordInjectionRun({
       trace_id: traceId,
@@ -1349,6 +1352,7 @@ export class RetrievalRuntimeService {
     injectionStartedAt: number;
     dependencyStatus: DependencyStatusSnapshot;
     proactiveRecommendations: ProactiveRecommendation[];
+    injectionTokenBudget?: number;
     recentlyFilteredCandidates?: CandidateMemory[];
     recentlySoftMarkedCandidates?: CandidateMemory[];
     replayEscapeReason?: string;
@@ -1389,7 +1393,9 @@ export class RetrievalRuntimeService {
       created_at: nowIso(),
     });
 
-    const injectionBlock = this.injectionEngine.build(input.packet);
+    const injectionBlock = this.injectionEngine.build(input.packet, {
+      tokenBudget: input.injectionTokenBudget,
+    });
     await this.repository.recordInjectionRun({
       trace_id: input.traceId,
       phase: "before_response",

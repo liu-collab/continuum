@@ -374,6 +374,7 @@ function createAgentConfig(input: {
       userId: input.ids.user,
       workspaceId: input.ids.workspace,
       cwd: input.workspaceDir,
+      injectionTokenBudget: 1_500,
     },
     mcp: {
       servers: [],

@@ -57,13 +57,13 @@ export class InjectionEngine {
       .map((record) => record.summary);
   }
 
-  build(packet: MemoryPacket): InjectionBlock | null {
+  build(packet: MemoryPacket, options?: { tokenBudget?: number }): InjectionBlock | null {
     if (packet.records.length === 0) {
       return null;
     }
 
     const summaryTokens = estimateTokens(packet.packet_summary);
-    const tokenBudget = this.config.INJECTION_TOKEN_BUDGET;
+    const tokenBudget = options?.tokenBudget ?? this.config.INJECTION_TOKEN_BUDGET;
     const sortedRecords = sortRecords(packet.records);
     const eligibleRecords = sortedRecords.filter((record) => !isBlockedByOpenConflict(record));
 

@@ -125,6 +125,7 @@ function createConfig(): AgentConfig {
       userId: "550e8400-e29b-41d4-a716-446655440001",
       workspaceId: "550e8400-e29b-41d4-a716-446655440000",
       cwd: "C:/workspace",
+      injectionTokenBudget: 1_500,
     },
     mcp: { servers: [] },
     tools: {
@@ -168,6 +169,8 @@ describe("AgentRunner", () => {
   it("runs before_response and finalizes a plain text turn", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();
+    const config = createConfig();
+    config.memory.injectionTokenBudget = 777;
     const runner = new AgentRunner({
       memoryClient: memoryClient as never,
       provider: {
@@ -189,7 +192,7 @@ describe("AgentRunner", () => {
         listTools: () => [],
         invoke: vi.fn(),
       } as never,
-      config: createConfig(),
+      config,
       io,
     });
 
@@ -202,6 +205,13 @@ describe("AgentRunner", () => {
     expect(io.recordPrepareContextLatency).toHaveBeenCalledWith("before_response", expect.any(Number));
     expect(io.recordProviderCall).toHaveBeenCalledWith("ollama");
     expect(io.recordProviderFirstTokenLatency).toHaveBeenCalledWith("ollama", expect.any(Number));
+    expect(memoryClient.sessionStartContext).toHaveBeenCalledWith(expect.objectContaining({
+      injection_token_budget: 777,
+    }));
+    expect(memoryClient.prepareContext).toHaveBeenCalledWith(expect.objectContaining({
+      phase: "before_response",
+      injection_token_budget: 777,
+    }));
   });
 
   it("runs task_switch, task_start, before_plan, and before_response in order", async () => {
@@ -2250,4 +2260,3 @@ describe("AgentRunner", () => {
     expect(memoryClient.sessionStartContext).toHaveBeenCalledTimes(2);
   });
 });
-

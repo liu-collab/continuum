@@ -119,6 +119,7 @@ describe("Claude Code bridge (memory-bridge.mjs)", () => {
       memory_mode: z
         .enum(["workspace_only", "workspace_plus_global"])
         .optional(),
+      injection_token_budget: z.number().int().positive().optional(),
     });
 
     it("session-start payload matches runtime schema", () => {
@@ -139,6 +140,7 @@ describe("Claude Code bridge (memory-bridge.mjs)", () => {
         task_id: undefined,
         recent_context_summary: undefined,
         memory_mode: undefined,
+        injection_token_budget: 512,
       };
 
       const parsed = sessionStartSchema.safeParse(payload);
@@ -167,6 +169,7 @@ describe("Claude Code bridge (memory-bridge.mjs)", () => {
         current_input: event.user_prompt,
         cwd: event.cwd,
         source: "claude_hook",
+        injection_token_budget: 512,
       };
 
       const parsed = prepareContextInputSchema.safeParse(payload);

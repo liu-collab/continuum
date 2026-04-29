@@ -2318,6 +2318,31 @@ describe("retrieval-runtime service", () => {
     expect(response.injection_block?.selected_scopes.length).toBeGreaterThan(0);
   });
 
+  it("uses request injection token budget when building the injection block", async () => {
+    const { service } = createRuntime({
+      config: {
+        INJECTION_TOKEN_BUDGET: 1_000,
+        INJECTION_RECORD_LIMIT: 6,
+      },
+    });
+
+    const response = await service.prepareContext({
+      host: "claude_code_plugin",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "task_start",
+      current_input: "任务继续",
+      injection_token_budget: 1,
+    });
+
+    expect(response.injection_block).not.toBeNull();
+    expect(response.injection_block?.memory_records).toHaveLength(0);
+    expect(response.injection_block?.trim_reasons).toContain("token_budget");
+    expect(response.budget_used).toBe(response.injection_block?.token_estimate);
+  });
+
   it("filters low-value writeback content and submits structured candidates", async () => {
     const { service } = createRuntime();
 

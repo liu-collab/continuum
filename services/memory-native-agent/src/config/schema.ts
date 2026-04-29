@@ -77,6 +77,7 @@ const partialMemorySchema = z
   .object({
     mode: memoryModeSchema.optional(),
     user_id: z.string().uuid().nullable().optional(),
+    injection_token_budget: z.coerce.number().int().positive().optional(),
   })
   .strict();
 
@@ -184,6 +185,7 @@ const mergedMemorySchema = z
   .object({
     mode: memoryModeSchema,
     user_id: z.string().uuid().nullable(),
+    injection_token_budget: z.coerce.number().int().positive(),
   })
   .strict();
 

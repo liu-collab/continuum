@@ -129,6 +129,7 @@ function createConfig(workspaceRoot: string): AgentConfig {
       userId: "550e8400-e29b-41d4-a716-446655440001",
       workspaceId: "550e8400-e29b-41d4-a716-446655440000",
       cwd: workspaceRoot,
+      injectionTokenBudget: 1_500,
     },
     mcp: {
       servers: [],
@@ -833,4 +834,3 @@ describe("session websocket routes", () => {
     ws.close();
   }, 15_000);
 });
-

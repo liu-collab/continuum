@@ -43,6 +43,7 @@ function describeAdapter(
           cwd: "/home/dev/project",
           source: "editor",
           memory_mode: "workspace_plus_global",
+          injection_token_budget: 640,
         };
 
         const result = adapter.toTriggerContext(input);
@@ -61,6 +62,7 @@ function describeAdapter(
           cwd: "/home/dev/project",
           source: "editor",
           memory_mode: "workspace_plus_global",
+          injection_token_budget: 640,
         });
       });
 
@@ -76,6 +78,7 @@ function describeAdapter(
           cwd: "/home/dev/project",
           source: "cli",
           memory_mode: "workspace_only",
+          injection_token_budget: 512,
         };
 
         const result = adapter.toTriggerContext(input);
@@ -91,6 +94,7 @@ function describeAdapter(
         expect(result.cwd).toBe("/home/dev/project");
         expect(result.source).toBe("cli");
         expect(result.memory_mode).toBe("workspace_only");
+        expect(result.injection_token_budget).toBe(512);
       });
 
       it('uses "session start" as current_input when recent_context_summary is absent in SessionStartRequest', () => {
@@ -141,6 +145,7 @@ function describeAdapter(
           cwd: "/opt/app",
           source: "vscode",
           memory_mode: "workspace_only",
+          injection_token_budget: 300,
         };
 
         const result = adapter.toTriggerContext(input);
@@ -151,6 +156,7 @@ function describeAdapter(
         expect(result.cwd).toBe("/opt/app");
         expect(result.source).toBe("vscode");
         expect(result.memory_mode).toBe("workspace_only");
+        expect(result.injection_token_budget).toBe(300);
       });
 
       it("outputs undefined for absent optional fields", () => {
@@ -176,6 +182,7 @@ function describeAdapter(
         expect(result.source).toBeUndefined();
         expect(result.recent_context_summary).toBeUndefined();
         expect(result.memory_mode).toBeUndefined();
+        expect(result.injection_token_budget).toBeUndefined();
       });
     });
 

@@ -82,7 +82,8 @@ function createConfig(workspaceRoot: string): AgentConfig {
       mode: "workspace_plus_global",
       userId: "550e8400-e29b-41d4-a716-446655440001",
       workspaceId: "550e8400-e29b-41d4-a716-446655440000",
-      cwd: workspaceRoot
+      cwd: workspaceRoot,
+      injectionTokenBudget: 1_500
     },
     mcp: {
       servers: []
@@ -178,4 +179,3 @@ describe("http cors", () => {
     }
   });
 });
-
