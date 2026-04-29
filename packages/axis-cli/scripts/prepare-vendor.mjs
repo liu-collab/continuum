@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,100 @@ async function copyEntries(sourceDir, targetDir, entries) {
       recursive: true,
     });
   }
+}
+
+function shouldRemoveGeneratedArtifact(name) {
+  return (
+    name === "__tests__"
+    || name === "@types"
+    || name === "test"
+    || name === "test.js"
+    || name === "tests"
+    || name === "example"
+    || name === "examples"
+    || name === "doc"
+    || name === "docs"
+    || name === "coverage"
+    || name === "bench"
+    || name === "benchmark"
+    || name === "benchmarks"
+    || name === "release"
+    || name === ".vite"
+    || name === ".github"
+    || name === ".circleci"
+    || name === ".vscode"
+    || name === ".nyc_output"
+    || name === "package-lock.json"
+    || name === "npm-shrinkwrap.json"
+    || /^vitest.*\.config\.js$/.test(name)
+    || /\.test\.js$/.test(name)
+    || /\.e2e\.test\.js$/.test(name)
+    || /\.d\.ts$/.test(name)
+    || /\.map$/.test(name)
+  );
+}
+
+async function pruneGeneratedArtifacts(targetDir) {
+  const entries = await readdir(targetDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const entryPath = path.join(targetDir, entry.name);
+    if (shouldRemoveGeneratedArtifact(entry.name)) {
+      await rm(entryPath, { recursive: true, force: true });
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      await pruneGeneratedArtifacts(entryPath);
+    }
+  }
+}
+
+async function pathExists(targetPath) {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function pruneVendorArtifacts() {
+  for (const serviceName of ["storage", "runtime", "memory-native-agent"]) {
+    const serviceDir = path.join(vendorDir, serviceName);
+    if (await pathExists(path.join(serviceDir, "package.json"))) {
+      await pruneStageProductionDependencies(serviceDir);
+    }
+  }
+
+  await pruneGeneratedArtifacts(vendorDir);
+  await rm(path.join(vendorDir, "runtime", "dist", "src", "cli"), {
+    recursive: true,
+    force: true,
+  }).catch(() => undefined);
+  await pruneVisualizationStandaloneArtifacts(path.join(vendorDir, "visualization", "standalone"));
+}
+
+async function pruneStageProductionDependencies(targetDir) {
+  await run(npmCommand(), ["prune", "--omit=dev", "--ignore-scripts"], targetDir);
+  await pruneGeneratedArtifacts(targetDir);
+}
+
+async function pruneVisualizationStandaloneArtifacts(targetDir) {
+  await rm(path.join(targetDir, "node_modules", "typescript"), {
+    recursive: true,
+    force: true,
+  }).catch(() => undefined);
+
+  const packageJsonPath = path.join(targetDir, "package.json");
+  const rawPackage = await readFile(packageJsonPath, "utf8").catch(() => null);
+  if (!rawPackage) {
+    return;
+  }
+
+  const parsed = JSON.parse(rawPackage);
+  delete parsed.devDependencies;
+  delete parsed.scripts;
+  await writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 2)}\n`);
 }
 
 function npmCommand() {
@@ -120,11 +214,13 @@ async function copyRuntimeBundle() {
     "node_modules",
     "package.json",
   ]);
+  await pruneStageProductionDependencies(targetDir);
 }
 
 async function copyStorageBundle() {
   const targetDir = path.join(vendorStageDir, "storage");
   await copyEntries(storageDir, targetDir, ["dist", "migrations", "node_modules", "package.json"]);
+  await pruneStageProductionDependencies(targetDir);
 }
 
 async function copyVisualizationBundle() {
@@ -136,6 +232,7 @@ async function copyVisualizationBundle() {
   await cp(standaloneSource, targetDir, { recursive: true });
   await cp(staticSource, path.join(targetDir, ".next", "static"), { recursive: true });
   await cp(publicSource, path.join(targetDir, "public"), { recursive: true });
+  await pruneVisualizationStandaloneArtifacts(targetDir);
 }
 
 async function copyMemoryNativeAgentBundle() {
@@ -147,6 +244,7 @@ async function copyMemoryNativeAgentBundle() {
     "package.json",
     "README.md",
   ]);
+  await pruneStageProductionDependencies(targetDir);
 }
 
 async function copyStackTemplate() {
@@ -237,6 +335,7 @@ async function main() {
   const plan = filterSkippedEntries(await planVendorBuild(packageDir));
 
   if (!plan.needsRefresh) {
+    await pruneVendorArtifacts();
     console.log(
       skipVisualization
         ? "vendor 已是最新，跳过 prepare:vendor；--ui-dev 下 visualization 由 next dev 直接读取源码。"
@@ -279,6 +378,7 @@ async function main() {
     await copyStackTemplate();
   }
   await replaceVendorDir();
+  await pruneVendorArtifacts();
   await writeBuildState(plan.nextState);
 }
 

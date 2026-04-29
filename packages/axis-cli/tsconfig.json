@@ -16,7 +16,8 @@
     "resolveJsonModule": true,
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node", "pg", "vitest/globals"]
+    "types": ["node", "pg"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/build-state.mjs"]
+  "include": ["src/**/*.ts", "scripts/build-state.mjs"],
+  "exclude": ["dist", "node_modules", "tests"]
 }

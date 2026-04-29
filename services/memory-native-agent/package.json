@@ -19,7 +19,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ./scripts/copy-assets.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node ./scripts/copy-assets.mjs",
     "check": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx watch bin/mna-server.mjs",
     "memory:tiering": "tsx src/devtools/memory-tiering-cli.ts",

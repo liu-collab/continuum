@@ -1,8 +1,27 @@
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+async function firstExistingPath(paths: string[]) {
+  for (const candidate of paths) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return paths[0]!;
+}
+
 export async function loadBuildStateHelpers(packageRoot: string) {
-  return import(pathToFileURL(path.join(packageRoot, "scripts", "build-state.mjs")).href) as Promise<{
+  const buildStatePath = await firstExistingPath([
+    path.join(packageRoot, "dist", "scripts", "build-state.mjs"),
+    path.join(packageRoot, "scripts", "build-state.mjs"),
+  ]);
+
+  return import(pathToFileURL(buildStatePath).href) as Promise<{
     planVendorBuild(packageDir: string): Promise<{
       currentState: {
         version: number;

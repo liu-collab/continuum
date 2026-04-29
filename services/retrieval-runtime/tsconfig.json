@@ -14,13 +14,11 @@
     "resolveJsonModule": true,
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node", "vitest/globals"]
+    "types": ["node"]
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.d.ts",
-    "tests/**/*.ts",
-    "tests/**/*.d.ts",
-    "vitest*.config.ts"
-  ]
+    "src/**/*.d.ts"
+  ],
+  "exclude": ["dist", "node_modules", "tests"]
 }

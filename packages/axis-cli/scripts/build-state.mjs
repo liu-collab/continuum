@@ -238,6 +238,25 @@ function serviceDefinitions(packageDir) {
   };
 }
 
+/** @param {string} packageDir */
+async function sourceTreeAvailable(packageDir) {
+  const repoRoot = repoRootFromPackageDir(packageDir);
+  const requiredPaths = [
+    path.join(repoRoot, "services", "storage", "package.json"),
+    path.join(repoRoot, "services", "retrieval-runtime", "package.json"),
+    path.join(repoRoot, "services", "visualization", "package.json"),
+    path.join(repoRoot, "services", "memory-native-agent", "package.json"),
+  ];
+
+  for (const requiredPath of requiredPaths) {
+    if (!(await pathExists(requiredPath))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * @param {string} baseDir
  * @param {string[]} outputs
@@ -344,6 +363,16 @@ export async function planCliBuild(packageDir) {
  */
 export async function planVendorBuild(packageDir) {
   const state = await readBuildState();
+  if (!(await sourceTreeAvailable(packageDir))) {
+    return {
+      currentState: state,
+      nextState: state,
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    };
+  }
+
   const definitions = serviceDefinitions(packageDir);
   const serviceNames = Object.keys(definitions);
   /** @type {Record<string, string>} */
@@ -435,13 +464,23 @@ export async function planVendorBuild(packageDir) {
  */
 export async function planStackImageBuild(packageDir) {
   const state = await readBuildState();
-  const hash = createHash("sha256")
-    .update(String(BUILD_STATE_VERSION))
-    .update(state.vendor.entries.storage ?? "")
-    .update(state.vendor.entries.runtime ?? "")
-    .update(state.vendor.entries.visualization ?? "")
-    .update(state.vendor.entries.stack ?? "")
-    .digest("hex");
+  const hash = (await sourceTreeAvailable(packageDir))
+    ? createHash("sha256")
+      .update(String(BUILD_STATE_VERSION))
+      .update(state.vendor.entries.storage ?? "")
+      .update(state.vendor.entries.runtime ?? "")
+      .update(state.vendor.entries.visualization ?? "")
+      .update(state.vendor.entries.stack ?? "")
+      .digest("hex")
+    : await hashInputs(packageDir, [
+      "package.json",
+      path.join("vendor", "storage", "package.json"),
+      path.join("vendor", "runtime", "package.json"),
+      path.join("vendor", "memory-native-agent", "package.json"),
+      path.join("vendor", "visualization", "standalone", "package.json"),
+      path.join("vendor", "stack", "Dockerfile"),
+      path.join("vendor", "stack", "entrypoint.mjs"),
+    ]);
 
   const contextReady = await outputsExist(packageDir, [
     path.join(packageDir, "vendor", "storage", "dist", "src", "server.js"),
