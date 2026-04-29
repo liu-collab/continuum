@@ -43,7 +43,7 @@ async function main() {
     new InMemoryRuntimeRepository(),
   );
   await repository.initialize?.();
-  const dependencyGuard = new DependencyGuard(repository, logger);
+  const dependencyGuard = new DependencyGuard(repository, logger, config);
   const readModelRepository = new PostgresReadModelRepository(config);
   const embeddingsClient = new CachedEmbeddingsClient(new HttpEmbeddingsClient(config), config);
   const storageClient = new HttpStorageWritebackClient(config);

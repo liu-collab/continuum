@@ -108,12 +108,15 @@ export class DependencyGuard {
     return created;
   }
 
-  private isMemoryLlmGuarded(name: DependencyStatus["name"]) {
+  private isCircuitGuarded(name: DependencyStatus["name"]) {
+    if (name === "embeddings") {
+      return true;
+    }
     return name === "memory_llm" && (this.config?.MEMORY_LLM_FALLBACK_ENABLED ?? true);
   }
 
   private async checkCircuitBeforeRun<T>(name: DependencyStatus["name"]): Promise<GuardResult<T> | null> {
-    if (!this.isMemoryLlmGuarded(name)) {
+    if (!this.isCircuitGuarded(name)) {
       return null;
     }
 
@@ -143,7 +146,7 @@ export class DependencyGuard {
   }
 
   private recordOutcome(name: DependencyStatus["name"], success: boolean) {
-    if (!this.isMemoryLlmGuarded(name)) {
+    if (!this.isCircuitGuarded(name)) {
       return;
     }
 
@@ -175,7 +178,10 @@ export class DependencyGuard {
         ? 0
         : window.recentOutcomes.filter((item) => !item).length / window.recentOutcomes.length;
 
-    if (window.consecutiveFailures >= 3 || failureRate > (this.config?.MEMORY_LLM_DEGRADED_THRESHOLD ?? 0.5)) {
+    if (
+      window.consecutiveFailures >= 3 ||
+      (window.recentOutcomes.length >= 3 && failureRate > (this.config?.MEMORY_LLM_DEGRADED_THRESHOLD ?? 0.5))
+    ) {
       window.degradedUntilMs = Date.now() + (this.config?.MEMORY_LLM_RECOVERY_INTERVAL_MS ?? 5 * 60 * 1000);
     }
   }

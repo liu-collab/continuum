@@ -920,6 +920,33 @@ describe("retrieval-runtime remediation", () => {
     expect(blocked.status.status).toBe("degraded");
   });
 
+  it("opens a temporary recovery window for embeddings after repeated failures", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const guard = new DependencyGuard(repository, pino({ enabled: false }), {
+      MEMORY_LLM_FALLBACK_ENABLED: true,
+      MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+      MEMORY_LLM_RECOVERY_INTERVAL_MS: 60_000,
+    });
+    let runCount = 0;
+
+    for (let index = 0; index < 3; index += 1) {
+      const result = await guard.run("embeddings", 20, async () => {
+        runCount += 1;
+        throw new Error("embeddings unavailable");
+      });
+      expect(result.ok).toBe(false);
+    }
+
+    const blocked = await guard.run("embeddings", 20, async () => {
+      runCount += 1;
+      return "should-not-run";
+    });
+    expect(blocked.ok).toBe(false);
+    expect(blocked.error?.message).toContain("recovery window");
+    expect(blocked.status.status).toBe("degraded");
+    expect(runCount).toBe(3);
+  });
+
   it("opens a temporary recovery window when recent failure rate exceeds threshold", async () => {
     const repository = new InMemoryRuntimeRepository();
     const guard = new DependencyGuard(repository, pino({ enabled: false }), {
