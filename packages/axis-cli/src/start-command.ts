@@ -244,7 +244,11 @@ async function startManagedVisualizationDevServer(options: {
 
   try {
     await Promise.race([
-      waitForHealthy(`${uiUrl}/api/health/readiness`, { timeoutMs: 30_000 }),
+      waitForHealthy(`${uiUrl}/api/health/readiness`, {
+        timeoutMs: 30_000,
+        intervalMs: 1_500,
+        fetcher: fetchJson,
+      }),
       exitPromise.then((code) => {
         throw new Error(`visualization dev 启动失败，退出码 ${code ?? 1}`);
       }),
@@ -474,8 +478,16 @@ export async function runStartCommand(
       stackImageName,
     );
 
-    await waitForHealthy(`${storageUrl}/health`, { timeoutMs: 120_000, intervalMs: 1_500 });
-    await waitForHealthy(`${runtimeUrl}/healthz`, { timeoutMs: 120_000, intervalMs: 1_500 });
+    await waitForHealthy(`${storageUrl}/health`, {
+      timeoutMs: 120_000,
+      intervalMs: 1_500,
+      fetcher: fetchJson,
+    });
+    await waitForHealthy(`${runtimeUrl}/healthz`, {
+      timeoutMs: 120_000,
+      intervalMs: 1_500,
+      fetcher: fetchJson,
+    });
     const mna = await startManagedMna(
       {
         ...options,
@@ -501,6 +513,7 @@ export async function runStartCommand(
       await waitForHealthy(`${uiUrl}/api/health/readiness`, {
         timeoutMs: 120_000,
         intervalMs: 1_500,
+        fetcher: fetchJson,
       });
     }
 

@@ -986,7 +986,7 @@ describe("runStartCommand", () => {
     });
     expect(waitForHealthyMock).toHaveBeenCalledWith(
       "http://127.0.0.1:3003/api/health/readiness",
-      { timeoutMs: 30_000 },
+      expect.objectContaining({ timeoutMs: 30_000 }),
     );
     expect(writeManagedStateMock).toHaveBeenCalledWith(
       expect.objectContaining({

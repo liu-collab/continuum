@@ -117,6 +117,7 @@ type WaitForHealthyOptions = {
   requestTimeoutMs?: number;
   extractBody?: boolean;
   timeoutMessage?: string;
+  fetcher?: typeof fetchJson;
 };
 
 export async function waitForHealthy(
@@ -127,11 +128,12 @@ export async function waitForHealthy(
   const requestTimeoutMs = options.requestTimeoutMs ?? 1_500;
   const maxRetries = options.maxRetries;
   const deadline = Date.now() + (options.timeoutMs ?? intervalMs * (maxRetries ?? 40));
+  const fetcher = options.fetcher ?? fetchJson;
   let attempts = 0;
 
   while (Date.now() < deadline && (maxRetries === undefined || attempts < maxRetries)) {
     attempts += 1;
-    const result = await fetchJson(url, requestTimeoutMs);
+    const result = await fetcher(url, requestTimeoutMs);
     if (result.ok) {
       return options.extractBody ? result.body : undefined;
     }

@@ -305,6 +305,7 @@ export async function startManagedMna(
         intervalMs: 1_000,
         extractBody: true,
         timeoutMessage: `memory-native-agent 未在预期时间内就绪: ${url}`,
+        fetcher: fetchJson,
       }) as Promise<{ version?: string } | undefined>,
       exitPromise.then((code) => {
         throw new Error(`memory-native-agent 启动失败，退出码 ${code ?? 1}`);
