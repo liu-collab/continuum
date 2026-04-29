@@ -584,6 +584,41 @@ a {
     background: var(--record-active-fill);
   }
 
+  .quick-filter-bar {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .quick-filter-chip {
+    display: inline-flex;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    background: var(--canvas);
+    color: var(--ink-muted-80);
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.43;
+    letter-spacing: 0;
+    transition: border-color 100ms ease, background-color 100ms ease, color 100ms ease;
+  }
+
+  .quick-filter-chip:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  .quick-filter-chip-active {
+    border-color: var(--primary-focus);
+    background: var(--record-active-fill);
+    color: var(--ink);
+  }
+
   .detail-grid {
     display: grid;
     gap: 24px;

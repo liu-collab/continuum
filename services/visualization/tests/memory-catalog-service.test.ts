@@ -128,6 +128,7 @@ vi.mock("@/lib/server/storage-governance-executions-client", () => ({
 }));
 
 import {
+  buildMemoryCatalogFilterChips,
   buildMemoryCatalogQuickViews,
   describeCatalogFilterHints,
   describeCatalogEmptyState,
@@ -254,6 +255,35 @@ describe("memory catalog service", () => {
     expect(response.pendingConfirmationCount).toBe(2);
     expect(response.viewSummary).toContain("待确认记忆");
     expect(views.some((view) => view.label === "待确认队列" && view.href.includes("status=pending_confirmation"))).toBe(true);
+  });
+
+  it("builds one-click memory filter chips with counts and active state", () => {
+    const chips = buildMemoryCatalogFilterChips({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: "pending_confirmation",
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 2,
+      pageSize: 20
+    }, 3);
+
+    expect(chips.map((chip) => chip.label)).toEqual([
+      "全部活跃",
+      "待确认 (3)",
+      "偏好",
+      "任务状态",
+      "事件记忆"
+    ]);
+    expect(chips.find((chip) => chip.key === "pending")?.active).toBe(true);
+    expect(chips.find((chip) => chip.key === "active")?.href).toContain("status=active");
+    expect(chips.find((chip) => chip.key === "preference")?.href).toContain("memory_type=fact_preference");
+    expect(chips.find((chip) => chip.key === "preference")?.href).toContain("page=1");
   });
 
   it("returns workspace-only catalog view summary", async () => {

@@ -154,6 +154,14 @@ const zhCommon = {
       recordsTitle: "当前结果",
       active: "当前",
       reviewNeeded: "需要复核",
+      quickFilters: {
+        label: "快速筛选",
+        active: "全部活跃",
+        pending: "待确认 ({count})",
+        preference: "偏好",
+        taskState: "任务状态",
+        episodic: "事件记忆"
+      },
       fields: {
         workspace: "工作区",
         task: "任务",

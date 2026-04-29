@@ -154,6 +154,14 @@ const enCommon = {
       recordsTitle: "Current results",
       active: "Current",
       reviewNeeded: "Review needed",
+      quickFilters: {
+        label: "Quick filters",
+        active: "All active",
+        pending: "Pending ({count})",
+        preference: "Preferences",
+        taskState: "Task state",
+        episodic: "Event memories"
+      },
       fields: {
         workspace: "Workspace",
         task: "Task",

@@ -43,6 +43,13 @@ export type MemoryCatalogQuickView = {
   active: boolean;
 };
 
+export type MemoryCatalogFilterChip = {
+  key: string;
+  label: string;
+  href: Route;
+  active: boolean;
+};
+
 function isImplicitGlobalView(filters: MemoryCatalogFilters) {
   return (
     !filters.workspaceId
@@ -191,6 +198,67 @@ function createQuickView(
     href: buildQuickViewHref(normalizedTarget),
     active: isQuickViewActive(current, normalizedTarget)
   };
+}
+
+function createFilterChip(
+  current: MemoryCatalogFilters,
+  key: string,
+  label: string,
+  target: Partial<MemoryCatalogFilters>
+): MemoryCatalogFilterChip {
+  const normalizedTarget: MemoryCatalogFilters = {
+    workspaceId: current.workspaceId,
+    taskId: current.taskId,
+    sessionId: current.sessionId,
+    sourceRef: current.sourceRef,
+    memoryViewMode: current.memoryViewMode,
+    memoryType: undefined,
+    scope: undefined,
+    status: undefined,
+    updatedFrom: current.updatedFrom,
+    updatedTo: current.updatedTo,
+    page: 1,
+    pageSize: current.pageSize,
+    ...target
+  };
+
+  return {
+    key,
+    label,
+    href: buildQuickViewHref(normalizedTarget),
+    active: isQuickViewActive(current, normalizedTarget)
+  };
+}
+
+export function buildMemoryCatalogFilterChips(
+  filters: MemoryCatalogFilters,
+  pendingConfirmationCount: number,
+  locale: AppLocale = "zh-CN"
+): MemoryCatalogFilterChip[] {
+  const t = createTranslator(locale);
+
+  return [
+    createFilterChip(filters, "active", t("memories.quickFilters.active"), {
+      status: "active"
+    }),
+    createFilterChip(filters, "pending", t("memories.quickFilters.pending", {
+      count: pendingConfirmationCount
+    }), {
+      status: "pending_confirmation"
+    }),
+    createFilterChip(filters, "preference", t("memories.quickFilters.preference"), {
+      status: "active",
+      memoryType: "fact_preference"
+    }),
+    createFilterChip(filters, "task-state", t("memories.quickFilters.taskState"), {
+      status: "active",
+      memoryType: "task_state"
+    }),
+    createFilterChip(filters, "episodic", t("memories.quickFilters.episodic"), {
+      status: "active",
+      memoryType: "episodic"
+    })
+  ];
 }
 
 export function buildMemoryCatalogQuickViews(

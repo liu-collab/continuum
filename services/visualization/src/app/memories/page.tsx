@@ -7,6 +7,7 @@ import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
 import { MemoryTable } from "@/features/memory-catalog/memory-table";
 import {
+  buildMemoryCatalogFilterChips,
   buildMemoryCatalogQuickViews,
   describeCatalogEmptyState,
   describeCatalogFilterHints,
@@ -26,6 +27,7 @@ export default async function MemoriesPage({
   const response = await getMemoryCatalog(filters);
   const emptyState = describeCatalogEmptyState(response, locale);
   const views = buildMemoryCatalogQuickViews(filters, locale);
+  const filterChips = buildMemoryCatalogFilterChips(filters, response.pendingConfirmationCount, locale);
   const hints = describeCatalogFilterHints(filters, locale);
   const activeCount = Object.values(filters).filter(Boolean).length;
 
@@ -100,6 +102,18 @@ export default async function MemoriesPage({
               reviewLabel={t("memories.reviewNeeded")}
             />
           </div>
+
+          <nav className="quick-filter-bar mt-6" aria-label={t("memories.quickFilters.label")}>
+            {filterChips.map((chip) => (
+              <Link
+                key={chip.key}
+                href={chip.href}
+                className={`quick-filter-chip ${chip.active ? "quick-filter-chip-active" : ""}`}
+              >
+                {chip.label}
+              </Link>
+            ))}
+          </nav>
 
           {hints.length > 0 ? (
             <div className="notice notice-warning mt-6">{hints.join(" ")}</div>
