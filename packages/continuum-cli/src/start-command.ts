@@ -1,5 +1,4 @@
-import { cp, mkdir, open, rm } from "node:fs/promises";
-import { createServer } from "node:net";
+import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { spawn } from "node:child_process";
@@ -12,9 +11,7 @@ import {
   openBrowser,
   packageRootFromImportMeta,
   pathExists,
-  spawnCrossPlatform,
   terminateProcess,
-  vendorPath,
 } from "./utils.js";
 import {
   continuumLogsDir,
@@ -22,7 +19,6 @@ import {
   continuumManagedDir,
   DEFAULT_MANAGED_DATABASE_NAME,
   DEFAULT_MANAGED_DATABASE_USER,
-  DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_POSTGRES_PORT,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
@@ -47,56 +43,31 @@ import {
 } from "./managed-config.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
+import {
+  buildStackImage,
+  cleanupManagedStackContainer,
+  ensureDockerDaemonReady,
+  ensureDockerInstalled,
+  prepareStackContext,
+  stopLegacyPostgresContainer,
+} from "./docker-lifecycle.js";
+import { npmCommand, runForeground } from "./managed-process.js";
+import {
+  normalizeBindHost,
+  parsePort,
+  resolveAccessibleHost,
+  resolveManagedPostgresPort,
+  resolveUiDevPort,
+} from "./port-utils.js";
+import {
+  refreshMemoryNativeAgentVendor,
+  refreshVisualizationVendor,
+} from "./vendor-refresh.js";
 
-const STAGE_DIR_NAME = "stack-stage";
-const LOOPBACK_BIND_HOST = "127.0.0.1";
-const WILDCARD_BIND_HOST = "0.0.0.0";
-const POSTGRES_PORT_SCAN_LIMIT = 20;
+export { resolveManagedPostgresPort } from "./port-utils.js";
+
 const UI_DEV_SERVICE_NAME = "visualization-dev";
 const UI_DEV_STACK_IMAGE = "continuum-local-ui-dev:latest";
-const DEFAULT_UI_DEV_PORT = 3003;
-const UI_DEV_PORT_SCAN_LIMIT = 20;
-
-async function runForeground(command: string, args: string[], cwd?: string) {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawnCrossPlatform(command, args, {
-      cwd,
-      stdio: "inherit",
-      env: process.env,
-    });
-
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`command failed: ${command} ${args.join(" ")}`));
-    });
-    child.on("error", reject);
-  });
-}
-
-async function runForegroundQuiet(command: string, args: string[]) {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawnCrossPlatform(command, args, {
-      stdio: "ignore",
-      env: process.env,
-    });
-
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`command failed: ${command} ${args.join(" ")}`));
-    });
-    child.on("error", reject);
-  });
-}
-
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
 
 function isManagedVisualizationDevRecord(service: ManagedServiceRecord) {
   return (
@@ -158,19 +129,6 @@ async function managedBackendIsHealthy(storageUrl: string, runtimeUrl: string) {
   return storageHealthy && runtimeHealthy;
 }
 
-function parsePort(rawValue: string | boolean | undefined, optionName: string) {
-  if (typeof rawValue !== "string") {
-    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
-  }
-
-  const parsed = Number(rawValue);
-  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
-    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
-  }
-
-  return parsed;
-}
-
 function buildUiDevReadModelDsn(
   options: Record<string, string | boolean>,
   managedState: { postgres?: { port: number }; dbPassword?: string },
@@ -211,335 +169,6 @@ function resolveUiDevMna(
         : typeof options["mna-home"] === "string"
           ? path.join(mnaHome, "token.txt")
           : managedMna?.tokenPath ?? path.join(mnaHome, "token.txt"),
-  };
-}
-
-async function waitForTcpAvailable(host: string, port: number, timeoutMs: number) {
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    const available = await isTcpPortAvailable(host, port);
-    if (available) {
-      return;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  throw new Error(
-    `visualization dev 端口仍被占用: ${host}:${port}。旧的 --ui-dev 进程可能没有退出，请先运行 npm run stop，或手动结束占用 3003 的进程后重试。`,
-  );
-}
-
-async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_DEV_PORT) {
-  for (let offset = 0; offset <= UI_DEV_PORT_SCAN_LIMIT; offset += 1) {
-    const candidate = preferredPort + offset;
-    if (await isTcpPortAvailable(host, candidate)) {
-      if (candidate !== preferredPort) {
-        process.stdout.write(`默认 visualization dev 端口 ${preferredPort} 不可用，自动切换到 ${candidate}。\n`);
-      }
-
-      return candidate;
-    }
-  }
-
-  throw new Error(
-    `未找到可用的 visualization dev 端口。已尝试 ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}。`,
-  );
-}
-
-async function ensureDockerInstalled() {
-  if (process.platform !== "win32") {
-    throw new Error(
-      "continuum start 当前仅支持 Windows 平台。其他平台请手动运行各服务或使用 Docker Compose。",
-    );
-  }
-
-  try {
-    await runForegroundQuiet("docker", ["--version"]);
-  } catch {
-    process.stdout.write("Docker 未安装，开始尝试自动安装 Docker Desktop。\n");
-    await runForeground("winget", [
-      "install",
-      "-e",
-      "--id",
-      "Docker.DockerDesktop",
-      "--accept-package-agreements",
-      "--accept-source-agreements",
-    ]);
-  }
-}
-
-function normalizeBindHost(rawValue: string | boolean | undefined) {
-  const bindHost = typeof rawValue === "string" ? rawValue : LOOPBACK_BIND_HOST;
-
-  if (bindHost !== LOOPBACK_BIND_HOST && bindHost !== WILDCARD_BIND_HOST) {
-    throw new Error(
-      `不支持的 --bind-host: ${bindHost}。当前仅支持 ${LOOPBACK_BIND_HOST} 或 ${WILDCARD_BIND_HOST}。`,
-    );
-  }
-
-  return bindHost;
-}
-
-function resolveAccessibleHost(bindHost: string) {
-  return bindHost === WILDCARD_BIND_HOST ? LOOPBACK_BIND_HOST : bindHost;
-}
-
-async function isTcpPortAvailable(host: string, port: number) {
-  return await new Promise<boolean>((resolve) => {
-    const server = createServer();
-
-    server.once("error", () => {
-      server.close(() => resolve(false));
-    });
-
-    server.once("listening", () => {
-      server.close(() => resolve(true));
-    });
-
-    server.listen({
-      host,
-      port,
-      exclusive: true,
-    });
-  });
-}
-
-export async function resolveManagedPostgresPort(
-  options: Record<string, string | boolean>,
-  bindHost: string,
-  probePort: (host: string, port: number) => Promise<boolean> = isTcpPortAvailable,
-) {
-  const requestedPort =
-    typeof options["postgres-port"] === "string"
-      ? Number(options["postgres-port"])
-      : DEFAULT_MANAGED_POSTGRES_PORT;
-  const explicitPort = typeof options["postgres-port"] === "string";
-
-  if (!Number.isInteger(requestedPort) || requestedPort <= 0 || requestedPort > 65_535) {
-    throw new Error(`不支持的 --postgres-port: ${options["postgres-port"]}`);
-  }
-
-  if (explicitPort) {
-    if (!(await probePort(bindHost, requestedPort))) {
-      throw new Error(`postgres 端口不可用: ${bindHost}:${requestedPort}。请改用其他 --postgres-port。`);
-    }
-
-    return requestedPort;
-  }
-
-  for (let offset = 0; offset <= POSTGRES_PORT_SCAN_LIMIT; offset += 1) {
-    const candidate = requestedPort + offset;
-    if (!(await probePort(bindHost, candidate))) {
-      continue;
-    }
-
-    if (candidate !== requestedPort) {
-      process.stdout.write(
-        `默认 postgres 端口 ${requestedPort} 不可用，自动切换到 ${candidate}。\n`,
-      );
-    }
-
-    return candidate;
-  }
-
-  throw new Error(
-    `未找到可用的 postgres 端口。已尝试 ${bindHost}:${requestedPort}-${requestedPort + POSTGRES_PORT_SCAN_LIMIT}。`,
-  );
-}
-
-async function ensureDockerDaemonReady() {
-  try {
-    await runForegroundQuiet("docker", ["version"]);
-    return;
-  } catch {
-    process.stdout.write("Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。\n");
-  }
-
-  const dockerDesktopExe = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
-  if (await pathExists(dockerDesktopExe)) {
-    spawn(dockerDesktopExe, [], {
-      detached: true,
-      stdio: "ignore",
-    }).unref();
-  }
-
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    try {
-      await runForegroundQuiet("docker", ["version"]);
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
-    }
-  }
-
-  throw new Error("Docker daemon 未就绪，无法启动 Continuum。");
-}
-
-async function stopLegacyPostgresContainer() {
-  await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER]).catch(
-    () => undefined,
-  );
-}
-
-async function cleanupManagedStackContainer() {
-  try {
-    await runForegroundQuiet("docker", ["rm", "-f", DEFAULT_MANAGED_STACK_CONTAINER]);
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("No such container")) {
-      return false;
-    }
-    throw error;
-  }
-}
-
-async function prepareStackContext(packageRoot: string, includeVisualization = true) {
-  const stageDir = path.join(continuumHomeDir(), STAGE_DIR_NAME);
-  await rm(stageDir, { recursive: true, force: true });
-  await mkdir(stageDir, { recursive: true });
-
-  await cp(vendorPath(packageRoot, "storage"), path.join(stageDir, "storage"), {
-    recursive: true,
-  });
-  await cp(vendorPath(packageRoot, "runtime"), path.join(stageDir, "runtime"), {
-    recursive: true,
-  });
-  const visualizationTarget = path.join(stageDir, "visualization");
-  if (includeVisualization) {
-    await cp(vendorPath(packageRoot, "visualization", "standalone"), visualizationTarget, {
-      recursive: true,
-    });
-  } else {
-    await mkdir(visualizationTarget, { recursive: true });
-  }
-  await cp(vendorPath(packageRoot, "stack", "Dockerfile"), path.join(stageDir, "Dockerfile"));
-  await cp(vendorPath(packageRoot, "stack", "entrypoint.mjs"), path.join(stageDir, "entrypoint.mjs"));
-
-  return stageDir;
-}
-
-async function buildStackImage(stageDir: string, imageName = DEFAULT_MANAGED_STACK_IMAGE) {
-  await runForeground("docker", ["build", "-t", imageName, stageDir]);
-}
-
-async function copyVisualizationVendorBundle(packageRoot: string) {
-  const repoRoot = path.resolve(packageRoot, "..", "..");
-  const visualizationDir = path.join(repoRoot, "services", "visualization");
-  const standaloneSource = path.join(visualizationDir, ".next", "standalone");
-  const staticSource = path.join(visualizationDir, ".next", "static");
-  const publicSource = path.join(visualizationDir, "public");
-  const visualizationVendorDir = vendorPath(packageRoot, "visualization");
-  const targetDir = path.join(visualizationVendorDir, "standalone");
-
-  await rm(visualizationVendorDir, { recursive: true, force: true });
-  await mkdir(targetDir, { recursive: true });
-  await cp(standaloneSource, targetDir, { recursive: true });
-  await cp(staticSource, path.join(targetDir, ".next", "static"), { recursive: true });
-  if (await pathExists(publicSource)) {
-    await cp(publicSource, path.join(targetDir, "public"), { recursive: true });
-  }
-}
-
-async function refreshVisualizationVendor(
-  packageRoot: string,
-  buildState: Awaited<ReturnType<typeof loadBuildStateHelpers>>,
-) {
-  const vendorPlan = await buildState.planVendorBuild(packageRoot);
-  const visualizationChanged = vendorPlan.changedEntries.includes("visualization");
-  const visualizationNeedsBuild = vendorPlan.buildServices.includes("visualization");
-
-  if (!visualizationChanged) {
-    return {
-      refreshed: false,
-    };
-  }
-
-  process.stdout.write("检测到 visualization 变更，正在刷新前端产物...\n");
-  if (visualizationNeedsBuild) {
-    const repoRoot = path.resolve(packageRoot, "..", "..");
-    const visualizationDir = path.join(repoRoot, "services", "visualization");
-    await rm(path.join(visualizationDir, ".next"), { recursive: true, force: true }).catch(() => undefined);
-    await runForeground("npm", ["run", "build"], visualizationDir);
-  }
-  await copyVisualizationVendorBundle(packageRoot);
-  await buildState.writeBuildState({
-    ...vendorPlan.currentState,
-    vendor: {
-      entries: {
-        ...vendorPlan.currentState.vendor.entries,
-        visualization: vendorPlan.nextState.vendor.entries.visualization,
-      },
-      builds: {
-        ...vendorPlan.currentState.vendor.builds,
-        visualization: vendorPlan.nextState.vendor.builds.visualization,
-      },
-    },
-  });
-
-  return {
-    refreshed: true,
-    visualizationNeedsBuild,
-  };
-}
-
-async function copyMemoryNativeAgentVendorBundle(packageRoot: string) {
-  const repoRoot = path.resolve(packageRoot, "..", "..");
-  const sourceDir = path.join(repoRoot, "services", "memory-native-agent");
-  const targetDir = vendorPath(packageRoot, "memory-native-agent");
-
-  await rm(targetDir, { recursive: true, force: true });
-  await mkdir(targetDir, { recursive: true });
-  await cp(path.join(sourceDir, "bin"), path.join(targetDir, "bin"), { recursive: true });
-  await cp(path.join(sourceDir, "dist"), path.join(targetDir, "dist"), { recursive: true });
-  await cp(path.join(sourceDir, "node_modules"), path.join(targetDir, "node_modules"), { recursive: true });
-  await cp(path.join(sourceDir, "package.json"), path.join(targetDir, "package.json"));
-  if (await pathExists(path.join(sourceDir, "README.md"))) {
-    await cp(path.join(sourceDir, "README.md"), path.join(targetDir, "README.md"));
-  }
-}
-
-async function refreshMemoryNativeAgentVendor(
-  packageRoot: string,
-  buildState: Awaited<ReturnType<typeof loadBuildStateHelpers>>,
-) {
-  const vendorPlan = await buildState.planVendorBuild(packageRoot);
-  const changed = vendorPlan.changedEntries.includes("memory-native-agent");
-  const needsBuild = vendorPlan.buildServices.includes("memory-native-agent");
-
-  if (!changed) {
-    return {
-      refreshed: false,
-    };
-  }
-
-  process.stdout.write("检测到 memory-native-agent 变更，正在刷新 MNA 产物...\n");
-  if (needsBuild) {
-    const repoRoot = path.resolve(packageRoot, "..", "..");
-    const serviceDir = path.join(repoRoot, "services", "memory-native-agent");
-    await runForeground("npm", ["run", "build"], serviceDir);
-  }
-  await copyMemoryNativeAgentVendorBundle(packageRoot);
-  await buildState.writeBuildState({
-    ...vendorPlan.currentState,
-    vendor: {
-      entries: {
-        ...vendorPlan.currentState.vendor.entries,
-        "memory-native-agent": vendorPlan.nextState.vendor.entries["memory-native-agent"],
-      },
-      builds: {
-        ...vendorPlan.currentState.vendor.builds,
-        "memory-native-agent": vendorPlan.nextState.vendor.builds["memory-native-agent"],
-      },
-    },
-  });
-
-  return {
-    refreshed: true,
-    needsBuild,
   };
 }
 

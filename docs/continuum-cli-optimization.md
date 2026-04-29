@@ -165,6 +165,8 @@ export async function terminateProcess(pid: number, label?: string): Promise<voi
 
 ## 优化五：拆分 `start-command.ts`
 
+**状态：已完成**
+
 ### 问题
 
 964 行混合了 6 类职责：进程管理、Docker 管理、端口扫描、vendor 刷新、dev server 管理、主编排。
