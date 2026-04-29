@@ -335,13 +335,22 @@ const enCommon = {
       },
       autoConfig: {
         title: "Automatic governance config",
+        description: "Adjust automatic memory scans, verifier checks, and execution guard settings.",
         status: "Automatic governance",
         interval: "Scan interval",
         verifier: "Verifier",
         shadow: "Shadow",
         maxActions: "Max actions",
         minutes: "minutes",
-        configure: "Configure"
+        configure: "Configure",
+        enabled: "Enable automatic governance",
+        verifierEnabled: "Verifier second pass",
+        shadowMode: "Shadow mode",
+        intervalMinutes: "Scan interval (minutes)",
+        save: "Save config",
+        saving: "Saving...",
+        intervalInvalid: "Automatic governance scan interval must be a positive integer number of minutes.",
+        maxActionsInvalid: "Max actions per scan must be an integer between 1 and 20."
       },
       evidenceFormatted: {
         empty: "No extra evidence was recorded for this proposal.",

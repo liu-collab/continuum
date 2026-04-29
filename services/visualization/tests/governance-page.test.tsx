@@ -1,15 +1,18 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 const {
   getGovernanceExecutionDetailMock,
   getGovernanceHistoryMock,
-  fetchRuntimeGovernanceConfigMock
+  fetchRuntimeGovernanceConfigMock,
+  refreshMock
 } = vi.hoisted(() => ({
   getGovernanceExecutionDetailMock: vi.fn<() => Promise<any>>(),
   getGovernanceHistoryMock: vi.fn<() => Promise<any>>(),
-  fetchRuntimeGovernanceConfigMock: vi.fn<() => Promise<any>>()
+  fetchRuntimeGovernanceConfigMock: vi.fn<() => Promise<any>>(),
+  refreshMock: vi.fn()
 }));
 
 vi.mock("@/features/memory-catalog/service", () => ({
@@ -23,6 +26,12 @@ vi.mock("@/lib/server/runtime-observe-client", () => ({
 
 vi.mock("@/components/health-modal", () => ({
   HealthModalButton: ({ label }: { label?: string }) => <button type="button">{label ?? "健康"}</button>
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    refresh: refreshMock
+  })
 }));
 
 vi.mock("next/link", () => ({
@@ -101,6 +110,41 @@ function createGovernanceDetail(overrides: Record<string, unknown> = {}) {
 }
 
 describe("governance page", () => {
+  it("opens automatic governance config in-place instead of linking to agent", async () => {
+    const user = userEvent.setup();
+    getGovernanceHistoryMock.mockResolvedValue({
+      items: [],
+      total: 0,
+      sourceStatus
+    });
+    getGovernanceExecutionDetailMock.mockResolvedValue({
+      detail: null,
+      status: sourceStatus
+    });
+    fetchRuntimeGovernanceConfigMock.mockResolvedValue({
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: true,
+        WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+        WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10
+      },
+      status: sourceStatus
+    });
+
+    const element = await GovernancePage({
+      searchParams: Promise.resolve({})
+    });
+    render(element);
+
+    expect(screen.queryByRole("link", { name: "配置" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "配置" }));
+
+    expect(screen.getByTestId("governance-config-form")).toBeInTheDocument();
+    expect(screen.getByLabelText("启用自动治理")).toBeChecked();
+  });
+
   it("uses client navigation links for execution cards", async () => {
     getGovernanceHistoryMock.mockResolvedValue({
       items: [

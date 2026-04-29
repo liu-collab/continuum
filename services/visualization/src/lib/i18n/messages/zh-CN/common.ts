@@ -335,13 +335,22 @@ const zhCommon = {
       },
       autoConfig: {
         title: "自动治理配置",
+        description: "调整记忆自动扫描、二次校验和执行保护参数。",
         status: "自动治理",
         interval: "扫描间隔",
         verifier: "Verifier",
         shadow: "Shadow",
         maxActions: "最大动作数",
         minutes: "分钟",
-        configure: "配置"
+        configure: "配置",
+        enabled: "启用自动治理",
+        verifierEnabled: "Verifier 二次校验",
+        shadowMode: "Shadow 模式",
+        intervalMinutes: "扫描间隔（分钟）",
+        save: "保存配置",
+        saving: "保存中...",
+        intervalInvalid: "自动治理扫描间隔需要是大于 0 的整数分钟。",
+        maxActionsInvalid: "每次扫描最大动作数需要是 1 到 20 之间的整数。"
       },
       evidenceFormatted: {
         empty: "当前提案没有记录额外证据",
