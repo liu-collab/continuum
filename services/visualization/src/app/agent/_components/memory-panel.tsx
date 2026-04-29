@@ -24,7 +24,7 @@ export function MemoryPanel({
     <section data-testid="memory-panel" className="panel flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-foreground">{t("memoryPanel.title")}</div>
+          <div className="truncate text-sm font-semibold text-foreground">{t("memoryPanel.title")}</div>
         </div>
         {phaseLabel ? (
           <StatusBadge tone="neutral">
@@ -62,7 +62,7 @@ export function MemoryPanel({
                 {injection.memory_records.map((record) => (
                   <div key={record.id} className="record-card">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="min-w-0 whitespace-pre-wrap break-words text-sm font-medium text-foreground">{record.summary}</span>
+                      <span className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold text-foreground">{record.summary}</span>
                       <StatusBadge tone="neutral">{formatMemoryTypeLabel(t, record.memory_type)}</StatusBadge>
                       <StatusBadge tone={scopeTone(record.scope)}>{formatScopeLabel(t, record.scope)}</StatusBadge>
                     </div>

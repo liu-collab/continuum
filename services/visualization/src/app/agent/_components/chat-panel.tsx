@@ -325,7 +325,7 @@ export function ChatPanel({
                   className="absolute inset-x-0 bottom-full mb-3 overflow-hidden border bg-surface"
                   style={{ borderRadius: "var(--radius-lg)" }}
                 >
-                  <div className="border-b bg-[var(--surface-pearl)] px-3 py-2 text-[12px] font-medium uppercase text-muted-foreground">
+                  <div className="border-b bg-[var(--surface-pearl)] px-3 py-2 text-[12px] font-semibold uppercase text-muted-foreground">
                     {t("chatPanel.slash.title")}
                   </div>
                   <div className="max-h-64 overflow-auto p-2">
@@ -345,7 +345,7 @@ export function ChatPanel({
                         }`}
                         style={{ borderRadius: "var(--radius-sm)" }}
                       >
-                        <span className="text-sm font-medium">{command.label}</span>
+                        <span className="text-sm font-semibold">{command.label}</span>
                         <span className="line-clamp-2 text-xs">{command.description}</span>
                       </button>
                     ))}

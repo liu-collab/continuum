@@ -634,7 +634,7 @@ export function SettingsModal({
 
         <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
-            <span className="text-xs font-medium text-muted-foreground">{t("modeSwitch.label")}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("modeSwitch.label")}</span>
             <div className="mt-1">
               <SelectField
                 testId="memory-mode-select"
@@ -648,7 +648,7 @@ export function SettingsModal({
             </div>
           </label>
           <div className="block">
-            <span className="text-xs font-medium text-muted-foreground">{t("approvalModeSwitch.label")}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("approvalModeSwitch.label")}</span>
             <div className="mt-1 inline-flex w-full rounded-md border bg-surface p-1">
               <button
                 type="button"
@@ -679,7 +679,7 @@ export function SettingsModal({
             </div>
           </div>
           <div className="block">
-            <span className="text-xs font-medium text-muted-foreground">{t("runtimeConfig.planMode")}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("runtimeConfig.planMode")}</span>
             <div className="mt-1 inline-flex w-full rounded-md border bg-surface p-1">
               <button
                 type="button"
@@ -710,7 +710,7 @@ export function SettingsModal({
             </div>
           </div>
           <label className="block">
-            <span className="text-xs font-medium text-muted-foreground">{t("localeSwitch.label")}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("localeSwitch.label")}</span>
             <div className="mt-1">
               <SelectField
                 testId="agent-locale-select"

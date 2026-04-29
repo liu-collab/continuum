@@ -136,7 +136,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-1 space-y-2">
                   {promptSegments.map((segment, index) => (
                     <div key={`${segment.kind}-${segment.phase ?? "none"}-${index}`} className="record-card px-3 py-2">
-                      <div className="text-xs font-medium text-foreground">
+                      <div className="text-xs font-semibold text-foreground">
                         {segment.kind} · {segment.priority}
                       </div>
                       {segment.phase ? (
@@ -171,7 +171,7 @@ export function PromptInspector({ open, payload, onClose }: PromptInspectorProps
                 <dd className="mt-1 space-y-2">
                   {phaseResults.map((result, index) => (
                     <div key={`${result.phase}-${result.trace_id ?? "none"}-${index}`} className="record-card px-3 py-2">
-                      <div className="text-xs font-medium text-foreground">
+                      <div className="text-xs font-semibold text-foreground">
                         {result.phase}
                         {result.degraded ? " · degraded" : ""}
                       </div>

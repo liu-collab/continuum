@@ -20,7 +20,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
   return (
     <div data-testid="mcp-panel" className="panel">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-medium text-foreground">{t("mcpPanel.title")}</div>
+        <div className="text-sm font-semibold text-foreground">{t("mcpPanel.title")}</div>
       </div>
       <div className="space-y-3 px-4 py-3">
         {servers.length === 0 ? (
@@ -36,7 +36,7 @@ export function McpPanel({ servers, tools, onRestart, onDisable }: McpPanelProps
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground">{server.name}</div>
+                  <div className="text-sm font-semibold text-foreground">{server.name}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {server.transport} · {t("mcpPanel.toolCount", { count: server.tool_count })}
                   </div>

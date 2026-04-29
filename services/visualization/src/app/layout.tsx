@@ -54,7 +54,9 @@ export default async function RootLayout({
                     </Link>
                   ))}
                 </nav>
-                <AppLocaleSwitch />
+                <div className="global-nav-actions">
+                  <AppLocaleSwitch />
+                </div>
               </div>
             </header>
 

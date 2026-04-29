@@ -1,6 +1,7 @@
 const zhCommon = {
     localeSwitch: {
       label: "界面语言",
+      switchTo: "切换到{locale}",
       options: {
         "zh-CN": "简体中文",
         "en-US": "English"

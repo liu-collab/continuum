@@ -25,7 +25,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
   return (
     <div data-testid="tool-console" className="panel">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-medium text-foreground">{t("toolConsole.title")}</div>
+        <div className="text-sm font-semibold text-foreground">{t("toolConsole.title")}</div>
       </div>
       <div className="max-h-64 overflow-auto px-4 py-3">
         {calls.length === 0 ? (
@@ -39,7 +39,7 @@ export function ToolConsole({ turns }: ToolConsoleProps) {
                 className="record-card px-3 py-2 text-sm text-foreground"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{call.name}</span>
+                  <span className="font-semibold">{call.name}</span>
                   <span className="text-xs text-muted-foreground" title={call.turnId}>
                     {t("toolConsole.turnLabel", { index: call.turnIndex + 1 })}
                   </span>

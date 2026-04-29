@@ -90,7 +90,7 @@ export function FileTree({
       <div className="border-b px-4 py-3">
         <div className="flex flex-col gap-3">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">{t("fileTree.title")}</div>
+            <div className="text-sm font-semibold text-foreground">{t("fileTree.title")}</div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">{path}</div>
           </div>
           {selectedWorkspace ? (
@@ -100,7 +100,7 @@ export function FileTree({
                   <div className="text-[12px] text-muted-foreground">{t("fileTree.selectedFolderLabel")}</div>
                   <div
                     data-testid="selected-workspace-path"
-                    className="mt-1 truncate text-sm font-medium text-foreground"
+                    className="mt-1 truncate text-sm font-semibold text-foreground"
                     title={selectedWorkspacePath ?? undefined}
                   >
                     {selectedWorkspaceDisplayName}
@@ -151,7 +151,7 @@ export function FileTree({
               <div className="icon-button !h-11 !w-11">
                 <FolderPlus className="h-5 w-5" />
               </div>
-              <div className="text-sm font-medium text-foreground">
+              <div className="text-sm font-semibold text-foreground">
                 {picking ? t("fileTree.pickFolderPendingAction") : t("fileTree.pickFolderAction")}
               </div>
               <div className="text-xs text-muted-foreground">{t("fileTree.uploadHint")}</div>

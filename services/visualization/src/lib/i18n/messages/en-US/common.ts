@@ -1,6 +1,7 @@
 const enCommon = {
     localeSwitch: {
       label: "UI language",
+      switchTo: "Switch to {locale}",
       options: {
         "zh-CN": "简体中文",
         "en-US": "English"

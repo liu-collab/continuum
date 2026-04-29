@@ -163,7 +163,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
                     ))}
                   </div>
                 </div>
-                <label className="mt-3 block text-xs font-medium text-muted-foreground" htmlFor={`${descriptionId}-feedback`}>
+                <label className="mt-3 block text-xs font-semibold text-muted-foreground" htmlFor={`${descriptionId}-feedback`}>
                   {t("confirmDialog.revisionFeedback")}
                 </label>
                 <textarea
@@ -254,7 +254,7 @@ export function ConfirmDialog({ pendingConfirm, onDecision }: ConfirmDialogProps
               {pendingConfirm.riskHint ? (
                 <div
                   data-testid="confirm-risk-hint"
-                  className="mt-2 inline-flex max-w-full items-center rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--surface-pearl)] px-2 py-1 text-xs font-medium text-muted-foreground"
+                  className="mt-2 inline-flex max-w-full items-center rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--surface-pearl)] px-2 py-1 text-xs font-semibold text-muted-foreground"
                 >
                   {t("confirmDialog.riskHint", {
                     risk: t(`confirmDialog.risk.${pendingConfirm.riskHint}`)

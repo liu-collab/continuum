@@ -20,7 +20,7 @@ export function FilePreview({ path, content }: FilePreviewProps) {
   return (
     <section data-testid="file-preview" className="panel">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-medium text-foreground">{t("filePreview.title")}</div>
+        <div className="text-sm font-semibold text-foreground">{t("filePreview.title")}</div>
         <div className="mt-0.5 truncate text-xs text-muted-foreground">{path}</div>
       </div>
       <div className="h-72">

@@ -26,7 +26,7 @@ export function MemoryTable({
               href={`/memories/${encodeURIComponent(item.id)}` as Route}
               className="group flex min-w-0 items-start gap-1 text-foreground hover:text-accent"
             >
-              <span className="font-medium">{item.summary}</span>
+              <span className="font-semibold">{item.summary}</span>
               <ArrowUpRight className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:opacity-100" />
             </Link>
           </div>

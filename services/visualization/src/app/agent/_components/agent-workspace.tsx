@@ -92,7 +92,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
             className={`panel order-2 flex ${PANEL_HEIGHT_CLASS} max-h-none flex-col overflow-hidden xl:order-1`}
           >
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-              <div className="text-sm font-medium text-foreground">{t("workspace.sessionsTitle")}</div>
+              <div className="text-sm font-semibold text-foreground">{t("workspace.sessionsTitle")}</div>
               <button
                 type="button"
                 onClick={() => {

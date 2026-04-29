@@ -228,7 +228,7 @@ function AssistantMessageBubble({
 
         {meta?.plan ? (
           <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
-            <div className="text-xs font-medium text-foreground">
+            <div className="text-xs font-semibold text-foreground">
               {t("chatPanel.plan")} · {meta.plan.status}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">{meta.plan.goal}</div>
@@ -244,7 +244,7 @@ function AssistantMessageBubble({
 
         {meta?.evaluations.length ? (
           <div className="mt-4 border bg-[var(--surface-pearl)] px-3 py-3" style={{ borderRadius: "var(--radius-lg)" }}>
-            <div className="text-xs font-medium text-foreground">{t("chatPanel.evaluation")}</div>
+            <div className="text-xs font-semibold text-foreground">{t("chatPanel.evaluation")}</div>
             <div className="mt-2 space-y-1">
               {meta.evaluations.slice(-4).map((item, index) => (
                 <div key={`${item.scope}-${index}`} className="text-xs text-muted-foreground">
@@ -311,7 +311,7 @@ function ToolCallCard(props: ToolCallMessagePartProps<Record<string, unknown>, u
       style={{ borderRadius: "var(--radius-lg)" }}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
           <TerminalSquare className="h-3.5 w-3.5" />
           {props.toolName}
         </span>
