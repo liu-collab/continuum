@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import process from "node:process";
 
 import { axisManagedDir } from "./managed-state.js";
 import type { ManagedMnaProviderConfig } from "./mna-provider-config.js";
@@ -42,6 +43,121 @@ type ManagedMnaProviderSecret = {
   version: 1;
   apiKey?: string;
 };
+
+function readNonEmpty(value: string | boolean | undefined) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readEnvNonEmpty(env: NodeJS.ProcessEnv, key: string) {
+  const value = env[key];
+  return value && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function ensureHttpUrl(value: string, fieldName: string) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error();
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    throw new Error(`${fieldName} 必须是有效的 http(s) URL。`);
+  }
+}
+
+function readPositiveInteger(value: string | undefined, fieldName: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${fieldName} 必须是正整数。`);
+  }
+  return parsed;
+}
+
+function readProtocol(value: string | undefined, fieldName: string) {
+  if (!value) {
+    return undefined;
+  }
+  if (value === "anthropic" || value === "openai-compatible") {
+    return value;
+  }
+  throw new Error(`${fieldName} 必须是 anthropic 或 openai-compatible。`);
+}
+
+function readEffort(value: string | undefined, fieldName: string) {
+  if (!value) {
+    return undefined;
+  }
+  if (
+    value === "low"
+    || value === "medium"
+    || value === "high"
+    || value === "xhigh"
+    || value === "max"
+  ) {
+    return value;
+  }
+  throw new Error(`${fieldName} 必须是 low、medium、high、xhigh 或 max。`);
+}
+
+export function mergeManagedConfig<T extends Record<string, unknown>>(
+  persisted: T | null,
+  envDefaults: Partial<T>,
+  cliOverrides: Partial<T>,
+): T {
+  return {
+    ...envDefaults,
+    ...(persisted ?? {}),
+    ...cliOverrides,
+  } as T;
+}
+
+export function resolveOptionalManagedMemoryLlmEnvConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Partial<ManagedWritebackLlmConfig> {
+  const baseUrl = readEnvNonEmpty(env, "MEMORY_LLM_BASE_URL");
+  const model = readEnvNonEmpty(env, "MEMORY_LLM_MODEL");
+  const apiKey = readEnvNonEmpty(env, "MEMORY_LLM_API_KEY");
+  const protocol = readProtocol(readEnvNonEmpty(env, "MEMORY_LLM_PROTOCOL"), "MEMORY_LLM_PROTOCOL");
+  const timeoutMs = readPositiveInteger(readEnvNonEmpty(env, "MEMORY_LLM_TIMEOUT_MS"), "MEMORY_LLM_TIMEOUT_MS");
+  const effort = readEffort(readEnvNonEmpty(env, "MEMORY_LLM_EFFORT"), "MEMORY_LLM_EFFORT");
+  const maxTokens = readPositiveInteger(readEnvNonEmpty(env, "MEMORY_LLM_MAX_TOKENS"), "MEMORY_LLM_MAX_TOKENS");
+
+  return {
+    ...(baseUrl ? { baseUrl: ensureHttpUrl(baseUrl, "MEMORY_LLM_BASE_URL") } : {}),
+    ...(model ? { model } : {}),
+    ...(apiKey ? { apiKey } : {}),
+    ...(protocol ? { protocol } : {}),
+    ...(timeoutMs ? { timeoutMs } : {}),
+    ...(effort ? { effort } : {}),
+    ...(maxTokens ? { maxTokens } : {}),
+  };
+}
+
+export function resolveOptionalManagedMemoryLlmCliConfig(
+  options: Record<string, string | boolean>,
+): Partial<ManagedWritebackLlmConfig> {
+  const baseUrl = readNonEmpty(options["memory-llm-base-url"]);
+  const model = readNonEmpty(options["memory-llm-model"]);
+  const apiKey = readNonEmpty(options["memory-llm-api-key"]);
+  const protocol = readProtocol(readNonEmpty(options["memory-llm-protocol"]), "--memory-llm-protocol");
+  const timeoutMs = readPositiveInteger(readNonEmpty(options["memory-llm-timeout-ms"]), "--memory-llm-timeout-ms");
+  const effort = readEffort(readNonEmpty(options["memory-llm-effort"]), "--memory-llm-effort");
+  const maxTokens = readPositiveInteger(readNonEmpty(options["memory-llm-max-tokens"]), "--memory-llm-max-tokens");
+
+  return {
+    ...(baseUrl ? { baseUrl: ensureHttpUrl(baseUrl, "--memory-llm-base-url") } : {}),
+    ...(model ? { model } : {}),
+    ...(apiKey ? { apiKey } : {}),
+    ...(protocol ? { protocol } : {}),
+    ...(timeoutMs ? { timeoutMs } : {}),
+    ...(effort ? { effort } : {}),
+    ...(maxTokens ? { maxTokens } : {}),
+  };
+}
 
 export function axisManagedEmbeddingConfigPath() {
   return path.join(axisManagedDir(), "embedding-config.json");

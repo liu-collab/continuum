@@ -9,8 +9,12 @@ import {
   axisManagedEmbeddingConfigPath,
   managedMnaProviderConfigPath,
   managedMnaProviderSecretPath,
+  type ManagedWritebackLlmConfig,
+  mergeManagedConfig,
   readManagedEmbeddingConfig,
   readManagedMnaProviderConfig,
+  resolveOptionalManagedMemoryLlmCliConfig,
+  resolveOptionalManagedMemoryLlmEnvConfig,
   writeManagedMnaProviderConfig,
 } from "../src/managed-config.js";
 
@@ -21,6 +25,64 @@ describe("managed mna provider config", () => {
   beforeEach(async () => {
     await rm(tempHome, { recursive: true, force: true });
     await mkdir(mnaHome, { recursive: true });
+  });
+
+  it("merges managed config with CLI over persisted over environment priority", () => {
+    expect(
+      mergeManagedConfig<ManagedWritebackLlmConfig>(
+        {
+          version: 1,
+          model: "persisted-model",
+          apiKey: "persisted-key",
+        },
+        {
+          version: 1,
+          baseUrl: "https://env.example/v1",
+          model: "env-model",
+          apiKey: "env-key",
+        },
+        {
+          model: "cli-model",
+        },
+      ),
+    ).toEqual({
+      version: 1,
+      baseUrl: "https://env.example/v1",
+      model: "cli-model",
+      apiKey: "persisted-key",
+    });
+  });
+
+  it("resolves managed memory llm environment and CLI config", () => {
+    expect(
+      resolveOptionalManagedMemoryLlmEnvConfig({
+        MEMORY_LLM_BASE_URL: "https://api.example.com/v1/",
+        MEMORY_LLM_MODEL: "env-model",
+        MEMORY_LLM_API_KEY: "env-key",
+        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_TIMEOUT_MS: "7000",
+        MEMORY_LLM_EFFORT: "medium",
+        MEMORY_LLM_MAX_TOKENS: "2048",
+      }),
+    ).toEqual({
+      baseUrl: "https://api.example.com/v1",
+      model: "env-model",
+      apiKey: "env-key",
+      protocol: "openai-compatible",
+      timeoutMs: 7000,
+      effort: "medium",
+      maxTokens: 2048,
+    });
+
+    expect(
+      resolveOptionalManagedMemoryLlmCliConfig({
+        "memory-llm-model": "cli-model",
+        "memory-llm-timeout-ms": "9000",
+      }),
+    ).toEqual({
+      model: "cli-model",
+      timeoutMs: 9000,
+    });
   });
 
   afterEach(async () => {

@@ -425,6 +425,8 @@ export async function readBuildState(root) { ... }
 
 ## 优化十三：配置合并逻辑统一
 
+**状态：已完成**
+
 ### 问题
 
 Embedding 和 Memory LLM 的配置合并使用不同的覆盖策略，且嵌入配置接受 CLI 覆盖但 Memory LLM 不接受。

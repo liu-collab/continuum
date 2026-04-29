@@ -35,9 +35,14 @@ import {
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
   axisManagedMemoryLlmConfigPath,
+  mergeManagedConfig,
   readManagedEmbeddingConfig,
   readManagedMemoryLlmConfig,
   readManagedWritebackLlmConfig,
+  resolveOptionalManagedMemoryLlmCliConfig,
+  resolveOptionalManagedMemoryLlmEnvConfig,
+  type ManagedEmbeddingConfig,
+  type ManagedWritebackLlmConfig,
   writeManagedEmbeddingConfig,
   writeManagedMemoryLlmConfig,
 } from "./managed-config.js";
@@ -414,19 +419,30 @@ export async function runStartCommand(
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
   const existingMemoryLlmConfig = await readManagedMemoryLlmConfig();
   const existingWritebackLlmConfig = await readManagedWritebackLlmConfig();
-  const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options);
-  const mergedEmbeddingConfig = {
-    version: 1 as const,
-    ...(existingEmbeddingConfig ?? {}),
-    ...requestedEmbeddingConfig,
-  };
+  const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options, {});
+  const mergedEmbeddingConfig = mergeManagedConfig<ManagedEmbeddingConfig>(
+    existingEmbeddingConfig,
+    {
+      version: 1,
+      ...resolveOptionalThirdPartyEmbeddingConfig({}, process.env),
+    },
+    requestedEmbeddingConfig,
+  );
 
   await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
-  const mergedMemoryLlmConfig = {
-    version: 1 as const,
+  const persistedMemoryLlmConfig: ManagedWritebackLlmConfig = {
+    version: 1,
     ...(existingWritebackLlmConfig ?? {}),
     ...(existingMemoryLlmConfig ?? {}),
   };
+  const mergedMemoryLlmConfig = mergeManagedConfig<ManagedWritebackLlmConfig>(
+    persistedMemoryLlmConfig,
+    {
+      version: 1,
+      ...resolveOptionalManagedMemoryLlmEnvConfig(process.env),
+    },
+    resolveOptionalManagedMemoryLlmCliConfig(options),
+  );
   await writeManagedMemoryLlmConfig(mergedMemoryLlmConfig);
 
   await mkdir(axisHomeDir(), { recursive: true });

@@ -3,7 +3,7 @@ export function renderHelp() {
 
 Commands:
   axis --version
-  axis start [--open] [--ui-dev] [--postgres-port PORT] [--bind-host HOST] [--embedding-base-url URL] [--embedding-model MODEL] [--embedding-api-key KEY] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV]
+  axis start [--open] [--ui-dev] [--postgres-port PORT] [--bind-host HOST] [--embedding-base-url URL] [--embedding-model MODEL] [--embedding-api-key KEY] [--memory-llm-base-url URL] [--memory-llm-model MODEL] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV]
   axis stop
   axis status [--json] [--strict] [--runtime-url URL] [--storage-url URL] [--ui-url URL] [--database-url URL] [--timeout MS]
   axis ui [--host HOST] [--port PORT] [--open] [--url URL] [--runtime-url URL] [--storage-url URL] [--database-url URL] [--mna-url URL] [--mna-token-path PATH]
@@ -21,6 +21,9 @@ Options:
   --embedding-base-url URL   第三方 embedding 接口地址，也可通过 EMBEDDING_BASE_URL 提供
   --embedding-model MODEL    第三方 embedding 模型名，也可通过 EMBEDDING_MODEL 提供
   --embedding-api-key KEY    第三方 embedding 鉴权，可选，也可通过 EMBEDDING_API_KEY 提供
+  --memory-llm-base-url URL  记忆模型接口地址，也可通过 MEMORY_LLM_BASE_URL 提供
+  --memory-llm-model MODEL   记忆模型名，也可通过 MEMORY_LLM_MODEL 提供
+  --memory-llm-api-key KEY   记忆模型鉴权，可选，也可通过 MEMORY_LLM_API_KEY 提供
   --provider-kind KIND       mna 模型类型，支持 demo / openai-compatible / anthropic / ollama
   --provider-model MODEL     mna 模型名；仅对本次启动生效，页面默认读取已保存配置
   --provider-base-url URL    mna provider 地址；仅对本次启动生效

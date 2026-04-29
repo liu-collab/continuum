@@ -83,16 +83,20 @@ vi.mock("../src/utils.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../src/managed-config.js", () => ({
-  axisManagedEmbeddingConfigPath: vi.fn(() => "C:/tmp/.axis/managed/embedding-config.json"),
-  axisManagedMemoryLlmConfigPath: vi.fn(() => "C:/tmp/.axis/managed/memory-llm-config.json"),
-  readManagedEmbeddingConfig: readManagedEmbeddingConfigMock,
-  readManagedMemoryLlmConfig: readManagedMemoryLlmConfigMock,
-  readManagedWritebackLlmConfig: readManagedWritebackLlmConfigMock,
-  writeManagedEmbeddingConfig: writeManagedEmbeddingConfigMock,
-  writeManagedMemoryLlmConfig: writeManagedMemoryLlmConfigMock,
-  writeManagedWritebackLlmConfig: writeManagedWritebackLlmConfigMock,
-}));
+vi.mock("../src/managed-config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/managed-config.js")>();
+  return {
+    ...actual,
+    axisManagedEmbeddingConfigPath: vi.fn(() => "C:/tmp/.axis/managed/embedding-config.json"),
+    axisManagedMemoryLlmConfigPath: vi.fn(() => "C:/tmp/.axis/managed/memory-llm-config.json"),
+    readManagedEmbeddingConfig: readManagedEmbeddingConfigMock,
+    readManagedMemoryLlmConfig: readManagedMemoryLlmConfigMock,
+    readManagedWritebackLlmConfig: readManagedWritebackLlmConfigMock,
+    writeManagedEmbeddingConfig: writeManagedEmbeddingConfigMock,
+    writeManagedMemoryLlmConfig: writeManagedMemoryLlmConfigMock,
+    writeManagedWritebackLlmConfig: writeManagedWritebackLlmConfigMock,
+  };
+});
 
 vi.mock("../src/managed-state.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/managed-state.js")>();
@@ -510,6 +514,103 @@ describe("runStartCommand", () => {
     expect(dockerRun?.args).toContain(
       "AXIS_MEMORY_LLM_CONFIG_PATH=/opt/axis/managed/memory-llm-config.json",
     );
+  });
+
+  it("merges memory llm CLI options over environment and persisted config", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    process.env.MEMORY_LLM_BASE_URL = "https://env.example.com/v1";
+    process.env.MEMORY_LLM_MODEL = "env-model";
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue({
+      version: 1,
+      model: "persisted-model",
+      apiKey: "persisted-key",
+      timeoutMs: 8000,
+    });
+    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 2,
+      image: {
+        hash: "image-hash",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    try {
+      await runStartCommand(
+        {
+          "memory-llm-model": "cli-model",
+          "memory-llm-timeout-ms": "9000",
+        },
+        import.meta.url,
+      );
+    } finally {
+      delete process.env.MEMORY_LLM_BASE_URL;
+      delete process.env.MEMORY_LLM_MODEL;
+    }
+
+    expect(writeManagedMemoryLlmConfigMock).toHaveBeenCalledWith({
+      version: 1,
+      baseUrl: "https://env.example.com/v1",
+      model: "cli-model",
+      apiKey: "persisted-key",
+      timeoutMs: 9000,
+    });
   });
 
   it("uses and persists the managed database password when starting the stack container", async () => {
