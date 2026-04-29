@@ -72,6 +72,12 @@
     "connectionLabel": "Connection",
     "connectionClosedTitle": "Connection closed",
     "connectionClosedDescription": "Restore `memory-native-agent` before sending more messages.",
+    "providerNotConfiguredTitle": "Primary chat model is not configured",
+    "providerNotConfiguredDescription": "Configure a provider in settings before sending messages.",
+    "configureProvider": "Configure model",
+    "embeddingNotConfiguredTitle": "Memory retrieval is not configured",
+    "embeddingNotConfiguredDescription": "Chat remains available, but memory retrieval will be degraded until embedding is configured in settings.",
+    "configureEmbedding": "Configure embedding",
     "placeholder": "Type a message. Enter to send, Shift+Enter for a new line",
     "inputHint": "Supports /skill and imported skill commands",
     "slash": {
@@ -185,7 +191,7 @@
     "save": "Save config",
     "setupWizard": {
       "title": "Configure chat model",
-      "description": "Axis is still using demo mode. Complete these 3 steps to use a real model.",
+      "description": "The primary chat model is not configured yet. Complete these 3 steps to start chatting.",
       "steps": {
         "1": "1. Choose provider",
         "2": "2. Enter API Key",

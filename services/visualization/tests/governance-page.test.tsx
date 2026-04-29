@@ -51,6 +51,7 @@ vi.mock("next/link", () => ({
 }));
 
 import GovernancePage from "@/app/governance/page";
+import { AppI18nProvider } from "@/lib/i18n/client";
 
 const sourceStatus = {
   name: "storage_governance_executions",
@@ -109,6 +110,10 @@ function createGovernanceDetail(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function renderZh(element: React.ReactNode) {
+  return render(<AppI18nProvider defaultLocale="zh-CN">{element}</AppI18nProvider>);
+}
+
 describe("governance page", () => {
   it("opens automatic governance config in-place instead of linking to agent", async () => {
     const user = userEvent.setup();
@@ -135,7 +140,7 @@ describe("governance page", () => {
     const element = await GovernancePage({
       searchParams: Promise.resolve({})
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.queryByRole("link", { name: "配置" })).not.toBeInTheDocument();
 
@@ -184,7 +189,7 @@ describe("governance page", () => {
     const element = await GovernancePage({
       searchParams: Promise.resolve({})
     });
-    render(element);
+    renderZh(element);
 
     await user.click(screen.getByRole("button", { name: "配置" }));
     await user.clear(screen.getByLabelText("扫描间隔（分钟）"));
@@ -248,7 +253,7 @@ describe("governance page", () => {
         limit: "25"
       })
     });
-    render(element);
+    renderZh(element);
 
     const link = screen.getByText("清理旧记忆").closest("a");
 
@@ -279,7 +284,7 @@ describe("governance page", () => {
         execution_id: "execution-1"
       })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByTitle("memory-1")).toHaveAttribute("href", "/memories/memory-1");
   });
@@ -310,7 +315,7 @@ describe("governance page", () => {
         execution_id: "execution-1"
       })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByTestId("governance-evidence-formatted")).toHaveTextContent("这次治理会删除目标记忆");
     expect(screen.getByTestId("governance-evidence-formatted")).toHaveTextContent("replaced by newer state");
@@ -343,7 +348,7 @@ describe("governance page", () => {
         execution_id: "execution-1"
       })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByTestId("governance-evidence-raw")).toHaveTextContent("查看原始证据");
     expect(screen.getByTestId("governance-evidence-raw")).toHaveTextContent("custom_field");

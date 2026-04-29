@@ -311,10 +311,15 @@ export function SettingsModal({
     if (!config) {
       return;
     }
-    if (isEditableProviderKind(config.provider.kind)) {
+    if (config.provider.kind === "not-configured") {
+      setProviderKind("openai-compatible");
+      setProviderKindToSave("openai-compatible");
+    } else if (isEditableProviderKind(config.provider.kind)) {
       setProviderKind(config.provider.kind);
+      setProviderKindToSave(config.provider.kind);
+    } else {
+      setProviderKindToSave(config.provider.kind);
     }
-    setProviderKindToSave(config.provider.kind);
     setProviderModel(config.provider.model ?? "");
     setProviderBaseUrl(config.provider.base_url ?? "");
     setProviderApiKey(config.provider.api_key ?? "");
@@ -358,7 +363,7 @@ export function SettingsModal({
   }, [config, open]);
 
   useEffect(() => {
-    if (!config || config.provider.kind !== "demo") {
+    if (!config || config.provider.kind !== "not-configured") {
       return;
     }
 
@@ -419,7 +424,7 @@ export function SettingsModal({
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
-  }, [open, setupWizard, config?.provider.kind, config?.env_hints?.provider_api_key_env]);
+  }, [open, setupWizard, config?.env_hints?.provider_api_key_env]);
 
   const providerRequiresBaseUrl = useMemo(
     () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",

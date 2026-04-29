@@ -72,8 +72,8 @@ describe("SettingsModal", () => {
             ...baseConfig,
             provider: {
               ...baseConfig.provider,
-              kind: "demo",
-              model: "axis-demo",
+              kind: "not-configured",
+              model: "",
               base_url: null,
               api_key: null,
             },
@@ -132,8 +132,8 @@ describe("SettingsModal", () => {
             ...baseConfig,
             provider: {
               ...baseConfig.provider,
-              kind: "demo",
-              model: "axis-demo",
+              kind: "not-configured",
+              model: "",
               base_url: null,
               api_key: null,
             },
@@ -188,8 +188,8 @@ describe("SettingsModal", () => {
             ...baseConfig,
             provider: {
               ...baseConfig.provider,
-              kind: "demo",
-              model: "axis-demo",
+              kind: "not-configured",
+              model: "",
               base_url: null,
               api_key: null,
             },

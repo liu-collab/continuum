@@ -44,6 +44,7 @@ vi.mock("next/link", () => ({
 import DashboardPage from "@/app/dashboard/page";
 import DashboardError from "@/app/dashboard/error";
 import DashboardLoading from "@/app/dashboard/loading";
+import { AppI18nProvider } from "@/lib/i18n/client";
 
 const healthyStatus = {
   name: "runtime_api",
@@ -59,6 +60,10 @@ const healthyStatus = {
   activeConnections: null,
   connectionLimit: null
 };
+
+function renderZh(element: React.ReactNode) {
+  return render(<AppI18nProvider defaultLocale="zh-CN">{element}</AppI18nProvider>);
+}
 
 describe("dashboard page", () => {
   it("renders explicit empty states for missing dashboard sections", async () => {
@@ -95,7 +100,7 @@ describe("dashboard page", () => {
     const element = await DashboardPage({
       searchParams: Promise.resolve({ window: "15m" })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByTestId("dashboard-diagnosis-empty")).toHaveTextContent("暂无诊断项");
     expect(screen.getByTestId("dashboard-source-empty")).toHaveTextContent("暂无数据源状态");
@@ -164,7 +169,7 @@ describe("dashboard page", () => {
     const element = await DashboardPage({
       searchParams: Promise.resolve({ window: "30m" })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByText("写回积压")).toBeInTheDocument();
     expect(screen.getByText("全局 / 工作区使用情况")).toBeInTheDocument();
@@ -229,7 +234,7 @@ describe("dashboard page", () => {
     const element = await DashboardPage({
       searchParams: Promise.resolve({ window: "30m" })
     });
-    render(element);
+    renderZh(element);
 
     expect(screen.getByText(/当前有 1 个数据源不可用或已超时/)).toBeInTheDocument();
     expect(screen.getAllByText(/Runtime observe API/).length).toBeGreaterThan(0);
@@ -238,7 +243,7 @@ describe("dashboard page", () => {
   });
 
   it("renders the loading state", () => {
-    render(<DashboardLoading />);
+    renderZh(<DashboardLoading />);
 
     expect(screen.getByTestId("dashboard-loading-state")).toHaveTextContent("正在读取运行时与存储指标");
     expect(screen.getByText("retrieval-runtime")).toBeInTheDocument();
@@ -248,7 +253,7 @@ describe("dashboard page", () => {
   it("renders the error state and supports retry", () => {
     const reset = vi.fn();
 
-    render(<DashboardError error={new Error("boom")} reset={reset} />);
+    renderZh(<DashboardError error={new Error("boom")} reset={reset} />);
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
 
     expect(screen.getByTestId("dashboard-error-state")).toHaveTextContent("看板加载失败");

@@ -49,7 +49,8 @@ describe("fetchJsonFromSource", () => {
       sourceName: "storage_api_test",
       sourceLabel: "Storage API test",
       url: "http://example.test/storage",
-      timeoutMs: 50
+      timeoutMs: 50,
+      locale: "zh-CN"
     });
 
     expect(result.status.detail).toContain("上游服务返回 503");

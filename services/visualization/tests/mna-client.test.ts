@@ -139,8 +139,8 @@ describe("MnaClient", () => {
         ok: true,
         json: async () => ({
           provider: {
-            kind: "demo",
-            model: "axis-demo",
+            kind: "not-configured",
+            model: "",
             base_url: null,
             api_key: null,
             temperature: null,
@@ -199,7 +199,7 @@ describe("MnaClient", () => {
       },
     });
 
-    expect(config.provider.kind).toBe("demo");
+    expect(config.provider.kind).toBe("not-configured");
     const updateRequest = fetchMock.mock.calls[2];
     expect(updateRequest?.[0]).toBe("http://127.0.0.1:4193/v1/agent/config");
     expect(JSON.parse(String((updateRequest?.[1] as RequestInit).body))).toEqual({
@@ -466,4 +466,3 @@ describe("MnaClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
-

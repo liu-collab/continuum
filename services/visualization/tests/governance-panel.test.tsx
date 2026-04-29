@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GovernancePanel } from "@/features/memory-catalog/governance-panel";
 import type { MemoryCatalogDetail } from "@/lib/contracts";
+import { AppI18nProvider } from "@/lib/i18n/client";
 
 const refresh = vi.fn();
 
@@ -59,6 +60,14 @@ async function flushPendingPromises() {
   });
 }
 
+function renderGovernancePanel() {
+  return render(
+    <AppI18nProvider defaultLocale="zh-CN">
+      <GovernancePanel detail={createMemoryDetail()} />
+    </AppI18nProvider>
+  );
+}
+
 describe("GovernancePanel", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -73,7 +82,7 @@ describe("GovernancePanel", () => {
       json: async () => ({ message: "deleted" })
     } as Response);
 
-    render(<GovernancePanel detail={createMemoryDetail()} />);
+    renderGovernancePanel();
 
     await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "过期记忆");
     await user.click(screen.getByTestId("memory-governance-delete-trigger"));
@@ -101,7 +110,7 @@ describe("GovernancePanel", () => {
       json: async () => ({ message: "confirmed" })
     } as Response);
 
-    render(<GovernancePanel detail={createMemoryDetail()} />);
+    renderGovernancePanel();
 
     await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "人工复核通过");
     await user.click(screen.getByRole("button", { name: "确认" }));
@@ -124,7 +133,7 @@ describe("GovernancePanel", () => {
       json: async () => ({ message: "confirmed" })
     } as Response);
 
-    render(<GovernancePanel detail={createMemoryDetail()} />);
+    renderGovernancePanel();
 
     await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "人工复核通过");
     await user.click(screen.getByRole("button", { name: "确认" }));
@@ -145,7 +154,7 @@ describe("GovernancePanel", () => {
       json: async () => ({ message: "confirmed" })
     } as Response);
 
-    render(<GovernancePanel detail={createMemoryDetail()} />);
+    renderGovernancePanel();
 
     fireEvent.change(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), {
       target: { value: "人工复核通过" }

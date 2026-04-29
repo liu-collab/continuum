@@ -74,10 +74,15 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       return;
     }
 
-    if (isEditableProviderKind(config.provider.kind)) {
+    if (config.provider.kind === "not-configured") {
+      setProviderKind("openai-compatible");
+      setProviderKindToSave("openai-compatible");
+    } else if (isEditableProviderKind(config.provider.kind)) {
       setProviderKind(config.provider.kind);
+      setProviderKindToSave(config.provider.kind);
+    } else {
+      setProviderKindToSave(config.provider.kind);
     }
-    setProviderKindToSave(config.provider.kind);
     setProviderModel(config.provider.model ?? "");
     setProviderBaseUrl(config.provider.base_url ?? "");
     setProviderApiKey(config.provider.api_key ?? "");

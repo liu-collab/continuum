@@ -64,12 +64,15 @@ describe("storage governance executions client", () => {
       }),
     } as Response);
 
-    const result = await fetchGovernanceExecutions({
-      workspaceId: "ws-1",
-      proposalType: undefined,
-      executionStatus: undefined,
-      limit: 20,
-    });
+    const result = await fetchGovernanceExecutions(
+      {
+        workspaceId: "ws-1",
+        proposalType: undefined,
+        executionStatus: undefined,
+        limit: 20,
+      },
+      { locale: "zh-CN" },
+    );
 
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.proposalTypeLabel).toBe("软删除");
@@ -185,4 +188,3 @@ describe("storage governance executions client", () => {
     expect(result.items[0]?.verificationBlockedReason).toBe("verifier_unavailable");
   });
 });
-

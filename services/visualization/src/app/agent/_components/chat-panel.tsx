@@ -58,11 +58,13 @@ export function ChatPanel({
   const { formatConnection, t } = useAgentI18n();
   const isBusy = turns.some((turn) => turn.status === "streaming");
   const latestTurn = turns.at(-1) ?? null;
-  const canSend = connection === "open" && !isBusy;
+  const providerNotConfigured = dependencyStatus?.provider.id === "not-configured";
+  const canSend = connection === "open" && !isBusy && !providerNotConfigured;
   const connectionLabel = formatConnection(connection);
   const runtimeStatus = resolveRuntimeStatus(dependencyStatus?.runtime);
   const providerStatus = dependencyStatus?.provider.status ?? "unknown";
   const embeddingStatus = String(dependencyStatus?.runtime.embeddings?.status ?? "unknown");
+  const embeddingNotConfigured = embeddingStatus === "unavailable" || embeddingStatus === "not_configured";
   const memoryLlmStatus = String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown");
   const hiddenTurnCount = Math.max(turns.length - visibleTurnCount, 0);
   const visibleTurns = useMemo(
@@ -243,6 +245,28 @@ export function ChatPanel({
       </div>
 
       <div className="shrink-0 border-t bg-surface px-4 pb-6 pt-3">
+        {providerNotConfigured ? (
+          <div className="mb-3 rounded-md border bg-surface-muted/30 px-3 py-3">
+            <div className="text-sm font-semibold text-foreground">{t("chatPanel.providerNotConfiguredTitle")}</div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              {t("chatPanel.providerNotConfiguredDescription")}
+            </div>
+            <button type="button" onClick={() => onOpenSettings?.()} className="btn-primary mt-3">
+              {t("chatPanel.configureProvider")}
+            </button>
+          </div>
+        ) : null}
+        {!providerNotConfigured && embeddingNotConfigured ? (
+          <div className="mb-3 rounded-md border bg-surface-muted/30 px-3 py-3">
+            <div className="text-sm font-semibold text-foreground">{t("chatPanel.embeddingNotConfiguredTitle")}</div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              {t("chatPanel.embeddingNotConfiguredDescription")}
+            </div>
+            <button type="button" onClick={() => onOpenSettings?.()} className="btn-outline mt-3">
+              {t("chatPanel.configureEmbedding")}
+            </button>
+          </div>
+        ) : null}
         {connection === "closed" ? (
           <ErrorState
             title={t("chatPanel.connectionClosedTitle")}

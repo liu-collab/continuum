@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { getAppConfig } from "@/lib/env";
 
 const originalPlatformUserId = process.env.PLATFORM_USER_ID;
+const originalDefaultLocale = process.env.NEXT_PUBLIC_MNA_DEFAULT_LOCALE;
 
 describe("visualization env", () => {
   afterEach(() => {
@@ -10,6 +11,11 @@ describe("visualization env", () => {
       delete process.env.PLATFORM_USER_ID;
     } else {
       process.env.PLATFORM_USER_ID = originalPlatformUserId;
+    }
+    if (originalDefaultLocale === undefined) {
+      delete process.env.NEXT_PUBLIC_MNA_DEFAULT_LOCALE;
+    } else {
+      process.env.NEXT_PUBLIC_MNA_DEFAULT_LOCALE = originalDefaultLocale;
     }
     globalThis.__AXIS_VIZ_CONFIG__ = undefined;
   });

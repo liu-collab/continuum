@@ -72,6 +72,12 @@
     "connectionLabel": "连接",
     "connectionClosedTitle": "连接已关闭",
     "connectionClosedDescription": "请先恢复 `memory-native-agent`，然后再继续发送消息。",
+    "providerNotConfiguredTitle": "尚未配置聊天主模型",
+    "providerNotConfiguredDescription": "请先在设置面板中配置 provider，配置完成后就可以继续发送消息。",
+    "configureProvider": "配置模型",
+    "embeddingNotConfiguredTitle": "尚未配置向量检索",
+    "embeddingNotConfiguredDescription": "当前仍可对话，但记忆检索会降级。可在设置面板中补充 embedding 配置。",
+    "configureEmbedding": "配置 embedding",
     "placeholder": "输入消息，Enter 发送，Shift+Enter 换行",
     "inputHint": "支持 /skill 或已导入 skill 命令",
     "slash": {
@@ -185,7 +191,7 @@
     "save": "保存配置",
     "setupWizard": {
       "title": "配置聊天模型",
-      "description": "当前仍在 demo 模式。完成这 3 步后，就可以使用真实模型对话。",
+      "description": "尚未配置聊天主模型。完成这 3 步后，就可以开始对话。",
       "steps": {
         "1": "1. 选择提供商",
         "2": "2. 输入 API Key",

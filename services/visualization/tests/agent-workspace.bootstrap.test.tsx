@@ -74,7 +74,7 @@ function createWorkspaceState(status: "loading" | "mna_not_running" | "token_mis
   };
 }
 
-function createReadyWorkspaceWithDemoProvider() {
+function createReadyWorkspaceWithoutProvider() {
   return {
     state: {
       bootstrapStatus: "ok",
@@ -121,18 +121,18 @@ function createReadyWorkspaceWithDemoProvider() {
         }
       },
       provider: {
-        id: "demo",
-        model: "axis-demo",
-        status: "configured",
-        detail: "demo provider"
+        id: "not-configured",
+        model: "",
+        status: "misconfigured",
+        detail: "provider is not configured"
       },
       mcp: [],
-      provider_key: "demo:axis-demo"
+      provider_key: "not-configured:"
     },
     agentConfig: {
       provider: {
-        kind: "demo",
-        model: "axis-demo",
+        kind: "not-configured",
+        model: "",
         base_url: null,
         api_key: null,
         temperature: null,
@@ -260,8 +260,8 @@ describe("AgentWorkspace bootstrap states", () => {
     );
   });
 
-  it("opens the setup wizard automatically when the provider is still demo", async () => {
-    mockedUseAgentWorkspace.mockReturnValue(createReadyWorkspaceWithDemoProvider() as never);
+  it("opens the setup wizard automatically when the provider is not configured", async () => {
+    mockedUseAgentWorkspace.mockReturnValue(createReadyWorkspaceWithoutProvider() as never);
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -270,7 +270,7 @@ describe("AgentWorkspace bootstrap states", () => {
     );
 
     expect(await screen.findByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
-    expect(screen.getByText("当前仍在 demo 模式。完成这 3 步后，就可以使用真实模型对话。")).toBeInTheDocument();
+    expect(screen.getByText("尚未配置聊天主模型。完成这 3 步后，就可以开始对话。")).toBeInTheDocument();
   });
 
   it("renders two-column workspace and header dependency badges after bootstrap succeeds", () => {

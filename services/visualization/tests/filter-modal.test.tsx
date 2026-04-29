@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FilterModalButton } from "@/components/filter-modal";
 import { FormField } from "@/components/form-field";
 import { SearchForm } from "@/components/search-form";
+import { AppI18nProvider } from "@/lib/i18n/client";
 
 const push = vi.fn();
 
@@ -15,12 +16,16 @@ vi.mock("next/navigation", () => ({
   })
 }));
 
+function renderZh(element: React.ReactNode) {
+  return render(<AppI18nProvider defaultLocale="zh-CN">{element}</AppI18nProvider>);
+}
+
 describe("filter modal button", () => {
   it("renders modal content as regular children and submits through search form", async () => {
     const user = userEvent.setup();
     push.mockReset();
 
-    render(
+    renderZh(
       <FilterModalButton activeCount={1} title="筛选记忆" description="按条件筛选">
         <SearchForm action="/memories" initialValues={{ workspace_id: "ws-1" }}>
           <FormField label="工作区" name="workspace_id" placeholder="workspace id" defaultValue="ws-1" />
@@ -44,7 +49,7 @@ describe("filter modal button", () => {
   it("renders dropdown options above the modal scroll container", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderZh(
       <FilterModalButton activeCount={1} title="筛选治理记录" description="按条件筛选">
         <SearchForm action="/governance" initialValues={{ proposal_type: "" }}>
           <FormField

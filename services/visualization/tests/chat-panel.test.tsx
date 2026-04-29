@@ -629,12 +629,12 @@ describe("ChatPanel", () => {
               }
             },
             provider: {
-              id: "demo",
-              model: "axis-demo",
+              id: "openai-compatible",
+              model: "gpt-4.1-mini",
               status: "configured"
             },
             mcp: [],
-            provider_key: "demo:axis-demo"
+            provider_key: "openai-compatible:gpt-4.1-mini"
           }}
           skills={[]}
           onSend={vi.fn()}

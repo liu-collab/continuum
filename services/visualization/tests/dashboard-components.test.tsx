@@ -19,7 +19,7 @@ describe("dashboard cards", () => {
       formattedValue: "不可用"
     };
 
-    render(<MetricCard metric={metric} />);
+    render(<MetricCard metric={metric} locale="zh-CN" />);
 
     expect(screen.getByText("召回 P95")).toBeInTheDocument();
     expect(screen.getByText("未知")).toBeInTheDocument();
@@ -47,7 +47,7 @@ describe("dashboard cards", () => {
       ]
     };
 
-    render(<TrendCard trend={trend} />);
+    render(<TrendCard trend={trend} locale="zh-CN" />);
 
     expect(screen.getByText("空召回随时间变化")).toBeInTheDocument();
     expect(screen.getByText("未知")).toBeInTheDocument();

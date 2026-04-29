@@ -3,12 +3,14 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { SourceHealthPanel } from "@/components/source-health-panel";
+import { AppI18nProvider } from "@/lib/i18n/client";
 
 describe("source health panel", () => {
   it("renders service health and dependencies separately", () => {
     render(
-      <SourceHealthPanel
-        health={{
+      <AppI18nProvider defaultLocale="zh-CN">
+        <SourceHealthPanel
+          health={{
           liveness: {
             status: "ok",
             checkedAt: "2026-04-15T12:00:00.000Z"
@@ -38,8 +40,9 @@ describe("source health panel", () => {
               connectionLimit: 5
             }
           ]
-        }}
-      />
+          }}
+        />
+      </AppI18nProvider>
     );
 
     expect(screen.getByText("服务存活")).toBeInTheDocument();

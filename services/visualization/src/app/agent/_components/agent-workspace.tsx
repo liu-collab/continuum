@@ -29,7 +29,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMode, setSettingsMode] = useState<"runtime" | "setup">("runtime");
-  const [demoSetupPrompted, setDemoSetupPrompted] = useState(false);
+  const [setupPrompted, setSetupPrompted] = useState(false);
   const sessionErrorContent = workspace.state.sessionErrorCode
     ? formatAgentError(workspace.state.sessionErrorCode, workspace.state.sessionError)
     : null;
@@ -41,7 +41,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const currentTurnRunsHref = workspace.activeTurn?.turnId
     ? `/runs?turn_id=${encodeURIComponent(workspace.activeTurn.turnId)}`
     : null;
-  const providerLabel = workspace.dependencyStatus
+  const providerLabel = workspace.dependencyStatus && workspace.dependencyStatus.provider.id !== "not-configured"
     ? `${formatProviderKindLabel(workspace.dependencyStatus.provider.id)} · ${workspace.dependencyStatus.provider.model}`
     : null;
   const currentTurnMemoriesHref = buildMemoriesHref({
@@ -59,17 +59,17 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   useEffect(() => {
     if (
-      demoSetupPrompted ||
+      setupPrompted ||
       workspace.state.bootstrapStatus !== "ok" ||
-      workspace.agentConfig?.provider.kind !== "demo"
+      workspace.agentConfig?.provider.kind !== "not-configured"
     ) {
       return;
     }
 
     setSettingsMode("setup");
     setSettingsOpen(true);
-    setDemoSetupPrompted(true);
-  }, [demoSetupPrompted, workspace.agentConfig?.provider.kind, workspace.state.bootstrapStatus]);
+    setSetupPrompted(true);
+  }, [setupPrompted, workspace.agentConfig?.provider.kind, workspace.state.bootstrapStatus]);
 
   if (workspace.state.bootstrapStatus === "loading") {
     return (
@@ -197,7 +197,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 void workspace.openPromptInspector(turnId);
               }}
               onOpenSettings={() => {
-                setSettingsMode("runtime");
+                setSettingsMode(workspace.agentConfig?.provider.kind === "not-configured" ? "setup" : "runtime");
                 setSettingsOpen(true);
               }}
             />
@@ -208,7 +208,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        setupWizard={settingsMode === "setup" && workspace.agentConfig?.provider.kind === "demo"}
+        setupWizard={settingsMode === "setup" && workspace.agentConfig?.provider.kind === "not-configured"}
         config={workspace.agentConfig}
         runtimeConfig={workspace.runtimeConfig}
         dependencyStatus={workspace.dependencyStatus}

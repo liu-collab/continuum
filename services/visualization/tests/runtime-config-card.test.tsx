@@ -8,8 +8,8 @@ import { AgentI18nProvider } from "@/lib/i18n/agent/provider";
 
 const baseConfig = {
   provider: {
-    kind: "demo" as const,
-    model: "axis-demo",
+    kind: "not-configured" as const,
+    model: "",
     base_url: null,
     api_key: null,
     temperature: null,
@@ -50,7 +50,20 @@ describe("RuntimeConfigCard", () => {
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
-        <RuntimeConfigCard config={baseConfig} dependencyStatus={null} onSave={onSave} />
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "deepseek-chat",
+              base_url: "https://api.deepseek.com",
+              api_key: "demo-key",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={onSave}
+        />
       </AgentI18nProvider>,
     );
 
@@ -68,11 +81,23 @@ describe("RuntimeConfigCard", () => {
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
-        <RuntimeConfigCard config={baseConfig} dependencyStatus={null} onSave={onSave} />
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "deepseek-chat",
+              base_url: "https://api.deepseek.com",
+              api_key: "demo-key",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={onSave}
+        />
       </AgentI18nProvider>,
     );
 
-    await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
     await user.type(screen.getByPlaceholderText("EMBEDDING_BASE_URL"), "https://api.openai.com/v1");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
@@ -108,7 +133,7 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "demo" }));
+    await user.click(screen.getByRole("button", { name: "openai" }));
     await user.click(screen.getByRole("option", { name: "openai" }));
     fireEvent.change(screen.getByPlaceholderText("provider model"), { target: { value: "deepseek-chat" } });
     fireEvent.change(screen.getByPlaceholderText("provider base_url"), {
@@ -149,7 +174,7 @@ describe("RuntimeConfigCard", () => {
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "demo" }));
+    await user.click(screen.getByRole("button", { name: "openai" }));
     await user.click(screen.getByRole("option", { name: "openai" }));
     await user.clear(screen.getByPlaceholderText("provider model"));
     await user.type(screen.getByPlaceholderText("provider model"), "deepseek-chat");
@@ -233,4 +258,3 @@ describe("RuntimeConfigCard", () => {
     expect(options).toEqual(["openai", "anthropic", "ollama", "record-replay"]);
   });
 });
-
