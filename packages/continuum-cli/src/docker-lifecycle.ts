@@ -12,38 +12,60 @@ import { runForeground, runForegroundQuiet } from "./managed-process.js";
 import { pathExists, vendorPath } from "./utils.js";
 
 const STAGE_DIR_NAME = "stack-stage";
+const DEFAULT_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
 
-export async function ensureDockerInstalled() {
-  if (process.platform !== "win32") {
-    throw new Error(
-      "continuum start 当前仅支持 Windows 平台。其他平台请手动运行各服务或使用 Docker Compose。",
-    );
-  }
+type DockerLifecycleOptions = {
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
+};
+
+export function resolveDockerDesktopPath(env: NodeJS.ProcessEnv = process.env) {
+  return env.CONTINUUM_DOCKER_DESKTOP_PATH ?? DEFAULT_DOCKER_DESKTOP_PATH;
+}
+
+export async function ensureDockerInstalled(options: DockerLifecycleOptions = {}) {
+  const platform = options.platform ?? process.platform;
 
   try {
     await runForegroundQuiet("docker", ["--version"]);
+    return;
   } catch {
-    process.stdout.write("Docker 未安装，开始尝试自动安装 Docker Desktop。\n");
-    await runForeground("winget", [
-      "install",
-      "-e",
-      "--id",
-      "Docker.DockerDesktop",
-      "--accept-package-agreements",
-      "--accept-source-agreements",
-    ]);
+    if (platform !== "win32") {
+      throw new Error(
+        "Docker CLI 未安装或不可用。请先安装 Docker Engine，并确保 docker 命令在 PATH 中。",
+      );
+    }
   }
+
+  process.stdout.write("Docker 未安装，开始尝试自动安装 Docker Desktop。\n");
+  await runForeground("winget", [
+    "install",
+    "-e",
+    "--id",
+    "Docker.DockerDesktop",
+    "--accept-package-agreements",
+    "--accept-source-agreements",
+  ]);
 }
 
-export async function ensureDockerDaemonReady() {
+export async function ensureDockerDaemonReady(options: DockerLifecycleOptions = {}) {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+
   try {
     await runForegroundQuiet("docker", ["version"]);
     return;
   } catch {
+    if (platform !== "win32") {
+      throw new Error(
+        "Docker daemon 未就绪。请确认 Docker Engine 已启动，并且当前用户可执行 docker version。",
+      );
+    }
+
     process.stdout.write("Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。\n");
   }
 
-  const dockerDesktopExe = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
+  const dockerDesktopExe = resolveDockerDesktopPath(env);
   if (await pathExists(dockerDesktopExe)) {
     spawn(dockerDesktopExe, [], {
       detached: true,

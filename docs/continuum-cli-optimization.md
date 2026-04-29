@@ -192,6 +192,8 @@ src/
 
 ## 优化六：Docker Desktop 路径配置化
 
+**状态：已完成**
+
 ### 问题
 
 ```typescript
