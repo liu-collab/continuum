@@ -1050,6 +1050,39 @@ describe("runStartCommand", () => {
       });
     writeManagedStateMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
+      version: "0.1.0",
+    });
     fetchJsonMock.mockImplementation(async (url: string) => {
       if (
         url === "http://127.0.0.1:3001/health"
@@ -1078,8 +1111,14 @@ describe("runStartCommand", () => {
     });
 
     expect(stopLegacyAxisProcessesMock).not.toHaveBeenCalled();
-    expect(startManagedMnaMock).not.toHaveBeenCalled();
-    expect(planVendorBuildMock).not.toHaveBeenCalled();
+    expect(startManagedMnaMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        "runtime-url": "http://127.0.0.1:3002",
+        "memory-llm-config-path": "C:/tmp/.axis/managed/memory-llm-config.json",
+      }),
+      import.meta.url,
+    );
+    expect(planVendorBuildMock).toHaveBeenCalled();
     expect(planStackImageBuildMock).not.toHaveBeenCalled();
     expect(dockerRun).toBeUndefined();
     expect(uiDevSpawn).toBeDefined();
@@ -1088,6 +1127,8 @@ describe("runStartCommand", () => {
       STORAGE_READ_MODEL_DSN: "postgres://axis_user:test-db-password@127.0.0.1:54330/axis_db",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
+      NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:4193",
+      MNA_TOKEN_PATH: "C:/tmp/.axis/managed/mna/token.txt",
     });
     expect(waitForHealthyMock).toHaveBeenCalledWith(
       "http://127.0.0.1:3003/api/health/readiness",
@@ -1397,6 +1438,76 @@ describe("runStartCommand", () => {
       STORAGE_READ_MODEL_DSN: "postgres://axis_user:test-db-password@127.0.0.1:54329/axis_db",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
+      NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:4193",
+      MNA_TOKEN_PATH: "C:/tmp/.axis/managed/mna/token.txt",
+    });
+  });
+
+  it("respects explicit mna connection options when ui-dev reuses healthy backend", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedStateMock
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "axis-stack",
+          port: 54330,
+          database: "axis_db",
+          username: "axis_user",
+        },
+        services: [],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "axis-stack",
+          port: 54330,
+          database: "axis_db",
+          username: "axis_user",
+        },
+        services: [],
+      })
+      .mockResolvedValueOnce({
+        version: 1,
+        postgres: {
+          containerName: "axis-stack",
+          port: 54330,
+          database: "axis_db",
+          username: "axis_user",
+        },
+        services: [],
+      });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    fetchJsonMock.mockImplementation(async (url: string) => {
+      if (
+        url === "http://127.0.0.1:3001/health"
+        || url === "http://127.0.0.1:3002/healthz"
+        || url === "http://127.0.0.1:3003/api/health/readiness"
+      ) {
+        return { ok: true, body: {} };
+      }
+
+      return { ok: false, error: "unexpected url" };
+    });
+
+    await runStartCommand({
+      "ui-dev": true,
+      "mna-url": "http://127.0.0.1:5193",
+      "mna-token-path": "C:/tmp/external-mna/token.txt",
+    }, import.meta.url);
+
+    const uiDevSpawn = spawnMock.mock.calls.find((call) => {
+      const command = call[0];
+      const options = call[2] as { cwd?: string; env?: Record<string, string> } | undefined;
+      return command === "cmd.exe" && options?.cwd?.includes("services\\visualization");
+    });
+
+    expect(startManagedMnaMock).not.toHaveBeenCalled();
+    expect(planVendorBuildMock).not.toHaveBeenCalled();
+    expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
+      NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:5193",
+      MNA_TOKEN_PATH: "C:/tmp/external-mna/token.txt",
     });
   });
 });

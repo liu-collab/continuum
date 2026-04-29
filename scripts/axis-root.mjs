@@ -197,7 +197,7 @@ async function run() {
     if (command === "start") {
       if (hasBooleanOption(passthroughArgs, "ui-dev")) {
         if (await managedBackendIsHealthy()) {
-          console.log("--ui-dev 检测到后端已健康，跳过 vendor 刷新。");
+          console.log("--ui-dev 检测到 storage/runtime 已健康，跳过 visualization vendor 刷新。");
         } else {
           await prepareLatestVendor(["--", "--skip-visualization"]);
         }

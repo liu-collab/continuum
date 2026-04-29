@@ -165,6 +165,10 @@ function resolveUiDevMna(
   };
 }
 
+function hasExplicitMnaConnectionOptions(options: Record<string, string | boolean>) {
+  return typeof options["mna-url"] === "string" || typeof options["mna-token-path"] === "string";
+}
+
 async function startManagedVisualizationDevServer(options: {
   packageRoot: string;
   bindHost: string;
@@ -387,7 +391,19 @@ export async function runStartCommand(
     : false;
 
   if (uiDev && uiDevBackendHealthy) {
-    const mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
+    let mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
+    if (!hasExplicitMnaConnectionOptions(options)) {
+      const buildState = await loadBuildStateHelpers(packageRoot);
+      await refreshMemoryNativeAgentVendor(packageRoot, buildState);
+      mna = await startManagedMna(
+        {
+          ...options,
+          "runtime-url": runtimeUrl,
+          "memory-llm-config-path": axisManagedMemoryLlmConfigPath(),
+        },
+        importMetaUrl,
+      );
+    }
     const devServer = await startManagedVisualizationDevServer({
       packageRoot,
       bindHost,
@@ -407,6 +423,7 @@ export async function runStartCommand(
     process.stdout.write(`runtime: ${runtimeUrl}\n`);
     process.stdout.write(`visualization: ${devServer.url} (dev)\n`);
     process.stdout.write(`log: ${devServer.logPath}\n`);
+    process.stdout.write(`memory-native-agent: ${mna.url}\n`);
 
     if (open) {
       await openBrowser(devServer.url);
