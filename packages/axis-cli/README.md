@@ -16,11 +16,19 @@
 
 ## 平台支持
 
-**当前 `axis start` 仅支持 Windows 平台**，依赖 `winget` 和 PowerShell 进行 Docker 安装和进程管理。
+| 平台 | 支持程度 |
+|---|---|
+| **Windows** | 完整支持，winget 自动安装 Docker + 全自动启动 |
+| **macOS** | 支持，需自行安装 Docker Desktop，`axis start` 自动检测并启动 |
+| **Linux** | 部分支持，需自行安装 Docker Engine 并手动配置 |
 
-其他平台用户请：
-- 手动运行各服务（storage、retrieval-runtime、visualization）
-- 或使用 Docker Compose 自行编排
+macOS / Linux 环境变量设置示例：
+```bash
+export EMBEDDING_BASE_URL="https://api.openai.com/v1"
+export EMBEDDING_MODEL="text-embedding-3-small"
+export EMBEDDING_API_KEY="your-key"
+axis start
+```
 
 ## 命令说明
 
