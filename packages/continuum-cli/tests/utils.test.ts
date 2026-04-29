@@ -9,7 +9,7 @@ vi.mock("node:child_process", () => ({
   spawn: spawnMock,
 }));
 
-import { runCommand, uninstallCodexMcpServer } from "../src/utils.js";
+import { runCommand, terminateProcess, uninstallCodexMcpServer } from "../src/utils.js";
 
 function createSpawnResult(options: { code: number; stdout?: string; stderr?: string }) {
   const child = new EventEmitter() as EventEmitter & {
@@ -84,6 +84,29 @@ describe("continuum utils", () => {
           stdio: ["ignore", "pipe", "pipe"],
         }),
       );
+    }
+  });
+
+  it("terminates managed processes through the shared helper", async () => {
+    spawnMock.mockImplementation(() =>
+      createSpawnResult({
+        code: 0,
+      }),
+    );
+
+    await terminateProcess(1234);
+
+    if (process.platform === "win32") {
+      expect(spawnMock).toHaveBeenCalledWith(
+        "taskkill",
+        ["/PID", "1234", "/T", "/F"],
+        expect.objectContaining({
+          stdio: "ignore",
+          windowsHide: true,
+        }),
+      );
+    } else {
+      expect(spawnMock).not.toHaveBeenCalled();
     }
   });
 });

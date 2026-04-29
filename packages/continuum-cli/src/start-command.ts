@@ -13,6 +13,7 @@ import {
   packageRootFromImportMeta,
   pathExists,
   spawnCrossPlatform,
+  terminateProcess,
   vendorPath,
 } from "./utils.js";
 import {
@@ -117,32 +118,6 @@ async function writeManagedVisualizationDevRecord(record: ManagedServiceRecord |
   });
 }
 
-async function terminateManagedProcess(pid: number) {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-        env: process.env,
-      });
-
-      child.on("exit", () => resolve());
-      child.on("error", () => resolve());
-    });
-    return;
-  }
-
-  try {
-    process.kill(pid, "SIGINT");
-  } catch {
-    return;
-  }
-}
-
 async function stopManagedVisualizationDevServer() {
   const state = await readManagedState();
   const records = state.services.filter(isManagedVisualizationDevRecord);
@@ -150,7 +125,7 @@ async function stopManagedVisualizationDevServer() {
     return false;
   }
 
-  await Promise.all(records.map((service) => terminateManagedProcess(service.pid)));
+  await Promise.all(records.map((service) => terminateProcess(service.pid)));
   await writeManagedVisualizationDevRecord(null);
   return true;
 }

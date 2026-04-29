@@ -20,6 +20,7 @@ import {
   fetchJson,
   packageRootFromImportMeta,
   pathExists,
+  terminateProcess,
   vendorPath
 } from "./utils.js";
 import {
@@ -198,26 +199,6 @@ async function isProcessAlive(pid: number) {
     return true;
   } catch {
     return false;
-  }
-}
-
-async function terminateProcess(pid: number) {
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-        stdio: "ignore"
-      });
-
-      child.on("exit", () => resolve());
-      child.on("error", () => resolve());
-    });
-    return;
-  }
-
-  try {
-    process.kill(pid, "SIGINT");
-  } catch {
-    return;
   }
 }
 

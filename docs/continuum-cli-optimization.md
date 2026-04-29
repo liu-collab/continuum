@@ -131,6 +131,8 @@ export function spawnCrossPlatform(
 
 ## 优化四：合并三份 `terminateManagedProcess` 实现
 
+**状态：已完成**
+
 ### 问题
 
 `start-command.ts`、`stop-command.ts`、`mna-command.ts` 各自实现了完全一致的进程终止逻辑。

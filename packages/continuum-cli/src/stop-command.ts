@@ -12,7 +12,7 @@ import {
 } from "./managed-state.js";
 import { stopManagedMna } from "./mna-command.js";
 import { stopLegacyContinuumProcesses } from "./process-cleanup.js";
-import { spawnCrossPlatform } from "./utils.js";
+import { spawnCrossPlatform, terminateProcess } from "./utils.js";
 
 async function runForegroundQuiet(command: string, args: string[]) {
   await new Promise<void>((resolve, reject) => {
@@ -45,32 +45,6 @@ async function removePathIfExists(targetPath: string) {
     maxRetries: 5,
     retryDelay: 200,
   });
-}
-
-async function terminateManagedProcess(pid: number) {
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-        env: process.env,
-      });
-
-      child.on("exit", () => resolve());
-      child.on("error", () => resolve());
-    });
-    return;
-  }
-
-  try {
-    process.kill(pid, "SIGINT");
-  } catch {
-    return;
-  }
 }
 
 async function clearManagedRuntimeState() {
@@ -113,7 +87,7 @@ export async function runStopCommand() {
 
   if (visualizationDev) {
     try {
-      await terminateManagedProcess(visualizationDev.pid);
+      await terminateProcess(visualizationDev.pid);
     } catch {
       // ignore and still clear managed state below
     }

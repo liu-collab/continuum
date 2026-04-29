@@ -135,6 +135,32 @@ export function spawnCrossPlatform(
   return spawn(command, args, options);
 }
 
+export async function terminateProcess(pid: number): Promise<void> {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    await new Promise<void>((resolve) => {
+      const child = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+        stdio: "ignore",
+        windowsHide: true,
+        env: process.env,
+      });
+
+      child.on("exit", () => resolve());
+      child.on("error", () => resolve());
+    });
+    return;
+  }
+
+  try {
+    process.kill(pid, "SIGINT");
+  } catch {
+    return;
+  }
+}
+
 type RunCommandOptions = {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
