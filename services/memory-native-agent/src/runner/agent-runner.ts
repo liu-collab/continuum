@@ -37,12 +37,19 @@ import {
   type MemoryWritebackIncompleteReason,
 } from "./writeback-decider.js";
 import type { AgentConfig } from "../config/index.js";
-import type { FinalizeTurnResult, MemoryClient, PrepareContextResult, SessionStartResult } from "../memory-client/index.js";
+import type {
+  DependencyStatusSnapshot,
+  FinalizeTurnResult,
+  MemoryClient,
+  PrepareContextResult,
+  SessionStartResult,
+} from "../memory-client/index.js";
 import type { ChatMessage, IModelProvider, ToolCall } from "../providers/index.js";
 import type { SessionStore } from "../session-store/index.js";
 import type { MaterializedSkillContext } from "../skills/index.js";
 import { hashArgs } from "../tools/index.js";
 import type { ToolCallEnvelope, ToolDispatcher, ToolResult } from "../tools/index.js";
+import type { ContextBudgetPlan } from "./context-budget-planner.js";
 
 export interface InjectionBlock {
   phase: string;
@@ -152,6 +159,7 @@ const RESIDENT_REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 const MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_WARN = 3;
 const MAX_CONSECUTIVE_WRITEBACK_FAILURES_BEFORE_SKIP = 8;
 const WRITEBACK_SKIP_COOLDOWN_MS = 5 * 60 * 1000;
+const MIN_REMAINING_TOKENS_FOR_MEMORY_RECALL = 64;
 
 interface WritebackHealthState {
   consecutiveFailures: number;
@@ -223,6 +231,34 @@ export class AgentRunner {
     }
 
     this.persistUserMessage(turnId, userInput);
+    const systemPrompt = buildSystemPrompt({
+      workspaceRoot: this.deps.config.memory.cwd,
+      platform: process.platform,
+      memoryMode: this.deps.config.memory.mode,
+      approvalMode: this.deps.config.tools.approvalMode,
+      locale: this.deps.config.locale,
+      appendedPrompt: [this.deps.config.cli.systemPrompt, options.skillContext?.systemPrompt].filter(Boolean).join("\n\n") || null,
+    });
+    const tools = this.deps.tools.listTools();
+    const contextMaxTokens = this.deps.config.context.maxTokens ?? resolveContextMaxTokens(this.deps.config.provider);
+    const toolTokenEstimate = estimateToolTokens(tools);
+    const requestMaxTokens = Math.max(
+      contextMaxTokens - Math.min(this.deps.config.context.reserveTokens, Math.floor(contextMaxTokens / 2)),
+      1_024,
+    );
+    const effectiveRequestMaxTokens = this.deps.config.provider.maxTokens
+      ? Math.min(requestMaxTokens, this.deps.config.provider.maxTokens)
+      : requestMaxTokens;
+    const baseBudgetInput = {
+      systemPrompt,
+      tools,
+      tokenBudget: {
+        maxTokens: contextMaxTokens,
+        reserveTokens: this.deps.config.context.reserveTokens,
+        compactionStrategy: this.deps.config.context.compactionStrategy,
+        toolTokenEstimate,
+      },
+    } as const;
 
     const rawInjections: InjectionBlock[] = [];
     const phaseResults: PromptPhaseResult[] = [];
@@ -230,8 +266,18 @@ export class AgentRunner {
     let traceId: string | null = null;
 
     for (const phase of orderedPhases) {
-      const response = await this.safePrepareContext(phase, turnId, userInput);
-      if (response?.trace_id) {
+      const currentInjections = buildPromptInjections([
+        ...(this.residentMemory ? [this.residentMemory] : []),
+        ...rawInjections,
+      ]);
+      const response = this.shouldSkipPrepareForContextBudget({
+        ...baseBudgetInput,
+        injections: currentInjections,
+        userInput,
+      })
+        ? this.createBudgetSkippedPrepareResult(phase)
+        : await this.safePrepareContext(phase, turnId, userInput);
+      if (response?.trace_id && response.trace_id !== "context_budget_skipped") {
         traceId = response.trace_id;
       }
       if (response?.degraded) {
@@ -258,15 +304,6 @@ export class AgentRunner {
       degraded,
     );
 
-    const systemPrompt = buildSystemPrompt({
-      workspaceRoot: this.deps.config.memory.cwd,
-      platform: process.platform,
-      memoryMode: this.deps.config.memory.mode,
-      approvalMode: this.deps.config.tools.approvalMode,
-      locale: this.deps.config.locale,
-      appendedPrompt: [this.deps.config.cli.systemPrompt, options.skillContext?.systemPrompt].filter(Boolean).join("\n\n") || null,
-    });
-    const tools = this.deps.tools.listTools();
     this.conversation.addMessage({
       role: "user",
       content: userInput,
@@ -288,25 +325,8 @@ export class AgentRunner {
       }
     }
 
-    const contextMaxTokens = this.deps.config.context.maxTokens ?? resolveContextMaxTokens(this.deps.config.provider);
-    const toolTokenEstimate = estimateToolTokens(tools);
-    const requestMaxTokens = Math.max(
-      contextMaxTokens - Math.min(this.deps.config.context.reserveTokens, Math.floor(contextMaxTokens / 2)),
-      1_024,
-    );
-    const effectiveRequestMaxTokens = this.deps.config.provider.maxTokens
-      ? Math.min(requestMaxTokens, this.deps.config.provider.maxTokens)
-      : requestMaxTokens;
-
     const budgetInput = {
-      systemPrompt,
-      tools,
-      tokenBudget: {
-        maxTokens: contextMaxTokens,
-        reserveTokens: this.deps.config.context.reserveTokens,
-        compactionStrategy: this.deps.config.context.compactionStrategy,
-        toolTokenEstimate,
-      },
+      ...baseBudgetInput,
       injections,
     } as const;
     let budgetPlan = this.conversation.buildBudgetPlan(budgetInput);
@@ -772,6 +792,48 @@ export class AgentRunner {
 
   private applyBudgetMetrics(budgetPlan: ReturnType<Conversation["buildBudgetPlan"]>) {
     this.deps.io.recordContextDrop?.(budgetPlan.dropped.length);
+  }
+
+  private shouldSkipPrepareForContextBudget(input: {
+    systemPrompt: string;
+    tools: ReturnType<ToolDispatcher["listTools"]>;
+    tokenBudget: {
+      maxTokens: number;
+      reserveTokens: number;
+      compactionStrategy: "truncate" | "summarize";
+      toolTokenEstimate: number;
+    };
+    injections: InjectionBlock[];
+    userInput: string;
+  }): boolean {
+    if (input.tokenBudget.maxTokens === null) {
+      return false;
+    }
+
+    const previewPlan = this.conversation.previewBudgetPlan(
+      {
+        systemPrompt: input.systemPrompt,
+        tools: input.tools,
+        tokenBudget: input.tokenBudget,
+        injections: input.injections,
+      },
+      [{ role: "user", content: input.userInput }],
+    );
+    return remainingPromptTokens(previewPlan) < MIN_REMAINING_TOKENS_FOR_MEMORY_RECALL;
+  }
+
+  private createBudgetSkippedPrepareResult(phase: Phase): PrepareContextResult {
+    return {
+      trace_id: "context_budget_skipped",
+      trigger: false,
+      trigger_reason: `context_budget_insufficient:${phase}`,
+      memory_packet: null,
+      injection_block: null,
+      degraded: false,
+      dependency_status: createUnknownDependencySnapshot("prepare_context skipped by MNA context budget"),
+      budget_used: 0,
+      memory_packet_ids: [],
+    };
   }
 
   private async maybeRetryToolCall(
@@ -1275,6 +1337,50 @@ function buildPendingConfirmationSummary(
   }
 
   return `检测到 ${pendingCandidates.length} 条待确认记忆，已暂存，等待确认后再生效。`;
+}
+
+function remainingPromptTokens(plan: ContextBudgetPlan): number {
+  if (plan.budget.available_for_prompt === null) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const used =
+    plan.allocation.fixed +
+    plan.allocation.memory +
+    plan.allocation.tools +
+    plan.allocation.history +
+    plan.allocation.current_turn;
+  return plan.budget.available_for_prompt - used;
+}
+
+function createUnknownDependencySnapshot(detail: string): DependencyStatusSnapshot {
+  const timestamp = new Date().toISOString();
+  return {
+    read_model: {
+      name: "read_model",
+      status: "unknown",
+      detail,
+      last_checked_at: timestamp,
+    },
+    embeddings: {
+      name: "embeddings",
+      status: "unknown",
+      detail,
+      last_checked_at: timestamp,
+    },
+    storage_writeback: {
+      name: "storage_writeback",
+      status: "unknown",
+      detail,
+      last_checked_at: timestamp,
+    },
+    memory_llm: {
+      name: "memory_llm",
+      status: "unknown",
+      detail,
+      last_checked_at: timestamp,
+    },
+  };
 }
 
 function toInjectionBlock(

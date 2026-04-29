@@ -961,6 +961,54 @@ describe("AgentRunner", () => {
     );
   });
 
+  it("skips runtime prepare when context budget has no room for memory recall", async () => {
+    const io = createIo();
+    const memoryClient = createMemoryClient();
+    const config = createConfig();
+    config.context.maxTokens = 128;
+    config.context.reserveTokens = 120;
+    const chat = vi.fn(async function* () {
+      yield { type: "text_delta", text: "hello" } as const;
+      yield {
+        type: "end",
+        finish_reason: "stop",
+        usage: {
+          prompt_tokens: 1,
+          completion_tokens: 1,
+        },
+      } as const;
+    });
+
+    const runner = new AgentRunner({
+      memoryClient: memoryClient as never,
+      provider: {
+        id: () => "ollama",
+        model: () => "qwen2.5-coder",
+        chat,
+      },
+      tools: {
+        listTools: () => [],
+        invoke: vi.fn(),
+      } as never,
+      config,
+      io,
+    });
+
+    await runner.start();
+    await runner.submit("继续这个任务", "turn-budget-skip");
+
+    expect(memoryClient.prepareContext).not.toHaveBeenCalled();
+    expect(io.emitPhaseResult).toHaveBeenCalledWith(
+      "turn-budget-skip",
+      "before_response",
+      expect.objectContaining({
+        trace_id: "context_budget_skipped",
+        trigger_reason: "context_budget_insufficient:before_response",
+      }),
+    );
+    expect(chat).toHaveBeenCalled();
+  });
+
   it("persists budget plan, plan, evaluation, and trace spans in dispatched payload", async () => {
     const io = createIo();
     const memoryClient = createMemoryClient();

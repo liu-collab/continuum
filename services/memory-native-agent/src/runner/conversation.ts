@@ -103,10 +103,20 @@ export class Conversation {
   }
 
   buildBudgetPlan(input: BuildMessagesInput): ContextBudgetPlan {
+    const plan = this.createBudgetPlan(input);
+    this.lastBudgetPlan = plan;
+    return plan;
+  }
+
+  previewBudgetPlan(input: BuildMessagesInput, extraHistoryMessages: ChatMessage[] = []): ContextBudgetPlan {
+    return this.createBudgetPlan(input, extraHistoryMessages);
+  }
+
+  private createBudgetPlan(input: BuildMessagesInput, extraHistoryMessages: ChatMessage[] = []): ContextBudgetPlan {
     const segments = this.buildPromptSegments(input);
-    const plan = planContextBudget({
+    return planContextBudget({
       segments,
-      historyMessages: this.recentMessages,
+      historyMessages: [...this.recentMessages, ...extraHistoryMessages],
       tokenBudget: {
         maxTokens: input.tokenBudget?.maxTokens ?? null,
         reserveTokens: input.tokenBudget?.reserveTokens ?? 4_096,
@@ -114,8 +124,6 @@ export class Conversation {
         toolTokenEstimate: input.tokenBudget?.toolTokenEstimate,
       },
     });
-    this.lastBudgetPlan = plan;
-    return plan;
   }
 
   private compactIfNeeded() {

@@ -369,7 +369,7 @@ const SUPPRESS_RECALL_PATTERNS = [
 | 注入预算透传 | done | `npm run check` + targeted vitest in `services/retrieval-runtime` and `services/memory-native-agent` |
 | embedding 熔断 | done | `npm run check` + `npx vitest run tests/remediation.test.ts tests/runtime-service.test.ts` in `services/retrieval-runtime` |
 | query 候选缓存 | done | `npm run check` + `npx vitest run tests/runtime-service.test.ts` in `services/retrieval-runtime` |
-| 完整 token 预算感知 | pending | - |
+| 完整 token 预算感知 | done | `npm run check` + `npx vitest run src/runner/__tests__/runner.test.ts` in `services/memory-native-agent` |
 
 ## 验证用例
 
