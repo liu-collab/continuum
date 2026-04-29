@@ -34,12 +34,13 @@ import {
 } from "./embedding-config.js";
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
-  axisManagedMemoryLlmConfigPath,
+  axisManagedConfigPath,
+  axisManagedSecretsPath,
+  migrateManagedConfigFiles,
   mergeManagedConfig,
   readManagedEmbeddingConfig,
   readManagedMnaProviderConfig,
   readManagedMemoryLlmConfig,
-  readManagedWritebackLlmConfig,
   resolveOptionalManagedMemoryLlmCliConfig,
   resolveOptionalManagedMemoryLlmEnvConfig,
   type ManagedEmbeddingConfig,
@@ -347,8 +348,8 @@ async function startStackContainer(
   publicHost: string,
   platformUserId: string,
   databasePassword: string,
-  embeddingConfigPath: string,
-  memoryLlmConfigPath: string,
+  managedConfigPath: string,
+  managedSecretsPath: string,
   servicePorts: {
     storage: number;
     runtime: number;
@@ -416,11 +417,9 @@ async function startStackContainer(
     "-e",
     "MNA_TOKEN_PATH=/opt/axis/managed/mna/token.txt",
     "-e",
-    `AXIS_EMBEDDING_CONFIG_PATH=${embeddingConfigPath}`,
+    `AXIS_MANAGED_CONFIG_PATH=${managedConfigPath}`,
     "-e",
-    `AXIS_MEMORY_LLM_CONFIG_PATH=${memoryLlmConfigPath}`,
-    "-e",
-    "AXIS_RUNTIME_CONFIG_PATH=/opt/axis/managed/runtime-config.json",
+    `AXIS_MANAGED_SECRETS_PATH=${managedSecretsPath}`,
     ...buildDockerHostGatewayArgs(),
   ];
 
@@ -456,6 +455,8 @@ export async function runStartCommand(
     ? await managedBackendIsHealthy(storageUrl, runtimeUrl)
     : false;
   const providerConfigured = await isPrimaryProviderConfigured(options);
+  const localManagedConfigPath = axisManagedConfigPath();
+  const localManagedSecretsPath = axisManagedSecretsPath();
 
   if (uiDev && uiDevBackendHealthy) {
     let mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
@@ -466,7 +467,8 @@ export async function runStartCommand(
         {
           ...options,
           "runtime-url": runtimeUrl,
-          "memory-llm-config-path": axisManagedMemoryLlmConfigPath(),
+          "managed-config-path": localManagedConfigPath,
+          "managed-secrets-path": localManagedSecretsPath,
         },
         importMetaUrl,
       );
@@ -510,12 +512,11 @@ export async function runStartCommand(
   const readModelDsn =
     process.env.STORAGE_READ_MODEL_DSN
     ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
-  const embeddingConfigPath = "/opt/axis/managed/embedding-config.json";
-  const stackMemoryLlmConfigPath = "/opt/axis/managed/memory-llm-config.json";
-  const localMemoryLlmConfigPath = axisManagedMemoryLlmConfigPath();
+  const stackManagedConfigPath = "/opt/axis/managed/config.json";
+  const stackManagedSecretsPath = "/opt/axis/managed/secrets.json";
+  await migrateManagedConfigFiles();
   const existingEmbeddingConfig = await readManagedEmbeddingConfig();
   const existingMemoryLlmConfig = await readManagedMemoryLlmConfig();
-  const existingWritebackLlmConfig = await readManagedWritebackLlmConfig();
   const requestedEmbeddingConfig = resolveOptionalThirdPartyEmbeddingConfig(options, {});
   const mergedEmbeddingConfig = mergeManagedConfig<ManagedEmbeddingConfig>(
     existingEmbeddingConfig,
@@ -527,13 +528,8 @@ export async function runStartCommand(
   );
 
   await writeManagedEmbeddingConfig(mergedEmbeddingConfig);
-  const persistedMemoryLlmConfig: ManagedWritebackLlmConfig = {
-    version: 1,
-    ...(existingWritebackLlmConfig ?? {}),
-    ...(existingMemoryLlmConfig ?? {}),
-  };
   const mergedMemoryLlmConfig = mergeManagedConfig<ManagedWritebackLlmConfig>(
-    persistedMemoryLlmConfig,
+    existingMemoryLlmConfig,
     {
       version: 1,
       ...resolveOptionalManagedMemoryLlmEnvConfig(process.env),
@@ -602,8 +598,8 @@ export async function runStartCommand(
       accessibleHost,
       platformUserId,
       databasePassword,
-      embeddingConfigPath,
-      stackMemoryLlmConfigPath,
+      stackManagedConfigPath,
+      stackManagedSecretsPath,
       {
         storage: storagePort,
         runtime: runtimePort,
@@ -627,7 +623,8 @@ export async function runStartCommand(
       {
         ...options,
         "runtime-url": runtimeUrl,
-        "memory-llm-config-path": localMemoryLlmConfigPath,
+        "managed-config-path": localManagedConfigPath,
+        "managed-secrets-path": localManagedSecretsPath,
       },
       importMetaUrl,
     );

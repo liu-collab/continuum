@@ -76,6 +76,8 @@ export class CachedEmbeddingsClient implements EmbeddingsClient, EmbeddingCacheP
       | "EMBEDDING_BASE_URL"
       | "EMBEDDING_MODEL"
       | "AXIS_EMBEDDING_CONFIG_PATH"
+      | "AXIS_MANAGED_CONFIG_PATH"
+      | "AXIS_MANAGED_SECRETS_PATH"
       | "EMBEDDING_CACHE_TTL_MS"
       | "EMBEDDING_CACHE_MAX_ENTRIES"
     >,

@@ -7,7 +7,9 @@ import { z } from "zod";
 import {
   type ConfigFieldReaders,
   type ConfigSourceFieldMap,
-  readLayeredMappedJsonConfigFields,
+  mapConfigSourceFields,
+  readJsonConfigFile,
+  readLayeredConfigFields,
   readOptionalConfigBoolean,
   readOptionalConfigPositiveInteger,
   readOptionalConfigString,
@@ -23,6 +25,7 @@ export type RuntimeGovernanceConfig = {
 
 export type RuntimeGovernanceConfigSource = Partial<RuntimeGovernanceConfig> & {
   AXIS_RUNTIME_CONFIG_PATH?: string;
+  AXIS_MANAGED_CONFIG_PATH?: string;
 };
 
 export const runtimeGovernanceConfigUpdateSchema = z.object({
@@ -61,13 +64,31 @@ export function resolveRuntimeGovernanceConfigPath(
     ?? path.join(os.homedir(), ".axis", "managed", "runtime-config.json");
 }
 
+export function resolveManagedRuntimeConfigPath(
+  source: RuntimeGovernanceConfigSource = process.env as RuntimeGovernanceConfigSource,
+) {
+  return readOptionalConfigString(source.AXIS_MANAGED_CONFIG_PATH)
+    ?? path.join(os.homedir(), ".axis", "managed", "config.json");
+}
+
+function readUnifiedGovernanceConfig(source: RuntimeGovernanceConfigSource) {
+  return readJsonConfigFile<{
+    governance?: Partial<RuntimeGovernanceConfig>;
+  }>(resolveManagedRuntimeConfigPath(source))?.governance;
+}
+
 export function resolveRuntimeGovernanceConfig(
   source: RuntimeGovernanceConfigSource,
 ): Partial<RuntimeGovernanceConfig> {
-  return readLayeredMappedJsonConfigFields<RuntimeGovernanceConfig, RuntimeGovernanceConfigSource>(
-    source,
-    runtimeGovernanceConfigFieldMap,
-    resolveRuntimeGovernanceConfigPath(source),
+  return readLayeredConfigFields<RuntimeGovernanceConfig>(
+    [
+      mapConfigSourceFields<RuntimeGovernanceConfig, RuntimeGovernanceConfigSource>(
+        source,
+        runtimeGovernanceConfigFieldMap,
+      ),
+      readJsonConfigFile(resolveRuntimeGovernanceConfigPath(source)),
+      readUnifiedGovernanceConfig(source),
+    ],
     runtimeGovernanceConfigReaders,
   );
 }
@@ -90,6 +111,25 @@ export async function writeRuntimeGovernanceConfigFile(
   await fs.writeFile(
     filePath,
     JSON.stringify({ version: 1, ...config }, null, 2),
+    "utf8",
+  );
+}
+
+export async function writeManagedRuntimeGovernanceConfigFile(
+  filePath: string,
+  config: RuntimeGovernanceConfig,
+) {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(await fs.readFile(filePath, "utf8")) as Record<string, unknown>;
+  } catch {
+    payload = {};
+  }
+
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(
+    filePath,
+    JSON.stringify({ ...payload, version: 2, governance: config }, null, 2),
     "utf8",
   );
 }

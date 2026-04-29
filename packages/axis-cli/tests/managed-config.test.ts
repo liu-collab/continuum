@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   AXIS_MNA_PROVIDER_API_KEY_ENV,
-  axisManagedEmbeddingConfigPath,
+  axisManagedConfigPath,
+  axisManagedSecretsPath,
+  migrateManagedConfigFiles,
   managedMnaProviderConfigPath,
   managedMnaProviderSecretPath,
   type ManagedWritebackLlmConfig,
@@ -21,8 +23,12 @@ import {
 describe("managed mna provider config", () => {
   const tempHome = path.join(os.tmpdir(), `axis-managed-config-${Date.now()}`);
   const mnaHome = path.join(tempHome, ".axis", "managed", "mna");
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
 
   beforeEach(async () => {
+    process.env.HOME = tempHome;
+    process.env.USERPROFILE = tempHome;
     await rm(tempHome, { recursive: true, force: true });
     await mkdir(mnaHome, { recursive: true });
   });
@@ -87,9 +93,19 @@ describe("managed mna provider config", () => {
 
   afterEach(async () => {
     await rm(tempHome, { recursive: true, force: true });
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalUserProfile === undefined) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
+    }
   });
 
-  it("writes snake_case provider fields for memory-native-agent config", async () => {
+  it("writes snake_case provider fields to the unified managed config", async () => {
     await writeManagedMnaProviderConfig(mnaHome, {
       kind: "openai-compatible",
       model: "deepseek-chat",
@@ -98,11 +114,13 @@ describe("managed mna provider config", () => {
     });
 
     const content = JSON.parse(
-      await readFile(managedMnaProviderConfigPath(mnaHome), "utf8"),
+      await readFile(axisManagedConfigPath(), "utf8"),
     ) as {
+      version: 2;
       provider: Record<string, string>;
     };
 
+    expect(content.version).toBe(2);
     expect(content.provider.base_url).toBe("https://api.deepseek.com");
     expect(content.provider.api_key_env).toBe("DEEPSEEK_API_KEY");
     expect(content.provider.baseUrl).toBeUndefined();
@@ -140,23 +158,23 @@ describe("managed mna provider config", () => {
     });
 
     const configContent = JSON.parse(
-      await readFile(managedMnaProviderConfigPath(mnaHome), "utf8"),
+      await readFile(axisManagedConfigPath(), "utf8"),
     ) as {
       provider: Record<string, string>;
     };
     const secretContent = JSON.parse(
-      await readFile(managedMnaProviderSecretPath(mnaHome), "utf8"),
+      await readFile(axisManagedSecretsPath(), "utf8"),
     ) as {
-      version: 1;
-      apiKey: string;
+      version: 2;
+      provider_api_key: string;
     };
 
     expect(configContent.provider.api_key).toBeUndefined();
     expect(configContent.provider.apiKey).toBeUndefined();
-    expect(configContent.provider.api_key_env).toBe(AXIS_MNA_PROVIDER_API_KEY_ENV);
+    expect(configContent.provider.api_key_env).toBeUndefined();
     expect(secretContent).toEqual({
-      version: 1,
-      apiKey: "secret-key",
+      version: 2,
+      provider_api_key: "secret-key",
     });
     await expect(readManagedMnaProviderConfig(mnaHome)).resolves.toEqual({
       kind: "openai-compatible",
@@ -168,10 +186,10 @@ describe("managed mna provider config", () => {
 
   it("removes stale secret file when provider no longer has inline api key", async () => {
     await writeFile(
-      managedMnaProviderSecretPath(mnaHome),
+      axisManagedSecretsPath(),
       JSON.stringify({
-        version: 1,
-        apiKey: "stale-key",
+        version: 2,
+        provider_api_key: "stale-key",
       }),
       "utf8",
     );
@@ -184,6 +202,9 @@ describe("managed mna provider config", () => {
     });
 
     await expect(readFile(managedMnaProviderSecretPath(mnaHome), "utf8")).rejects.toThrow();
+    await expect(readFile(axisManagedSecretsPath(), "utf8").then(JSON.parse)).resolves.toEqual({
+      version: 2,
+    });
   });
 
   it("reads legacy snake_case inline api key for backward compatibility", async () => {
@@ -209,32 +230,87 @@ describe("managed mna provider config", () => {
   });
 
   it("reports a clear error when a managed JSON config is corrupted", async () => {
-    const originalHome = process.env.HOME;
-    const originalUserProfile = process.env.USERPROFILE;
-    process.env.HOME = tempHome;
-    process.env.USERPROFILE = tempHome;
+    const configPath = axisManagedConfigPath();
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(configPath, "{bad json", "utf8");
 
-    try {
-      const configPath = axisManagedEmbeddingConfigPath();
-      await mkdir(path.dirname(configPath), { recursive: true });
-      await writeFile(configPath, "{bad json", "utf8");
+    await expect(readManagedEmbeddingConfig()).rejects.toMatchObject({
+      code: "config_corrupted",
+      filePath: configPath,
+      hint: "请删除该文件后重新运行",
+    });
+  });
 
-      await expect(readManagedEmbeddingConfig()).rejects.toMatchObject({
-        code: "config_corrupted",
-        filePath: configPath,
-        hint: "请删除该文件后重新运行",
-      });
-    } finally {
-      if (originalHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = originalHome;
-      }
-      if (originalUserProfile === undefined) {
-        delete process.env.USERPROFILE;
-      } else {
-        process.env.USERPROFILE = originalUserProfile;
-      }
-    }
+  it("migrates legacy managed files to unified config and secrets", async () => {
+    await writeFile(
+      managedMnaProviderConfigPath(mnaHome),
+      JSON.stringify({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key_env: AXIS_MNA_PROVIDER_API_KEY_ENV,
+        },
+      }),
+      "utf8",
+    );
+    await writeFile(
+      managedMnaProviderSecretPath(mnaHome),
+      JSON.stringify({
+        version: 1,
+        apiKey: "provider-key",
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempHome, ".axis", "managed", "embedding-config.json"),
+      JSON.stringify({
+        version: 1,
+        baseUrl: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+        apiKey: "embedding-key",
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(tempHome, ".axis", "managed", "memory-llm-config.json"),
+      JSON.stringify({
+        version: 1,
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-sonnet-4-20250514",
+        apiKey: "memory-key",
+        protocol: "anthropic",
+      }),
+      "utf8",
+    );
+
+    await migrateManagedConfigFiles(mnaHome);
+
+    await expect(readFile(managedMnaProviderConfigPath(mnaHome), "utf8")).rejects.toThrow();
+    await expect(readFile(path.join(tempHome, ".axis", "managed", "embedding-config.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(path.join(tempHome, ".axis", "managed", "memory-llm-config.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(axisManagedConfigPath(), "utf8").then(JSON.parse)).resolves.toMatchObject({
+      version: 2,
+      provider: {
+        kind: "openai-compatible",
+        model: "deepseek-chat",
+        base_url: "https://api.deepseek.com",
+      },
+      embedding: {
+        baseUrl: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+      },
+      memory_llm: {
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-sonnet-4-20250514",
+        protocol: "anthropic",
+      },
+    });
+    await expect(readFile(axisManagedSecretsPath(), "utf8").then(JSON.parse)).resolves.toMatchObject({
+      version: 2,
+      provider_api_key: "provider-key",
+      embedding_api_key: "embedding-key",
+      memory_llm_api_key: "memory-key",
+    });
   });
 });

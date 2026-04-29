@@ -7,9 +7,9 @@ import { hostAdapters } from "./host-adapters/index.js";
 import { finalizeTurnInputSchema, prepareContextInputSchema } from "./host-adapters/types.js";
 import type { RetrievalRuntimeService } from "./runtime-service.js";
 import {
-  resolveRuntimeGovernanceConfigPath,
+  resolveManagedRuntimeConfigPath,
   runtimeGovernanceConfigUpdateSchema,
-  writeRuntimeGovernanceConfigFile,
+  writeManagedRuntimeGovernanceConfigFile,
 } from "./runtime-config.js";
 import { observeRunsQuerySchema } from "./api/schemas.js";
 
@@ -143,7 +143,7 @@ export function createApp(runtimeService: RetrievalRuntimeService) {
         ...runtimeService.getRuntimeGovernanceConfig(),
         ...update,
       };
-      await writeRuntimeGovernanceConfigFile(resolveRuntimeGovernanceConfigPath(), next);
+      await writeManagedRuntimeGovernanceConfigFile(resolveManagedRuntimeConfigPath(), next);
       runtimeService.updateRuntimeGovernanceConfig(update);
       return {
         ok: true,

@@ -466,16 +466,30 @@ describe("health routes", () => {
       expect(writeResponse.statusCode).toBe(200);
       expect(writeResponse.json()).toEqual({ ok: true });
 
-      const providerConfigPath = path.join(home, ".mna", "config.json");
-      expect(JSON.parse(fs.readFileSync(providerConfigPath, "utf8"))).toEqual({
+      const managedDir = path.dirname(path.dirname(app.mnaTokenPath));
+      const managedConfigPath = path.join(managedDir, "config.json");
+      const managedSecretsPath = path.join(managedDir, "secrets.json");
+      expect(JSON.parse(fs.readFileSync(managedConfigPath, "utf8"))).toEqual({
+        version: 2,
         provider: {
           kind: "openai-compatible",
           model: "deepseek-chat",
           base_url: "https://api.deepseek.com",
-          api_key: "demo-key",
           temperature: 0.2,
           effort: "high",
           max_tokens: 6000,
+        },
+        embedding: {
+          baseUrl: "https://api.openai.com/v1",
+          model: "text-embedding-3-small",
+        },
+        memory_llm: {
+          baseUrl: "https://api.anthropic.com",
+          model: "claude-haiku-4-5-20251001",
+          protocol: "anthropic",
+          timeoutMs: 8000,
+          effort: "medium",
+          maxTokens: 1200,
         },
         tools: {
           approval_mode: "yolo",
@@ -494,23 +508,11 @@ describe("health routes", () => {
         }
       });
 
-      const embeddingConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
-      expect(JSON.parse(fs.readFileSync(embeddingConfigPath, "utf8"))).toEqual({
-        version: 1,
-        baseUrl: "https://api.openai.com/v1",
-        model: "text-embedding-3-small",
-        apiKey: "embed-key"
-      });
-      const memoryLlmConfigPath = path.join(path.dirname(path.dirname(app.mnaTokenPath)), "memory-llm-config.json");
-      expect(JSON.parse(fs.readFileSync(memoryLlmConfigPath, "utf8"))).toEqual({
-        version: 1,
-        baseUrl: "https://api.anthropic.com",
-        model: "claude-haiku-4-5-20251001",
-        apiKey: "writeback-key",
-        protocol: "anthropic",
-        timeoutMs: 8000,
-        effort: "medium",
-        maxTokens: 1200,
+      expect(JSON.parse(fs.readFileSync(managedSecretsPath, "utf8"))).toEqual({
+        version: 2,
+        provider_api_key: "demo-key",
+        embedding_api_key: "embed-key",
+        memory_llm_api_key: "writeback-key",
       });
 
       const configResponse = await app.inject({
@@ -853,7 +855,8 @@ describe("health routes", () => {
       });
 
       expect(writeResponse.statusCode).toBe(200);
-      expect(JSON.parse(fs.readFileSync(path.join(home, ".mna", "config.json"), "utf8"))).toMatchObject({
+      expect(JSON.parse(fs.readFileSync(path.join(home, "config.json"), "utf8"))).toMatchObject({
+        version: 2,
         provider: {
           kind: "openai-compatible",
           model: "deepseek-chat",

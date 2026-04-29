@@ -403,6 +403,76 @@ describe("retrieval-runtime embeddings client", () => {
     }
   });
 
+  it("reads embedding and memory llm config from unified managed files", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-unified-config-"));
+    const configPath = path.join(tempDir, "config.json");
+    const secretsPath = path.join(tempDir, "secrets.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 2,
+        embedding: {
+          baseUrl: "https://api.openai.com/v1",
+          model: "text-embedding-3-small",
+        },
+        memory_llm: {
+          baseUrl: "https://api.anthropic.com",
+          model: "claude-sonnet-4-20250514",
+          protocol: "anthropic",
+          timeoutMs: 8000,
+        },
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      secretsPath,
+      JSON.stringify({
+        version: 2,
+        embedding_api_key: "embedding-key",
+        memory_llm_api_key: "memory-key",
+      }),
+      "utf8",
+    );
+
+    let calledUrl = "";
+    globalThis.fetch = (async (input, init) => {
+      calledUrl = String(input);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer embedding-key");
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    try {
+      const client = new HttpEmbeddingsClient(loadConfig({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
+        STORAGE_WRITEBACK_URL: "http://localhost:3001",
+        AXIS_MANAGED_CONFIG_PATH: configPath,
+        AXIS_MANAGED_SECRETS_PATH: secretsPath,
+      }));
+      await expect(client.embedText("hello")).resolves.toEqual([0.1, 0.2, 0.3]);
+      expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
+      expect(
+        resolveRuntimeWritebackLlmConfig({
+          AXIS_MANAGED_CONFIG_PATH: configPath,
+          AXIS_MANAGED_SECRETS_PATH: secretsPath,
+        }),
+      ).toEqual({
+        baseUrl: "https://api.anthropic.com",
+        model: "claude-sonnet-4-20250514",
+        apiKey: "memory-key",
+        protocol: "anthropic",
+        timeoutMs: 8000,
+      });
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("caches normalized embedding requests and returns defensive copies", async () => {
     const inner = new SpyEmbeddingsClient([0.4, 0.5, 0.6]);
     const client = new CachedEmbeddingsClient(inner, cacheConfig);

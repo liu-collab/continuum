@@ -3445,8 +3445,10 @@ describe("retrieval-runtime service", () => {
 
   it("serves public HTTP endpoints with stable response shapes", async () => {
     const previousRuntimeConfigPath = process.env.AXIS_RUNTIME_CONFIG_PATH;
+    const previousManagedConfigPath = process.env.AXIS_MANAGED_CONFIG_PATH;
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "runtime-config-"));
     process.env.AXIS_RUNTIME_CONFIG_PATH = path.join(tempDir, "runtime-config.json");
+    process.env.AXIS_MANAGED_CONFIG_PATH = path.join(tempDir, "config.json");
 
     try {
     const { service } = createRuntime();
@@ -3556,6 +3558,11 @@ describe("retrieval-runtime service", () => {
         delete process.env.AXIS_RUNTIME_CONFIG_PATH;
       } else {
         process.env.AXIS_RUNTIME_CONFIG_PATH = previousRuntimeConfigPath;
+      }
+      if (previousManagedConfigPath === undefined) {
+        delete process.env.AXIS_MANAGED_CONFIG_PATH;
+      } else {
+        process.env.AXIS_MANAGED_CONFIG_PATH = previousManagedConfigPath;
       }
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

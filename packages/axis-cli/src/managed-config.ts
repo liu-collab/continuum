@@ -40,6 +40,30 @@ export type ManagedProviderOverride = {
 
 export const AXIS_MNA_PROVIDER_API_KEY_ENV = "AXIS_MNA_PROVIDER_API_KEY";
 
+type LegacyManagedProviderFile = ManagedProviderOverride & {
+  tools?: Record<string, unknown>;
+  planning?: Record<string, unknown>;
+  mcp?: Record<string, unknown>;
+};
+
+type ManagedUnifiedConfig = {
+  version: 2;
+  provider?: ManagedProviderOverride["provider"];
+  embedding?: Omit<ManagedEmbeddingConfig, "version" | "apiKey">;
+  memory_llm?: Omit<ManagedWritebackLlmConfig, "version" | "apiKey">;
+  governance?: Record<string, unknown>;
+  tools?: Record<string, unknown>;
+  planning?: Record<string, unknown>;
+  mcp?: Record<string, unknown>;
+};
+
+type ManagedUnifiedSecrets = {
+  version: 2;
+  provider_api_key?: string;
+  embedding_api_key?: string;
+  memory_llm_api_key?: string;
+};
+
 type ManagedMnaProviderSecret = {
   version: 1;
   apiKey?: string;
@@ -189,6 +213,14 @@ export function axisManagedRuntimeConfigPath() {
   return path.join(axisManagedDir(), "runtime-config.json");
 }
 
+export function axisManagedConfigPath() {
+  return path.join(axisManagedDir(), "config.json");
+}
+
+export function axisManagedSecretsPath() {
+  return path.join(axisManagedDir(), "secrets.json");
+}
+
 export function managedMnaProviderConfigPath(mnaHomeDir: string) {
   return path.join(mnaHomeDir, "config.json");
 }
@@ -197,110 +229,268 @@ export function managedMnaProviderSecretPath(mnaHomeDir: string) {
   return path.join(mnaHomeDir, "provider-secret.json");
 }
 
-export async function readManagedEmbeddingConfig(): Promise<ManagedEmbeddingConfig | null> {
-  const filePath = axisManagedEmbeddingConfigPath();
+function defaultManagedMnaHomeDir() {
+  return path.join(axisManagedDir(), "mna");
+}
+
+async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
   if (!(await pathExists(filePath))) {
     return null;
   }
+  return safeJsonParse<T>(filePath, await readFile(filePath, "utf8"));
+}
 
-  const content = await readFile(filePath, "utf8");
-  return safeJsonParse<ManagedEmbeddingConfig>(filePath, content);
+function splitEmbeddingConfig(config: ManagedEmbeddingConfig | null): {
+  config?: ManagedUnifiedConfig["embedding"];
+  apiKey?: string;
+} {
+  if (!config) {
+    return {};
+  }
+
+  return {
+    config: {
+      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+      ...(config.model ? { model: config.model } : {}),
+    },
+    ...(config.apiKey ? { apiKey: config.apiKey } : {}),
+  };
+}
+
+function splitMemoryLlmConfig(config: ManagedWritebackLlmConfig | null): {
+  config?: ManagedUnifiedConfig["memory_llm"];
+  apiKey?: string;
+} {
+  if (!config) {
+    return {};
+  }
+
+  return {
+    config: {
+      ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+      ...(config.model ? { model: config.model } : {}),
+      ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
+      ...(config.protocol ? { protocol: config.protocol } : {}),
+      ...(config.effort !== undefined ? { effort: config.effort } : {}),
+      ...(config.maxTokens !== undefined ? { maxTokens: config.maxTokens } : {}),
+    },
+    ...(config.apiKey ? { apiKey: config.apiKey } : {}),
+  };
+}
+
+function normalizeProviderForConfig(provider: ManagedProviderOverride["provider"]) {
+  const apiKeyEnv = provider.api_key_env ?? provider.apiKeyEnv;
+  return {
+    kind: provider.kind,
+    model: provider.model,
+    ...(provider.base_url
+      ? { base_url: provider.base_url }
+      : provider.baseUrl
+        ? { base_url: provider.baseUrl }
+        : {}),
+    ...(apiKeyEnv ? { api_key_env: apiKeyEnv } : {}),
+  };
+}
+
+async function readUnifiedConfig(): Promise<ManagedUnifiedConfig> {
+  return (await readJsonIfExists<ManagedUnifiedConfig>(axisManagedConfigPath())) ?? { version: 2 };
+}
+
+async function readUnifiedSecrets(): Promise<ManagedUnifiedSecrets> {
+  return (await readJsonIfExists<ManagedUnifiedSecrets>(axisManagedSecretsPath())) ?? { version: 2 };
+}
+
+async function writeUnifiedConfig(config: ManagedUnifiedConfig) {
+  const filePath = axisManagedConfigPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify({ ...config, version: 2 }, null, 2), "utf8");
+}
+
+async function writeUnifiedSecrets(secrets: ManagedUnifiedSecrets) {
+  const filePath = axisManagedSecretsPath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify({ ...secrets, version: 2 }, null, 2), "utf8");
+}
+
+export async function migrateManagedConfigFiles(mnaHomeDir = defaultManagedMnaHomeDir()) {
+  const legacyProviderPath = managedMnaProviderConfigPath(mnaHomeDir);
+  const legacyProviderSecretPath = managedMnaProviderSecretPath(mnaHomeDir);
+  const legacyEmbeddingPath = axisManagedEmbeddingConfigPath();
+  const legacyMemoryLlmPath = axisManagedMemoryLlmConfigPath();
+  const legacyWritebackLlmPath = axisManagedWritebackLlmConfigPath();
+  const legacyRuntimePath = axisManagedRuntimeConfigPath();
+  const legacyFiles = [
+    legacyProviderPath,
+    legacyProviderSecretPath,
+    legacyEmbeddingPath,
+    legacyMemoryLlmPath,
+    legacyWritebackLlmPath,
+    legacyRuntimePath,
+  ];
+
+  const legacyExists = await Promise.all(legacyFiles.map((filePath) => pathExists(filePath)));
+  if (!legacyExists.some(Boolean)) {
+    return;
+  }
+
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  const legacyProvider = await readJsonIfExists<LegacyManagedProviderFile>(legacyProviderPath);
+  const legacyProviderSecret = await readJsonIfExists<ManagedMnaProviderSecret>(legacyProviderSecretPath);
+  const legacyEmbedding = await readJsonIfExists<ManagedEmbeddingConfig>(legacyEmbeddingPath);
+  const legacyMemoryLlm = await readJsonIfExists<ManagedWritebackLlmConfig>(legacyMemoryLlmPath);
+  const legacyWritebackLlm = await readJsonIfExists<ManagedWritebackLlmConfig>(legacyWritebackLlmPath);
+  const legacyRuntime = await readJsonIfExists<Record<string, unknown>>(legacyRuntimePath);
+
+  if (legacyProvider?.provider) {
+    const provider = legacyProvider.provider;
+    const providerApiKey =
+      provider.api_key
+      ?? provider.apiKey
+      ?? (
+        provider.api_key_env === AXIS_MNA_PROVIDER_API_KEY_ENV
+        || provider.apiKeyEnv === AXIS_MNA_PROVIDER_API_KEY_ENV
+          ? legacyProviderSecret?.apiKey
+          : undefined
+      );
+    unified.provider = normalizeProviderForConfig(provider);
+    if (providerApiKey) {
+      secrets.provider_api_key = providerApiKey;
+      delete unified.provider.api_key_env;
+    }
+    if (legacyProvider.tools) {
+      unified.tools = legacyProvider.tools;
+    }
+    if (legacyProvider.planning) {
+      unified.planning = legacyProvider.planning;
+    }
+    if (legacyProvider.mcp) {
+      unified.mcp = legacyProvider.mcp;
+    }
+  }
+
+  const embedding = splitEmbeddingConfig(legacyEmbedding);
+  if (embedding.config) {
+    unified.embedding = embedding.config;
+  }
+  if (embedding.apiKey) {
+    secrets.embedding_api_key = embedding.apiKey;
+  }
+
+  const memoryLlm = splitMemoryLlmConfig(legacyMemoryLlm ?? legacyWritebackLlm);
+  if (memoryLlm.config) {
+    unified.memory_llm = memoryLlm.config;
+  }
+  if (memoryLlm.apiKey) {
+    secrets.memory_llm_api_key = memoryLlm.apiKey;
+  }
+
+  if (legacyRuntime) {
+    const { version: _version, ...governance } = legacyRuntime;
+    if (Object.keys(governance).length > 0) {
+      unified.governance = governance;
+    }
+  }
+
+  await writeUnifiedConfig(unified);
+  await writeUnifiedSecrets(secrets);
+  await Promise.all(legacyFiles.map((filePath) => rm(filePath, { force: true }).catch(() => undefined)));
+}
+
+export async function readManagedEmbeddingConfig(): Promise<ManagedEmbeddingConfig | null> {
+  await migrateManagedConfigFiles();
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  if (!unified.embedding) {
+    return null;
+  }
+
+  return {
+    version: 1,
+    ...unified.embedding,
+    ...(secrets.embedding_api_key ? { apiKey: secrets.embedding_api_key } : {}),
+  };
 }
 
 export async function writeManagedEmbeddingConfig(config: ManagedEmbeddingConfig) {
-  const filePath = axisManagedEmbeddingConfigPath();
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(config, null, 2), "utf8");
-}
-
-export async function readManagedWritebackLlmConfig(): Promise<ManagedWritebackLlmConfig | null> {
-  const filePath = axisManagedWritebackLlmConfigPath();
-  if (!(await pathExists(filePath))) {
-    return null;
+  await migrateManagedConfigFiles();
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  const split = splitEmbeddingConfig(config);
+  unified.embedding = split.config ?? {};
+  if (split.apiKey) {
+    secrets.embedding_api_key = split.apiKey;
+  } else {
+    delete secrets.embedding_api_key;
   }
-
-  const content = await readFile(filePath, "utf8");
-  return safeJsonParse<ManagedWritebackLlmConfig>(filePath, content);
+  await writeUnifiedConfig(unified);
+  await writeUnifiedSecrets(secrets);
 }
 
 export async function readManagedMemoryLlmConfig(): Promise<ManagedWritebackLlmConfig | null> {
-  const filePath = axisManagedMemoryLlmConfigPath();
-  if (!(await pathExists(filePath))) {
+  await migrateManagedConfigFiles();
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  if (!unified.memory_llm) {
     return null;
   }
 
-  const content = await readFile(filePath, "utf8");
-  return safeJsonParse<ManagedWritebackLlmConfig>(filePath, content);
+  return {
+    version: 1,
+    ...unified.memory_llm,
+    ...(secrets.memory_llm_api_key ? { apiKey: secrets.memory_llm_api_key } : {}),
+  };
 }
 
 export async function writeManagedMemoryLlmConfig(config: ManagedWritebackLlmConfig) {
-  const filePath = axisManagedMemoryLlmConfigPath();
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(config, null, 2), "utf8");
+  await migrateManagedConfigFiles();
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  const split = splitMemoryLlmConfig(config);
+  unified.memory_llm = split.config ?? {};
+  if (split.apiKey) {
+    secrets.memory_llm_api_key = split.apiKey;
+  } else {
+    delete secrets.memory_llm_api_key;
+  }
+  await writeUnifiedConfig(unified);
+  await writeUnifiedSecrets(secrets);
 }
 
 export async function writeManagedMnaProviderConfig(
   mnaHomeDir: string,
   provider: ManagedMnaProviderConfig,
 ) {
-  const filePath = managedMnaProviderConfigPath(mnaHomeDir);
-  const secretPath = managedMnaProviderSecretPath(mnaHomeDir);
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(
-    filePath,
-    JSON.stringify(
-      {
-        provider: {
-          kind: provider.kind,
-          model: provider.model,
-          ...(provider.baseUrl ? { base_url: provider.baseUrl } : {}),
-          ...(provider.apiKey
-            ? { api_key_env: AXIS_MNA_PROVIDER_API_KEY_ENV }
-            : provider.apiKeyEnv
-              ? { api_key_env: provider.apiKeyEnv }
-              : {}),
-        },
-      } satisfies ManagedProviderOverride,
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  await migrateManagedConfigFiles(mnaHomeDir);
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  unified.provider = {
+    kind: provider.kind,
+    model: provider.model,
+    ...(provider.baseUrl ? { base_url: provider.baseUrl } : {}),
+    ...(provider.apiKeyEnv ? { api_key_env: provider.apiKeyEnv } : {}),
+  };
 
   if (provider.apiKey) {
-    await writeFile(
-      secretPath,
-      JSON.stringify(
-        {
-          version: 1,
-          apiKey: provider.apiKey,
-        } satisfies ManagedMnaProviderSecret,
-        null,
-        2,
-      ),
-      "utf8",
-    );
-    return;
+    secrets.provider_api_key = provider.apiKey;
+    delete unified.provider.api_key_env;
+  } else {
+    delete secrets.provider_api_key;
   }
 
-  await rm(secretPath, { force: true }).catch(() => undefined);
+  await writeUnifiedConfig(unified);
+  await writeUnifiedSecrets(secrets);
+  await rm(managedMnaProviderConfigPath(mnaHomeDir), { force: true }).catch(() => undefined);
+  await rm(managedMnaProviderSecretPath(mnaHomeDir), { force: true }).catch(() => undefined);
 }
 
 export async function readManagedMnaProviderConfig(
   mnaHomeDir: string,
 ): Promise<ManagedMnaProviderConfig | null> {
-  const filePath = managedMnaProviderConfigPath(mnaHomeDir);
-  const secretPath = managedMnaProviderSecretPath(mnaHomeDir);
-  if (!(await pathExists(filePath))) {
-    return null;
-  }
-
-  const content = await readFile(filePath, "utf8");
-  const payload = safeJsonParse<ManagedProviderOverride>(filePath, content);
-  const secretPayload = (await pathExists(secretPath))
-    ? safeJsonParse<ManagedMnaProviderSecret>(secretPath, await readFile(secretPath, "utf8"))
-    : null;
-  const provider = payload.provider;
+  await migrateManagedConfigFiles(mnaHomeDir);
+  const unified = await readUnifiedConfig();
+  const secrets = await readUnifiedSecrets();
+  const provider = unified.provider;
   if (!provider) {
     return null;
   }
@@ -308,14 +498,7 @@ export async function readManagedMnaProviderConfig(
   const resolvedApiKey =
     provider.api_key
     || provider.apiKey
-    || (
-      (
-        provider.api_key_env === AXIS_MNA_PROVIDER_API_KEY_ENV
-        || provider.apiKeyEnv === AXIS_MNA_PROVIDER_API_KEY_ENV
-      )
-        ? secretPayload?.apiKey
-        : undefined
-    );
+    || secrets.provider_api_key;
 
   const resolvedApiKeyEnv =
     provider.api_key_env && provider.api_key_env !== AXIS_MNA_PROVIDER_API_KEY_ENV

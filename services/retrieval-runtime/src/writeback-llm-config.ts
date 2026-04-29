@@ -1,8 +1,13 @@
+import os from "node:os";
+import path from "node:path";
+
 import {
   type ConfigFieldReaders,
   type ConfigSourceFieldMap,
+  mapConfigSourceFields,
   normalizeHttpConfigUrl,
-  readLayeredMappedJsonConfigFields,
+  readJsonConfigFile,
+  readLayeredConfigFields,
   readOptionalConfigString,
   readOptionalConfigPositiveInteger,
 } from "./config-file.js";
@@ -16,6 +21,8 @@ type WritebackLlmConfigSource = {
   MEMORY_LLM_EFFORT?: string;
   MEMORY_LLM_MAX_TOKENS?: number | string;
   AXIS_MEMORY_LLM_CONFIG_PATH?: string;
+  AXIS_MANAGED_CONFIG_PATH?: string;
+  AXIS_MANAGED_SECRETS_PATH?: string;
 };
 
 export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible";
@@ -87,13 +94,46 @@ const writebackLlmConfigFieldMap: ConfigSourceFieldMap<
   maxTokens: "MEMORY_LLM_MAX_TOKENS",
 };
 
+function resolveManagedConfigPath(source: WritebackLlmConfigSource) {
+  return readOptionalConfigString(source.AXIS_MANAGED_CONFIG_PATH)
+    ?? path.join(os.homedir(), ".axis", "managed", "config.json");
+}
+
+function resolveManagedSecretsPath(source: WritebackLlmConfigSource) {
+  return readOptionalConfigString(source.AXIS_MANAGED_SECRETS_PATH)
+    ?? path.join(os.homedir(), ".axis", "managed", "secrets.json");
+}
+
+function readUnifiedMemoryLlmConfig(source: WritebackLlmConfigSource) {
+  const managedConfig = readJsonConfigFile<{
+    memory_llm?: {
+      baseUrl?: string;
+      model?: string;
+      timeoutMs?: number;
+      protocol?: RuntimeWritebackLlmProtocol;
+      effort?: RuntimeWritebackLlmConfig["effort"];
+      maxTokens?: number | null;
+    };
+  }>(resolveManagedConfigPath(source));
+  const managedSecrets = readJsonConfigFile<{
+    memory_llm_api_key?: string;
+  }>(resolveManagedSecretsPath(source));
+
+  return {
+    ...(managedConfig?.memory_llm ?? {}),
+    ...(managedSecrets?.memory_llm_api_key ? { apiKey: managedSecrets.memory_llm_api_key } : {}),
+  };
+}
+
 export function resolveRuntimeWritebackLlmConfig(
   source: WritebackLlmConfigSource,
 ): RuntimeWritebackLlmConfig {
-  return readLayeredMappedJsonConfigFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(
-    source,
-    writebackLlmConfigFieldMap,
-    source.AXIS_MEMORY_LLM_CONFIG_PATH,
+  return readLayeredConfigFields<RuntimeWritebackLlmConfig>(
+    [
+      mapConfigSourceFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(source, writebackLlmConfigFieldMap),
+      readJsonConfigFile(source.AXIS_MEMORY_LLM_CONFIG_PATH),
+      readUnifiedMemoryLlmConfig(source),
+    ],
     writebackLlmConfigReaders,
   );
 }

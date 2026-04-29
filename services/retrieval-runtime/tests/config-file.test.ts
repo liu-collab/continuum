@@ -21,6 +21,7 @@ import {
 import { ConfigurationError } from "../src/errors.js";
 import {
   resolveRuntimeGovernanceConfig,
+  writeManagedRuntimeGovernanceConfigFile,
   writeRuntimeGovernanceConfigFile,
 } from "../src/runtime-config.js";
 
@@ -365,6 +366,38 @@ describe("config file helper", () => {
         WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
         WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
         WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+      }),
+    ).toEqual({
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4,
+    });
+  });
+
+  it("loads runtime governance config from unified managed config over legacy runtime file", async () => {
+    const legacyPath = tempConfigPath("runtime-config.json");
+    const unifiedPath = tempConfigPath("config.json");
+    await writeRuntimeGovernanceConfigFile(legacyPath, {
+      WRITEBACK_MAINTENANCE_ENABLED: false,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+    });
+    await writeManagedRuntimeGovernanceConfigFile(unifiedPath, {
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4,
+    });
+
+    expect(
+      resolveRuntimeGovernanceConfig({
+        AXIS_RUNTIME_CONFIG_PATH: legacyPath,
+        AXIS_MANAGED_CONFIG_PATH: unifiedPath,
       }),
     ).toEqual({
       WRITEBACK_MAINTENANCE_ENABLED: true,

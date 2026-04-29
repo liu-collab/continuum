@@ -247,9 +247,13 @@ export async function startManagedMna(
   const port = parseMnaPort(options);
   const homeDir = parseMnaHome(options);
   const runtimeUrl = typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
-  const memoryLlmConfigPath =
-    typeof options["memory-llm-config-path"] === "string"
-      ? options["memory-llm-config-path"]
+  const managedConfigPath =
+    typeof options["managed-config-path"] === "string"
+      ? options["managed-config-path"]
+      : undefined;
+  const managedSecretsPath =
+    typeof options["managed-secrets-path"] === "string"
+      ? options["managed-secrets-path"]
       : undefined;
   const hasProviderOverrides = hasManagedMnaProviderOptionOverrides(options);
   const persistedProviderConfig = await readManagedMnaProviderConfig(homeDir);
@@ -282,7 +286,8 @@ export async function startManagedMna(
       MNA_HOME: homeDir,
       MNA_WORKSPACE_CWD: process.cwd(),
       RUNTIME_BASE_URL: runtimeUrl,
-      ...(memoryLlmConfigPath ? { AXIS_MEMORY_LLM_CONFIG_PATH: memoryLlmConfigPath } : {}),
+      ...(managedConfigPath ? { AXIS_MANAGED_CONFIG_PATH: managedConfigPath } : {}),
+      ...(managedSecretsPath ? { AXIS_MANAGED_SECRETS_PATH: managedSecretsPath } : {}),
       MNA_PROVIDER_KIND: providerConfig.kind,
       MNA_PROVIDER_MODEL: providerConfig.model,
       ...(providerConfig.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),

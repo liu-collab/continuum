@@ -310,9 +310,18 @@ describe("axis mna command", () => {
       return child;
     });
 
-    await startManagedMna({ "mna-home": mnaHome }, import.meta.url);
+    await startManagedMna(
+      {
+        "mna-home": mnaHome,
+        "managed-config-path": path.join(tempHome, ".axis", "managed", "config.json"),
+        "managed-secrets-path": path.join(tempHome, ".axis", "managed", "secrets.json"),
+      },
+      import.meta.url,
+    );
 
     expect(capturedEnv?.MNA_WORKSPACE_CWD).toBe(process.cwd());
+    expect(capturedEnv?.AXIS_MANAGED_CONFIG_PATH).toBe(path.join(tempHome, ".axis", "managed", "config.json"));
+    expect(capturedEnv?.AXIS_MANAGED_SECRETS_PATH).toBe(path.join(tempHome, ".axis", "managed", "secrets.json"));
     expect(waitForHealthyMock).toHaveBeenCalledWith(
       "http://127.0.0.1:4193/healthz",
       expect.objectContaining({

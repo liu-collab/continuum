@@ -8,10 +8,9 @@ const pathExistsMock = vi.hoisted(() => vi.fn());
 const readManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
 const readManagedMnaProviderConfigMock = vi.hoisted(() => vi.fn());
 const readManagedMemoryLlmConfigMock = vi.hoisted(() => vi.fn());
-const readManagedWritebackLlmConfigMock = vi.hoisted(() => vi.fn());
 const writeManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
 const writeManagedMemoryLlmConfigMock = vi.hoisted(() => vi.fn());
-const writeManagedWritebackLlmConfigMock = vi.hoisted(() => vi.fn());
+const migrateManagedConfigFilesMock = vi.hoisted(() => vi.fn());
 const readManagedStateMock = vi.hoisted(() => vi.fn());
 const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const startManagedMnaMock = vi.hoisted(() => vi.fn());
@@ -88,15 +87,16 @@ vi.mock("../src/managed-config.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/managed-config.js")>();
   return {
     ...actual,
+    axisManagedConfigPath: vi.fn(() => "C:/tmp/.axis/managed/config.json"),
+    axisManagedSecretsPath: vi.fn(() => "C:/tmp/.axis/managed/secrets.json"),
     axisManagedEmbeddingConfigPath: vi.fn(() => "C:/tmp/.axis/managed/embedding-config.json"),
     axisManagedMemoryLlmConfigPath: vi.fn(() => "C:/tmp/.axis/managed/memory-llm-config.json"),
+    migrateManagedConfigFiles: migrateManagedConfigFilesMock,
     readManagedEmbeddingConfig: readManagedEmbeddingConfigMock,
     readManagedMnaProviderConfig: readManagedMnaProviderConfigMock,
     readManagedMemoryLlmConfig: readManagedMemoryLlmConfigMock,
-    readManagedWritebackLlmConfig: readManagedWritebackLlmConfigMock,
     writeManagedEmbeddingConfig: writeManagedEmbeddingConfigMock,
     writeManagedMemoryLlmConfig: writeManagedMemoryLlmConfigMock,
-    writeManagedWritebackLlmConfig: writeManagedWritebackLlmConfigMock,
   };
 });
 
@@ -155,6 +155,7 @@ describe("runStartCommand", () => {
     process.env.PLATFORM_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
     waitForHealthyMock.mockResolvedValue(undefined);
     readManagedMnaProviderConfigMock.mockResolvedValue(null);
+    migrateManagedConfigFilesMock.mockResolvedValue(undefined);
     openMock.mockResolvedValue({
       fd: 1,
       close: vi.fn(async () => undefined),
@@ -171,10 +172,9 @@ describe("runStartCommand", () => {
     readManagedEmbeddingConfigMock.mockReset();
     readManagedMnaProviderConfigMock.mockReset();
     readManagedMemoryLlmConfigMock.mockReset();
-    readManagedWritebackLlmConfigMock.mockReset();
     writeManagedEmbeddingConfigMock.mockReset();
     writeManagedMemoryLlmConfigMock.mockReset();
-    writeManagedWritebackLlmConfigMock.mockReset();
+    migrateManagedConfigFilesMock.mockReset();
     readManagedStateMock.mockReset();
     writeManagedStateMock.mockReset();
     startManagedMnaMock.mockReset();
@@ -190,6 +190,7 @@ describe("runStartCommand", () => {
     tcpPortAvailableMock.mockReset();
     tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
     readManagedMnaProviderConfigMock.mockResolvedValue(null);
+    migrateManagedConfigFilesMock.mockResolvedValue(undefined);
     delete process.env.AXIS_DB_PASSWORD;
     delete process.env.PLATFORM_USER_ID;
     delete process.env.STORAGE_PORT;
@@ -203,10 +204,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 1,
       services: [],
@@ -280,9 +279,7 @@ describe("runStartCommand", () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -356,15 +353,15 @@ describe("runStartCommand", () => {
     ).toBe(false);
   });
 
-  it("migrates managed writeback llm config into memory llm config when axis start runs again", async () => {
+  it("migrates legacy managed config files when axis start runs again", async () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue({
+    readManagedMemoryLlmConfigMock.mockResolvedValue({
       version: 1,
       baseUrl: "https://api.anthropic.com",
       model: "claude-haiku-4-5-20251001",
-      apiKey: "writeback-key",
+      apiKey: "memory-key",
       protocol: "anthropic",
       timeoutMs: 8000,
     });
@@ -432,23 +429,22 @@ describe("runStartCommand", () => {
 
     await runStartCommand({}, import.meta.url);
 
+    expect(migrateManagedConfigFilesMock).toHaveBeenCalled();
     expect(writeManagedMemoryLlmConfigMock).toHaveBeenCalledWith({
       version: 1,
       baseUrl: "https://api.anthropic.com",
       model: "claude-haiku-4-5-20251001",
-      apiKey: "writeback-key",
+      apiKey: "memory-key",
       protocol: "anthropic",
       timeoutMs: 8000,
     });
   });
 
-  it("passes the managed memory llm config path into the stack container env", async () => {
+  it("passes the managed config paths into the stack container env", async () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -523,9 +519,8 @@ describe("runStartCommand", () => {
     );
 
     expect(dockerRun).toBeDefined();
-    expect(dockerRun?.args).toContain(
-      "AXIS_MEMORY_LLM_CONFIG_PATH=/opt/axis/managed/memory-llm-config.json",
-    );
+    expect(dockerRun?.args).toContain("AXIS_MANAGED_CONFIG_PATH=/opt/axis/managed/config.json");
+    expect(dockerRun?.args).toContain("AXIS_MANAGED_SECRETS_PATH=/opt/axis/managed/secrets.json");
   });
 
   it("merges memory llm CLI options over environment and persisted config", async () => {
@@ -540,7 +535,6 @@ describe("runStartCommand", () => {
       apiKey: "persisted-key",
       timeoutMs: 8000,
     });
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
@@ -630,10 +624,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 1,
       dbPassword: "persisted-db-password",
@@ -715,10 +707,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -783,7 +773,8 @@ describe("runStartCommand", () => {
 
     expect(startManagedMnaMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        "memory-llm-config-path": "C:/tmp/.axis/managed/memory-llm-config.json",
+        "managed-config-path": "C:/tmp/.axis/managed/config.json",
+        "managed-secrets-path": "C:/tmp/.axis/managed/secrets.json",
       }),
       import.meta.url,
     );
@@ -794,10 +785,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -918,9 +907,7 @@ describe("runStartCommand", () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock.mockResolvedValue({
       version: 2,
       image: {
@@ -1124,7 +1111,8 @@ describe("runStartCommand", () => {
     expect(startManagedMnaMock).toHaveBeenCalledWith(
       expect.objectContaining({
         "runtime-url": "http://127.0.0.1:3002",
-        "memory-llm-config-path": "C:/tmp/.axis/managed/memory-llm-config.json",
+        "managed-config-path": "C:/tmp/.axis/managed/config.json",
+        "managed-secrets-path": "C:/tmp/.axis/managed/secrets.json",
       }),
       import.meta.url,
     );
@@ -1161,10 +1149,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock
       .mockResolvedValueOnce({
         version: 1,
@@ -1316,10 +1302,8 @@ describe("runStartCommand", () => {
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
     readManagedMemoryLlmConfigMock.mockResolvedValue(null);
-    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
     writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
     writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
-    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
     readManagedStateMock
       .mockResolvedValueOnce({
         version: 1,

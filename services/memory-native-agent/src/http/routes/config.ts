@@ -116,24 +116,98 @@ const updateRuntimeConfigSchema = z.object({
   governance: runtimeGovernanceConfigUpdateSchema.optional(),
 });
 
+type ManagedProviderConfig = {
+  kind: z.infer<typeof providerKindSchema>;
+  model: string;
+  base_url?: string;
+  api_key_env?: string;
+  temperature?: number | null;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  max_tokens?: number | null;
+  organization?: string;
+  keep_alive?: string | number;
+};
+
+type ManagedMemoryLlmConfig = {
+  baseUrl?: string;
+  model?: string;
+  protocol?: "anthropic" | "openai-compatible";
+  timeoutMs?: number;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+  maxTokens?: number | null;
+};
+
+type ManagedUnifiedConfig = {
+  version?: number;
+  provider?: ManagedProviderConfig;
+  embedding?: {
+    baseUrl?: string;
+    model?: string;
+  };
+  memory_llm?: ManagedMemoryLlmConfig;
+  tools?: {
+    approval_mode?: "confirm" | "yolo";
+  };
+  planning?: {
+    plan_mode?: "advisory" | "confirm";
+  };
+  mcp?: {
+    servers?: Array<z.infer<typeof mcpServerPayloadSchema>>;
+  };
+  governance?: Record<string, unknown>;
+};
+
+type ManagedUnifiedSecrets = {
+  version?: number;
+  provider_api_key?: string;
+  embedding_api_key?: string;
+  memory_llm_api_key?: string;
+};
+
 function formatZodIssues(error: z.ZodError) {
   return error.issues
     .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
     .join("; ");
 }
 
+function resolveAxisManagedDir(app: RuntimeFastifyInstance) {
+  return path.dirname(path.dirname(app.mnaTokenPath));
+}
+
+function resolveManagedConfigPath(app: RuntimeFastifyInstance) {
+  return process.env.AXIS_MANAGED_CONFIG_PATH?.trim()
+    || path.join(resolveAxisManagedDir(app), "config.json");
+}
+
+function resolveManagedSecretsPath(app: RuntimeFastifyInstance) {
+  return process.env.AXIS_MANAGED_SECRETS_PATH?.trim()
+    || path.join(resolveAxisManagedDir(app), "secrets.json");
+}
+
 function resolveManagedEmbeddingConfigPath(app: RuntimeFastifyInstance) {
   return process.env.AXIS_EMBEDDING_CONFIG_PATH?.trim()
-    || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "embedding-config.json");
+    || path.join(resolveAxisManagedDir(app), "embedding-config.json");
 }
 
 function resolveManagedMemoryLlmConfigPath(app: RuntimeFastifyInstance) {
   return process.env.AXIS_MEMORY_LLM_CONFIG_PATH?.trim()
-    || path.join(path.dirname(path.dirname(app.mnaTokenPath)), "memory-llm-config.json");
+    || path.join(resolveAxisManagedDir(app), "memory-llm-config.json");
+}
+
+function resolveLegacyWritebackLlmConfigPath(app: RuntimeFastifyInstance) {
+  return path.join(resolveAxisManagedDir(app), "writeback-llm-config.json");
+}
+
+function resolveLegacyRuntimeConfigPath(app: RuntimeFastifyInstance) {
+  return path.join(resolveAxisManagedDir(app), "runtime-config.json");
 }
 
 function resolveProviderConfigPath(app: RuntimeFastifyInstance) {
   return path.join(path.dirname(app.mnaTokenPath), "config.json");
+}
+
+function resolveProviderSecretPath(app: RuntimeFastifyInstance) {
+  return path.join(path.dirname(app.mnaTokenPath), "provider-secret.json");
 }
 
 async function writeJson(filePath: string, payload: unknown) {
@@ -148,6 +222,121 @@ async function readJson<T>(filePath: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+async function removeIfExists(filePath: string) {
+  await fs.rm(filePath, { force: true }).catch(() => undefined);
+}
+
+async function readManagedConfig(app: RuntimeFastifyInstance): Promise<ManagedUnifiedConfig> {
+  return (await readJson<ManagedUnifiedConfig>(resolveManagedConfigPath(app))) ?? { version: 2 };
+}
+
+async function readManagedSecrets(app: RuntimeFastifyInstance): Promise<ManagedUnifiedSecrets> {
+  return (await readJson<ManagedUnifiedSecrets>(resolveManagedSecretsPath(app))) ?? { version: 2 };
+}
+
+async function writeManagedConfig(app: RuntimeFastifyInstance, payload: ManagedUnifiedConfig) {
+  await writeJson(resolveManagedConfigPath(app), {
+    ...payload,
+    version: 2,
+  });
+}
+
+async function writeManagedSecrets(app: RuntimeFastifyInstance, payload: ManagedUnifiedSecrets) {
+  await writeJson(resolveManagedSecretsPath(app), {
+    ...payload,
+    version: 2,
+  });
+}
+
+async function migrateManagedConfigFiles(app: RuntimeFastifyInstance) {
+  const legacyProviderPath = resolveProviderConfigPath(app);
+  const legacyProviderSecretPath = resolveProviderSecretPath(app);
+  const legacyEmbeddingPath = resolveManagedEmbeddingConfigPath(app);
+  const legacyMemoryLlmPath = resolveManagedMemoryLlmConfigPath(app);
+  const legacyWritebackLlmPath = resolveLegacyWritebackLlmConfigPath(app);
+  const legacyRuntimePath = resolveLegacyRuntimeConfigPath(app);
+  const legacyFiles = [
+    legacyProviderPath,
+    legacyProviderSecretPath,
+    legacyEmbeddingPath,
+    legacyMemoryLlmPath,
+    legacyWritebackLlmPath,
+    legacyRuntimePath,
+  ];
+  const legacyPayloads = await Promise.all(legacyFiles.map((filePath) => readJson<Record<string, unknown>>(filePath)));
+  if (!legacyPayloads.some(Boolean)) {
+    return;
+  }
+
+  const [providerPayload, providerSecretPayload, embeddingPayload, memoryLlmPayload, writebackPayload, runtimePayload] =
+    legacyPayloads;
+  const unified = await readManagedConfig(app);
+  const secrets = await readManagedSecrets(app);
+  const provider = providerPayload?.provider;
+
+  if (provider && typeof provider === "object" && !Array.isArray(provider)) {
+    const providerRecord = provider as Record<string, unknown>;
+    unified.provider = {
+      kind: providerRecord.kind as z.infer<typeof providerKindSchema>,
+      model: String(providerRecord.model ?? ""),
+      ...(typeof providerRecord.base_url === "string" ? { base_url: providerRecord.base_url } : {}),
+      ...(typeof providerRecord.api_key_env === "string" ? { api_key_env: providerRecord.api_key_env } : {}),
+      ...(typeof providerRecord.temperature === "number" ? { temperature: providerRecord.temperature } : {}),
+      ...(providerRecord.effort !== undefined ? { effort: providerRecord.effort as ManagedProviderConfig["effort"] } : {}),
+      ...(providerRecord.max_tokens !== undefined ? { max_tokens: providerRecord.max_tokens as number | null } : {}),
+      ...(typeof providerRecord.organization === "string" ? { organization: providerRecord.organization } : {}),
+      ...(providerRecord.keep_alive !== undefined ? { keep_alive: providerRecord.keep_alive as string | number } : {}),
+    };
+    if (typeof providerRecord.api_key === "string") {
+      secrets.provider_api_key = providerRecord.api_key;
+      delete unified.provider.api_key_env;
+    }
+  }
+
+  if (providerSecretPayload && typeof providerSecretPayload.apiKey === "string") {
+    secrets.provider_api_key = providerSecretPayload.apiKey;
+    if (unified.provider) {
+      delete unified.provider.api_key_env;
+    }
+  }
+
+  if (embeddingPayload) {
+    unified.embedding = {
+      ...(typeof embeddingPayload.baseUrl === "string" ? { baseUrl: embeddingPayload.baseUrl } : {}),
+      ...(typeof embeddingPayload.model === "string" ? { model: embeddingPayload.model } : {}),
+    };
+    if (typeof embeddingPayload.apiKey === "string") {
+      secrets.embedding_api_key = embeddingPayload.apiKey;
+    }
+  }
+
+  const memoryPayload = memoryLlmPayload ?? writebackPayload;
+  if (memoryPayload) {
+    unified.memory_llm = {
+      ...(typeof memoryPayload.baseUrl === "string" ? { baseUrl: memoryPayload.baseUrl } : {}),
+      ...(typeof memoryPayload.model === "string" ? { model: memoryPayload.model } : {}),
+      ...(typeof memoryPayload.protocol === "string" ? { protocol: memoryPayload.protocol as "anthropic" | "openai-compatible" } : {}),
+      ...(typeof memoryPayload.timeoutMs === "number" ? { timeoutMs: memoryPayload.timeoutMs } : {}),
+      ...(memoryPayload.effort !== undefined ? { effort: memoryPayload.effort as ManagedMemoryLlmConfig["effort"] } : {}),
+      ...(memoryPayload.maxTokens !== undefined ? { maxTokens: memoryPayload.maxTokens as number | null } : {}),
+    };
+    if (typeof memoryPayload.apiKey === "string") {
+      secrets.memory_llm_api_key = memoryPayload.apiKey;
+    }
+  }
+
+  if (runtimePayload) {
+    const { version: _version, ...governance } = runtimePayload;
+    if (Object.keys(governance).length > 0) {
+      unified.governance = governance;
+    }
+  }
+
+  await writeManagedConfig(app, unified);
+  await writeManagedSecrets(app, secrets);
+  await Promise.all(legacyFiles.map(removeIfExists));
 }
 
 function nowIso() {
@@ -282,6 +471,9 @@ async function probeMemoryLlm(env: NodeJS.ProcessEnv, config: {
 
 export function registerConfigRoutes(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/config", async () => {
+    await migrateManagedConfigFiles(app);
+    const managedConfig = await readManagedConfig(app);
+    const managedSecrets = await readManagedSecrets(app);
     const embedding = await readJson<{
       baseUrl?: string;
       model?: string;
@@ -296,13 +488,15 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       maxTokens?: number | null;
     }>(resolveManagedMemoryLlmConfigPath(app));
+    const managedEmbedding = managedConfig.embedding;
+    const managedMemoryLlm = managedConfig.memory_llm;
 
     return {
       provider: {
         kind: app.runtimeState.config.provider.kind,
         model: app.runtimeState.config.provider.model,
         base_url: app.runtimeState.config.provider.baseUrl,
-        api_key: app.runtimeState.config.provider.apiKey,
+        api_key: app.runtimeState.config.provider.apiKey ?? managedSecrets.provider_api_key,
         api_key_env: app.runtimeState.config.provider.apiKeyEnv,
         temperature: app.runtimeState.config.provider.temperature,
         effort: app.runtimeState.config.provider.effort ?? null,
@@ -317,25 +511,26 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         plan_mode: app.runtimeState.config.planning.planMode,
       },
       embedding: {
-        base_url: embedding?.baseUrl ?? process.env.EMBEDDING_BASE_URL ?? null,
-        model: embedding?.model ?? process.env.EMBEDDING_MODEL ?? null,
-        api_key: embedding?.apiKey ?? process.env.EMBEDDING_API_KEY ?? null,
+        base_url: managedEmbedding?.baseUrl ?? embedding?.baseUrl ?? process.env.EMBEDDING_BASE_URL ?? null,
+        model: managedEmbedding?.model ?? embedding?.model ?? process.env.EMBEDDING_MODEL ?? null,
+        api_key: managedSecrets.embedding_api_key ?? embedding?.apiKey ?? process.env.EMBEDDING_API_KEY ?? null,
       },
       memory_llm: {
-        base_url: memoryLlm?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL ?? null,
-        model: memoryLlm?.model ?? process.env.MEMORY_LLM_MODEL ?? "claude-haiku-4-5-20251001",
-        api_key: memoryLlm?.apiKey ?? process.env.MEMORY_LLM_API_KEY ?? null,
+        base_url: managedMemoryLlm?.baseUrl ?? memoryLlm?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL ?? null,
+        model: managedMemoryLlm?.model ?? memoryLlm?.model ?? process.env.MEMORY_LLM_MODEL ?? "claude-haiku-4-5-20251001",
+        api_key: managedSecrets.memory_llm_api_key ?? memoryLlm?.apiKey ?? process.env.MEMORY_LLM_API_KEY ?? null,
         protocol:
-          memoryLlm?.protocol
+          managedMemoryLlm?.protocol
+          ?? memoryLlm?.protocol
           ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined)
             ?? "openai-compatible"),
-        timeout_ms: memoryLlm?.timeoutMs ?? (
+        timeout_ms: managedMemoryLlm?.timeoutMs ?? memoryLlm?.timeoutMs ?? (
           process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
             ? Number(process.env.MEMORY_LLM_TIMEOUT_MS)
             : 15000
         ),
-        effort: memoryLlm?.effort ?? null,
-        max_tokens: memoryLlm?.maxTokens ?? null,
+        effort: managedMemoryLlm?.effort ?? memoryLlm?.effort ?? null,
+        max_tokens: managedMemoryLlm?.maxTokens ?? memoryLlm?.maxTokens ?? null,
       },
       mcp: {
         servers: app.runtimeState.config.mcp.servers,
@@ -358,28 +553,39 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       });
     }
     const payload = parsed.data;
+    await migrateManagedConfigFiles(app);
 
     if (payload.embedding) {
-      await writeJson(resolveManagedEmbeddingConfigPath(app), {
-        version: 1,
+      const managedConfig = await readManagedConfig(app);
+      const managedSecrets = await readManagedSecrets(app);
+      managedConfig.embedding = {
         ...(payload.embedding.base_url ? { baseUrl: payload.embedding.base_url } : {}),
         ...(payload.embedding.model ? { model: payload.embedding.model } : {}),
-        ...(payload.embedding.api_key ? { apiKey: payload.embedding.api_key } : {}),
-      });
+      };
+      if (payload.embedding.api_key) {
+        managedSecrets.embedding_api_key = payload.embedding.api_key;
+      }
+      await writeManagedConfig(app, managedConfig);
+      await writeManagedSecrets(app, managedSecrets);
       await clearManagedDependencyProbe(app, ["embeddings"]);
     }
 
     if (payload.memory_llm) {
-      await writeJson(resolveManagedMemoryLlmConfigPath(app), {
-        version: 1,
+      const managedConfig = await readManagedConfig(app);
+      const managedSecrets = await readManagedSecrets(app);
+      managedConfig.memory_llm = {
         ...(payload.memory_llm.base_url ? { baseUrl: payload.memory_llm.base_url } : {}),
         ...(payload.memory_llm.model ? { model: payload.memory_llm.model } : {}),
-        ...(payload.memory_llm.api_key ? { apiKey: payload.memory_llm.api_key } : {}),
         ...(payload.memory_llm.protocol ? { protocol: payload.memory_llm.protocol } : {}),
         ...(payload.memory_llm.timeout_ms ? { timeoutMs: payload.memory_llm.timeout_ms } : {}),
         ...(payload.memory_llm.effort !== undefined ? { effort: payload.memory_llm.effort } : {}),
         ...(payload.memory_llm.max_tokens !== undefined ? { maxTokens: payload.memory_llm.max_tokens } : {}),
-      });
+      };
+      if (payload.memory_llm.api_key) {
+        managedSecrets.memory_llm_api_key = payload.memory_llm.api_key;
+      }
+      await writeManagedConfig(app, managedConfig);
+      await writeManagedSecrets(app, managedSecrets);
       await clearManagedDependencyProbe(app, ["memory_llm"]);
     }
 
@@ -403,14 +609,19 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       };
 
       updateProviderSelection(app.runtimeState, nextProvider);
-      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
-      await writeJson(resolveProviderConfigPath(app), {
+      const existingConfig = await readManagedConfig(app);
+      const existingSecrets = await readManagedSecrets(app);
+      if (payload.provider.api_key) {
+        existingSecrets.provider_api_key = payload.provider.api_key;
+      } else {
+        delete existingSecrets.provider_api_key;
+      }
+      await writeManagedConfig(app, {
         ...existingConfig,
         provider: {
           kind: nextProvider.kind,
           model: nextProvider.model,
           base_url: nextProvider.baseUrl,
-          ...(nextProvider.apiKey ? { api_key: nextProvider.apiKey } : {}),
           ...(nextProvider.apiKeyEnv ? { api_key_env: nextProvider.apiKeyEnv } : {}),
           temperature: nextProvider.temperature,
           effort: nextProvider.effort ?? null,
@@ -419,13 +630,14 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
           ...(nextProvider.keepAlive !== undefined ? { keep_alive: nextProvider.keepAlive } : {}),
         },
       });
+      await writeManagedSecrets(app, existingSecrets);
     }
 
     if (payload.tools?.approval_mode) {
       updateToolApprovalMode(app.runtimeState, payload.tools.approval_mode);
 
-      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
-      await writeJson(resolveProviderConfigPath(app), {
+      const existingConfig = await readManagedConfig(app);
+      await writeManagedConfig(app, {
         ...existingConfig,
         tools: {
           ...(isRecord(existingConfig.tools) ? existingConfig.tools : {}),
@@ -437,8 +649,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     if (payload.planning?.plan_mode) {
       updatePlanMode(app.runtimeState, payload.planning.plan_mode);
 
-      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
-      await writeJson(resolveProviderConfigPath(app), {
+      const existingConfig = await readManagedConfig(app);
+      await writeManagedConfig(app, {
         ...existingConfig,
         planning: {
           ...(isRecord(existingConfig.planning) ? existingConfig.planning : {}),
@@ -464,8 +676,8 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
 
       await updateMcpServers(app.runtimeState, nextServers);
 
-      const existingConfig = (await readJson<Record<string, unknown>>(resolveProviderConfigPath(app))) ?? {};
-      await writeJson(resolveProviderConfigPath(app), {
+      const existingConfig = await readManagedConfig(app);
+      await writeManagedConfig(app, {
         ...existingConfig,
         mcp: {
           servers: nextServers,
@@ -489,7 +701,16 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
   });
 
   app.get("/v1/agent/runtime/config", async () => {
-    return app.runtimeState.memoryClient.getRuntimeConfig();
+    await migrateManagedConfigFiles(app);
+    const managedConfig = await readManagedConfig(app);
+    const runtimeConfig = await app.runtimeState.memoryClient.getRuntimeConfig();
+    return {
+      ...runtimeConfig,
+      governance: {
+        ...runtimeConfig.governance,
+        ...(managedConfig.governance ?? {}),
+      },
+    };
   });
 
   app.put("/v1/agent/runtime/config", async (request, reply) => {
@@ -504,10 +725,23 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       });
     }
 
-    return app.runtimeState.memoryClient.updateRuntimeConfig(parsed.data);
+    await migrateManagedConfigFiles(app);
+    const managedConfig = await readManagedConfig(app);
+    const runtimeConfig = await app.runtimeState.memoryClient.updateRuntimeConfig(parsed.data);
+    if (parsed.data.governance) {
+      managedConfig.governance = {
+        ...(managedConfig.governance ?? {}),
+        ...parsed.data.governance,
+      };
+      await writeManagedConfig(app, managedConfig);
+    }
+    return runtimeConfig;
   });
 
   app.post("/v1/agent/dependency-status/memory-llm/check", async () => {
+    await migrateManagedConfigFiles(app);
+    const unifiedConfig = await readManagedConfig(app);
+    const unifiedSecrets = await readManagedSecrets(app);
     const managedConfig = await readJson<{
       baseUrl?: string;
       model?: string;
@@ -518,18 +752,19 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     }>(resolveManagedMemoryLlmConfigPath(app));
 
     const probeConfig = {
-      baseUrl: managedConfig?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL,
-      model: managedConfig?.model ?? process.env.MEMORY_LLM_MODEL,
-      apiKey: managedConfig?.apiKey ?? process.env.MEMORY_LLM_API_KEY,
+      baseUrl: unifiedConfig.memory_llm?.baseUrl ?? managedConfig?.baseUrl ?? process.env.MEMORY_LLM_BASE_URL,
+      model: unifiedConfig.memory_llm?.model ?? managedConfig?.model ?? process.env.MEMORY_LLM_MODEL,
+      apiKey: unifiedSecrets.memory_llm_api_key ?? managedConfig?.apiKey ?? process.env.MEMORY_LLM_API_KEY,
       protocol:
-        managedConfig?.protocol
+        unifiedConfig.memory_llm?.protocol
+        ?? managedConfig?.protocol
         ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined) ?? "openai-compatible"),
-      timeoutMs: managedConfig?.timeoutMs ?? (
+      timeoutMs: unifiedConfig.memory_llm?.timeoutMs ?? managedConfig?.timeoutMs ?? (
         process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
           ? Number(process.env.MEMORY_LLM_TIMEOUT_MS)
           : undefined
       ),
-      effort: managedConfig?.effort ?? null,
+      effort: unifiedConfig.memory_llm?.effort ?? managedConfig?.effort ?? null,
     };
 
     if (!normalizeOptionalText(probeConfig.baseUrl) || !normalizeOptionalText(probeConfig.model)) {
