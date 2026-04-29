@@ -48,7 +48,7 @@ describe("api route error shape", () => {
     expect(payload).toEqual({
       error: {
         code: "memory_catalog_failed",
-        message: "记忆目录加载失败。"
+        message: "记忆目录加载失败"
       }
     });
     expect(consoleError).toHaveBeenCalledWith(
@@ -64,7 +64,7 @@ describe("api route error shape", () => {
     expect(payload).toEqual({
       error: {
         code: "run_trace_failed",
-        message: "运行轨迹加载失败。"
+        message: "运行轨迹加载失败"
       }
     });
     expect(consoleError).toHaveBeenCalledWith(
@@ -80,7 +80,7 @@ describe("api route error shape", () => {
     expect(payload).toEqual({
       error: {
         code: "dashboard_failed",
-        message: "看板加载失败。"
+        message: "看板加载失败"
       }
     });
     expect(consoleError).toHaveBeenCalledWith(

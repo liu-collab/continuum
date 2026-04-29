@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -30,6 +33,8 @@ import type {
   StorageWritebackClient,
 } from "../src/writeback/storage-client.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
+
+const testCwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -333,7 +338,7 @@ describe("host consistency across Claude Code and Codex", () => {
       task_id: ids.task,
       phase: "before_response" as const,
       current_input: "继续按之前约定处理",
-      cwd: "C:/workspace/work/agent-memory",
+      cwd: testCwd,
     };
 
     const claudeRes = await app1.inject({

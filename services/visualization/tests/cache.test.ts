@@ -4,12 +4,12 @@ import { getCachedValue } from "@/lib/cache";
 
 describe("in-memory cache", () => {
   beforeEach(() => {
-    globalThis.__AGENT_MEMORY_VIZ_CACHE__ = undefined;
+    globalThis.__AXIS_VIZ_CACHE__ = undefined;
     vi.spyOn(Date, "now").mockReturnValue(1_000);
   });
 
   afterEach(() => {
-    globalThis.__AGENT_MEMORY_VIZ_CACHE__ = undefined;
+    globalThis.__AXIS_VIZ_CACHE__ = undefined;
     vi.restoreAllMocks();
   });
 

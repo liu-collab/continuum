@@ -54,8 +54,8 @@ type QueryOptions = {
 };
 
 declare global {
-  var __AGENT_MEMORY_VIZ_PG_POOL__: Pool | undefined;
-  var __AGENT_MEMORY_VIZ_PG_POOL_LOGGED__: boolean | undefined;
+  var __AXIS_VIZ_PG_POOL__: Pool | undefined;
+  var __AXIS_VIZ_PG_POOL_LOGGED__: boolean | undefined;
 }
 
 export class StorageReadModelUnavailableError extends Error {
@@ -77,8 +77,8 @@ function getPool() {
     return null;
   }
 
-  if (!globalThis.__AGENT_MEMORY_VIZ_PG_POOL__) {
-    globalThis.__AGENT_MEMORY_VIZ_PG_POOL__ = new Pool({
+  if (!globalThis.__AXIS_VIZ_PG_POOL__) {
+    globalThis.__AXIS_VIZ_PG_POOL__ = new Pool({
       connectionString: values.STORAGE_READ_MODEL_DSN,
       connectionTimeoutMillis: values.STORAGE_READ_MODEL_TIMEOUT_MS,
       idleTimeoutMillis: 30_000,
@@ -88,16 +88,16 @@ function getPool() {
     });
   }
 
-  if (!globalThis.__AGENT_MEMORY_VIZ_PG_POOL_LOGGED__) {
+  if (!globalThis.__AXIS_VIZ_PG_POOL_LOGGED__) {
     console.info(`[visualization] database pool max=${values.DATABASE_POOL_MAX}`);
-    globalThis.__AGENT_MEMORY_VIZ_PG_POOL_LOGGED__ = true;
+    globalThis.__AXIS_VIZ_PG_POOL_LOGGED__ = true;
   }
 
-  return globalThis.__AGENT_MEMORY_VIZ_PG_POOL__;
+  return globalThis.__AXIS_VIZ_PG_POOL__;
 }
 
 export function getReadModelPoolStats() {
-  const pool = globalThis.__AGENT_MEMORY_VIZ_PG_POOL__;
+  const pool = globalThis.__AXIS_VIZ_PG_POOL__;
   const { values } = getAppConfig();
 
   return {

@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import pino from "pino";
 import { describe, expect, it, vi } from "vitest";
@@ -28,6 +28,8 @@ import { renderMigrationTemplate } from "../src/db/migration-runner.js";
 import { FinalizeIdempotencyCache } from "../src/writeback/finalize-idempotency-cache.js";
 import { HttpLlmExtractor } from "../src/writeback/llm-extractor.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
+
+const runtimeRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const localWriteBackBatchRequestSchema = z.object({
   candidates: z
@@ -375,7 +377,7 @@ describe("retrieval-runtime remediation", () => {
       await expect(
         access(
           path.resolve(
-            "C:/workspace/work/agent-memory/services/retrieval-runtime",
+            runtimeRoot,
             relativePath,
           ),
         ),
@@ -385,7 +387,7 @@ describe("retrieval-runtime remediation", () => {
 
   it("ships a real Codex MCP bridge instead of a placeholder message", async () => {
     const filePath = path.resolve(
-      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      runtimeRoot,
       "host-adapters/memory-codex-adapter/mcp/memory-mcp-server.mjs",
     );
     const content = await readFile(filePath, "utf8");
@@ -740,7 +742,7 @@ describe("retrieval-runtime remediation", () => {
   it("renders runtime migration sql with schema placeholders replaced", async () => {
     const template = await readFile(
       path.resolve(
-        "C:/workspace/work/agent-memory/services/retrieval-runtime/migrations/0001_runtime_init.sql",
+        path.join(runtimeRoot, "migrations", "0001_runtime_init.sql"),
       ),
       "utf8",
     );
@@ -756,7 +758,7 @@ describe("retrieval-runtime remediation", () => {
   it("renders recent injection migration sql with schema placeholders replaced", async () => {
     const template = await readFile(
       path.resolve(
-        "C:/workspace/work/agent-memory/services/retrieval-runtime/migrations/0006_runtime_recent_injections.sql",
+        path.join(runtimeRoot, "migrations", "0006_runtime_recent_injections.sql"),
       ),
       "utf8",
     );
@@ -1313,11 +1315,11 @@ describe("retrieval-runtime remediation", () => {
 
   it("rejects host payloads that omit required identity fields instead of falling back to unknown namespaces", async () => {
     const bridgePath = path.resolve(
-      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      runtimeRoot,
       "host-adapters/memory-claude-plugin/bin/memory-bridge.mjs",
     );
     const proxyPath = path.resolve(
-      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      runtimeRoot,
       "host-adapters/memory-codex-adapter/bin/memory-codex-proxy.mjs",
     );
     const [bridgeContent, proxyContent] = await Promise.all([
@@ -1338,7 +1340,7 @@ describe("retrieval-runtime remediation", () => {
 
   it("does not ship zero-uuid fallback identities in the Codex MCP bridge", async () => {
     const mcpPath = path.resolve(
-      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      runtimeRoot,
       "host-adapters/memory-codex-adapter/mcp/memory-mcp-server.mjs",
     );
     const content = await readFile(mcpPath, "utf8");
@@ -1349,7 +1351,7 @@ describe("retrieval-runtime remediation", () => {
 
   it("does not pretend finalize-turn forwarding succeeded in the Codex proxy", async () => {
     const proxyPath = path.resolve(
-      "C:/workspace/work/agent-memory/services/retrieval-runtime",
+      runtimeRoot,
       "host-adapters/memory-codex-adapter/bin/memory-codex-proxy.mjs",
     );
     const content = await readFile(proxyPath, "utf8");
@@ -1361,7 +1363,7 @@ describe("retrieval-runtime remediation", () => {
   it("resolves Claude bridge identity fields from environment variables", async () => {
     const moduleUrl = pathToFileURL(
       path.resolve(
-        "C:/workspace/work/agent-memory/services/retrieval-runtime/host-adapters/memory-claude-plugin/bin/memory-bridge.mjs",
+        path.join(runtimeRoot, "host-adapters", "memory-claude-plugin", "bin", "memory-bridge.mjs"),
       ),
     ).href;
     const bridge = (await import(moduleUrl)) as {
@@ -1391,7 +1393,7 @@ describe("retrieval-runtime remediation", () => {
     const originalFetch = globalThis.fetch;
     const moduleUrl = pathToFileURL(
       path.resolve(
-        "C:/workspace/work/agent-memory/services/retrieval-runtime/host-adapters/memory-codex-adapter/mcp/memory-mcp-server.mjs",
+        path.join(runtimeRoot, "host-adapters", "memory-codex-adapter", "mcp", "memory-mcp-server.mjs"),
       ),
     ).href;
     const mcp = (await import(moduleUrl)) as {

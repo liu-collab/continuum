@@ -1,5 +1,5 @@
 groups:
-  - name: agent-memory-runtime
+  - name: axis-runtime
     rules:
       - alert: RetrievalRuntimeUnavailable
         expr: up{job="retrieval-runtime"} == 0

@@ -58,6 +58,7 @@ import {
   stopLegacyPostgresContainer,
 } from "./docker-lifecycle.js";
 import { npmCommand, runForeground } from "./managed-process.js";
+import { resolvePlatformUserId } from "./platform-user.js";
 import {
   normalizeBindHost,
   parsePort,
@@ -168,6 +169,7 @@ async function startManagedVisualizationDevServer(options: {
   packageRoot: string;
   bindHost: string;
   publicHost: string;
+  platformUserId: string;
   readModelDsn: string;
   runtimeUrl: string;
   storageUrl: string;
@@ -192,6 +194,7 @@ async function startManagedVisualizationDevServer(options: {
     NODE_ENV: "development",
     STORAGE_API_BASE_URL: options.storageUrl,
     RUNTIME_API_BASE_URL: options.runtimeUrl,
+    PLATFORM_USER_ID: options.platformUserId,
     STORAGE_READ_MODEL_DSN: options.readModelDsn,
     STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
     STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
@@ -280,6 +283,7 @@ async function startStackContainer(
   port: number,
   bindHost: string,
   publicHost: string,
+  platformUserId: string,
   databasePassword: string,
   embeddingConfigPath: string,
   memoryLlmConfigPath: string,
@@ -337,6 +341,8 @@ async function startStackContainer(
     "-e",
     `RUNTIME_API_BASE_URL=${DEFAULT_RUNTIME_URL}`,
     "-e",
+    `PLATFORM_USER_ID=${platformUserId}`,
+    "-e",
     `NEXT_PUBLIC_MNA_BASE_URL=http://${publicHost}:${DEFAULT_MNA_PORT}`,
     "-e",
     `MNA_INTERNAL_BASE_URL=http://host.docker.internal:${DEFAULT_MNA_PORT}`,
@@ -369,6 +375,7 @@ export async function runStartCommand(
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
+  const platformUserId = resolvePlatformUserId();
   const uiDev = options["ui-dev"] === true;
   const initialManagedState = await readManagedState();
   const open = options.open === true;
@@ -385,6 +392,7 @@ export async function runStartCommand(
       packageRoot,
       bindHost,
       publicHost: accessibleHost,
+      platformUserId,
       readModelDsn: buildUiDevReadModelDsn(options, initialManagedState, accessibleHost),
       runtimeUrl,
       storageUrl,
@@ -487,6 +495,7 @@ export async function runStartCommand(
       postgresPort,
       bindHost,
       accessibleHost,
+      platformUserId,
       databasePassword,
       embeddingConfigPath,
       stackMemoryLlmConfigPath,
@@ -517,6 +526,7 @@ export async function runStartCommand(
         packageRoot,
         bindHost,
         publicHost: accessibleHost,
+        platformUserId,
         readModelDsn,
         runtimeUrl,
         storageUrl,

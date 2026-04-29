@@ -29,6 +29,8 @@
   --nav-border: color-mix(in srgb, var(--body-on-dark) 14%, transparent);
   --nav-border-hover: color-mix(in srgb, var(--body-on-dark) 26%, transparent);
   --nav-utility-text: color-mix(in srgb, var(--body-on-dark) 88%, transparent);
+  --nav-utility-bg: #1d1d1f;
+  --nav-utility-bg-hover: #2a2a2c;
   --modal-backdrop: color-mix(in srgb, var(--surface-black) 35%, transparent);
 
   --bg: var(--canvas-parchment);
@@ -87,6 +89,8 @@ html.dark {
   --nav-border: color-mix(in srgb, var(--body-on-dark) 14%, transparent);
   --nav-border-hover: color-mix(in srgb, var(--body-on-dark) 26%, transparent);
   --nav-utility-text: color-mix(in srgb, var(--body-on-dark) 88%, transparent);
+  --nav-utility-bg: #1d1d1f;
+  --nav-utility-bg-hover: #2a2a2c;
   --modal-backdrop: color-mix(in srgb, var(--surface-black) 62%, transparent);
   --bg: var(--canvas-parchment);
   --bg-raised: var(--canvas);
@@ -218,7 +222,7 @@ a {
     gap: 6px;
     border: 1px solid var(--nav-border);
     border-radius: var(--radius-sm);
-    background: var(--ink);
+    background: var(--nav-utility-bg);
     color: var(--nav-utility-text);
     padding: 0 11px;
     font-size: 12px;
@@ -226,7 +230,7 @@ a {
     line-height: 1;
     letter-spacing: 0;
     cursor: pointer;
-    transition: color 100ms ease, border-color 100ms ease, transform 100ms ease;
+    transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease, transform 100ms ease;
     white-space: nowrap;
   }
 
@@ -242,6 +246,7 @@ a {
 
   .global-nav-utility-button:hover {
     color: var(--body-on-dark);
+    background: var(--nav-utility-bg-hover);
     border-color: var(--nav-border-hover);
   }
 

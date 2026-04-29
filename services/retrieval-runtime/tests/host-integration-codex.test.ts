@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -30,6 +33,8 @@ import type {
   StorageWritebackClient,
 } from "../src/writeback/storage-client.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
+
+const testCwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -339,7 +344,7 @@ describe("Codex host integration", () => {
           user_id: ids.user,
           session_id: ids.session,
           task_id: ids.task,
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });
@@ -368,7 +373,7 @@ describe("Codex host integration", () => {
           user_id: ids.user,
           session_id: ids.session,
           task_id: ids.task,
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });
@@ -407,7 +412,7 @@ describe("Codex host integration", () => {
           user_id: ids.user,
           session_id: ids.session,
           task_id: ids.task,
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
           memory_mode: "workspace_only",
         },
@@ -446,7 +451,7 @@ describe("Codex host integration", () => {
           turn_id: "codex-turn-1",
           phase: "session_start",
           current_input: "启动 Codex 会话。",
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });
@@ -475,7 +480,7 @@ describe("Codex host integration", () => {
           turn_id: "codex-turn-2",
           phase: "before_response",
           current_input: "之前已经记过我的输出偏好，这次在 Codex 里继续沿用。",
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });
@@ -529,7 +534,7 @@ describe("Codex host integration", () => {
           turn_id: "codex-turn-3",
           phase: "after_response",
           current_input: "完成本轮回复。",
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });
@@ -561,7 +566,7 @@ describe("Codex host integration", () => {
           phase: "before_response",
           current_input:
             "之前已经记过我的输出偏好，这次在 Codex 里继续沿用默认中文输出。",
-          cwd: "C:/workspace/work/agent-memory",
+          cwd: testCwd,
           source: "codex_proxy",
         },
       });

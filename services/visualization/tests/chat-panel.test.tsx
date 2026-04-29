@@ -565,6 +565,6 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", "healthy");
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "configured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
-    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "misconfigured");
+    expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "misconfigured");
   });
 });

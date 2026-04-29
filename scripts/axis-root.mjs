@@ -23,6 +23,7 @@ const sharedEnv = {
   ...process.env,
   DATABASE_URL: process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/agent_memory",
   AXIS_REPO_ROOT: process.env.AXIS_REPO_ROOT ?? repoRoot,
+  PLATFORM_USER_ID: process.env.PLATFORM_USER_ID ?? process.env.MNA_PLATFORM_USER_ID ?? process.env.MEMORY_USER_ID,
 };
 
 function npmCommand() {

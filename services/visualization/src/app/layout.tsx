@@ -13,9 +13,9 @@ import "./globals.css";
 
 const navigation = [
   { href: "/agent" as Route, labelKey: "layout.nav.agent" },
-  { href: "/dashboard" as Route, labelKey: "layout.nav.dashboard" },
   { href: "/memories" as Route, labelKey: "layout.nav.memories" },
   { href: "/runs" as Route, labelKey: "layout.nav.runs" },
+  { href: "/dashboard" as Route, labelKey: "layout.nav.dashboard" },
   { href: "/governance" as Route, labelKey: "layout.nav.governance" },
   { href: "/docs/configuration" as Route, labelKey: "layout.nav.docs" }
 ];

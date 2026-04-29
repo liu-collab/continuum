@@ -149,6 +149,7 @@ function mockSuccessfulSpawn() {
 describe("runStartCommand", () => {
   beforeEach(() => {
     process.env.AXIS_DB_PASSWORD = "test-db-password";
+    process.env.PLATFORM_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
     waitForHealthyMock.mockResolvedValue(undefined);
     openMock.mockResolvedValue({
       fd: 1,
@@ -184,6 +185,7 @@ describe("runStartCommand", () => {
     tcpPortAvailableMock.mockReset();
     tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
     delete process.env.AXIS_DB_PASSWORD;
+    delete process.env.PLATFORM_USER_ID;
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
@@ -690,6 +692,7 @@ describe("runStartCommand", () => {
 
     expect(dockerRun?.[1]).toContain("POSTGRES_PASSWORD=persisted-db-password");
     expect(dockerRun?.[1]).toContain("DATABASE_URL=postgres://axis_user:persisted-db-password@127.0.0.1:5432/axis_db");
+    expect(dockerRun?.[1]).toContain("PLATFORM_USER_ID=550e8400-e29b-41d4-a716-446655440000");
     expect(writeManagedStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         dbPassword: "persisted-db-password",
@@ -1081,6 +1084,7 @@ describe("runStartCommand", () => {
     expect(dockerRun).toBeUndefined();
     expect(uiDevSpawn).toBeDefined();
     expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
+      PLATFORM_USER_ID: "550e8400-e29b-41d4-a716-446655440000",
       STORAGE_READ_MODEL_DSN: "postgres://axis_user:test-db-password@127.0.0.1:54330/axis_db",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",

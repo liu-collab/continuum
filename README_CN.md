@@ -144,8 +144,8 @@ axis stop      # 停止全部服务
 需要 Node.js >= 22 和本地 PostgreSQL。
 
 ```bash
-git clone https://github.com/anthropics/agent-memory.git
-cd agent-memory
+git clone https://github.com/liu-collab/axis.git
+cd axis
 npm run dev
 ```
 

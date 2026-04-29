@@ -144,8 +144,8 @@ axis stop      # shut everything down
 Requires Node.js >= 22 and a local PostgreSQL instance.
 
 ```bash
-git clone https://github.com/anthropics/agent-memory.git
-cd agent-memory
+git clone https://github.com/liu-collab/axis.git
+cd axis
 npm run dev
 ```
 

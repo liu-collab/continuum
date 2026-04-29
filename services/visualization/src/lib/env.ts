@@ -23,7 +23,11 @@ const envSchema = z.object({
   STORAGE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   RUNTIME_API_BASE_URL: z.string().url().optional(),
   RUNTIME_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
-  PLATFORM_USER_ID: z.string().uuid().default("00000000-0000-4000-8000-000000000001"),
+  PLATFORM_USER_ID: z
+    .string({
+      required_error: "PLATFORM_USER_ID is required. Set PLATFORM_USER_ID to a valid UUID before starting visualization."
+    })
+    .uuid("PLATFORM_USER_ID must be a valid UUID."),
   MNA_TOKEN_PATH: z.string().default("~/.mna/token.txt"),
   DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().max(100).default(20),
   HEALTH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
@@ -68,7 +72,7 @@ export type AppConfig = {
 };
 
 declare global {
-  var __AGENT_MEMORY_VIZ_CONFIG__: AppConfig | undefined;
+  var __AXIS_VIZ_CONFIG__: AppConfig | undefined;
 }
 
 function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
@@ -99,11 +103,12 @@ function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
 }
 
 export function getAppConfig(): AppConfig {
-  if (globalThis.__AGENT_MEMORY_VIZ_CONFIG__) {
-    return globalThis.__AGENT_MEMORY_VIZ_CONFIG__;
+  if (globalThis.__AXIS_VIZ_CONFIG__) {
+    return globalThis.__AXIS_VIZ_CONFIG__;
   }
 
-  const parsed = envSchema.safeParse(normalizeRawEnv(process.env));
+  const rawEnv = normalizeRawEnv(process.env);
+  const parsed = envSchema.safeParse(rawEnv);
 
   if (parsed.success) {
     const config = {
@@ -111,16 +116,23 @@ export function getAppConfig(): AppConfig {
       issues: []
     };
 
-    globalThis.__AGENT_MEMORY_VIZ_CONFIG__ = config;
+    globalThis.__AXIS_VIZ_CONFIG__ = config;
     return config;
   }
 
-  const fallback = envSchema.parse({});
+  const platformUserIssue = parsed.error.issues.find((issue) => issue.path.join(".") === "PLATFORM_USER_ID");
+  if (platformUserIssue) {
+    throw new Error(platformUserIssue.message);
+  }
+
+  const fallback = envSchema.parse({
+    PLATFORM_USER_ID: rawEnv.PLATFORM_USER_ID
+  });
   const config = {
     values: fallback,
     issues: parsed.error.issues.map((issue) => `${issue.path.join(".") || "env"} ${issue.message}`)
   };
 
-  globalThis.__AGENT_MEMORY_VIZ_CONFIG__ = config;
+  globalThis.__AXIS_VIZ_CONFIG__ = config;
   return config;
 }

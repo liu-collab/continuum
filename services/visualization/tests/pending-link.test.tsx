@@ -32,6 +32,15 @@ function PendingHarness({ resetKey }: { resetKey: string }) {
       <PendingLink href={`/dashboard?window=${resetKey}`} pendingKey="dashboard-window" pendingLabel="正在切换时间窗口">
         {resetKey}
       </PendingLink>
+      <PendingLink
+        href={`/runs?window=${resetKey}`}
+        pendingKey="runs-window"
+        pendingLabel="正在切换运行轨迹"
+        className="segment-item"
+        testId="classed-pending-link"
+      >
+        runs
+      </PendingLink>
       <PendingNavigationStatus pendingKey="dashboard-window" label="正在切换时间窗口" testId="pending-status" />
     </NavigationPendingProvider>
   );
@@ -50,5 +59,11 @@ describe("pending navigation", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("pending-status")).not.toBeInTheDocument();
     });
+  });
+
+  it("passes anchor props through to the rendered link", () => {
+    render(<PendingHarness resetKey="6h" />);
+
+    expect(screen.getByTestId("classed-pending-link")).toHaveClass("segment-item");
   });
 });

@@ -75,7 +75,7 @@ describe("GovernancePanel", () => {
 
     render(<GovernancePanel detail={createMemoryDetail()} />);
 
-    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), "过期记忆");
+    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "过期记忆");
     await user.click(screen.getByTestId("memory-governance-delete-trigger"));
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe("GovernancePanel", () => {
 
     render(<GovernancePanel detail={createMemoryDetail()} />);
 
-    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), "人工复核通过");
+    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "人工复核通过");
     await user.click(screen.getByRole("button", { name: "确认" }));
 
     await waitFor(() => {
@@ -126,7 +126,7 @@ describe("GovernancePanel", () => {
 
     render(<GovernancePanel detail={createMemoryDetail()} />);
 
-    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), "人工复核通过");
+    await user.type(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), "人工复核通过");
     await user.click(screen.getByRole("button", { name: "确认" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("10 秒后自动刷新读模型");
@@ -147,7 +147,7 @@ describe("GovernancePanel", () => {
 
     render(<GovernancePanel detail={createMemoryDetail()} />);
 
-    fireEvent.change(screen.getByPlaceholderText("说明为什么需要执行这次治理动作。"), {
+    fireEvent.change(screen.getByPlaceholderText("说明为什么需要执行这次治理动作"), {
       target: { value: "人工复核通过" }
     });
     fireEvent.click(screen.getByRole("button", { name: "确认" }));

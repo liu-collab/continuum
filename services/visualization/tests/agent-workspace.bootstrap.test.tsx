@@ -264,12 +264,12 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("openai · deepseek-chat");
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
-    expect(screen.getByTestId("agent-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
+    expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
     expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("h-full");
     expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("overflow-hidden");
     expect(screen.getByTestId("agent-chat-column")).toHaveClass("order-1");
     expect(screen.getByTestId("agent-sidebar-column")).toHaveClass("order-2");
-    expect(screen.queryByTestId("agent-memory-column")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("axis-memory-column")).not.toBeInTheDocument();
     expect(screen.queryByTestId("memory-panel")).not.toBeInTheDocument();
     expect(screen.queryByTestId("runtime-config-summary-card")).not.toBeInTheDocument();
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
@@ -281,4 +281,3 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(createNewSession).toHaveBeenCalledTimes(1);
   });
 });
-

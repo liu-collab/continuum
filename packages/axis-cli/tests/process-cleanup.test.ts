@@ -1,4 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "../../..");
+const normalizedRepoRoot = repoRoot.replace(/\\/g, "/").toLowerCase();
 
 describe("process cleanup", () => {
   afterEach(() => {
@@ -8,14 +15,14 @@ describe("process cleanup", () => {
   });
 
   it("normalizes windows command lines before matching managed services", async () => {
-    process.env.AXIS_REPO_ROOT = "C:\\workspace\\work\\agent-memory";
+    process.env.AXIS_REPO_ROOT = repoRoot;
     const { buildWindowsLegacyAxisCleanupScript } = await import("../src/process-cleanup.js");
     const script = buildWindowsLegacyAxisCleanupScript();
 
     expect(script).toContain("-replace '\\\\','/'");
     expect(script).toContain("vendor/(storage/dist/src/server\\.js|storage/dist/src/worker\\.js|runtime/dist/src/index\\.js|visualization/standalone/server\\.js|memory-native-agent/bin/mna-server\\.mjs)");
     expect(script).toContain("local-embedding-service\\.js");
-    expect(script).toContain("c:/workspace/work/agent-memory/services/");
+    expect(script).toContain(`${normalizedRepoRoot}/services/`);
   });
 
   it("invokes powershell directly on windows cleanup", async () => {

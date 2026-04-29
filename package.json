@@ -7,6 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "build": "node ./scripts/build-all.mjs",
     "start": "node ./scripts/axis-root.mjs start",
     "stop": "node ./scripts/axis-root.mjs stop",
     "status": "node ./scripts/axis-root.mjs status",

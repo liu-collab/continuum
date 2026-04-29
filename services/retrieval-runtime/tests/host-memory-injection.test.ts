@@ -1,3 +1,6 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -30,6 +33,8 @@ import type {
   StorageWritebackClient,
 } from "../src/writeback/storage-client.js";
 import { WritebackEngine } from "../src/writeback/writeback-engine.js";
+
+const testCwd = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const config: AppConfig = {
   NODE_ENV: "test",
@@ -374,7 +379,7 @@ describe("host memory injection", () => {
         turn_id: "claude-turn-1",
         phase: "before_response",
         current_input: "上次说过这个仓库默认中文输出，这轮继续按之前的约定处理。",
-        cwd: "C:/workspace/work/agent-memory",
+        cwd: testCwd,
         source: "claude_hook",
       },
     });
@@ -400,7 +405,7 @@ describe("host memory injection", () => {
         turn_id: "codex-turn-1",
         phase: "before_response",
         current_input: "之前已经记过我的输出偏好，这次在 Codex 里继续沿用。",
-        cwd: "C:/workspace/work/agent-memory",
+        cwd: testCwd,
         source: "codex_proxy",
       },
     });
@@ -422,7 +427,7 @@ describe("host memory injection", () => {
         user_id: ids.user,
         session_id: ids.session,
         task_id: ids.task,
-        cwd: "C:/workspace/work/agent-memory",
+        cwd: testCwd,
         source: "codex_proxy",
       },
     });

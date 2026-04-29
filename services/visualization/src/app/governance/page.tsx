@@ -236,7 +236,7 @@ export default async function GovernancePage({
                       ...(params.executionStatus ? { execution_status: params.executionStatus } : {}),
                       limit: String(params.limit),
                       execution_id: item.executionId,
-                    }).toString()}`;
+                    }).toString()}` as Route;
 
                     return (
                       <Link

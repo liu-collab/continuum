@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: agent-memory
+  name: axis
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: storage
-  namespace: agent-memory
+  namespace: axis
 spec:
   replicas: 1
   selector:
@@ -20,12 +20,12 @@ spec:
     spec:
       containers:
         - name: storage
-          image: agent-memory/storage:latest
+          image: axis/storage:latest
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agent-memory-secrets
+                  name: axis-secrets
                   key: database_url
             - name: STORAGE_SCHEMA_PRIVATE
               value: storage_private
@@ -38,7 +38,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: retrieval-runtime
-  namespace: agent-memory
+  namespace: axis
 spec:
   replicas: 1
   selector:
@@ -51,12 +51,12 @@ spec:
     spec:
       containers:
         - name: retrieval-runtime
-          image: agent-memory/retrieval-runtime:latest
+          image: axis/retrieval-runtime:latest
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agent-memory-secrets
+                  name: axis-secrets
                   key: database_url
             - name: STORAGE_WRITEBACK_URL
               value: http://storage:3001
@@ -69,17 +69,17 @@ spec:
             - name: EMBEDDING_BASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agent-memory-secrets
+                  name: axis-secrets
                   key: embedding_base_url
             - name: MEMORY_LLM_BASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agent-memory-secrets
+                  name: axis-secrets
                   key: memory_llm_base_url
             - name: MEMORY_LLM_MODEL
               valueFrom:
                 secretKeyRef:
-                  name: agent-memory-secrets
+                  name: axis-secrets
                   key: memory_llm_model
           ports:
             - containerPort: 3002

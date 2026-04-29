@@ -34,11 +34,11 @@ import {
 describe("storage read model catalog view", () => {
   beforeEach(() => {
     queryMock.mockReset();
-    globalThis.__AGENT_MEMORY_VIZ_PG_POOL__ = undefined;
+    globalThis.__AXIS_VIZ_PG_POOL__ = undefined;
   });
 
   afterEach(() => {
-    globalThis.__AGENT_MEMORY_VIZ_PG_POOL__ = undefined;
+    globalThis.__AXIS_VIZ_PG_POOL__ = undefined;
   });
 
   it("exposes connection pool stats", () => {

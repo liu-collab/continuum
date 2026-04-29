@@ -19,6 +19,11 @@ const vendorDir = path.join(packageDir, "vendor");
 const vendorStageDir = path.join(packageDir, "vendor-stage");
 const visualizationBuildDir = path.join(visualizationDir, ".next");
 const skipVisualization = process.argv.includes("--skip-visualization");
+const buildPlatformUserId =
+  process.env.PLATFORM_USER_ID
+  ?? process.env.MNA_PLATFORM_USER_ID
+  ?? process.env.MEMORY_USER_ID
+  ?? "550e8400-e29b-41d4-a716-446655440000";
 
 async function copyEntries(sourceDir, targetDir, entries) {
   await mkdir(targetDir, { recursive: true });
@@ -41,12 +46,18 @@ async function run(command, args, cwd) {
         ? spawn("cmd", ["/c", command, ...args], {
             cwd,
             stdio: "inherit",
-            env: process.env,
+            env: {
+              ...process.env,
+              PLATFORM_USER_ID: buildPlatformUserId,
+            },
           })
         : spawn(command, args, {
             cwd,
             stdio: "inherit",
-            env: process.env,
+            env: {
+              ...process.env,
+              PLATFORM_USER_ID: buildPlatformUserId,
+            },
           });
 
     child.on("exit", (code) => {

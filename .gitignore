@@ -7,7 +7,9 @@ coverage/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
-packages/continuum-cli/vendor/
+DESIGN-SYSTEM.md
+packages/axis-cli/vendor/
+packages/axis-cli/vendor-stage/
 .env
 .env.local
 .env.*.local

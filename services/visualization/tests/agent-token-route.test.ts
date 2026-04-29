@@ -79,7 +79,7 @@ describe("agent token route", () => {
     expect(payload).toEqual({
       status: "token_missing",
       token: null,
-      reason: "token 文件为空。",
+      reason: "token 文件为空",
       mnaBaseUrl: "http://127.0.0.1:4193"
     });
   });
@@ -97,7 +97,7 @@ describe("agent token route", () => {
     expect(payload).toEqual({
       status: "token_missing",
       token: null,
-      reason: "读取 token 文件超时。",
+      reason: "读取 token 文件超时",
       mnaBaseUrl: "http://127.0.0.1:4193"
     });
   });
@@ -111,7 +111,7 @@ describe("agent token route", () => {
     expect(payload).toEqual({
       status: "token_invalid",
       token: null,
-      reason: "token 文件格式不合法。",
+      reason: "token 文件格式不合法",
       mnaBaseUrl: "http://127.0.0.1:4193"
     });
   });
@@ -126,7 +126,7 @@ describe("agent token route", () => {
     expect(payload).toEqual({
       status: "token_invalid",
       token: null,
-      reason: "没有权限读取 token 文件。",
+      reason: "没有权限读取 token 文件",
       mnaBaseUrl: "http://127.0.0.1:4193"
     });
   });

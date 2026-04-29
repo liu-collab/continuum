@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "axis": "./bin/axis.mjs"
+    "axis": "bin/axis.mjs"
   },
   "files": [
     "bin/",
@@ -33,7 +33,6 @@
     "access": "public"
   },
   "dependencies": {
-    "axis-repo": "file:../..",
     "pg": "^8.13.3"
   },
   "devDependencies": {

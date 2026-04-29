@@ -177,42 +177,42 @@ export function ChatPanel({
               </div>
             ) : null}
           </div>
-          <div data-testid="chat-status-bar" className="flex flex-wrap items-center gap-2">
-            <TopStatusBadge
-              testId="agent-connection-badge"
-              icon={<Bot className="h-3.5 w-3.5" />}
+          <div data-testid="chat-status-bar" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <StatusDot
               tone={resolveConnectionTone(connection)}
               label={t("chatPanel.connectionLabel")}
               value={connectionLabel}
+              stateValue={connectionLabel}
+              testId="agent-connection-badge"
               stateTestId="agent-connection-state"
             />
-            <TopStatusBadge
-              testId="agent-runtime-badge"
-              icon={<Orbit className="h-3.5 w-3.5" />}
+            <StatusDot
               tone={resolveStatusTone(runtimeStatus)}
               label={t("workspace.runtimeLabel")}
-              value={runtimeStatus}
+              value={formatStatus(runtimeStatus)}
+              stateValue={runtimeStatus}
+              testId="agent-runtime-badge"
             />
-            <TopStatusBadge
-              testId="agent-provider-badge"
-              icon={<Sparkles className="h-3.5 w-3.5" />}
+            <StatusDot
               tone={resolveStatusTone(providerStatus)}
               label={t("workspace.providerLabel")}
-              value={providerStatus}
+              value={formatStatus(providerStatus)}
+              stateValue={providerStatus}
+              testId="agent-provider-badge"
             />
-            <TopStatusBadge
-              testId="agent-embedding-badge"
-              icon={<Database className="h-3.5 w-3.5" />}
+            <StatusDot
               tone={resolveStatusTone(embeddingStatus)}
               label={t("workspace.embeddingLabel")}
-              value={embeddingStatus}
+              value={formatStatus(embeddingStatus)}
+              stateValue={embeddingStatus}
+              testId="agent-embedding-badge"
             />
-            <TopStatusBadge
-              testId="agent-memory-llm-badge"
-              icon={<BrainCircuit className="h-3.5 w-3.5" />}
+            <StatusDot
               tone={resolveStatusTone(memoryLlmStatus)}
               label={t("workspace.memoryLlmLabel")}
-              value={memoryLlmStatus}
+              value={formatStatus(memoryLlmStatus)}
+              stateValue={memoryLlmStatus}
+              testId="axis-memory-llm-badge"
             />
           </div>
         </div>
@@ -425,40 +425,46 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
   return "neutral";
 }
 
-function TopStatusBadge({
-  icon,
+function formatStatus(status: string): string {
+  const map: Record<string, string> = {
+    healthy: "正常", configured: "已配置", unknown: "未知", unavailable: "不可用",
+    degraded: "降级", misconfigured: "配置错误", not_configured: "未配置",
+    reachable: "可达", ok: "正常", online: "在线", error: "异常",
+    closed: "已关闭", connecting: "连接中", reconnecting: "重连中",
+  };
+  return map[status] ?? status;
+}
+
+function StatusDot({
   label,
   value,
+  stateValue,
   tone,
   testId,
-  stateTestId
+  stateTestId,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
+  stateValue?: string;
   tone: "neutral" | "success" | "warning" | "danger";
   testId: string;
   stateTestId?: string;
 }) {
+  const dotColor =
+    tone === "success" ? "var(--primary)" :
+    tone === "warning" ? "var(--ink-muted-48)" :
+    tone === "danger" ? "var(--ink)" :
+    "var(--hairline)";
+
   return (
-    <StatusBadge tone={tone}>
-      <span
-        data-testid={testId}
-        data-state={value}
-        title={`${label}: ${value}`}
-        aria-label={`${label}: ${value}`}
-        className={cn(
-          "inline-flex min-w-0 items-center gap-1.5",
-          tone === "neutral" && "text-muted-foreground",
-          tone === "success" && "text-[var(--primary)]",
-          tone === "warning" && "text-muted-foreground",
-          tone === "danger" && "text-[var(--ink)]"
-        )}
-      >
-        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">{icon}</span>
-        <span className="max-w-[7rem] truncate">{value}</span>
-        {stateTestId ? <span data-testid={stateTestId} data-state={value} className="sr-only" /> : null}
-      </span>
-    </StatusBadge>
+    <span data-testid={testId} data-state={stateValue ?? value} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn(
+        tone === "success" && "text-[var(--primary)]",
+        tone === "danger" && "text-[var(--ink)]"
+      )}>{value}</span>
+      {stateTestId ? <span data-testid={stateTestId} data-state={stateValue ?? value} className="sr-only" /> : null}
+    </span>
   );
 }

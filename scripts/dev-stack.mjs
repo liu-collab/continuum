@@ -13,6 +13,7 @@ const defaultRuntimeUrl = "http://127.0.0.1:3002";
 const defaultVisualizationUrl = "http://127.0.0.1:3003";
 const defaultMnaUrl = "http://127.0.0.1:4193";
 const defaultMnaHome = path.join(os.homedir(), ".mna");
+const defaultPlatformUserId = "550e8400-e29b-41d4-a716-446655440000";
 
 const sharedEnv = {
   ...process.env,
@@ -23,6 +24,7 @@ const sharedEnv = {
   RUNTIME_API_BASE_URL: process.env.RUNTIME_API_BASE_URL ?? defaultRuntimeUrl,
   NEXT_PUBLIC_MNA_BASE_URL: process.env.NEXT_PUBLIC_MNA_BASE_URL ?? defaultMnaUrl,
   MNA_INTERNAL_BASE_URL: process.env.MNA_INTERNAL_BASE_URL ?? defaultMnaUrl,
+  PLATFORM_USER_ID: process.env.PLATFORM_USER_ID ?? process.env.MNA_PLATFORM_USER_ID ?? process.env.MEMORY_USER_ID ?? defaultPlatformUserId,
   MNA_TOKEN_PATH: process.env.MNA_TOKEN_PATH ?? path.join(defaultMnaHome, "token.txt"),
   MNA_HOME: process.env.MNA_HOME ?? defaultMnaHome,
   RUNTIME_BASE_URL: process.env.RUNTIME_BASE_URL ?? defaultRuntimeUrl,

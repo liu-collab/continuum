@@ -16,7 +16,7 @@ Commands:
   axis codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
 
 Options:
-  --bind-host HOST    绑定地址 (默认: 127.0.0.1, 仅本机访问; 使用 0.0.0.0 允许局域网访问)
+  --bind-host HOST    绑定地址（默认: 127.0.0.1，仅本机访问。使用 0.0.0.0 可允许局域网访问）
   --ui-dev            仅把 visualization 切到本机 next dev，页面改动会自动热更新
   --embedding-base-url URL   第三方 embedding 接口地址，也可通过 EMBEDDING_BASE_URL 提供
   --embedding-model MODEL    第三方 embedding 模型名，也可通过 EMBEDDING_MODEL 提供

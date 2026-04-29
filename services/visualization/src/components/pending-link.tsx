@@ -1,7 +1,7 @@
 "use client";
 
 import type { Route } from "next";
-import Link, { type LinkProps } from "next/link";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import React, {
   createContext,
@@ -14,7 +14,7 @@ import React, {
   useState
 } from "react";
 
-type PendingLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof LinkProps | "href" | "children" | "onClick"> & {
+type PendingLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "children" | "onClick"> & {
   href: Route;
   children: ReactNode;
   pendingLabel: string;
@@ -22,7 +22,7 @@ type PendingLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof Link
   inlinePending?: boolean;
   testId?: string;
   onClick?: AnchorHTMLAttributes<HTMLAnchorElement>["onClick"];
-  scroll?: LinkProps["scroll"];
+  scroll?: boolean;
 };
 
 type NavigationPendingContextValue = {

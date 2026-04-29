@@ -6,15 +6,15 @@ type CacheEntry<T> = {
 const MAX_CACHE_ENTRIES = 200;
 
 declare global {
-  var __AGENT_MEMORY_VIZ_CACHE__: Map<string, CacheEntry<unknown>> | undefined;
+  var __AXIS_VIZ_CACHE__: Map<string, CacheEntry<unknown>> | undefined;
 }
 
 function getStore() {
-  if (!globalThis.__AGENT_MEMORY_VIZ_CACHE__) {
-    globalThis.__AGENT_MEMORY_VIZ_CACHE__ = new Map();
+  if (!globalThis.__AXIS_VIZ_CACHE__) {
+    globalThis.__AXIS_VIZ_CACHE__ = new Map();
   }
 
-  return globalThis.__AGENT_MEMORY_VIZ_CACHE__;
+  return globalThis.__AXIS_VIZ_CACHE__;
 }
 
 export function getCachedValue<T>(key: string, ttlMs: number, loader: () => Promise<T>) {

@@ -14,6 +14,7 @@ import {
   vendorPath,
 } from "./utils.js";
 import { DEFAULT_MNA_HOME_DIR, DEFAULT_MNA_URL } from "./mna-command.js";
+import { resolvePlatformUserId } from "./platform-user.js";
 
 export async function runUiCommand(
   options: Record<string, string | boolean>,
@@ -81,6 +82,7 @@ export async function runUiCommand(
     typeof options["mna-token-path"] === "string"
       ? options["mna-token-path"]
       : process.env.MNA_TOKEN_PATH ?? path.join(DEFAULT_MNA_HOME_DIR, "token.txt");
+  const platformUserId = resolvePlatformUserId();
 
   const child = spawn(process.execPath, [serverEntry], {
     cwd: standaloneDir,
@@ -92,6 +94,7 @@ export async function runUiCommand(
       NODE_ENV: "production",
       STORAGE_API_BASE_URL: storageUrl,
       RUNTIME_API_BASE_URL: runtimeUrl,
+      PLATFORM_USER_ID: platformUserId,
       STORAGE_READ_MODEL_DSN: readModelDsn,
       NEXT_PUBLIC_MNA_BASE_URL: mnaBaseUrl,
       MNA_INTERNAL_BASE_URL: mnaInternalBaseUrl,
