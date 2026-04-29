@@ -7,6 +7,7 @@ import React, {
   createContext,
   type AnchorHTMLAttributes,
   useCallback,
+  useEffect,
   type ReactNode,
   useContext,
   useMemo,
@@ -26,20 +27,33 @@ type PendingLinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, keyof Link
 
 type NavigationPendingContextValue = {
   pendingKey: string | null;
+  resetKey?: string | number | null;
   setPendingKey(nextPendingKey: string): void;
 };
 
 const NavigationPendingContext = createContext<NavigationPendingContextValue | null>(null);
 
-export function NavigationPendingProvider({ children }: { children: ReactNode }) {
+export function NavigationPendingProvider({
+  children,
+  resetKey
+}: {
+  children: ReactNode;
+  resetKey?: string | number | null;
+}) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const setNavigationPendingKey = useCallback((nextPendingKey: string) => {
     setPendingKey(nextPendingKey);
   }, []);
+
+  useEffect(() => {
+    setPendingKey(null);
+  }, [resetKey]);
+
   const value = useMemo(() => ({
     pendingKey,
+    resetKey,
     setPendingKey: setNavigationPendingKey
-  }), [pendingKey, setNavigationPendingKey]);
+  }), [pendingKey, resetKey, setNavigationPendingKey]);
 
   return (
     <NavigationPendingContext.Provider value={value}>
@@ -62,6 +76,10 @@ export function PendingLink({
   const navigationPending = useContext(NavigationPendingContext);
   const isPending = pendingKey ? navigationPending?.pendingKey === pendingKey || pending : pending;
 
+  useEffect(() => {
+    setPending(false);
+  }, [href, navigationPending?.resetKey]);
+
   return (
     <Link
       href={href}
@@ -70,6 +88,10 @@ export function PendingLink({
       onClick={(event) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
+          const targetUrl = event.currentTarget.href;
+          if (targetUrl === window.location.href) {
+            return;
+          }
           if (pendingKey) {
             navigationPending?.setPendingKey(pendingKey);
           }

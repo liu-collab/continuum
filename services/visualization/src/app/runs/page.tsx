@@ -63,7 +63,7 @@ export default async function RunsPage({
 
       <section className="tile tile-parchment">
         <div className="tile-inner">
-          <NavigationPendingProvider>
+          <NavigationPendingProvider resetKey={selectedTurn?.turn.traceId ?? "none"}>
           <div className="master-detail-grid">
             <aside className="panel p-5">
               <div className="section-kicker">{t("runs.recentKicker")}</div>

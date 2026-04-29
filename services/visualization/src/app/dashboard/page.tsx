@@ -58,7 +58,7 @@ export default async function DashboardPage({
               <p className="tile-subtitle">{t("dashboard.subtitle")}</p>
             </div>
             <div className="tile-actions">
-              <NavigationPendingProvider>
+              <NavigationPendingProvider resetKey={window}>
                 <div className="grid gap-2">
                   <div className="segment-control" aria-label={t("dashboard.timeWindow")}>
                     {windows.map((item) => (
@@ -75,12 +75,14 @@ export default async function DashboardPage({
                       </PendingLink>
                     ))}
                   </div>
-                  <PendingNavigationStatus
-                    pendingKey="dashboard-window"
-                    label={t("dashboard.loadingWindow")}
-                    className="flex items-center gap-2 text-[14px] leading-[1.43] text-[var(--primary)]"
-                    testId="dashboard-window-pending"
-                  />
+                  <div className="min-h-[20px]">
+                    <PendingNavigationStatus
+                      pendingKey="dashboard-window"
+                      label={t("dashboard.loadingWindow")}
+                      className="flex items-center justify-end gap-2 whitespace-nowrap text-[14px] leading-[1.43] text-[var(--primary)]"
+                      testId="dashboard-window-pending"
+                    />
+                  </div>
                 </div>
               </NavigationPendingProvider>
               <HealthModalButton health={health} />
