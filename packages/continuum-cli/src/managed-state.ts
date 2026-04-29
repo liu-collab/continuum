@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +17,7 @@ export type ManagedServiceRecord = {
 
 export type ContinuumManagedState = {
   version: 1;
+  dbPassword?: string;
   postgres?: {
     containerName: string;
     port: number;
@@ -31,7 +33,8 @@ export const DEFAULT_MANAGED_STACK_IMAGE = "continuum-local:latest";
 export const DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER = "continuum-postgres";
 export const DEFAULT_MANAGED_DATABASE_NAME = "continuum";
 export const DEFAULT_MANAGED_DATABASE_USER = "continuum";
-export const DEFAULT_MANAGED_DATABASE_PASSWORD = "continuum_local_dev";
+
+const PROCESS_MANAGED_DATABASE_PASSWORD = randomBytes(12).toString("hex");
 
 export function continuumHomeDir() {
   return path.join(os.homedir(), ".continuum");
@@ -49,8 +52,12 @@ export function continuumStatePath() {
   return path.join(continuumHomeDir(), "state.json");
 }
 
-export function buildManagedDatabaseUrl(port: number) {
-  return `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:${port}/${DEFAULT_MANAGED_DATABASE_NAME}`;
+export function resolveDatabasePasswordFromState(state: Pick<ContinuumManagedState, "dbPassword">) {
+  return state.dbPassword ?? process.env.CONTINUUM_DB_PASSWORD ?? PROCESS_MANAGED_DATABASE_PASSWORD;
+}
+
+export function buildManagedDatabaseUrl(port: number, password: string) {
+  return `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${password}@127.0.0.1:${port}/${DEFAULT_MANAGED_DATABASE_NAME}`;
 }
 
 export async function readManagedState(): Promise<ContinuumManagedState> {

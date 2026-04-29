@@ -142,6 +142,7 @@ function mockSuccessfulSpawn() {
 
 describe("runStartCommand", () => {
   beforeEach(() => {
+    process.env.CONTINUUM_DB_PASSWORD = "test-db-password";
     openMock.mockResolvedValue({
       fd: 1,
       close: vi.fn(async () => undefined),
@@ -174,6 +175,7 @@ describe("runStartCommand", () => {
     writeBuildStateMock.mockReset();
     tcpPortAvailableMock.mockReset();
     tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
+    delete process.env.CONTINUUM_DB_PASSWORD;
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
@@ -503,6 +505,90 @@ describe("runStartCommand", () => {
     expect(dockerRun).toBeDefined();
     expect(dockerRun?.args).toContain(
       "CONTINUUM_MEMORY_LLM_CONFIG_PATH=/opt/continuum/managed/memory-llm-config.json",
+    );
+  });
+
+  it("uses and persists the managed database password when starting the stack container", async () => {
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    readManagedWritebackLlmConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    writeManagedWritebackLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      dbPassword: "persisted-db-password",
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.continuum/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.continuum/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    const dockerRun = spawnMock.mock.calls.find((call) => {
+      const command = call[0];
+      const args = Array.isArray(call[1]) ? call[1] : [];
+      return command === "cmd" && args.includes("docker") && args.includes("run");
+    });
+
+    expect(dockerRun?.[1]).toContain("POSTGRES_PASSWORD=persisted-db-password");
+    expect(dockerRun?.[1]).toContain("DATABASE_URL=postgres://continuum:persisted-db-password@127.0.0.1:5432/continuum");
+    expect(writeManagedStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dbPassword: "persisted-db-password",
+      }),
     );
   });
 
@@ -890,7 +976,7 @@ describe("runStartCommand", () => {
     expect(dockerRun).toBeUndefined();
     expect(uiDevSpawn).toBeDefined();
     expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
-      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54330/continuum",
+      STORAGE_READ_MODEL_DSN: "postgres://continuum:test-db-password@127.0.0.1:54330/continuum",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
     });
@@ -1196,7 +1282,7 @@ describe("runStartCommand", () => {
       expect.anything(),
     );
     expect((uiDevSpawn?.[2] as { env?: Record<string, string> } | undefined)?.env).toMatchObject({
-      STORAGE_READ_MODEL_DSN: "postgres://continuum:continuum_local_dev@127.0.0.1:54329/continuum",
+      STORAGE_READ_MODEL_DSN: "postgres://continuum:test-db-password@127.0.0.1:54329/continuum",
       STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
       STORAGE_READ_MODEL_TABLE: "memory_read_model_v1",
     });

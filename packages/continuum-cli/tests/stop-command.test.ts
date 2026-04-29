@@ -163,6 +163,7 @@ describe("runStopCommand", () => {
     expect(rmMock).toHaveBeenCalledTimes(4);
     expect(writeManagedStateMock).toHaveBeenCalledWith({
       version: 1,
+      dbPassword: undefined,
       services: [],
     });
   });
@@ -209,6 +210,34 @@ describe("runStopCommand", () => {
     expect(rmMock).toHaveBeenCalledTimes(4);
     expect(writeManagedStateMock).toHaveBeenCalledWith({
       version: 1,
+      dbPassword: undefined,
+      services: [],
+    });
+  });
+
+  it("preserves the generated managed database password across stop", async () => {
+    mockSpawnExit(0);
+    rmMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      dbPassword: "persisted-password",
+      postgres: {
+        containerName: "continuum-stack",
+        port: 54329,
+        database: "continuum",
+        username: "continuum",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopManagedMnaMock.mockResolvedValue(true);
+    stopLegacyContinuumProcessesMock.mockResolvedValue(undefined);
+
+    await runStopCommand();
+
+    expect(writeManagedStateMock).toHaveBeenCalledWith({
+      version: 1,
+      dbPassword: "persisted-password",
       services: [],
     });
   });

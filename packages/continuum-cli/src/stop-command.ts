@@ -142,6 +142,7 @@ export async function runStopCommand() {
 
   await writeManagedState({
     version: 1,
+    dbPassword: state.dbPassword,
     services: [],
   });
 

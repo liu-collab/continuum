@@ -7,7 +7,11 @@ import {
   DEFAULT_UI_URL,
   fetchJson,
 } from "./utils.js";
-import { buildManagedDatabaseUrl, readManagedState } from "./managed-state.js";
+import {
+  buildManagedDatabaseUrl,
+  readManagedState,
+  resolveDatabasePasswordFromState,
+} from "./managed-state.js";
 import { getManagedMnaStatus } from "./mna-command.js";
 
 type StatusCheckResult = {
@@ -144,7 +148,10 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   const uiUrl = typeof options["ui-url"] === "string" ? options["ui-url"] : DEFAULT_UI_URL;
   const managedState = await readManagedState();
   const managedDatabaseUrl = managedState.postgres
-    ? buildManagedDatabaseUrl(managedState.postgres.port)
+    ? buildManagedDatabaseUrl(
+        managedState.postgres.port,
+        resolveDatabasePasswordFromState(managedState),
+      )
     : undefined;
   const databaseUrl =
     typeof options["database-url"] === "string"

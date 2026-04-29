@@ -19,7 +19,6 @@ import {
   continuumHomeDir,
   continuumManagedDir,
   DEFAULT_MANAGED_DATABASE_NAME,
-  DEFAULT_MANAGED_DATABASE_PASSWORD,
   DEFAULT_MANAGED_DATABASE_USER,
   DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_POSTGRES_PORT,
@@ -27,6 +26,7 @@ import {
   DEFAULT_MANAGED_STACK_IMAGE,
   type ManagedServiceRecord,
   readManagedState,
+  resolveDatabasePasswordFromState,
   writeManagedState,
 } from "./managed-state.js";
 import {
@@ -210,7 +210,7 @@ function parsePort(rawValue: string | boolean | undefined, optionName: string) {
 
 function buildUiDevReadModelDsn(
   options: Record<string, string | boolean>,
-  managedState: { postgres?: { port: number } },
+  managedState: { postgres?: { port: number }; dbPassword?: string },
   accessibleHost: string,
 ) {
   if (process.env.STORAGE_READ_MODEL_DSN) {
@@ -222,7 +222,8 @@ function buildUiDevReadModelDsn(
       ? parsePort(options["postgres-port"], "--postgres-port")
       : managedState.postgres?.port ?? DEFAULT_MANAGED_POSTGRES_PORT;
 
-  return `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
+  const databasePassword = resolveDatabasePasswordFromState(managedState);
+  return `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
 }
 
 function resolveUiDevMna(
@@ -691,12 +692,13 @@ async function startStackContainer(
   port: number,
   bindHost: string,
   publicHost: string,
+  databasePassword: string,
   embeddingConfigPath: string,
   memoryLlmConfigPath: string,
   publishVisualizationPort: boolean,
   imageName = DEFAULT_MANAGED_STACK_IMAGE,
 ) {
-  const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
+  const internalDatabaseUrl = `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@127.0.0.1:5432/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const managedDir = continuumManagedDir();
   const managedMnaDir = path.join(managedDir, "mna");
   await mkdir(managedDir, { recursive: true });
@@ -721,7 +723,7 @@ async function startStackContainer(
     "-e",
     `POSTGRES_USER=${DEFAULT_MANAGED_DATABASE_USER}`,
     "-e",
-    `POSTGRES_PASSWORD=${DEFAULT_MANAGED_DATABASE_PASSWORD}`,
+    `POSTGRES_PASSWORD=${databasePassword}`,
     "-e",
     `DATABASE_URL=${internalDatabaseUrl}`,
     "-e",
@@ -818,9 +820,10 @@ export async function runStartCommand(
 
   const buildState = await loadBuildStateHelpers(packageRoot);
   const postgresPort = await resolveManagedPostgresPort(options, bindHost);
+  const databasePassword = resolveDatabasePasswordFromState(initialManagedState);
   const readModelDsn =
     process.env.STORAGE_READ_MODEL_DSN
-    ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${DEFAULT_MANAGED_DATABASE_PASSWORD}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
+    ?? `postgres://${DEFAULT_MANAGED_DATABASE_USER}:${databasePassword}@${accessibleHost}:${postgresPort}/${DEFAULT_MANAGED_DATABASE_NAME}`;
   const embeddingConfigPath = "/opt/continuum/managed/embedding-config.json";
   const stackMemoryLlmConfigPath = "/opt/continuum/managed/memory-llm-config.json";
   const localMemoryLlmConfigPath = continuumManagedMemoryLlmConfigPath();
@@ -885,6 +888,7 @@ export async function runStartCommand(
       postgresPort,
       bindHost,
       accessibleHost,
+      databasePassword,
       embeddingConfigPath,
       stackMemoryLlmConfigPath,
       !uiDev,
@@ -922,6 +926,7 @@ export async function runStartCommand(
     await writeManagedState({
       ...latestManagedState,
       version: 1,
+      dbPassword: databasePassword,
       postgres: {
         containerName: DEFAULT_MANAGED_STACK_CONTAINER,
         port: postgresPort,
