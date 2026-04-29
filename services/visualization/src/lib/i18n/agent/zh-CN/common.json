@@ -212,6 +212,7 @@
         "openai": "使用 OpenAI 官方接口。",
         "anthropic": "使用 Anthropic Claude 接口。",
         "deepseek": "使用 DeepSeek OpenAI-compatible 接口。",
+        "custom": "使用 OpenAI-compatible 协议的第三方 API。",
         "ollama": "使用本机 Ollama 服务。"
       }
     },

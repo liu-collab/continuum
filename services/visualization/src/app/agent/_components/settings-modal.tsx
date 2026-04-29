@@ -113,7 +113,7 @@ function resolveStatusTone(status: string | undefined) {
 
 type MemoryModelMode = "same_as_primary" | "custom";
 type SetupWizardStep = 1 | 2 | 3;
-type SetupProviderId = "openai" | "anthropic" | "deepseek" | "ollama";
+type SetupProviderId = "openai" | "anthropic" | "deepseek" | "custom" | "ollama";
 type ProviderApiKeyEnv = "OPENAI_API_KEY" | "ANTHROPIC_API_KEY" | "DEEPSEEK_API_KEY";
 
 type SetupProviderPreset = {
@@ -153,6 +153,14 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
     model: "deepseek-chat",
     apiKeyRequired: true,
     apiKeyEnv: "DEEPSEEK_API_KEY",
+  },
+  {
+    id: "custom",
+    label: "OpenAI-compatible API",
+    kind: "openai-compatible",
+    baseUrl: "https://api.example.com/v1",
+    model: "gpt-4.1-mini",
+    apiKeyRequired: true,
   },
   {
     id: "ollama",
@@ -292,6 +300,7 @@ export function SettingsModal({
   const [setupApiKey, setSetupApiKey] = useState("");
   const [setupApiKeyEnv, setSetupApiKeyEnv] = useState<ProviderApiKeyEnv | "">("");
   const [setupModel, setSetupModel] = useState("gpt-4.1-mini");
+  const [setupBaseUrl, setSetupBaseUrl] = useState("https://api.openai.com/v1");
 
   const currentProviderKind: ProviderKind = useMemo(
     () => (isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave),
@@ -421,6 +430,7 @@ export function SettingsModal({
     setSetupApiKey("");
     setSetupApiKeyEnv(envPreset?.apiKeyEnv ?? "");
     setSetupModel(nextPreset.model);
+    setSetupBaseUrl(nextPreset.baseUrl);
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
@@ -615,6 +625,7 @@ export function SettingsModal({
     setSetupApiKey("");
     setSetupApiKeyEnv(resolveProviderApiKeyEnv(preset.apiKeyEnv === detectedEnvName ? preset.apiKeyEnv : ""));
     setSetupModel(preset.model);
+    setSetupBaseUrl(preset.baseUrl);
     setErrorMessage(null);
   }
 
@@ -630,10 +641,16 @@ export function SettingsModal({
 
   async function handleSetupSave() {
     const trimmedModel = setupModel.trim();
+    const trimmedBaseUrl = setupBaseUrl.trim();
     const trimmedApiKey = setupApiKey.trim();
 
     if (!trimmedModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
+      return;
+    }
+
+    if (!trimmedBaseUrl) {
+      setErrorMessage(t("runtimeConfig.errors.providerBaseUrlRequired"));
       return;
     }
 
@@ -650,7 +667,7 @@ export function SettingsModal({
         provider: {
           kind: setupProvider.kind,
           model: trimmedModel,
-          base_url: setupProvider.baseUrl,
+          base_url: trimmedBaseUrl,
           ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
           ...(!trimmedApiKey && setupApiKeyEnv ? { api_key_env: setupApiKeyEnv } : {}),
           effort: null,
@@ -900,10 +917,17 @@ export function SettingsModal({
                   className="field mt-1"
                 />
               </label>
-              <div className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">base_url</span>
-                <span className="ml-2" data-testid="setup-provider-base-url">{setupProvider.baseUrl}</span>
-              </div>
+              <label className="block">
+                <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
+                <input
+                  aria-label={t("runtimeConfig.providerBaseUrl")}
+                  value={setupBaseUrl}
+                  onChange={(event) => setSetupBaseUrl(event.target.value)}
+                  placeholder={t("runtimeConfig.providerBaseUrl")}
+                  className="field mt-1"
+                  data-testid="setup-provider-base-url"
+                />
+              </label>
             </div>
           ) : null}
         </div>

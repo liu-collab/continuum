@@ -26,7 +26,18 @@ export function resolveRuntimeSettings(
 }
 
 export function buildBaseUrl(baseUrl: string, pathname: string): URL {
-  return new URL(pathname, `${baseUrl.replace(/\/+$/, "")}/`);
+  const endpointParts = pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+  const url = new URL(baseUrl);
+  const basePathParts = url.pathname.split("/").filter(Boolean);
+  const pathToAppend =
+    endpointParts.length > 1 && basePathParts.at(-1) === endpointParts[0]
+      ? endpointParts.slice(1)
+      : endpointParts;
+
+  url.pathname = `/${[...basePathParts, ...pathToAppend].join("/")}`;
+  url.search = "";
+  url.hash = "";
+  return url;
 }
 
 export function buildProviderUserAgent(providerId: string): string {

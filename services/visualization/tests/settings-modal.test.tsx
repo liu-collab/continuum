@@ -175,6 +175,121 @@ describe("SettingsModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("saves a custom OpenAI-compatible provider from the setup wizard", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          setupWizard
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "not-configured",
+              model: "",
+              base_url: null,
+              api_key: null,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("setup-provider-custom"));
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.type(screen.getByLabelText("API Key"), "sk-custom");
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.clear(screen.getByLabelText("模型名"));
+    await user.type(screen.getByLabelText("模型名"), "qwen-plus");
+    await user.clear(screen.getByLabelText("provider base_url"));
+    await user.type(
+      screen.getByLabelText("provider base_url"),
+      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    );
+    await user.click(screen.getByTestId("setup-wizard-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith({
+      provider: {
+        kind: "openai-compatible",
+        model: "qwen-plus",
+        base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        api_key: "sk-custom",
+        effort: null,
+      },
+    });
+  });
+
+  it("allows editing the preset provider base_url in the setup wizard", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          setupWizard
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "not-configured",
+              model: "",
+              base_url: null,
+              api_key: null,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("setup-provider-openai"));
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.type(screen.getByLabelText("API Key"), "sk-router");
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.clear(screen.getByLabelText("provider base_url"));
+    await user.type(screen.getByLabelText("provider base_url"), "https://openrouter.ai/api/v1");
+    await user.click(screen.getByTestId("setup-wizard-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith({
+      provider: {
+        kind: "openai-compatible",
+        model: "gpt-4.1-mini",
+        base_url: "https://openrouter.ai/api/v1",
+        api_key: "sk-router",
+        effort: null,
+      },
+    });
+  });
+
   it("prefills provider settings from a detected DeepSeek API key env hint", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);

@@ -212,6 +212,7 @@
         "openai": "Use the official OpenAI API.",
         "anthropic": "Use the Anthropic Claude API.",
         "deepseek": "Use the DeepSeek OpenAI-compatible API.",
+        "custom": "Use a third-party OpenAI-compatible API.",
         "ollama": "Use the local Ollama service."
       }
     },

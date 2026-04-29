@@ -10,7 +10,7 @@ export const EDITABLE_PROVIDER_KIND_OPTIONS: Array<{
 }> = [
   {
     value: "openai-compatible",
-    label: "openai"
+    label: "OpenAI-compatible"
   },
   {
     value: "anthropic",
@@ -27,5 +27,5 @@ export function isEditableProviderKind(kind: ProviderKind): kind is EditableProv
 }
 
 export function formatProviderKindLabel(kind: string): string {
-  return kind === "openai-compatible" ? "openai" : kind;
+  return kind === "openai-compatible" ? "OpenAI-compatible" : kind;
 }
