@@ -16,20 +16,39 @@ import { bilingualMessage, formatErrorMessage } from "./messages.js";
 import { pathExists, runCommand, vendorPath } from "./utils.js";
 
 const STAGE_DIR_NAME = "stack-stage";
-const DEFAULT_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
+const WINDOWS_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
+const DARWIN_DOCKER_DESKTOP_PATH = "/Applications/Docker.app/Contents/MacOS/Docker";
 
 type DockerLifecycleOptions = {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
+  daemonWaitTimeoutMs?: number;
+  daemonWaitIntervalMs?: number;
 };
 
 const DOCKER_INSTALL_GUIDE = bilingualMessage(
-  "请手动安装 Docker Desktop 并确保 Docker 服务正在运行。",
-  "Install Docker Desktop manually and make sure the Docker service is running.",
+  "请手动安装 Docker Desktop（Windows/macOS）或 Docker Engine（Linux）后重试。",
+  "Install Docker Desktop (Windows/macOS) or Docker Engine (Linux), then retry.",
 );
 
-export function resolveDockerDesktopPath(env: NodeJS.ProcessEnv = process.env) {
-  return env.AXIS_DOCKER_DESKTOP_PATH ?? DEFAULT_DOCKER_DESKTOP_PATH;
+export function resolveDockerDesktopPath(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+) {
+  const configuredPath = env.AXIS_DOCKER_DESKTOP_PATH?.trim();
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  if (platform === "win32") {
+    return WINDOWS_DOCKER_DESKTOP_PATH;
+  }
+
+  if (platform === "darwin") {
+    return DARWIN_DOCKER_DESKTOP_PATH;
+  }
+
+  return null;
 }
 
 export function buildDockerHostGatewayArgs(platform: NodeJS.Platform = process.platform) {
@@ -57,6 +76,75 @@ async function confirmWingetDockerInstall() {
   }
 }
 
+async function commandAvailable(command: string) {
+  try {
+    await runForegroundQuiet(command, ["--version"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveLinuxDockerInstallCommand() {
+  if (await commandAvailable("apt-get")) {
+    return "sudo apt-get update && sudo apt-get install -y docker.io";
+  }
+
+  if (await commandAvailable("dnf")) {
+    return "sudo dnf install -y docker";
+  }
+
+  if (await commandAvailable("yum")) {
+    return "sudo yum install -y docker";
+  }
+
+  return null;
+}
+
+function dockerDaemonCheckArgs(platform: NodeJS.Platform) {
+  return platform === "darwin" ? ["info"] : ["version"];
+}
+
+async function checkDockerDaemon(platform: NodeJS.Platform) {
+  await runForegroundQuiet("docker", dockerDaemonCheckArgs(platform));
+}
+
+function writeDockerDaemonWaitProgress(elapsedMs: number) {
+  const elapsedSeconds = Math.max(0, Math.round(elapsedMs / 1000));
+  process.stdout.write(`${bilingualMessage(
+    `正在等待 Docker daemon 就绪（已等待 ${elapsedSeconds} 秒）...`,
+    `Waiting for Docker daemon to become ready (${elapsedSeconds}s elapsed)...`,
+  )}\n`);
+}
+
+async function waitForDockerDaemonReady(
+  platform: NodeJS.Platform,
+  timeoutMs: number,
+  intervalMs: number,
+) {
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      await checkDockerDaemon(platform);
+      return;
+    } catch {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs)));
+      writeDockerDaemonWaitProgress(Date.now() - startedAt);
+    }
+  }
+
+  throw new Error(bilingualMessage(
+    `Docker daemon 未就绪，无法启动 Axis。${DOCKER_INSTALL_GUIDE}`,
+    `Docker daemon is not ready, so Axis cannot start. ${DOCKER_INSTALL_GUIDE}`,
+  ));
+}
+
 export async function ensureDockerInstalled(options: DockerLifecycleOptions = {}) {
   const platform = options.platform ?? process.platform;
 
@@ -64,13 +152,35 @@ export async function ensureDockerInstalled(options: DockerLifecycleOptions = {}
     await runForegroundQuiet("docker", ["--version"]);
     return;
   } catch {
+    if (platform === "darwin") {
+      const brewAvailable = await commandAvailable("brew");
+      throw new Error(bilingualMessage(
+        brewAvailable
+          ? "Docker CLI 未安装或不可用。请执行 `brew install --cask docker` 后重试。"
+          : "Docker CLI 未安装或不可用，且未检测到 Homebrew。请安装 Homebrew 后执行 `brew install --cask docker`，或从 Docker 官网安装 Docker Desktop 后重试。",
+        brewAvailable
+          ? "Docker CLI is not installed or unavailable. Run `brew install --cask docker`, then retry."
+          : "Docker CLI is not installed or unavailable, and Homebrew was not detected. Install Homebrew and run `brew install --cask docker`, or install Docker Desktop from Docker manually, then retry.",
+      ));
+    }
+
+    if (platform === "linux") {
+      const installCommand = await resolveLinuxDockerInstallCommand();
+      throw new Error(bilingualMessage(
+        installCommand
+          ? `Docker CLI 未安装或不可用。请执行 \`${installCommand}\` 后重试。`
+          : "Docker CLI 未安装或不可用。请按当前 Linux 发行版安装 Docker Engine，并确保 docker 命令在 PATH 中。",
+        installCommand
+          ? `Docker CLI is not installed or unavailable. Run \`${installCommand}\`, then retry.`
+          : "Docker CLI is not installed or unavailable. Install Docker Engine for your Linux distribution and make sure docker is in PATH.",
+      ));
+    }
+
     if (platform !== "win32") {
-      throw new Error(
-        bilingualMessage(
-          "Docker CLI 未安装或不可用。请先安装 Docker Engine，并确保 docker 命令在 PATH 中。",
-          "Docker CLI is not installed or unavailable. Install Docker Engine and make sure docker is in PATH.",
-        ),
-      );
+      throw new Error(bilingualMessage(
+        "Docker CLI 未安装或不可用。请先安装 Docker，并确保 docker 命令在 PATH 中。",
+        "Docker CLI is not installed or unavailable. Install Docker and make sure docker is in PATH.",
+      ));
     }
   }
 
@@ -111,51 +221,55 @@ export async function ensureDockerDaemonReady(options: DockerLifecycleOptions = 
   const env = options.env ?? process.env;
 
   try {
-    await runForegroundQuiet("docker", ["version"]);
+    await checkDockerDaemon(platform);
     return;
   } catch {
-    if (platform !== "win32") {
-      throw new Error(
-        bilingualMessage(
-          "Docker daemon 未就绪。请确认 Docker Engine 已启动，并且当前用户可执行 docker version。",
-          "Docker daemon is not ready. Make sure Docker Engine is running and this user can run docker version.",
-        ),
-      );
+    if (platform === "linux") {
+      throw new Error(bilingualMessage(
+        "Docker daemon 未就绪。请执行 `sudo systemctl start docker` 后重试，并确认当前用户可执行 docker version。",
+        "Docker daemon is not ready. Run `sudo systemctl start docker`, then retry, and make sure this user can run docker version.",
+      ));
     }
 
-    process.stdout.write(bilingualMessage(
-      "Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。",
-      "Docker is installed but not running. Attempting to start Docker Desktop.",
-    ) + "\n");
-  }
-
-  const dockerDesktopExe = resolveDockerDesktopPath(env);
-  if (await pathExists(dockerDesktopExe)) {
-    spawn(dockerDesktopExe, [], {
-      detached: true,
-      stdio: "ignore",
-    }).unref();
-  } else {
-    throw new Error(bilingualMessage(
-      `未找到 Docker Desktop: ${dockerDesktopExe}。${DOCKER_INSTALL_GUIDE}`,
-      `Docker Desktop was not found: ${dockerDesktopExe}. ${DOCKER_INSTALL_GUIDE}`,
-    ));
-  }
-
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    try {
-      await runForegroundQuiet("docker", ["version"]);
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 3_000));
+    if (platform === "darwin") {
+      process.stdout.write(bilingualMessage(
+        "Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。",
+        "Docker is installed but not running. Attempting to start Docker Desktop.",
+      ) + "\n");
+      spawn("open", ["-a", "Docker"], {
+        detached: true,
+        stdio: "ignore",
+      }).unref();
+    } else if (platform === "win32") {
+      process.stdout.write(bilingualMessage(
+        "Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。",
+        "Docker is installed but not running. Attempting to start Docker Desktop.",
+      ) + "\n");
+      const dockerDesktopExe = resolveDockerDesktopPath(env, platform);
+      if (dockerDesktopExe && await pathExists(dockerDesktopExe)) {
+        spawn(dockerDesktopExe, [], {
+          detached: true,
+          stdio: "ignore",
+        }).unref();
+      } else {
+        throw new Error(bilingualMessage(
+          `未找到 Docker Desktop: ${dockerDesktopExe ?? "unknown"}。${DOCKER_INSTALL_GUIDE}`,
+          `Docker Desktop was not found: ${dockerDesktopExe ?? "unknown"}. ${DOCKER_INSTALL_GUIDE}`,
+        ));
+      }
+    } else {
+      throw new Error(bilingualMessage(
+        "Docker daemon 未就绪。请确认 Docker Engine 已启动，并且当前用户可执行 docker version。",
+        "Docker daemon is not ready. Make sure Docker Engine is running and this user can run docker version.",
+      ));
     }
   }
 
-  throw new Error(bilingualMessage(
-    `Docker daemon 未就绪，无法启动 Axis。${DOCKER_INSTALL_GUIDE}`,
-    `Docker daemon is not ready, so Axis cannot start. ${DOCKER_INSTALL_GUIDE}`,
-  ));
+  await waitForDockerDaemonReady(
+    platform,
+    options.daemonWaitTimeoutMs ?? 180_000,
+    options.daemonWaitIntervalMs ?? 10_000,
+  );
 }
 
 export async function stopLegacyPostgresContainer() {

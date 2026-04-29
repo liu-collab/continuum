@@ -80,8 +80,8 @@ async function checkDockerRunning(): Promise<DoctorCheck> {
   return {
     level: "fail",
     label: bilingualMessage(
-      "Docker 未运行，请先启动 Docker Desktop",
-      "Docker is not running. Start Docker Desktop first",
+      "Docker 未运行，请先启动 Docker Desktop（Windows/macOS）或 Docker Engine（Linux）",
+      "Docker is not running. Start Docker Desktop (Windows/macOS) or Docker Engine (Linux) first",
     ),
   };
 }

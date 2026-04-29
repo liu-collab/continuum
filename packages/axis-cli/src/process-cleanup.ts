@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 
 import { bilingualMessage } from "./messages.js";
+import { runCommand } from "./utils.js";
 
 function normalizeWindowsPathForMatch(value: string) {
   return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
@@ -42,15 +43,49 @@ async function runPowerShellQuiet(args: string[]) {
   });
 }
 
-export async function stopLegacyAxisProcesses() {
-  if (process.platform !== "win32") {
+async function stopDarwinLegacyAxisProcesses() {
+  const result = await runCommand(
+    "pgrep",
+    ["-f", "axis\\|memory-native-agent\\|memory-bridge"],
+    {
+      captureOutput: true,
+      env: process.env,
+      timeoutMs: 2_000,
+    },
+  ).catch(() => null);
+
+  if (!result || result.code !== 0) {
     return;
   }
 
-  await runPowerShellQuiet([
-    "-NoLogo",
-    "-NoProfile",
-    "-Command",
-    buildWindowsLegacyAxisCleanupScript(),
-  ]).catch(() => undefined);
+  const pids = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d+$/.test(line) && Number(line) !== process.pid);
+
+  if (pids.length === 0) {
+    return;
+  }
+
+  await runCommand("kill", ["-9", ...pids], {
+    captureOutput: true,
+    env: process.env,
+    timeoutMs: 2_000,
+  }).catch(() => undefined);
+}
+
+export async function stopLegacyAxisProcesses() {
+  if (process.platform === "win32") {
+    await runPowerShellQuiet([
+      "-NoLogo",
+      "-NoProfile",
+      "-Command",
+      buildWindowsLegacyAxisCleanupScript(),
+    ]).catch(() => undefined);
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    await stopDarwinLegacyAxisProcesses();
+  }
 }

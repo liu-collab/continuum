@@ -76,4 +76,25 @@ describe("runDoctorCommand", () => {
 
     await expect(runDoctorCommand()).resolves.toBe(1);
   });
+
+  it("reports a cross-platform Docker startup hint when daemon is not running", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    runCommandMock.mockImplementation(async (_command: string, args: string[]) => ({
+      code: args.includes("--version") ? 0 : 1,
+      stdout: args.includes("--version") ? "Docker version 1\n" : "",
+      stderr: args.includes("--version") ? "" : "daemon unavailable",
+    }));
+    portAvailableMock.mockResolvedValue(true);
+    statfsMock.mockResolvedValue({
+      bavail: BigInt(3 * 1024 * 1024),
+      bsize: 1024,
+    });
+
+    await expect(runDoctorCommand()).resolves.toBe(1);
+
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(output).toContain("Docker 未运行");
+    expect(output).toContain("Windows/macOS");
+    expect(output).toContain("Docker Engine");
+  });
 });

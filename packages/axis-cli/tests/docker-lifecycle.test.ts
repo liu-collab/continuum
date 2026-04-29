@@ -71,6 +71,12 @@ describe("docker lifecycle", () => {
     ).toBe("D:/Docker/Docker Desktop.exe");
   });
 
+  it("resolves platform-specific Docker Desktop paths", () => {
+    expect(resolveDockerDesktopPath({}, "darwin")).toBe("/Applications/Docker.app/Contents/MacOS/Docker");
+    expect(resolveDockerDesktopPath({}, "win32")).toBe("C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe");
+    expect(resolveDockerDesktopPath({}, "linux")).toBeNull();
+  });
+
   it("adds host-gateway mapping for Linux Docker Engine only", () => {
     expect(buildDockerHostGatewayArgs("linux")).toEqual([
       "--add-host",
@@ -96,9 +102,21 @@ describe("docker lifecycle", () => {
   });
 
   it("does not install Docker Desktop on Linux when docker CLI is missing", async () => {
-    runForegroundQuietMock.mockRejectedValueOnce(new Error("not found"));
+    runForegroundQuietMock
+      .mockRejectedValueOnce(new Error("not found"))
+      .mockResolvedValueOnce(undefined);
 
-    await expect(ensureDockerInstalled({ platform: "linux" })).rejects.toThrow("Docker CLI");
+    await expect(ensureDockerInstalled({ platform: "linux" })).rejects.toThrow("apt-get install");
+    expect(runForegroundMock).not.toHaveBeenCalled();
+  });
+
+  it("guides macOS users to install Docker with brew when docker CLI is missing", async () => {
+    runForegroundQuietMock
+      .mockRejectedValueOnce(new Error("docker missing"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(ensureDockerInstalled({ platform: "darwin" })).rejects.toThrow("brew install --cask docker");
+    expect(runForegroundQuietMock).toHaveBeenCalledWith("brew", ["--version"]);
     expect(runForegroundMock).not.toHaveBeenCalled();
   });
 
@@ -142,10 +160,34 @@ describe("docker lifecycle", () => {
     });
   });
 
+  it("starts Docker Desktop with open on macOS daemon startup", async () => {
+    runForegroundQuietMock
+      .mockRejectedValueOnce(new Error("daemon unavailable"))
+      .mockResolvedValueOnce(undefined);
+    spawnMock.mockReturnValueOnce({
+      unref: vi.fn(),
+    });
+
+    await expect(
+      ensureDockerDaemonReady({
+        platform: "darwin",
+        daemonWaitTimeoutMs: 50,
+        daemonWaitIntervalMs: 1,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(runForegroundQuietMock).toHaveBeenNthCalledWith(1, "docker", ["info"]);
+    expect(runForegroundQuietMock).toHaveBeenNthCalledWith(2, "docker", ["info"]);
+    expect(spawnMock).toHaveBeenCalledWith("open", ["-a", "Docker"], {
+      detached: true,
+      stdio: "ignore",
+    });
+  });
+
   it("reports Linux daemon readiness failures without trying Docker Desktop", async () => {
     runForegroundQuietMock.mockRejectedValueOnce(new Error("daemon unavailable"));
 
-    await expect(ensureDockerDaemonReady({ platform: "linux" })).rejects.toThrow("Docker daemon");
+    await expect(ensureDockerDaemonReady({ platform: "linux" })).rejects.toThrow("systemctl start docker");
     expect(spawnMock).not.toHaveBeenCalled();
   });
 

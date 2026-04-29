@@ -52,4 +52,45 @@ describe("process cleanup", () => {
     expect(spawnMock).toHaveBeenCalled();
     expect(spawnMock.mock.calls[0]?.[0]).toBe("powershell");
   });
+
+  it("uses pgrep and kill for macOS cleanup", async () => {
+    const runCommandMock = vi.fn()
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "123\n456\n",
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: "",
+        stderr: "",
+      });
+
+    vi.doMock("../src/utils.js", () => ({
+      runCommand: runCommandMock,
+    }));
+    vi.doMock("node:process", () => ({
+      default: {
+        ...process,
+        platform: "darwin",
+        env: process.env,
+      },
+    }));
+
+    const { stopLegacyAxisProcesses } = await import("../src/process-cleanup.js");
+    await stopLegacyAxisProcesses();
+
+    expect(runCommandMock).toHaveBeenNthCalledWith(
+      1,
+      "pgrep",
+      ["-f", "axis\\|memory-native-agent\\|memory-bridge"],
+      expect.objectContaining({ captureOutput: true }),
+    );
+    expect(runCommandMock).toHaveBeenNthCalledWith(
+      2,
+      "kill",
+      ["-9", "123", "456"],
+      expect.objectContaining({ captureOutput: true }),
+    );
+  });
 });

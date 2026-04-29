@@ -101,6 +101,12 @@ LLM has no tools — memory is the only source, used directly. That's the theore
 
 ## Quick Start
 
+Prerequisite: Docker Desktop on Windows/macOS, or Docker Engine on Linux.
+
+```bash
+docker --version
+```
+
 ### Install the CLI
 
 ```bash
@@ -109,10 +115,22 @@ npm install -g axis-agent
 
 ### Start all services
 
+Windows PowerShell:
+
+```powershell
+$env:EMBEDDING_BASE_URL="https://api.openai.com/v1"
+$env:EMBEDDING_MODEL="text-embedding-3-small"
+$env:EMBEDDING_API_KEY="your-key"
+axis start
+```
+
+macOS / Linux:
+
 ```bash
-axis start \
-  --embedding-base-url https://api.openai.com/v1 \
-  --embedding-model text-embedding-3-small
+export EMBEDDING_BASE_URL="https://api.openai.com/v1"
+export EMBEDDING_MODEL="text-embedding-3-small"
+export EMBEDDING_API_KEY="your-key"
+axis start
 ```
 
 Launches a single Docker container with PostgreSQL + pgvector, storage, retrieval-runtime, and visualization. All ports bind to `127.0.0.1`.
@@ -184,7 +202,9 @@ The goal stays the same: the main model always has clean, complete context. No m
 
 ## Platform Support
 
-`axis start` currently supports **Windows** (requires Docker Desktop). Other platforms can run services manually or via Docker Compose.
+- **Windows**: fully supported. `axis start` can install Docker Desktop through winget and start it automatically.
+- **macOS**: supported. Install Docker Desktop yourself; `axis start` detects it and can start it automatically.
+- **Linux**: partially supported. Install Docker Engine yourself and start/configure the Docker daemon manually.
 
 ## Star History
 
