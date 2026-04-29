@@ -82,7 +82,7 @@ export async function runUiCommand(
     typeof options["mna-token-path"] === "string"
       ? options["mna-token-path"]
       : process.env.MNA_TOKEN_PATH ?? path.join(DEFAULT_MNA_HOME_DIR, "token.txt");
-  const platformUserId = resolvePlatformUserId();
+  const platformUserId = await resolvePlatformUserId();
 
   const child = spawn(process.execPath, [serverEntry], {
     cwd: standaloneDir,

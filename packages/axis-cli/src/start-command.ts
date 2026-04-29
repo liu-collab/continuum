@@ -375,7 +375,7 @@ export async function runStartCommand(
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
-  const platformUserId = resolvePlatformUserId();
+  const platformUserId = await resolvePlatformUserId();
   const uiDev = options["ui-dev"] === true;
   const initialManagedState = await readManagedState();
   const open = options.open === true;
