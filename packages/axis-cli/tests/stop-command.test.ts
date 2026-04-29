@@ -8,6 +8,7 @@ const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const stopManagedMnaMock = vi.hoisted(() => vi.fn());
 const stopLegacyAxisProcessesMock = vi.hoisted(() => vi.fn());
 const removeDockerContainerMock = vi.hoisted(() => vi.fn());
+const removeDockerImageMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -29,6 +30,7 @@ vi.mock("../src/managed-state.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/managed-state.js")>();
   return {
     ...actual,
+    axisHomeDir: vi.fn(() => "C:/Users/test/.axis"),
     axisLogsDir: vi.fn(() => "C:/Users/test/.axis/logs"),
     axisManagedDir: vi.fn(() => "C:/Users/test/.axis/managed"),
     readManagedState: readManagedStateMock,
@@ -46,6 +48,7 @@ vi.mock("../src/process-cleanup.js", () => ({
 
 vi.mock("../src/docker-lifecycle.js", () => ({
   removeDockerContainer: removeDockerContainerMock,
+  removeDockerImage: removeDockerImageMock,
 }));
 
 import { runStopCommand } from "../src/stop-command.js";
@@ -76,6 +79,8 @@ describe("runStopCommand", () => {
     stopManagedMnaMock.mockReset();
     stopLegacyAxisProcessesMock.mockReset();
     removeDockerContainerMock.mockReset();
+    removeDockerImageMock.mockReset();
+    removeDockerImageMock.mockResolvedValue(false);
   });
 
   it("clears managed runtime residue but keeps persisted config files untouched", async () => {
@@ -108,6 +113,10 @@ describe("runStopCommand", () => {
     );
     expect(rmMock).toHaveBeenCalledWith(
       path.join("C:/Users/test/.axis/managed", "mna", "artifacts"),
+      expect.objectContaining({ recursive: true, force: true }),
+    );
+    expect(rmMock).toHaveBeenCalledWith(
+      path.join("C:/Users/test/.axis", "stack-stage"),
       expect.objectContaining({ recursive: true, force: true }),
     );
     expect(rmMock).toHaveBeenCalledWith(
@@ -169,7 +178,7 @@ describe("runStopCommand", () => {
     removeDockerContainerMock.mockRejectedValue(new Error("docker rm -f axis-stack failed with exit code 2"));
 
     await expect(runStopCommand()).rejects.toThrow(/docker rm -f axis-stack/);
-    expect(rmMock).toHaveBeenCalledTimes(4);
+    expect(rmMock).toHaveBeenCalledTimes(5);
     expect(writeManagedStateMock).toHaveBeenCalledWith({
       version: 1,
       dbPassword: undefined,
@@ -196,7 +205,7 @@ describe("runStopCommand", () => {
     removeDockerContainerMock.mockResolvedValue(false);
 
     await expect(runStopCommand()).resolves.toBeUndefined();
-    expect(rmMock).toHaveBeenCalledTimes(4);
+    expect(rmMock).toHaveBeenCalledTimes(5);
     expect(writeManagedStateMock).toHaveBeenCalledWith({
       version: 1,
       dbPassword: undefined,
@@ -230,5 +239,23 @@ describe("runStopCommand", () => {
       dbPassword: "persisted-password",
       services: [],
     });
+  });
+
+  it("removes the old managed Docker image on stop", async () => {
+    mockSpawnExit(0);
+    rmMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopManagedMnaMock.mockResolvedValue(true);
+    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    removeDockerContainerMock.mockResolvedValue(false);
+    removeDockerImageMock.mockResolvedValue(true);
+
+    await runStopCommand();
+
+    expect(removeDockerImageMock).toHaveBeenCalledWith();
   });
 });

@@ -12,6 +12,7 @@ import {
   readManagedState,
   resolveDatabasePasswordFromState,
 } from "./managed-state.js";
+import { bilingualMessage } from "./messages.js";
 import { getManagedMnaStatus } from "./mna-command.js";
 
 type StatusCheckResult = {
@@ -181,8 +182,16 @@ export async function runStatusCommand(options: Record<string, string | boolean>
         status: mnaStatus.record ? "degraded" : "unavailable",
         detail:
           mnaStatus.dependency.status === 401
-            ? "token mismatch between axis and running memory-native-agent"
-            : mnaStatus.health.error ?? mnaStatus.dependency.error ?? `http_${mnaStatus.health.status ?? "unknown"}`,
+            ? bilingualMessage(
+                "axis 与正在运行的 memory-native-agent token 不匹配。运行 axis mna token 获取最新 token。",
+                "Token mismatch between axis and the running memory-native-agent. Run axis mna token to get the latest token.",
+              )
+            : mnaStatus.health.error
+              ?? mnaStatus.dependency.error
+              ?? bilingualMessage(
+                `http_${mnaStatus.health.status ?? "unknown"}`,
+                `http_${mnaStatus.health.status ?? "unknown"}`,
+              ),
       };
   const allResults = [...results, mnaResult];
 
@@ -199,6 +208,7 @@ export async function runStatusCommand(options: Record<string, string | boolean>
           mna: {
             url: mnaStatus.url,
             tokenPath: mnaStatus.tokenPath,
+            logPath: mnaStatus.logPath,
             artifactsPath: mnaStatus.artifactsPath,
             dependency: mnaStatus.dependency.body ?? null,
           },
@@ -214,10 +224,9 @@ export async function runStatusCommand(options: Record<string, string | boolean>
   for (const result of allResults) {
     process.stdout.write(`${formatLine(result)}\n`);
   }
-  if (mnaAuthorized) {
-    process.stdout.write(`mna token path      ${mnaStatus.tokenPath}\n`);
-    process.stdout.write(`mna artifacts path  ${mnaStatus.artifactsPath}\n`);
-  }
+  process.stdout.write(`mna token path      ${mnaStatus.tokenPath}\n`);
+  process.stdout.write(`mna log path        ${mnaStatus.logPath}\n`);
+  process.stdout.write(`mna artifacts path  ${mnaStatus.artifactsPath}\n`);
 
   return exitCode;
 }

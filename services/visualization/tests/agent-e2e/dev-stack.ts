@@ -53,8 +53,9 @@ async function start() {
   const stateFile = process.env.PLAYWRIGHT_STACK_STATE_FILE
     ? path.resolve(process.env.PLAYWRIGHT_STACK_STATE_FILE)
     : path.join(workRoot, "stack-state.json");
-  fs.mkdirSync(path.join(homeDir, ".mna"), { recursive: true });
-  fs.copyFileSync(stack.mna.mnaTokenPath, path.join(homeDir, ".mna", "token.txt"));
+  const managedMnaDir = path.join(homeDir, ".axis", "managed", "mna");
+  fs.mkdirSync(managedMnaDir, { recursive: true });
+  fs.copyFileSync(stack.mna.mnaTokenPath, path.join(managedMnaDir, "token.txt"));
 
   const mnaAddress = stack.mna.server.address();
   const storageAddress = stack.storageApp?.server.address();
@@ -70,7 +71,7 @@ async function start() {
     env: {
       ...process.env,
       NEXT_PUBLIC_MNA_BASE_URL: `http://127.0.0.1:${mnaAddress.port}`,
-      MNA_TOKEN_PATH: path.join(homeDir, ".mna", "token.txt"),
+      MNA_TOKEN_PATH: path.join(managedMnaDir, "token.txt"),
       STORAGE_API_BASE_URL:
         storageAddress && typeof storageAddress !== "string"
           ? `http://127.0.0.1:${storageAddress.port}`

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -73,6 +73,9 @@ export async function readManagedState(): Promise<AxisManagedState> {
 }
 
 export async function writeManagedState(state: AxisManagedState) {
-  await mkdir(path.dirname(axisStatePath()), { recursive: true });
-  await writeFile(axisStatePath(), JSON.stringify(state, null, 2), "utf8");
+  const statePath = axisStatePath();
+  const tempPath = `${statePath}.tmp`;
+  await mkdir(path.dirname(statePath), { recursive: true });
+  await writeFile(tempPath, JSON.stringify(state, null, 2), "utf8");
+  await rename(tempPath, statePath);
 }

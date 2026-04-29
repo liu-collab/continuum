@@ -101,4 +101,4 @@ axis mna logs
 axis mna token
 ```
 
-默认地址是 `http://127.0.0.1:4193`，默认数据目录是 `~/.mna`。
+默认地址是 `http://127.0.0.1:4193`，默认数据目录是 `~/.axis/managed/mna`。

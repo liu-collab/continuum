@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 
+import { bilingualMessage } from "./messages.js";
+
 function normalizeWindowsPathForMatch(value: string) {
   return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
@@ -31,7 +33,10 @@ async function runPowerShellQuiet(args: string[]) {
         resolve();
         return;
       }
-      reject(new Error(`command failed: powershell ${args.join(" ")}`));
+      reject(new Error(bilingualMessage(
+        `命令执行失败: powershell ${args.join(" ")}`,
+        `Command failed: powershell ${args.join(" ")}`,
+      )));
     });
     child.on("error", reject);
   });

@@ -1,24 +1,42 @@
 import { createServer } from "node:net";
 
 import { DEFAULT_MANAGED_POSTGRES_PORT } from "./managed-state.js";
+import { bilingualMessage } from "./messages.js";
 
 export const LOOPBACK_BIND_HOST = "127.0.0.1";
 export const WILDCARD_BIND_HOST = "0.0.0.0";
 export const POSTGRES_PORT_SCAN_LIMIT = 20;
+export const DEFAULT_STORAGE_PORT = 3001;
+export const DEFAULT_RUNTIME_PORT = 3002;
+export const DEFAULT_VISUALIZATION_PORT = 3003;
 export const DEFAULT_UI_DEV_PORT = 3003;
 export const UI_DEV_PORT_SCAN_LIMIT = 20;
 
 export function parsePort(rawValue: string | boolean | undefined, optionName: string) {
   if (typeof rawValue !== "string") {
-    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
+    throw new Error(bilingualMessage(
+      `不支持的 ${optionName}: ${rawValue}`,
+      `Unsupported ${optionName}: ${rawValue}`,
+    ));
   }
 
   const parsed = Number(rawValue);
   if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65_535) {
-    throw new Error(`不支持的 ${optionName}: ${rawValue}`);
+    throw new Error(bilingualMessage(
+      `不支持的 ${optionName}: ${rawValue}`,
+      `Unsupported ${optionName}: ${rawValue}`,
+    ));
   }
 
   return parsed;
+}
+
+export function parsePortEnv(rawValue: string | undefined, envName: string, defaultPort: number) {
+  if (rawValue === undefined || rawValue.trim() === "") {
+    return defaultPort;
+  }
+
+  return parsePort(rawValue, envName);
 }
 
 export function normalizeBindHost(rawValue: string | boolean | undefined) {
@@ -26,7 +44,10 @@ export function normalizeBindHost(rawValue: string | boolean | undefined) {
 
   if (bindHost !== LOOPBACK_BIND_HOST && bindHost !== WILDCARD_BIND_HOST) {
     throw new Error(
-      `不支持的 --bind-host: ${bindHost}。当前仅支持 ${LOOPBACK_BIND_HOST} 或 ${WILDCARD_BIND_HOST}。`,
+      bilingualMessage(
+        `不支持的 --bind-host: ${bindHost}。当前仅支持 ${LOOPBACK_BIND_HOST} 或 ${WILDCARD_BIND_HOST}。`,
+        `Unsupported --bind-host: ${bindHost}. Only ${LOOPBACK_BIND_HOST} or ${WILDCARD_BIND_HOST} is supported.`,
+      ),
     );
   }
 
@@ -70,7 +91,10 @@ export async function waitForTcpAvailable(host: string, port: number, timeoutMs:
   }
 
   throw new Error(
-    `visualization dev 端口仍被占用: ${host}:${port}。旧的 --ui-dev 进程可能没有退出，请先运行 npm run stop，或手动结束占用 3003 的进程后重试。`,
+    bilingualMessage(
+      `visualization dev 端口仍被占用: ${host}:${port}。旧的 --ui-dev 进程可能没有退出，请先运行 npm run stop，或手动结束占用 3003 的进程后重试。`,
+      `Visualization dev port is still in use: ${host}:${port}. A previous --ui-dev process may still be running. Run npm run stop or end the process using port 3003 and retry.`,
+    ),
   );
 }
 
@@ -87,8 +111,26 @@ export async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_
   }
 
   throw new Error(
-    `未找到可用的 visualization dev 端口。已尝试 ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}。`,
+    bilingualMessage(
+      `未找到可用的 visualization dev 端口。已尝试 ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}。`,
+      `No available visualization dev port was found. Tried ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}.`,
+    ),
   );
+}
+
+export async function assertFixedServicePortsAvailable(
+  host: string,
+  ports: Array<{ port: number; envName: string }>,
+  probePort: (host: string, port: number) => Promise<boolean> = isTcpPortAvailable,
+) {
+  for (const item of ports) {
+    if (!(await probePort(host, item.port))) {
+      throw new Error(bilingualMessage(
+        `端口 ${item.port} 已被占用，请先释放该端口或设置 ${item.envName} 环境变量。`,
+        `Port ${item.port} is already in use. Free it first or set ${item.envName}.`,
+      ));
+    }
+  }
 }
 
 export async function resolveManagedPostgresPort(
@@ -103,12 +145,18 @@ export async function resolveManagedPostgresPort(
   const explicitPort = typeof options["postgres-port"] === "string";
 
   if (!Number.isInteger(requestedPort) || requestedPort <= 0 || requestedPort > 65_535) {
-    throw new Error(`不支持的 --postgres-port: ${options["postgres-port"]}`);
+    throw new Error(bilingualMessage(
+      `不支持的 --postgres-port: ${options["postgres-port"]}`,
+      `Unsupported --postgres-port: ${options["postgres-port"]}`,
+    ));
   }
 
   if (explicitPort) {
     if (!(await probePort(bindHost, requestedPort))) {
-      throw new Error(`postgres 端口不可用: ${bindHost}:${requestedPort}。请改用其他 --postgres-port。`);
+      throw new Error(bilingualMessage(
+        `postgres 端口不可用: ${bindHost}:${requestedPort}。请改用其他 --postgres-port。`,
+        `Postgres port is unavailable: ${bindHost}:${requestedPort}. Use a different --postgres-port.`,
+      ));
     }
 
     return requestedPort;
@@ -130,6 +178,9 @@ export async function resolveManagedPostgresPort(
   }
 
   throw new Error(
-    `未找到可用的 postgres 端口。已尝试 ${bindHost}:${requestedPort}-${requestedPort + POSTGRES_PORT_SCAN_LIMIT}。`,
+    bilingualMessage(
+      `未找到可用的 postgres 端口。已尝试 ${bindHost}:${requestedPort}-${requestedPort + POSTGRES_PORT_SCAN_LIMIT}。`,
+      `No available postgres port was found. Tried ${bindHost}:${requestedPort}-${requestedPort + POSTGRES_PORT_SCAN_LIMIT}.`,
+    ),
   );
 }

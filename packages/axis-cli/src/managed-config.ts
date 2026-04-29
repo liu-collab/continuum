@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { axisManagedDir } from "./managed-state.js";
+import { bilingualMessage } from "./messages.js";
 import type { ManagedMnaProviderConfig } from "./mna-provider-config.js";
 import { pathExists, safeJsonParse } from "./utils.js";
 
@@ -56,13 +57,17 @@ function readEnvNonEmpty(env: NodeJS.ProcessEnv, key: string) {
 function ensureHttpUrl(value: string, fieldName: string) {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error();
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString().replace(/\/+$/, "");
     }
-    return parsed.toString().replace(/\/+$/, "");
   } catch {
-    throw new Error(`${fieldName} 必须是有效的 http(s) URL。`);
+    // fall through to the shared validation error below
   }
+
+  throw new Error(bilingualMessage(
+    `${fieldName} 必须是有效的 http(s) URL。`,
+    `${fieldName} must be a valid http(s) URL.`,
+  ));
 }
 
 function readPositiveInteger(value: string | undefined, fieldName: string) {
@@ -72,7 +77,10 @@ function readPositiveInteger(value: string | undefined, fieldName: string) {
 
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${fieldName} 必须是正整数。`);
+    throw new Error(bilingualMessage(
+      `${fieldName} 必须是正整数。`,
+      `${fieldName} must be a positive integer.`,
+    ));
   }
   return parsed;
 }
@@ -84,7 +92,10 @@ function readProtocol(value: string | undefined, fieldName: string) {
   if (value === "anthropic" || value === "openai-compatible") {
     return value;
   }
-  throw new Error(`${fieldName} 必须是 anthropic 或 openai-compatible。`);
+  throw new Error(bilingualMessage(
+    `${fieldName} 必须是 anthropic 或 openai-compatible。`,
+    `${fieldName} must be anthropic or openai-compatible.`,
+  ));
 }
 
 function readEffort(value: string | undefined, fieldName: string) {
@@ -100,7 +111,10 @@ function readEffort(value: string | undefined, fieldName: string) {
   ) {
     return value;
   }
-  throw new Error(`${fieldName} 必须是 low、medium、high、xhigh 或 max。`);
+  throw new Error(bilingualMessage(
+    `${fieldName} 必须是 low、medium、high、xhigh 或 max。`,
+    `${fieldName} must be low, medium, high, xhigh, or max.`,
+  ));
 }
 
 export function mergeManagedConfig<T extends Record<string, unknown>>(

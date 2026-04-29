@@ -2,7 +2,7 @@ import { cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { loadBuildStateHelpers } from "./build-state-loader.js";
-import { runForeground } from "./managed-process.js";
+import { npmCommand, runForeground } from "./managed-process.js";
 import { pathExists, vendorPath } from "./utils.js";
 
 type BuildStateHelpers = Awaited<ReturnType<typeof loadBuildStateHelpers>>;
@@ -44,7 +44,7 @@ export async function refreshVisualizationVendor(
     const repoRoot = path.resolve(packageRoot, "..", "..");
     const visualizationDir = path.join(repoRoot, "services", "visualization");
     await rm(path.join(visualizationDir, ".next"), { recursive: true, force: true }).catch(() => undefined);
-    await runForeground("npm", ["run", "build"], visualizationDir);
+    await runForeground(npmCommand(), ["run", "build"], visualizationDir);
   }
   await copyVisualizationVendorBundle(packageRoot);
   await buildState.writeBuildState({
@@ -101,7 +101,7 @@ export async function refreshMemoryNativeAgentVendor(
   if (needsBuild) {
     const repoRoot = path.resolve(packageRoot, "..", "..");
     const serviceDir = path.join(repoRoot, "services", "memory-native-agent");
-    await runForeground("npm", ["run", "build"], serviceDir);
+    await runForeground(npmCommand(), ["run", "build"], serviceDir);
   }
   await copyMemoryNativeAgentVendorBundle(packageRoot);
   await buildState.writeBuildState({

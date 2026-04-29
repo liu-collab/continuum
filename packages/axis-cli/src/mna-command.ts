@@ -12,8 +12,8 @@ import {
 } from "./managed-state.js";
 import {
   readManagedMnaProviderConfig,
-  writeManagedMnaProviderConfig,
 } from "./managed-config.js";
+import { bilingualMessage } from "./messages.js";
 import {
   DEFAULT_RUNTIME_URL,
   DEFAULT_TIMEOUT_MS,
@@ -195,6 +195,7 @@ export async function getManagedMnaStatus(options: Record<string, string | boole
   const url = record?.url ?? parseMnaBaseUrl(options);
   const tokenPath = record?.tokenPath ?? path.join(parseMnaHome(options), "token.txt");
   const artifactsPath = record?.artifactsPath ?? path.join(parseMnaHome(options), "artifacts");
+  const logPath = record?.logPath ?? path.join(axisLogsDir(), "mna.log");
   const timeoutMs = typeof options.timeout === "string" ? Number(options.timeout) : DEFAULT_TIMEOUT_MS;
   const health = await fetchJson(`${url}/healthz`, timeoutMs);
   const dependency = await fetchMnaDependency(url, tokenPath, timeoutMs);
@@ -203,6 +204,7 @@ export async function getManagedMnaStatus(options: Record<string, string | boole
     record,
     url,
     tokenPath,
+    logPath,
     artifactsPath,
     health,
     dependency
@@ -218,7 +220,10 @@ export async function startManagedMna(
   const entryPath = path.join(vendorDir, "bin", "mna-server.mjs");
 
   if (!(await pathExists(entryPath))) {
-    throw new Error(`memory-native-agent vendor 产物不存在: ${entryPath}`);
+    throw new Error(bilingualMessage(
+      `memory-native-agent vendor 产物不存在: ${entryPath}`,
+      `memory-native-agent vendor artifact does not exist: ${entryPath}`,
+    ));
   }
 
   const existing = await getManagedMnaStatus(options);
@@ -261,9 +266,6 @@ export async function startManagedMna(
 
   await mkdir(axisLogsDir(), { recursive: true });
   await mkdir(homeDir, { recursive: true });
-  if (!hasProviderOverrides) {
-    await writeManagedMnaProviderConfig(homeDir, providerConfig);
-  }
   const stdoutHandle = await open(logPath, "a");
   const stderrHandle = await open(logPath, "a");
 
@@ -301,14 +303,20 @@ export async function startManagedMna(
   try {
     healthy = await Promise.race([
       waitForHealthy(`${url}/healthz`, {
-        timeoutMs: 10_000,
+        timeoutMs: 60_000,
         intervalMs: 1_000,
         extractBody: true,
-        timeoutMessage: `memory-native-agent 未在预期时间内就绪: ${url}`,
+        timeoutMessage: bilingualMessage(
+          `memory-native-agent 未在预期时间内就绪: ${url}。查看日志：axis mna logs`,
+          `memory-native-agent did not become ready in time: ${url}. View logs: axis mna logs`,
+        ),
         fetcher: fetchJson,
       }) as Promise<{ version?: string } | undefined>,
       exitPromise.then((code) => {
-        throw new Error(`memory-native-agent 启动失败，退出码 ${code ?? 1}`);
+        throw new Error(bilingualMessage(
+          `memory-native-agent 启动失败，退出码 ${code ?? 1}。查看日志：axis mna logs`,
+          `memory-native-agent failed to start with exit code ${code ?? 1}. View logs: axis mna logs`,
+        ));
       })
     ]);
   } catch (error) {
@@ -357,7 +365,10 @@ export async function runMnaCommand(
     const packageRoot = packageRootFromImportMeta(importMetaUrl);
     const vendorDir = vendorPath(packageRoot, "memory-native-agent");
     if (!(await pathExists(vendorDir))) {
-      throw new Error(`memory-native-agent vendor 目录不存在: ${vendorDir}`);
+      throw new Error(bilingualMessage(
+        `memory-native-agent vendor 目录不存在: ${vendorDir}`,
+        `memory-native-agent vendor directory does not exist: ${vendorDir}`,
+      ));
     }
     process.stdout.write(`memory-native-agent vendor 已就绪: ${vendorDir}\n`);
     return 0;
@@ -380,7 +391,10 @@ export async function runMnaCommand(
     const managedState = await readManagedState();
     const record = getManagedMnaRecord(managedState.services);
     if (!record) {
-      throw new Error("memory-native-agent 尚未由 axis 管理启动。");
+      throw new Error(bilingualMessage(
+        "memory-native-agent 尚未由 axis 管理启动。",
+        "memory-native-agent has not been started by axis.",
+      ));
     }
 
     const content = (await readFile(record.logPath, "utf8").catch(() => "")) || "";
@@ -402,5 +416,8 @@ export async function runMnaCommand(
     return 0;
   }
 
-  throw new Error(`Unknown mna command: ${subcommand ?? ""}`);
+  throw new Error(bilingualMessage(
+    `未知的 mna 命令: ${subcommand ?? ""}`,
+    `Unknown mna command: ${subcommand ?? ""}`,
+  ));
 }

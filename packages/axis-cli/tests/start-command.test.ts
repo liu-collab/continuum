@@ -6,6 +6,7 @@ const waitForHealthyMock = vi.hoisted(() => vi.fn());
 const openBrowserMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
 const readManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
+const readManagedMnaProviderConfigMock = vi.hoisted(() => vi.fn());
 const readManagedMemoryLlmConfigMock = vi.hoisted(() => vi.fn());
 const readManagedWritebackLlmConfigMock = vi.hoisted(() => vi.fn());
 const writeManagedEmbeddingConfigMock = vi.hoisted(() => vi.fn());
@@ -90,6 +91,7 @@ vi.mock("../src/managed-config.js", async (importOriginal) => {
     axisManagedEmbeddingConfigPath: vi.fn(() => "C:/tmp/.axis/managed/embedding-config.json"),
     axisManagedMemoryLlmConfigPath: vi.fn(() => "C:/tmp/.axis/managed/memory-llm-config.json"),
     readManagedEmbeddingConfig: readManagedEmbeddingConfigMock,
+    readManagedMnaProviderConfig: readManagedMnaProviderConfigMock,
     readManagedMemoryLlmConfig: readManagedMemoryLlmConfigMock,
     readManagedWritebackLlmConfig: readManagedWritebackLlmConfigMock,
     writeManagedEmbeddingConfig: writeManagedEmbeddingConfigMock,
@@ -125,6 +127,7 @@ vi.mock("../src/build-state-loader.js", () => ({
 }));
 
 import { resolveManagedPostgresPort, runStartCommand } from "../src/start-command.js";
+import { assertFixedServicePortsAvailable } from "../src/port-utils.js";
 
 function mockSuccessfulSpawn() {
   spawnMock.mockImplementation(() => ({
@@ -151,6 +154,7 @@ describe("runStartCommand", () => {
     process.env.AXIS_DB_PASSWORD = "test-db-password";
     process.env.PLATFORM_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
     waitForHealthyMock.mockResolvedValue(undefined);
+    readManagedMnaProviderConfigMock.mockResolvedValue(null);
     openMock.mockResolvedValue({
       fd: 1,
       close: vi.fn(async () => undefined),
@@ -165,6 +169,7 @@ describe("runStartCommand", () => {
     openBrowserMock.mockReset();
     pathExistsMock.mockReset();
     readManagedEmbeddingConfigMock.mockReset();
+    readManagedMnaProviderConfigMock.mockReset();
     readManagedMemoryLlmConfigMock.mockReset();
     readManagedWritebackLlmConfigMock.mockReset();
     writeManagedEmbeddingConfigMock.mockReset();
@@ -184,8 +189,13 @@ describe("runStartCommand", () => {
     writeBuildStateMock.mockReset();
     tcpPortAvailableMock.mockReset();
     tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
+    readManagedMnaProviderConfigMock.mockResolvedValue(null);
     delete process.env.AXIS_DB_PASSWORD;
     delete process.env.PLATFORM_USER_ID;
+    delete process.env.STORAGE_PORT;
+    delete process.env.RUNTIME_PORT;
+    delete process.env.UI_PORT;
+    delete process.env.VISUALIZATION_PORT;
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
@@ -892,7 +902,7 @@ describe("runStartCommand", () => {
 
     expect(spawnMock).toHaveBeenCalledWith(
       "cmd",
-      expect.arrayContaining(["/c", "npm", "run", "build"]),
+      expect.arrayContaining(["/c", "npm.cmd", "run", "build"]),
       expect.objectContaining({
         cwd: expect.stringContaining("services\\memory-native-agent"),
       }),
@@ -990,7 +1000,7 @@ describe("runStartCommand", () => {
       const args = Array.isArray(call[1]) ? call[1] : [];
       const options = call[2] as { cwd?: string } | undefined;
       return command === "cmd"
-        && args.includes("npm")
+        && args.includes("npm.cmd")
         && args.includes("run")
         && args.includes("build")
         && options?.cwd?.includes("services\\visualization");
@@ -1289,6 +1299,16 @@ describe("runStartCommand", () => {
     await expect(
       resolveManagedPostgresPort({ "postgres-port": "55432" }, "127.0.0.1", probePort),
     ).rejects.toThrow(/postgres 端口不可用/);
+  });
+
+  it("reports occupied fixed service ports with the matching env override", async () => {
+    const probePort = vi
+      .fn<(_: string, __: number) => Promise<boolean>>()
+      .mockResolvedValueOnce(false);
+
+    await expect(
+      assertFixedServicePortsAvailable("127.0.0.1", [{ port: 3001, envName: "STORAGE_PORT" }], probePort),
+    ).rejects.toThrow(/端口 3001 已被占用.*STORAGE_PORT/);
   });
 
   it("reuses healthy backend services and only restarts local visualization when ui-dev is enabled", async () => {

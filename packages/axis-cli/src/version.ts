@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { bilingualMessage } from "./messages.js";
 import { pathExists, safeJsonParse } from "./utils.js";
 
 export async function readCliVersion() {
@@ -12,7 +13,10 @@ export async function readCliVersion() {
   ];
   const fallbackPackageJsonPath = packageJsonCandidates[0];
   if (!fallbackPackageJsonPath) {
-    throw new Error("axis package.json path cannot be resolved");
+    throw new Error(bilingualMessage(
+      "无法解析 axis package.json 路径。",
+      "axis package.json path cannot be resolved.",
+    ));
   }
   const packageJsonPath =
     (await resolveExistingPath(packageJsonCandidates))
@@ -21,7 +25,10 @@ export async function readCliVersion() {
   const parsed = safeJsonParse<{ version?: unknown }>(packageJsonPath, content);
 
   if (typeof parsed.version !== "string" || parsed.version.trim().length === 0) {
-    throw new Error(`axis package version is missing: ${packageJsonPath}`);
+    throw new Error(bilingualMessage(
+      `axis package version 缺失: ${packageJsonPath}`,
+      `axis package version is missing: ${packageJsonPath}`,
+    ));
   }
 
   return parsed.version;

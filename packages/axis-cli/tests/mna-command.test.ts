@@ -110,7 +110,7 @@ describe("axis mna command", () => {
 
   it("fails logs command when mna is not managed", async () => {
     await expect(runMnaCommand("logs", {}, import.meta.url)).rejects.toThrow(
-      "memory-native-agent 尚未由 axis 管理启动。"
+      "memory-native-agent 尚未由 axis 管理启动。",
     );
   });
 
@@ -240,7 +240,7 @@ describe("axis mna command", () => {
       });
       return child;
     });
-    waitForHealthyMock.mockRejectedValue(new Error("memory-native-agent 未在预期时间内就绪"));
+    waitForHealthyMock.mockRejectedValue(new Error("memory-native-agent 未在预期时间内就绪。查看日志：axis mna logs"));
 
     await expect(startManagedMna({ "mna-home": mnaHome }, import.meta.url)).rejects.toThrow(/启动失败|未在预期时间内就绪/);
     expect(managedStateStore.state.services).toEqual([]);
@@ -262,7 +262,7 @@ describe("axis mna command", () => {
       });
       return child;
     });
-    waitForHealthyMock.mockRejectedValue(new Error("memory-native-agent 未在预期时间内就绪"));
+    waitForHealthyMock.mockRejectedValue(new Error("memory-native-agent 未在预期时间内就绪。查看日志：axis mna logs"));
 
     const server = net.createServer();
     const occupiedPort = await new Promise<number>((resolve, reject) => {
@@ -313,6 +313,13 @@ describe("axis mna command", () => {
     await startManagedMna({ "mna-home": mnaHome }, import.meta.url);
 
     expect(capturedEnv?.MNA_WORKSPACE_CWD).toBe(process.cwd());
+    expect(waitForHealthyMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:4193/healthz",
+      expect.objectContaining({
+        timeoutMs: 60_000,
+        timeoutMessage: expect.stringContaining("查看日志：axis mna logs"),
+      }),
+    );
   });
 
   it("ignores legacy env-based persisted provider config when no page config was saved", async () => {

@@ -6,10 +6,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { bilingualMessage } from "./messages.js";
+
 export const DEFAULT_RUNTIME_URL = "http://127.0.0.1:3002";
 export const DEFAULT_STORAGE_URL = "http://127.0.0.1:3001";
 export const DEFAULT_UI_URL = "http://127.0.0.1:3003";
-export const DEFAULT_TIMEOUT_MS = 2000;
+export const DEFAULT_TIMEOUT_MS = 5000;
 export const DEFAULT_CODEX_MCP_SERVER_NAME = "memory";
 
 export function packageRootFromImportMeta(importMetaUrl: string) {
@@ -140,7 +142,10 @@ export async function waitForHealthy(
     await delay(intervalMs);
   }
 
-  throw new Error(options.timeoutMessage ?? `服务未在预期时间内就绪: ${url}`);
+  throw new Error(options.timeoutMessage ?? bilingualMessage(
+    `服务未在预期时间内就绪: ${url}`,
+    `Service did not become ready in time: ${url}`,
+  ));
 }
 
 export async function openBrowser(url: string) {
@@ -248,7 +253,10 @@ export async function installClaudePlugin(options: {
   const exists = await pathExists(targetDir);
 
   if (exists && !force) {
-    throw new Error(`target already exists: ${targetDir}`);
+    throw new Error(bilingualMessage(
+      `目标目录已存在: ${targetDir}`,
+      `Target already exists: ${targetDir}`,
+    ));
   }
 
   if (exists) {
@@ -297,7 +305,10 @@ export async function uninstallCodexMcpServer(options: { name: string; codexHome
     return true;
   }
 
-  throw new Error(output || `codex mcp remove failed with exit code ${result.code}`);
+  throw new Error(output || bilingualMessage(
+    `codex mcp remove 失败，退出码 ${result.code}`,
+    `codex mcp remove failed with exit code ${result.code}`,
+  ));
 }
 
 export async function rewriteClaudePluginCommands(

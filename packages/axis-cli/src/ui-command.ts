@@ -13,6 +13,7 @@ import {
   pathExists,
   vendorPath,
 } from "./utils.js";
+import { bilingualMessage, formatErrorMessage } from "./messages.js";
 import { DEFAULT_MNA_HOME_DIR, DEFAULT_MNA_URL } from "./mna-command.js";
 import { resolvePlatformUserId } from "./platform-user.js";
 
@@ -59,7 +60,10 @@ export async function runUiCommand(
 
   if (!(await pathExists(serverEntry))) {
     throw new Error(
-      `visualization bundle not found: ${serverEntry}. Run package build with vendor preparation first.`,
+      bilingualMessage(
+        `visualization bundle 不存在: ${serverEntry}。请先运行带 vendor 准备的 package build。`,
+        `visualization bundle not found: ${serverEntry}. Run package build with vendor preparation first.`,
+      ),
     );
   }
 
@@ -117,7 +121,10 @@ export async function runUiCommand(
   });
 
   child.on("error", (error) => {
-    console.error(error);
+    console.error(bilingualMessage(
+      `visualization 启动失败：${formatErrorMessage(error)}`,
+      `Failed to start visualization: ${formatErrorMessage(error)}`,
+    ));
     process.exit(1);
   });
 }

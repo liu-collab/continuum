@@ -191,17 +191,17 @@ describe("axis cli", () => {
     const exitCode = await runCli(["codex", "foo"], import.meta.url);
 
     expect(exitCode).toBe(1);
-    expect(stderrSpy).toHaveBeenCalledWith("未知的 codex 子命令: foo\n");
-    expect(stderrSpy).toHaveBeenCalledWith("可用: install, uninstall, use\n");
+    expect(stderrSpy).toHaveBeenCalledWith("未知的 codex 子命令: foo | Unknown codex subcommand: foo\n");
+    expect(stderrSpy).toHaveBeenCalledWith("可用: install, uninstall, use | Available: install, uninstall, use\n");
     expect(codexUseMock).not.toHaveBeenCalled();
   });
 
   it("parses the mna command and exposes it in help", () => {
-    const parsed = parseArgs(["mna", "start", "--mna-port", "4193", "--mna-home", "C:/tmp/.mna"]);
+    const parsed = parseArgs(["mna", "start", "--mna-port", "4193", "--mna-home", "C:/tmp/.axis/managed/mna"]);
 
     expect(parsed.command).toEqual(["mna", "start"]);
     expect(parsed.options["mna-port"]).toBe("4193");
-    expect(parsed.options["mna-home"]).toBe("C:/tmp/.mna");
+    expect(parsed.options["mna-home"]).toBe("C:/tmp/.axis/managed/mna");
     expect(renderHelp()).toContain("axis mna <install|start|stop|logs|token>");
   });
 
@@ -209,8 +209,9 @@ describe("axis cli", () => {
     getManagedMnaStatusMock.mockResolvedValue({
       record: null,
       url: "http://127.0.0.1:4193",
-      tokenPath: "C:/tmp/.mna/token.txt",
-      artifactsPath: "C:/tmp/.mna/artifacts",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      logPath: "C:/tmp/.axis/logs/mna.log",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
       health: {
         ok: false,
         status: 503,
@@ -238,8 +239,9 @@ describe("axis cli", () => {
     getManagedMnaStatusMock.mockResolvedValue({
       record: null,
       url: "http://127.0.0.1:4193",
-      tokenPath: "C:/tmp/.mna/token.txt",
-      artifactsPath: "C:/tmp/.mna/artifacts",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      logPath: "C:/tmp/.axis/logs/mna.log",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
       health: {
         ok: false,
         status: 503,
@@ -262,7 +264,7 @@ describe("axis cli", () => {
       "ui-url": "http://127.0.0.1:39993",
       timeout: "50",
       "mna-url": "http://127.0.0.1:4193",
-      "mna-home": "C:/tmp/.mna"
+      "mna-home": "C:/tmp/.axis/managed/mna"
     });
 
     expect(exitCode).toBe(1);
@@ -270,13 +272,15 @@ describe("axis cli", () => {
       mna: {
         url: string;
         tokenPath: string;
+        logPath: string;
         artifactsPath: string;
         dependency: unknown;
       };
     };
     expect(payload.mna.url).toBe("http://127.0.0.1:4193");
-    expect(payload.mna.tokenPath).toBe("C:/tmp/.mna/token.txt");
-    expect(payload.mna.artifactsPath).toBe("C:/tmp/.mna/artifacts");
+    expect(payload.mna.tokenPath).toBe("C:/tmp/.axis/managed/mna/token.txt");
+    expect(payload.mna.logPath).toBe("C:/tmp/.axis/logs/mna.log");
+    expect(payload.mna.artifactsPath).toBe("C:/tmp/.axis/managed/mna/artifacts");
     expect(payload.mna).toHaveProperty("dependency");
   });
 
@@ -288,13 +292,14 @@ describe("axis cli", () => {
         pid: 123,
         logPath: "C:/tmp/.axis/logs/mna.log",
         url: "http://127.0.0.1:4193",
-        tokenPath: "C:/tmp/.mna/token.txt",
-        artifactsPath: "C:/tmp/.mna/artifacts",
+        tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+        artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
         version: "0.1.0"
       },
       url: "http://127.0.0.1:4193",
-      tokenPath: "C:/tmp/.mna/token.txt",
-      artifactsPath: "C:/tmp/.mna/artifacts",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      logPath: "C:/tmp/.axis/logs/mna.log",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
       health: {
         ok: true,
         status: 200,
@@ -329,7 +334,7 @@ describe("axis cli", () => {
     expect(payload.checks.find((item) => item.name === "memory-native-agent")).toEqual({
       name: "memory-native-agent",
       status: "degraded",
-      detail: "token mismatch between axis and running memory-native-agent",
+      detail: "axis 与正在运行的 memory-native-agent token 不匹配。运行 axis mna token 获取最新 token。 | Token mismatch between axis and the running memory-native-agent. Run axis mna token to get the latest token.",
     });
   });
 
@@ -398,8 +403,9 @@ describe("axis cli", () => {
     getManagedMnaStatusMock.mockResolvedValue({
       record: null,
       url: "http://127.0.0.1:4193",
-      tokenPath: "C:/tmp/.mna/token.txt",
-      artifactsPath: "C:/tmp/.mna/artifacts",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      logPath: "C:/tmp/.axis/logs/mna.log",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
       health: {
         ok: false,
         status: 503,

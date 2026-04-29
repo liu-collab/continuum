@@ -1,6 +1,7 @@
 import process from "node:process";
 import { spawn } from "node:child_process";
 
+import { bilingualMessage, formatErrorMessage } from "./messages.js";
 import {
   DEFAULT_CODEX_MCP_SERVER_NAME,
   packageRootFromImportMeta,
@@ -95,7 +96,10 @@ export async function runCodexUseCommand(
   });
 
   child.on("error", (error) => {
-    console.error(error);
+    console.error(bilingualMessage(
+      `Codex 启动失败：${formatErrorMessage(error)}`,
+      `Failed to start Codex: ${formatErrorMessage(error)}`,
+    ));
     process.exit(1);
   });
 }

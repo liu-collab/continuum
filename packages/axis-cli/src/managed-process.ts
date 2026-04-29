@@ -1,5 +1,6 @@
 import process from "node:process";
 
+import { bilingualMessage } from "./messages.js";
 import { spawnCrossPlatform } from "./utils.js";
 
 export function npmCommand() {
@@ -19,7 +20,10 @@ export async function runForeground(command: string, args: string[], cwd?: strin
         resolve();
         return;
       }
-      reject(new Error(`command failed: ${command} ${args.join(" ")}`));
+      reject(new Error(bilingualMessage(
+        `命令执行失败: ${command} ${args.join(" ")}`,
+        `Command failed: ${command} ${args.join(" ")}`,
+      )));
     });
     child.on("error", reject);
   });
@@ -37,7 +41,10 @@ export async function runForegroundQuiet(command: string, args: string[]) {
         resolve();
         return;
       }
-      reject(new Error(`command failed: ${command} ${args.join(" ")}`));
+      reject(new Error(bilingualMessage(
+        `命令执行失败: ${command} ${args.join(" ")}`,
+        `Command failed: ${command} ${args.join(" ")}`,
+      )));
     });
     child.on("error", reject);
   });

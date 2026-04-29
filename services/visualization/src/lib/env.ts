@@ -28,7 +28,7 @@ const envSchema = z.object({
       required_error: "PLATFORM_USER_ID is required. Set PLATFORM_USER_ID to a valid UUID before starting visualization."
     })
     .uuid("PLATFORM_USER_ID must be a valid UUID."),
-  MNA_TOKEN_PATH: z.string().default("~/.mna/token.txt"),
+  MNA_TOKEN_PATH: z.string().default("~/.axis/managed/mna/token.txt"),
   DEFAULT_PAGE_SIZE: z.coerce.number().int().positive().max(100).default(20),
   HEALTH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
   SOURCE_HEALTH_CACHE_MS: z.coerce.number().int().positive().default(8000),

@@ -37,6 +37,7 @@ import {
   axisManagedMemoryLlmConfigPath,
   mergeManagedConfig,
   readManagedEmbeddingConfig,
+  readManagedMnaProviderConfig,
   readManagedMemoryLlmConfig,
   readManagedWritebackLlmConfig,
   resolveOptionalManagedMemoryLlmCliConfig,
@@ -46,6 +47,7 @@ import {
   writeManagedEmbeddingConfig,
   writeManagedMemoryLlmConfig,
 } from "./managed-config.js";
+import { bilingualMessage } from "./messages.js";
 import { stopLegacyAxisProcesses } from "./process-cleanup.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
 import {
@@ -60,8 +62,13 @@ import {
 import { npmCommand, runForeground } from "./managed-process.js";
 import { resolvePlatformUserId } from "./platform-user.js";
 import {
+  assertFixedServicePortsAvailable,
+  DEFAULT_RUNTIME_PORT,
+  DEFAULT_STORAGE_PORT,
+  DEFAULT_VISUALIZATION_PORT,
   normalizeBindHost,
   parsePort,
+  parsePortEnv,
   resolveAccessibleHost,
   resolveManagedPostgresPort,
   resolveUiDevPort,
@@ -169,6 +176,47 @@ function hasExplicitMnaConnectionOptions(options: Record<string, string | boolea
   return typeof options["mna-url"] === "string" || typeof options["mna-token-path"] === "string";
 }
 
+function resolveStoragePort() {
+  return parsePortEnv(process.env.STORAGE_PORT, "STORAGE_PORT", DEFAULT_STORAGE_PORT);
+}
+
+function resolveRuntimePort() {
+  return parsePortEnv(process.env.RUNTIME_PORT, "RUNTIME_PORT", DEFAULT_RUNTIME_PORT);
+}
+
+function resolveVisualizationPort() {
+  if (process.env.UI_PORT !== undefined && process.env.UI_PORT.trim() !== "") {
+    return parsePortEnv(process.env.UI_PORT, "UI_PORT", DEFAULT_VISUALIZATION_PORT);
+  }
+
+  return parsePortEnv(process.env.VISUALIZATION_PORT, "VISUALIZATION_PORT", DEFAULT_VISUALIZATION_PORT);
+}
+
+function buildServiceUrl(host: string, port: number) {
+  return `http://${host}:${port}`;
+}
+
+async function isPrimaryProviderConfigured(options: Record<string, string | boolean>) {
+  if (
+    typeof options["provider-kind"] === "string"
+    || typeof options["provider-model"] === "string"
+    || typeof options["provider-base-url"] === "string"
+    || typeof options["provider-api-key-env"] === "string"
+  ) {
+    return true;
+  }
+
+  const persisted = await readManagedMnaProviderConfig(path.join(axisManagedDir(), "mna")).catch(() => null);
+  return Boolean(persisted && persisted.kind !== "demo");
+}
+
+function writeMissingPrimaryProviderWarning() {
+  process.stdout.write(`${bilingualMessage(
+    "⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。",
+    "⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.",
+  )}\n`);
+}
+
 async function startManagedVisualizationDevServer(options: {
   packageRoot: string;
   bindHost: string;
@@ -179,12 +227,17 @@ async function startManagedVisualizationDevServer(options: {
   storageUrl: string;
   mnaUrl: string;
   mnaTokenPath: string;
+  storagePort: number;
+  runtimePort: number;
 }) {
   const repoRoot = path.resolve(options.packageRoot, "..", "..");
   const visualizationDir = path.join(repoRoot, "services", "visualization");
   const packageJsonPath = path.join(visualizationDir, "package.json");
   if (!(await pathExists(packageJsonPath))) {
-    throw new Error("--ui-dev 仅支持在 Axis 仓库源码目录中使用。");
+    throw new Error(bilingualMessage(
+      "--ui-dev 仅支持在 Axis 仓库源码目录中使用。",
+      "--ui-dev is only supported from the Axis repository source directory.",
+    ));
   }
 
   await stopManagedVisualizationDevServer().catch(() => undefined);
@@ -198,6 +251,8 @@ async function startManagedVisualizationDevServer(options: {
     NODE_ENV: "development",
     STORAGE_API_BASE_URL: options.storageUrl,
     RUNTIME_API_BASE_URL: options.runtimeUrl,
+    STORAGE_PORT: String(options.storagePort),
+    RUNTIME_PORT: String(options.runtimePort),
     PLATFORM_USER_ID: options.platformUserId,
     STORAGE_READ_MODEL_DSN: options.readModelDsn,
     STORAGE_READ_MODEL_SCHEMA: "storage_shared_v1",
@@ -262,7 +317,10 @@ async function startManagedVisualizationDevServer(options: {
         fetcher: fetchJson,
       }),
       exitPromise.then((code) => {
-        throw new Error(`visualization dev 启动失败，退出码 ${code ?? 1}`);
+        throw new Error(bilingualMessage(
+          `visualization dev 启动失败，退出码 ${code ?? 1}`,
+          `visualization dev failed to start with exit code ${code ?? 1}`,
+        ));
       }),
     ]);
   } catch (error) {
@@ -291,6 +349,11 @@ async function startStackContainer(
   databasePassword: string,
   embeddingConfigPath: string,
   memoryLlmConfigPath: string,
+  servicePorts: {
+    storage: number;
+    runtime: number;
+    visualization: number;
+  },
   publishVisualizationPort: boolean,
   imageName = DEFAULT_MANAGED_STACK_IMAGE,
 ) {
@@ -309,9 +372,9 @@ async function startStackContainer(
     "-p",
     `${bindHost}:${port}:5432`,
     "-p",
-    `${bindHost}:3001:3001`,
+    `${bindHost}:${servicePorts.storage}:3001`,
     "-p",
-    `${bindHost}:3002:3002`,
+    `${bindHost}:${servicePorts.runtime}:3002`,
     "-v",
     `${managedDir}:/opt/axis/managed`,
     "-e",
@@ -362,7 +425,7 @@ async function startStackContainer(
   ];
 
   if (publishVisualizationPort) {
-    dockerArgs.push("-p", `${bindHost}:3003:3003`);
+    dockerArgs.push("-p", `${bindHost}:${servicePorts.visualization}:3003`);
   } else {
     dockerArgs.push("-e", "AXIS_DISABLE_STACK_VISUALIZATION=1");
   }
@@ -379,16 +442,20 @@ export async function runStartCommand(
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
+  const storagePort = resolveStoragePort();
+  const runtimePort = resolveRuntimePort();
+  const visualizationPort = resolveVisualizationPort();
   const platformUserId = await resolvePlatformUserId();
   const uiDev = options["ui-dev"] === true;
   const initialManagedState = await readManagedState();
   const open = options.open === true;
-  const storageUrl = `http://${accessibleHost}:3001`;
-  const runtimeUrl = `http://${accessibleHost}:3002`;
-  const uiUrl = `http://${accessibleHost}:3003`;
+  const storageUrl = buildServiceUrl(accessibleHost, storagePort);
+  const runtimeUrl = buildServiceUrl(accessibleHost, runtimePort);
+  const uiUrl = buildServiceUrl(accessibleHost, visualizationPort);
   const uiDevBackendHealthy = uiDev
     ? await managedBackendIsHealthy(storageUrl, runtimeUrl)
     : false;
+  const providerConfigured = await isPrimaryProviderConfigured(options);
 
   if (uiDev && uiDevBackendHealthy) {
     let mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
@@ -414,6 +481,8 @@ export async function runStartCommand(
       storageUrl,
       mnaUrl: mna.url,
       mnaTokenPath: mna.tokenPath,
+      storagePort,
+      runtimePort,
     });
 
     process.stdout.write("Axis visualization dev 已启动。\n");
@@ -424,6 +493,9 @@ export async function runStartCommand(
     process.stdout.write(`visualization: ${devServer.url} (dev)\n`);
     process.stdout.write(`log: ${devServer.logPath}\n`);
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    if (!providerConfigured) {
+      writeMissingPrimaryProviderWarning();
+    }
 
     if (open) {
       await openBrowser(devServer.url);
@@ -503,6 +575,22 @@ export async function runStartCommand(
 
   // Remove old container only after successful build.
   await cleanupManagedStackContainer().catch(() => undefined);
+  await assertFixedServicePortsAvailable(
+    bindHost,
+    [
+      { port: storagePort, envName: "STORAGE_PORT" },
+      { port: runtimePort, envName: "RUNTIME_PORT" },
+      ...(uiDev
+        ? []
+        : [{
+            port: visualizationPort,
+            envName:
+              process.env.UI_PORT !== undefined && process.env.UI_PORT.trim() !== ""
+                ? "UI_PORT"
+                : "VISUALIZATION_PORT",
+          }]),
+    ],
+  );
 
   try {
     let startedVisualizationUrl = uiUrl;
@@ -516,6 +604,11 @@ export async function runStartCommand(
       databasePassword,
       embeddingConfigPath,
       stackMemoryLlmConfigPath,
+      {
+        storage: storagePort,
+        runtime: runtimePort,
+        visualization: visualizationPort,
+      },
       !uiDev,
       stackImageName,
     );
@@ -549,6 +642,8 @@ export async function runStartCommand(
         storageUrl,
         mnaUrl: mna.url,
         mnaTokenPath: mna.tokenPath,
+        storagePort,
+        runtimePort,
       });
       startedVisualizationUrl = devServer.url;
       startedVisualizationLogPath = devServer.logPath;
@@ -585,6 +680,9 @@ export async function runStartCommand(
       process.stdout.write(`visualization log: ${startedVisualizationLogPath}\n`);
     }
     process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    if (!providerConfigured) {
+      writeMissingPrimaryProviderWarning();
+    }
     if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
       process.stdout.write(
         `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
@@ -599,7 +697,10 @@ export async function runStartCommand(
   } catch (error) {
     const cleaned = await cleanupManagedStackContainer().catch(() => false);
     if (cleaned) {
-      process.stderr.write(`Axis 启动失败，已清理未完成容器: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
+      process.stderr.write(`${bilingualMessage(
+        `Axis 启动失败，已清理未完成容器: ${DEFAULT_MANAGED_STACK_CONTAINER}`,
+        `Axis startup failed. Removed incomplete container: ${DEFAULT_MANAGED_STACK_CONTAINER}`,
+      )}\n`);
     }
     throw error;
   }

@@ -34,6 +34,7 @@ import {
   ensureDockerDaemonReady,
   ensureDockerInstalled,
   isDockerMissingContainerResult,
+  removeDockerImage,
   resolveDockerDesktopPath,
 } from "../src/docker-lifecycle.js";
 
@@ -93,6 +94,16 @@ describe("docker lifecycle", () => {
     expect(runForegroundMock).not.toHaveBeenCalled();
   });
 
+  it("asks before installing Docker Desktop with winget on Windows", async () => {
+    runForegroundQuietMock
+      .mockRejectedValueOnce(new Error("docker missing"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(ensureDockerInstalled({ platform: "win32" })).rejects.toThrow("请手动安装 Docker Desktop");
+    expect(runForegroundQuietMock).toHaveBeenCalledWith("winget", ["--version"]);
+    expect(runForegroundMock).not.toHaveBeenCalled();
+  });
+
   it("uses the configured Docker Desktop path on Windows daemon startup", async () => {
     runForegroundQuietMock.mockRejectedValueOnce(new Error("daemon unavailable"));
     runForegroundQuietMock.mockResolvedValueOnce(undefined);
@@ -121,5 +132,16 @@ describe("docker lifecycle", () => {
 
     await expect(ensureDockerDaemonReady({ platform: "linux" })).rejects.toThrow("Docker daemon");
     expect(spawnMock).not.toHaveBeenCalled();
+  });
+
+  it("removes the managed stack image when present", async () => {
+    runCommandMock.mockResolvedValueOnce({
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    await expect(removeDockerImage()).resolves.toBe(true);
+    expect(runCommandMock).toHaveBeenCalledWith("docker", ["rmi", "axis-stack:latest"], expect.any(Object));
   });
 });

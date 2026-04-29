@@ -15,7 +15,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 vi.mock("@/lib/env", () => ({
   getAppConfig: () => ({
     values: {
-      MNA_TOKEN_PATH: "~/.mna/token.txt",
+      MNA_TOKEN_PATH: "~/.axis/managed/mna/token.txt",
       NEXT_PUBLIC_MNA_BASE_URL: "http://127.0.0.1:4193",
       MNA_INTERNAL_BASE_URL: "http://host.docker.internal:4193"
     },

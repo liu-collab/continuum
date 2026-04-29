@@ -12,7 +12,7 @@ describe("resolvePlatformUserId", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "axis-platform-user-"));
-    configPath = path.join(tempDir, "platform-user.json");
+    configPath = path.join(tempDir, "platform-user-id.txt");
   });
 
   afterEach(async () => {
@@ -44,10 +44,7 @@ describe("resolvePlatformUserId", () => {
   it("reuses a persisted local platform user id", async () => {
     await writeFile(
       configPath,
-      JSON.stringify({
-        version: 1,
-        platformUserId: "550e8400-e29b-41d4-a716-446655440003",
-      }),
+      "550e8400-e29b-41d4-a716-446655440003\n",
       "utf8",
     );
 
@@ -57,11 +54,11 @@ describe("resolvePlatformUserId", () => {
   it("creates a stable local platform user id when env is not set", async () => {
     const first = await resolvePlatformUserId({}, { configPath });
     const second = await resolvePlatformUserId({}, { configPath });
-    const persisted = JSON.parse(await readFile(configPath, "utf8")) as { platformUserId: string };
+    const persisted = (await readFile(configPath, "utf8")).trim();
 
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(second).toBe(first);
-    expect(persisted.platformUserId).toBe(first);
+    expect(persisted).toBe(first);
   });
 
   it("rejects invalid env or corrupted persisted values", async () => {
@@ -69,7 +66,7 @@ describe("resolvePlatformUserId", () => {
       "PLATFORM_USER_ID 必须是有效 UUID",
     );
 
-    await writeFile(configPath, JSON.stringify({ version: 1, platformUserId: "bad" }), "utf8");
+    await writeFile(configPath, "bad\n", "utf8");
     await expect(resolvePlatformUserId({}, { configPath })).rejects.toThrow("本机 PLATFORM_USER_ID 配置损坏");
   });
 });

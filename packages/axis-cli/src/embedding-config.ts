@@ -1,5 +1,7 @@
 import process from "node:process";
 
+import { bilingualMessage } from "./messages.js";
+
 export type ThirdPartyEmbeddingConfig = {
   baseUrl: string;
   model: string;
@@ -19,13 +21,17 @@ function readNonEmpty(value: string | boolean | undefined) {
 function ensureUrl(value: string, fieldName: string) {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error();
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.toString().replace(/\/+$/, "");
     }
-    return parsed.toString().replace(/\/+$/, "");
   } catch {
-    throw new Error(`${fieldName} 必须是有效的 http(s) URL。`);
+    // fall through to the shared validation error below
   }
+
+  throw new Error(bilingualMessage(
+    `${fieldName} 必须是有效的 http(s) URL。`,
+    `${fieldName} must be a valid http(s) URL.`,
+  ));
 }
 
 export function resolveThirdPartyEmbeddingConfig(
@@ -39,7 +45,10 @@ export function resolveThirdPartyEmbeddingConfig(
 
   if (!baseUrl || !model) {
     throw new Error(
-      "axis start 需要第三方 embedding 配置。请提供 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL，或使用 --embedding-base-url / --embedding-model 传入。",
+      bilingualMessage(
+        "axis start 需要第三方 embedding 配置。请提供 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL，或使用 --embedding-base-url / --embedding-model 传入。",
+        "axis start requires third-party embedding configuration. Provide EMBEDDING_BASE_URL and EMBEDDING_MODEL, or pass --embedding-base-url / --embedding-model.",
+      ),
     );
   }
 

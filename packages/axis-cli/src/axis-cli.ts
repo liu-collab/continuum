@@ -10,6 +10,7 @@ import {
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runMnaCommand } from "./mna-command.js";
+import { bilingualMessage, formatErrorMessage } from "./messages.js";
 import { runRuntimeCommand } from "./runtime-command.js";
 import { runStartCommand } from "./start-command.js";
 import { runStopCommand } from "./stop-command.js";
@@ -20,6 +21,22 @@ import { readCliVersion } from "./version.js";
 const CODEX_VALID_SUBCOMMANDS = new Set(["install", "uninstall", "use"]);
 
 export async function runCli(argv: string[], importMetaUrl: string) {
+  try {
+    return await runCliUnchecked(argv, importMetaUrl);
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    process.stderr.write(`${bilingualMessage(
+      `Axis CLI 遇到未预期的错误：${message}`,
+      `Axis CLI encountered an unexpected error: ${message}`,
+    )}\n`);
+    if (process.env.NODE_ENV === "development" && error instanceof Error && error.stack) {
+      process.stderr.write(`${error.stack}\n`);
+    }
+    process.exit(1);
+  }
+}
+
+async function runCliUnchecked(argv: string[], importMetaUrl: string) {
   if (
     argv.length === 1
     && (argv[0] === "--version" || argv[0] === "-v" || argv[0] === "version")
@@ -73,8 +90,14 @@ export async function runCli(argv: string[], importMetaUrl: string) {
   if (primary === "codex") {
     const subcommand = secondary ?? "use";
     if (!CODEX_VALID_SUBCOMMANDS.has(subcommand)) {
-      process.stderr.write(`未知的 codex 子命令: ${subcommand}\n`);
-      process.stderr.write(`可用: ${[...CODEX_VALID_SUBCOMMANDS].join(", ")}\n`);
+      process.stderr.write(`${bilingualMessage(
+        `未知的 codex 子命令: ${subcommand}`,
+        `Unknown codex subcommand: ${subcommand}`,
+      )}\n`);
+      process.stderr.write(`${bilingualMessage(
+        `可用: ${[...CODEX_VALID_SUBCOMMANDS].join(", ")}`,
+        `Available: ${[...CODEX_VALID_SUBCOMMANDS].join(", ")}`,
+      )}\n`);
       return 1;
     }
 
@@ -106,7 +129,10 @@ export async function runCli(argv: string[], importMetaUrl: string) {
     return 0;
   }
 
-  process.stderr.write(`Unknown command: ${parsed.command.join(" ")}\n`);
+  process.stderr.write(`${bilingualMessage(
+    `未知命令: ${parsed.command.join(" ")}`,
+    `Unknown command: ${parsed.command.join(" ")}`,
+  )}\n`);
   process.stdout.write(renderHelp());
   return 1;
 }

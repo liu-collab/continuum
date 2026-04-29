@@ -3,22 +3,18 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { axisManagedDir } from "./managed-state.js";
-import { pathExists, safeJsonParse } from "./utils.js";
+import { bilingualMessage } from "./messages.js";
+import { pathExists } from "./utils.js";
 
 const PLATFORM_USER_ID_ENV_NAMES = ["PLATFORM_USER_ID", "MNA_PLATFORM_USER_ID", "MEMORY_USER_ID"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-type ManagedPlatformUserConfig = {
-  version: 1;
-  platformUserId: string;
-};
 
 type ResolvePlatformUserIdOptions = {
   configPath?: string;
 };
 
 export function axisManagedPlatformUserPath() {
-  return path.join(axisManagedDir(), "platform-user.json");
+  return path.join(axisManagedDir(), "platform-user-id.txt");
 }
 
 function resolvePlatformUserIdFromEnv(env: NodeJS.ProcessEnv) {
@@ -31,7 +27,10 @@ function resolvePlatformUserIdFromEnv(env: NodeJS.ProcessEnv) {
   }
 
   if (!UUID_PATTERN.test(value)) {
-    throw new Error("PLATFORM_USER_ID 必须是有效 UUID。");
+    throw new Error(bilingualMessage(
+      "PLATFORM_USER_ID 必须是有效 UUID。",
+      "PLATFORM_USER_ID must be a valid UUID.",
+    ));
   }
 
   return value;
@@ -42,10 +41,12 @@ async function readPersistedPlatformUserId(configPath: string) {
     return undefined;
   }
 
-  const parsed = safeJsonParse<Partial<ManagedPlatformUserConfig>>(configPath, await readFile(configPath, "utf8"));
-  const platformUserId = parsed.platformUserId?.trim();
+  const platformUserId = (await readFile(configPath, "utf8")).trim();
   if (!platformUserId || !UUID_PATTERN.test(platformUserId)) {
-    throw new Error(`本机 PLATFORM_USER_ID 配置损坏: ${configPath}，请删除该文件后重试。`);
+    throw new Error(bilingualMessage(
+      `本机 PLATFORM_USER_ID 配置损坏: ${configPath}，请删除该文件后重试。`,
+      `Local PLATFORM_USER_ID config is corrupted: ${configPath}. Delete this file and retry.`,
+    ));
   }
   return platformUserId;
 }
@@ -67,17 +68,6 @@ export async function resolvePlatformUserId(
 
   const platformUserId = randomUUID();
   await mkdir(path.dirname(configPath), { recursive: true });
-  await writeFile(
-    configPath,
-    JSON.stringify(
-      {
-        version: 1,
-        platformUserId,
-      } satisfies ManagedPlatformUserConfig,
-      null,
-      2,
-    ),
-    "utf8",
-  );
+  await writeFile(configPath, `${platformUserId}\n`, "utf8");
   return platformUserId;
 }
