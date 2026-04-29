@@ -41,8 +41,8 @@ describe("config loader", () => {
 
     expect(config.runtime.baseUrl).toBe("http://127.0.0.1:3002");
     expect(config.runtime.finalizeTimeoutMs).toBe(10_000);
-    expect(config.provider.kind).toBe("demo");
-    expect(config.provider.model).toBe("axis-demo");
+    expect(config.provider.kind).toBe("not-configured");
+    expect(config.provider.model).toBe("not configured");
     expect(config.provider.effort).toBeNull();
     expect(config.provider.maxTokens).toBeNull();
     expect(config.memory.mode).toBe("workspace_plus_global");
@@ -389,7 +389,7 @@ locale: en-US
       path.join(managedHome, "config.yaml"),
       `
 provider:
-  kind: demo
+  kind: ollama
   model: qwen-from-managed-home
   base_url: http://127.0.0.1:11434
 `,

@@ -15,7 +15,9 @@ import {
   createCompositeAbortController,
   buildProviderUserAgent,
   emptyUsage,
+  isProviderNetworkError,
   mapStatusToError,
+  mapNetworkErrorToProviderUnavailable,
   parseJsonObject,
   resolveRuntimeSettings,
   retryDelayMs,
@@ -239,6 +241,10 @@ export class OllamaProvider implements IModelProvider {
 
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Ollama provider timed out before response.", error);
+        }
+
+        if (isProviderNetworkError(error)) {
+          throw mapNetworkErrorToProviderUnavailable("Ollama provider", error);
         }
 
         throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));

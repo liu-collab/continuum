@@ -32,7 +32,6 @@ export function resolveContextMaxTokens(provider: ProviderConfig): number {
         return 32_000;
       }
       return 16_000;
-    case "demo":
     default:
       return 8_192;
   }

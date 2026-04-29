@@ -9,7 +9,7 @@ import type { RuntimeFastifyInstance } from "../types.js";
 import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolApprovalMode } from "../state.js";
 import { clearManagedDependencyProbe, writeManagedDependencyProbe } from "./dependency-status-cache.js";
 
-const providerKindSchema = z.enum(["demo", "openai-compatible", "anthropic", "ollama", "record-replay"]);
+const providerKindSchema = z.enum(["openai-compatible", "anthropic", "ollama", "record-replay"]);
 const mcpServerPayloadSchema = z.object({
   name: z.string().trim().min(1),
   transport: z.enum(["stdio", "http"]),
@@ -490,12 +490,15 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
     }>(resolveManagedMemoryLlmConfigPath(app));
     const managedEmbedding = managedConfig.embedding;
     const managedMemoryLlm = managedConfig.memory_llm;
+    const providerStatus = app.runtimeState.provider.status?.();
+    const providerNotConfigured = providerStatus?.status === "misconfigured"
+      && app.runtimeState.config.provider.kind === "not-configured";
 
     return {
       provider: {
-        kind: app.runtimeState.config.provider.kind,
-        model: app.runtimeState.config.provider.model,
-        base_url: app.runtimeState.config.provider.baseUrl,
+        kind: providerNotConfigured ? "not-configured" : app.runtimeState.config.provider.kind,
+        model: providerNotConfigured ? "" : app.runtimeState.config.provider.model,
+        base_url: providerNotConfigured ? null : app.runtimeState.config.provider.baseUrl,
         api_key: app.runtimeState.config.provider.apiKey ?? managedSecrets.provider_api_key,
         api_key_env: app.runtimeState.config.provider.apiKeyEnv,
         temperature: app.runtimeState.config.provider.temperature,

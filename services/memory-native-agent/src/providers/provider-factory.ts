@@ -1,6 +1,5 @@
 import type { ProviderConfig } from "../config/index.js";
 import { AnthropicProvider } from "./anthropic.js";
-import { DemoProvider } from "./demo.js";
 import { MisconfiguredProvider } from "./misconfigured.js";
 import { OllamaProvider } from "./ollama.js";
 import { OpenAICompatibleProvider } from "./openai-compatible.js";
@@ -8,6 +7,14 @@ import { RecordReplayProvider } from "./record-replay.js";
 import { ProviderAuthError, type IModelProvider } from "./types.js";
 
 export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = process.env): IModelProvider {
+  if (config.kind === "not-configured") {
+    return new MisconfiguredProvider({
+      kind: config.kind,
+      model: config.model,
+      detail: "尚未配置聊天主模型。请在 Agent 页面的设置面板中配置 provider。 | Primary chat model is not configured. Configure a provider in Agent settings.",
+    });
+  }
+
   if (config.kind === "record-replay") {
     const mode = resolveRecordReplayMode(env);
     const targetProvider = createRecordReplayTargetProvider(config, env);
@@ -25,12 +32,6 @@ export function createProvider(config: ProviderConfig, env: NodeJS.ProcessEnv = 
       mode,
       modelId: config.model,
       targetProvider,
-    });
-  }
-
-  if (config.kind === "demo") {
-    return new DemoProvider({
-      model: config.model,
     });
   }
 
@@ -83,7 +84,7 @@ function createRecordReplayTargetProvider(
   env: NodeJS.ProcessEnv,
 ): IModelProvider | undefined {
   const targetKind = (env.MNA_REC_TARGET?.trim() as ProviderConfig["kind"] | undefined) ?? config.recordReplayTarget;
-  if (!targetKind || targetKind === "record-replay") {
+  if (!targetKind || !isRecordReplayTargetKind(targetKind)) {
     return undefined;
   }
 
@@ -92,7 +93,15 @@ function createRecordReplayTargetProvider(
     kind: targetKind,
   };
 
+  if (targetKind === "openai-compatible" || targetKind === "anthropic") {
+    targetConfig.apiKeyEnv ??= targetKind === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
+  }
+
   return createProvider(targetConfig, env);
+}
+
+function isRecordReplayTargetKind(value: string): value is "openai-compatible" | "anthropic" | "ollama" {
+  return value === "openai-compatible" || value === "anthropic" || value === "ollama";
 }
 
 function resolveRecordReplayMode(env: NodeJS.ProcessEnv): "live" | "record" | "replay" {

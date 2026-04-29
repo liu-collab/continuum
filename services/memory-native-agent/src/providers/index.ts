@@ -1,4 +1,3 @@
-export { DemoProvider } from "./demo.js";
 export { AnthropicProvider } from "./anthropic.js";
 export { MisconfiguredProvider } from "./misconfigured.js";
 export { OllamaProvider } from "./ollama.js";

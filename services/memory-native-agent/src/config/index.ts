@@ -38,7 +38,7 @@ export interface ProviderConfig {
   keepAlive?: string | number;
   fixtureDir?: string;
   fixtureName?: string;
-  recordReplayTarget?: Exclude<ProviderKind, "record-replay">;
+  recordReplayTarget?: Exclude<ProviderKind, "record-replay" | "not-configured">;
 }
 
 export interface McpServerConfig {
@@ -165,13 +165,18 @@ function parseConfigFile(filePath: string): ConfigFileInput {
     extension === ".json"
       ? JSON.parse(content)
       : parseYaml(content);
+  const normalizedRaw = normalizeLegacyConfig(raw);
 
-  const parsed = configFileSchema.safeParse(raw);
+  const parsed = configFileSchema.safeParse(normalizedRaw);
   if (!parsed.success) {
     throw new Error(formatValidationError(`Invalid config file ${filePath}`, parsed.error));
   }
 
   return parsed.data;
+}
+
+function normalizeLegacyConfig(raw: unknown) {
+  return raw;
 }
 
 function buildCandidateConfigFiles(options: {
@@ -235,7 +240,7 @@ function resolveSystemPrompt(options: {
 
 function validateProviderEnvironment(provider: {
   kind: ProviderKind;
-  record_replay_target?: Exclude<ProviderKind, "record-replay">;
+  record_replay_target?: Exclude<ProviderKind, "record-replay" | "not-configured">;
 }, env: NodeJS.ProcessEnv) {
   if (provider.kind === "record-replay") {
     // record-replay missing target should not block startup.
@@ -312,11 +317,12 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
     || env.MNA_FIXTURE_NAME
     || env.MNA_REC_TARGET
   ) {
+    const envProviderKind = env.MNA_PROVIDER_KIND?.trim();
     const reparsed = mergedConfigSchema.safeParse({
       ...parsed.data,
       provider: {
         ...parsed.data.provider,
-        kind: (env.MNA_PROVIDER_KIND as ProviderKind | undefined) ?? parsed.data.provider.kind,
+        kind: (envProviderKind as ProviderKind | undefined) ?? parsed.data.provider.kind,
         model: env.MNA_PROVIDER_MODEL?.trim() || parsed.data.provider.model,
         base_url: env.MNA_PROVIDER_BASE_URL?.trim() || parsed.data.provider.base_url,
         api_key: env.MNA_PROVIDER_API_KEY?.trim() || parsed.data.provider.api_key,
@@ -324,7 +330,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AgentConfig {
         fixture_dir: env.MNA_FIXTURE_DIR?.trim() || parsed.data.provider.fixture_dir,
         fixture_name: env.MNA_FIXTURE_NAME?.trim() || parsed.data.provider.fixture_name,
         record_replay_target:
-          (env.MNA_REC_TARGET?.trim() as Exclude<ProviderKind, "record-replay"> | undefined)
+          (env.MNA_REC_TARGET?.trim() as Exclude<ProviderKind, "record-replay" | "not-configured"> | undefined)
           ?? parsed.data.provider.record_replay_target,
       },
     });

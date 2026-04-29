@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OpenAICompatibleProvider } from "../openai-compatible.js";
 import { ProviderAuthError, ProviderRateLimitedError, ProviderTimeoutError, ProviderUnavailableError } from "../types.js";
@@ -10,6 +10,7 @@ describe("OpenAICompatibleProvider", () => {
   const apps: Array<{ close(): Promise<void> }> = [];
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(apps.splice(0).map((app) => app.close()));
   });
 
@@ -194,6 +195,30 @@ describe("OpenAICompatibleProvider", () => {
     await expect(
       collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
     ).rejects.toBeInstanceOf(ProviderUnavailableError);
+  });
+
+  it("reports a clear provider network error when the endpoint is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(
+      new TypeError("fetch failed", {
+        cause: Object.assign(new Error("getaddrinfo ENOTFOUND api.invalid"), { code: "ENOTFOUND" }),
+      }),
+    );
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: "https://api.invalid",
+      model: "deepseek-chat",
+      apiKey: "test-key",
+      runtimeSettings: {
+        maxRetries: 0,
+      },
+    });
+
+    await expect(
+      collectChunks(provider.chat({ messages: [{ role: "user", content: "继续" }] })),
+    ).rejects.toMatchObject({
+      code: "provider_unavailable",
+      message: expect.stringContaining("网络不可达"),
+    });
   });
 
   it("stops streaming after the caller aborts the request signal", async () => {

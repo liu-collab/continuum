@@ -15,7 +15,9 @@ import {
   createCompositeAbortController,
   emptyUsage,
   buildProviderUserAgent,
+  isProviderNetworkError,
   mapStatusToError,
+  mapNetworkErrorToProviderUnavailable,
   mergeUsage,
   parseJsonObject,
   resolveRuntimeSettings,
@@ -311,6 +313,10 @@ export class AnthropicProvider implements IModelProvider {
 
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("Anthropic provider timed out before response.", error);
+        }
+
+        if (isProviderNetworkError(error)) {
+          throw mapNetworkErrorToProviderUnavailable("Anthropic provider", error);
         }
 
         throw error instanceof Error ? new ProviderStreamError(error.message, error) : new ProviderStreamError(String(error));

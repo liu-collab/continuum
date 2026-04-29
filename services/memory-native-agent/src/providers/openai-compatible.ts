@@ -20,6 +20,8 @@ import {
   mergeUsage,
   parseJsonObject,
   buildProviderUserAgent,
+  isProviderNetworkError,
+  mapNetworkErrorToProviderUnavailable,
   resolveRuntimeSettings,
   retryDelayMs,
   sleep,
@@ -311,6 +313,10 @@ export class OpenAICompatibleProvider implements IModelProvider {
 
         if (isAbortLikeError(error, controller.signal.reason)) {
           throw new ProviderTimeoutError("OpenAI-compatible provider timed out before response.", error);
+        }
+
+        if (isProviderNetworkError(error)) {
+          throw mapNetworkErrorToProviderUnavailable("OpenAI-compatible provider", error);
         }
 
         lastError = error instanceof Error ? error : new Error(String(error));

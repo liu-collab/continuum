@@ -10,7 +10,7 @@ export const DEFAULT_RUNTIME_BASE_URL = "http://127.0.0.1:3002";
 export const DEFAULT_RUNTIME_REQUEST_TIMEOUT_MS = 30_000;
 export const DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS = 10_000;
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-export const DEFAULT_DEMO_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
+export const DEFAULT_UNCONFIGURED_PROVIDER_BASE_URL = "http://127.0.0.1:4194";
 export const DEFAULT_TOOL_MAX_OUTPUT_CHARS = 8_192;
 export const DEFAULT_CONTEXT_RESERVE_TOKENS = 4_096;
 export const DEFAULT_SKILL_DISCOVERY_PATHS = [
@@ -37,9 +37,9 @@ export const DEFAULT_RAW_CONFIG = {
     finalize_timeout_ms: DEFAULT_RUNTIME_FINALIZE_TIMEOUT_MS,
   },
   provider: {
-    kind: "demo",
-    model: "axis-demo",
-    base_url: DEFAULT_DEMO_PROVIDER_BASE_URL,
+    kind: "not-configured",
+    model: "not configured",
+    base_url: DEFAULT_UNCONFIGURED_PROVIDER_BASE_URL,
     temperature: 0.2,
     effort: null as "low" | "medium" | "high" | "xhigh" | "max" | null,
     max_tokens: null as number | null,

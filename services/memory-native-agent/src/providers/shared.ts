@@ -70,6 +70,47 @@ export function mapStatusToError(status: number, context: string): Error {
   return new ProviderUnavailableError(`${context} failed with ${status}`, status);
 }
 
+function readErrorCauseCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (!cause || typeof cause !== "object") {
+    return undefined;
+  }
+
+  const code = (cause as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+export function isProviderNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = readErrorCauseCode(error);
+  return (
+    error instanceof TypeError
+    || error.message.includes("fetch failed")
+    || code === "ECONNREFUSED"
+    || code === "ENOTFOUND"
+    || code === "EAI_AGAIN"
+    || code === "ECONNRESET"
+    || code === "ETIMEDOUT"
+    || code === "UND_ERR_CONNECT_TIMEOUT"
+  );
+}
+
+export function mapNetworkErrorToProviderUnavailable(context: string, error: unknown): ProviderUnavailableError {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new ProviderUnavailableError(
+    `${context} 网络不可达，请检查网络、代理或 provider base_url 配置。${detail} | ${context} is not reachable. Check the network, proxy, or provider base_url configuration. ${detail}`,
+    undefined,
+    error,
+  );
+}
+
 export function retryDelayMs(
   error: Error,
   attempt: number,
