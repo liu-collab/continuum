@@ -36,7 +36,7 @@ Options:
   --memory-llm-effort EFFORT      记忆模型推理强度，支持 low / medium / high / xhigh / max
   --memory-llm-timeout-ms MS      记忆模型请求超时毫秒数
   --memory-llm-max-tokens TOKENS  记忆模型最大输出 token 数
-  --provider-kind KIND       mna 模型类型，支持 demo / openai-compatible / anthropic / ollama
+  --provider-kind KIND       mna 模型类型，支持 openai-compatible / anthropic / ollama
   --provider-model MODEL     mna 模型名；仅对本次启动生效，页面默认读取已保存配置
   --provider-base-url URL    mna provider 地址；仅对本次启动生效
   --provider-api-key-env ENV mna provider 鉴权环境变量名；仅对本次启动生效

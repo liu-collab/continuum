@@ -428,5 +428,13 @@ export async function prepareStackContext(packageRoot: string, includeVisualizat
 }
 
 export async function buildStackImage(stageDir: string, imageName = DEFAULT_MANAGED_STACK_IMAGE) {
-  await runForeground("docker", ["build", "-t", imageName, stageDir]);
+  try {
+    await runForeground("docker", ["build", "-t", imageName, stageDir]);
+  } catch (error) {
+    const message = formatErrorMessage(error);
+    throw new Error(bilingualMessage(
+      `Docker 镜像构建失败。首次启动需要访问 Docker Hub 和 NodeSource；如果当前网络不可用，请联网后重试。${message}`,
+      `Docker image build failed. First startup needs access to Docker Hub and NodeSource. If the network is unavailable, reconnect and retry. ${message}`,
+    ));
+  }
 }

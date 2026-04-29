@@ -494,6 +494,10 @@ export async function readManagedMnaProviderConfig(
   if (!provider) {
     return null;
   }
+  const kind = String(provider.kind);
+  if (!["openai-compatible", "anthropic", "ollama"].includes(kind)) {
+    return null;
+  }
 
   const resolvedApiKey =
     provider.api_key
@@ -508,7 +512,7 @@ export async function readManagedMnaProviderConfig(
         : undefined;
 
   return {
-    kind: provider.kind,
+    kind,
     model: provider.model,
     ...(provider.base_url
       ? { baseUrl: provider.base_url }

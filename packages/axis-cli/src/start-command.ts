@@ -211,7 +211,7 @@ async function isPrimaryProviderConfigured(options: Record<string, string | bool
   }
 
   const persisted = await readManagedMnaProviderConfig(path.join(axisManagedDir(), "mna")).catch(() => null);
-  return Boolean(persisted && persisted.kind !== "demo");
+  return Boolean(persisted);
 }
 
 function writeMissingPrimaryProviderWarning() {

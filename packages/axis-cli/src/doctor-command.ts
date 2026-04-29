@@ -2,6 +2,7 @@ import { statfs } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
+import { readManagedEmbeddingConfig } from "./managed-config.js";
 import {
   axisHomeDir,
   DEFAULT_MANAGED_POSTGRES_PORT,
@@ -255,6 +256,30 @@ function checkProviderKey(): DoctorCheck {
       };
 }
 
+async function checkEmbeddingConfig(): Promise<DoctorCheck> {
+  const managed = await readManagedEmbeddingConfig().catch(() => null);
+  const hasConfig = Boolean(
+    (managed?.baseUrl && managed.model)
+    || (process.env.EMBEDDING_BASE_URL?.trim() && process.env.EMBEDDING_MODEL?.trim()),
+  );
+
+  return hasConfig
+    ? {
+        level: "ok",
+        label: bilingualMessage(
+          "已配置 embedding",
+          "Embedding is configured",
+        ),
+      }
+    : {
+        level: "warn",
+        label: bilingualMessage(
+          "未检测到 embedding 配置，记忆检索会降级；可启动后在 Agent 设置面板中配置。",
+          "Embedding config was not detected, so memory retrieval will be degraded. Configure it in the Agent settings panel after startup.",
+        ),
+      };
+}
+
 export async function runDoctorCommand() {
   const [dockerInstalled, dockerRunning, ...portChecks] = await Promise.all([
     checkDockerInstalled(),
@@ -270,6 +295,7 @@ export async function runDoctorCommand() {
     dockerRunning,
     ...portChecks,
     checkProviderKey(),
+    await checkEmbeddingConfig(),
     await checkDiskSpace(),
   ];
 

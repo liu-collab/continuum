@@ -94,11 +94,11 @@ function isUiManagedProviderConfig(config: ManagedMnaProviderConfig | null) {
     return false;
   }
 
-  if (config.kind === "demo" || config.kind === "ollama") {
+  if (config.kind === "ollama") {
     return true;
   }
 
-  return Boolean(config.apiKey);
+  return Boolean(config.apiKey || config.apiKeyEnv);
 }
 
 function readTailLines(content: string, lineCount: number) {
@@ -262,7 +262,7 @@ export async function startManagedMna(
     : null;
   const providerConfig = hasProviderOverrides
     ? resolveManagedMnaProviderConfig(options)
-    : uiManagedProviderConfig ?? resolveManagedMnaProviderConfig({});
+    : uiManagedProviderConfig;
   const url = `http://${host}:${port}`;
   const logPath = path.join(axisLogsDir(), "mna.log");
   const tokenPath = path.join(homeDir, "token.txt");
@@ -288,11 +288,11 @@ export async function startManagedMna(
       RUNTIME_BASE_URL: runtimeUrl,
       ...(managedConfigPath ? { AXIS_MANAGED_CONFIG_PATH: managedConfigPath } : {}),
       ...(managedSecretsPath ? { AXIS_MANAGED_SECRETS_PATH: managedSecretsPath } : {}),
-      MNA_PROVIDER_KIND: providerConfig.kind,
-      MNA_PROVIDER_MODEL: providerConfig.model,
-      ...(providerConfig.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),
-      ...(providerConfig.apiKey ? { MNA_PROVIDER_API_KEY: providerConfig.apiKey } : {}),
-      ...(providerConfig.apiKeyEnv ? { MNA_PROVIDER_API_KEY_ENV: providerConfig.apiKeyEnv } : {}),
+      ...(providerConfig ? { MNA_PROVIDER_KIND: providerConfig.kind } : {}),
+      ...(providerConfig ? { MNA_PROVIDER_MODEL: providerConfig.model } : {}),
+      ...(providerConfig?.baseUrl ? { MNA_PROVIDER_BASE_URL: providerConfig.baseUrl } : {}),
+      ...(providerConfig?.apiKey ? { MNA_PROVIDER_API_KEY: providerConfig.apiKey } : {}),
+      ...(providerConfig?.apiKeyEnv ? { MNA_PROVIDER_API_KEY_ENV: providerConfig.apiKeyEnv } : {}),
     }
   });
   child.unref();

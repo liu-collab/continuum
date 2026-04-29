@@ -441,14 +441,10 @@ describe("axis cli", () => {
     expect(buildEmbeddingsEndpoint(config.baseUrl)).toBe("https://api.openai.com/v1/embeddings");
   });
 
-  it("falls back to demo provider when no model credential is available", () => {
+  it("does not configure a provider when no model option is available", () => {
     const config = resolveManagedMnaProviderConfig({});
 
-    expect(config).toEqual({
-      kind: "demo",
-      model: "axis-demo",
-      baseUrl: undefined,
-    });
+    expect(config).toBeNull();
   });
 
   it("uses explicit DeepSeek provider options without reading local env", () => {

@@ -370,8 +370,8 @@ describe("axis mna command", () => {
 
     await startManagedMna({ "mna-home": mnaHome }, import.meta.url);
 
-    expect(capturedEnv?.MNA_PROVIDER_KIND).toBe("demo");
-    expect(capturedEnv?.MNA_PROVIDER_MODEL).toBe("axis-demo");
+    expect(capturedEnv?.MNA_PROVIDER_KIND).toBeUndefined();
+    expect(capturedEnv?.MNA_PROVIDER_MODEL).toBeUndefined();
     expect(capturedEnv?.MNA_PROVIDER_API_KEY_ENV).toBeUndefined();
   });
 

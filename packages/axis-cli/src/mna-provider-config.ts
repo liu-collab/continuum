@@ -1,11 +1,6 @@
+import { bilingualMessage } from "./messages.js";
+
 export type ManagedMnaProviderConfig =
-  | {
-      kind: "demo";
-      model: string;
-      baseUrl?: string;
-      apiKey?: undefined;
-      apiKeyEnv?: undefined;
-    }
   | {
       kind: "openai-compatible" | "anthropic";
       model: string;
@@ -29,6 +24,10 @@ function shouldUseDeepSeekDefaults(model: string, baseUrl: string) {
   return model.startsWith("deepseek") || baseUrl.includes("api.deepseek.com");
 }
 
+function isSupportedProviderKind(value: string) {
+  return value === "openai-compatible" || value === "anthropic" || value === "ollama";
+}
+
 export function hasManagedMnaProviderOptionOverrides(options: Record<string, string | boolean>) {
   return [
     options["provider-kind"],
@@ -40,7 +39,7 @@ export function hasManagedMnaProviderOptionOverrides(options: Record<string, str
 
 export function resolveManagedMnaProviderConfig(
   options: Record<string, string | boolean>,
-): ManagedMnaProviderConfig {
+): ManagedMnaProviderConfig | null {
   const explicitKind =
     typeof options["provider-kind"] === "string" ? options["provider-kind"].trim() : "";
   const explicitModel =
@@ -52,12 +51,15 @@ export function resolveManagedMnaProviderConfig(
       ? options["provider-api-key-env"].trim()
       : "";
 
-  if (explicitKind === "demo" || !hasManagedMnaProviderOptionOverrides(options)) {
-    return {
-      kind: "demo",
-      model: explicitModel || "axis-demo",
-      baseUrl: explicitBaseUrl || undefined,
-    };
+  if (!hasManagedMnaProviderOptionOverrides(options)) {
+    return null;
+  }
+
+  if (explicitKind && !isSupportedProviderKind(explicitKind)) {
+    throw new Error(bilingualMessage(
+      `不支持的 provider-kind: ${explicitKind}`,
+      `Unsupported provider-kind: ${explicitKind}`,
+    ));
   }
 
   const resolvedKind = explicitKind || "ollama";
