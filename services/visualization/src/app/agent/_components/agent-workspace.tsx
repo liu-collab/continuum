@@ -222,6 +222,9 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onSaveGovernanceConfig={(payload) => {
           return workspace.updateGovernanceConfig(payload);
         }}
+        onListProviderModels={(payload) => {
+          return workspace.listProviderModels(payload);
+        }}
         onCheckEmbeddings={() => {
           return workspace.checkEmbeddings();
         }}

@@ -61,6 +61,12 @@ describe("SettingsModal", () => {
   it("uses a detected OpenAI API key env hint in the setup wizard", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
+    const onListProviderModels = vi.fn(async () => ({
+      models: [
+        { id: "gpt-4.1-mini", label: "gpt-4.1-mini" },
+        { id: "gpt-4.1", label: "gpt-4.1" },
+      ],
+    }));
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -85,6 +91,7 @@ describe("SettingsModal", () => {
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
+          onListProviderModels={onListProviderModels}
           onCheckEmbeddings={vi.fn(async () => ({
             status: "healthy",
             detail: "embedding request completed",
@@ -103,7 +110,14 @@ describe("SettingsModal", () => {
       "已检测到环境变量 OPENAI_API_KEY，可直接使用。",
     );
     await user.click(screen.getByTestId("setup-wizard-next"));
-    expect(screen.getByLabelText("模型名")).toHaveValue("gpt-4.1-mini");
+    expect(onListProviderModels).toHaveBeenCalledWith({
+      kind: "openai-responses",
+      base_url: "https://api.openai.com/v1",
+      api_key_env: "OPENAI_API_KEY",
+    });
+    expect(await screen.findByTestId("setup-model-select")).toHaveTextContent("请选择模型");
+    await user.click(screen.getByTestId("setup-model-select"));
+    await user.click(screen.getByRole("option", { name: "gpt-4.1-mini" }));
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
@@ -121,6 +135,12 @@ describe("SettingsModal", () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onSaveRuntime = vi.fn(async () => undefined);
+    const onListProviderModels = vi.fn(async () => ({
+      models: [
+        { id: "deepseek-chat", label: "deepseek-chat" },
+        { id: "deepseek-reasoner", label: "deepseek-reasoner" },
+      ],
+    }));
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -142,6 +162,7 @@ describe("SettingsModal", () => {
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
+          onListProviderModels={onListProviderModels}
           onCheckEmbeddings={vi.fn(async () => ({
             status: "healthy",
             detail: "embedding request completed",
@@ -160,7 +181,14 @@ describe("SettingsModal", () => {
     await user.click(screen.getByTestId("setup-wizard-next"));
     await user.type(screen.getByLabelText("API Key"), "sk-test");
     await user.click(screen.getByTestId("setup-wizard-next"));
-    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-chat");
+    expect(onListProviderModels).toHaveBeenCalledWith({
+      kind: "openai-compatible",
+      base_url: "https://api.deepseek.com",
+      api_key: "sk-test",
+    });
+    expect(await screen.findByTestId("setup-model-select")).toHaveTextContent("请选择模型");
+    await user.click(screen.getByTestId("setup-model-select"));
+    await user.click(screen.getByRole("option", { name: "deepseek-chat" }));
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
@@ -178,6 +206,12 @@ describe("SettingsModal", () => {
   it("saves a custom OpenAI-compatible provider from the setup wizard", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
+    const onListProviderModels = vi.fn(async () => ({
+      models: [
+        { id: "qwen-plus", label: "qwen-plus" },
+        { id: "qwen-max", label: "qwen-max" },
+      ],
+    }));
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -199,6 +233,7 @@ describe("SettingsModal", () => {
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
+          onListProviderModels={onListProviderModels}
           onCheckEmbeddings={vi.fn(async () => ({
             status: "healthy",
             detail: "embedding request completed",
@@ -221,8 +256,13 @@ describe("SettingsModal", () => {
       "https://dashscope.aliyuncs.com/compatible-mode/v1",
     );
     await user.click(screen.getByTestId("setup-wizard-next"));
-    await user.clear(screen.getByLabelText("模型名"));
-    await user.type(screen.getByLabelText("模型名"), "qwen-plus");
+    expect(onListProviderModels).toHaveBeenCalledWith({
+      kind: "openai-compatible",
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      api_key: "sk-custom",
+    });
+    await user.click(screen.getByTestId("setup-model-select"));
+    await user.click(screen.getByRole("option", { name: "qwen-plus" }));
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
@@ -239,6 +279,11 @@ describe("SettingsModal", () => {
   it("allows editing the preset provider base_url in the setup wizard", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
+    const onListProviderModels = vi.fn(async () => ({
+      models: [
+        { id: "openrouter/auto", label: "openrouter/auto" },
+      ],
+    }));
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
@@ -260,6 +305,7 @@ describe("SettingsModal", () => {
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
+          onListProviderModels={onListProviderModels}
           onCheckEmbeddings={vi.fn(async () => ({
             status: "healthy",
             detail: "embedding request completed",
@@ -278,12 +324,19 @@ describe("SettingsModal", () => {
     await user.clear(screen.getByLabelText("provider base_url"));
     await user.type(screen.getByLabelText("provider base_url"), "https://openrouter.ai/api/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
+    expect(onListProviderModels).toHaveBeenCalledWith({
+      kind: "openai-responses",
+      base_url: "https://openrouter.ai/api/v1",
+      api_key: "sk-router",
+    });
+    await user.click(screen.getByTestId("setup-model-select"));
+    await user.click(screen.getByRole("option", { name: "openrouter/auto" }));
     await user.click(screen.getByTestId("setup-wizard-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith({
       provider: {
         kind: "openai-responses",
-        model: "gpt-4.1-mini",
+        model: "openrouter/auto",
         base_url: "https://openrouter.ai/api/v1",
         api_key: "sk-router",
         effort: null,
@@ -331,8 +384,9 @@ describe("SettingsModal", () => {
 
     const primaryConfig = screen.getByTestId("primary-model-config");
     await waitFor(() => {
-      expect(within(primaryConfig).getByPlaceholderText("provider model")).toHaveValue("deepseek-chat");
+      expect(within(primaryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.deepseek.com");
     });
+    expect(within(primaryConfig).getByPlaceholderText("provider model")).toHaveValue("");
     expect(within(primaryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.deepseek.com");
     expect(screen.getByTestId("runtime-config-provider-api-key-env")).toHaveTextContent(
       "已检测到环境变量 DEEPSEEK_API_KEY，可直接使用。",
@@ -340,15 +394,9 @@ describe("SettingsModal", () => {
 
     await user.click(screen.getByTestId("runtime-config-save"));
 
-    expect(onSaveRuntime).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: expect.objectContaining({
-          kind: "openai-compatible",
-          model: "deepseek-chat",
-          base_url: "https://api.deepseek.com",
-          api_key_env: "DEEPSEEK_API_KEY",
-        }),
-      }),
+    expect(onSaveRuntime).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
+      "provider model 不能为空。",
     );
   });
 

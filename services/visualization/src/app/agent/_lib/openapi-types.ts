@@ -356,6 +356,13 @@ export type MnaAgentConfigResponse = {
   };
 };
 
+export type MnaProviderModelListResponse = {
+  models: Array<{
+    id: string;
+    label: string;
+  }>;
+};
+
 export type MnaRuntimeGovernanceConfig = {
   WRITEBACK_MAINTENANCE_ENABLED: boolean;
   WRITEBACK_MAINTENANCE_INTERVAL_MS: number;

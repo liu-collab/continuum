@@ -41,6 +41,11 @@ export function registerOpenApiRoutes(app: RuntimeFastifyInstance) {
           summary: "Update current agent, embedding, and memory llm config",
         },
       },
+      "/v1/agent/provider-models": {
+        post: {
+          summary: "List models from the selected provider",
+        },
+      },
       "/v1/skills": {
         get: {
           summary: "List imported skills",

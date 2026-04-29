@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { ProviderConfig } from "../../config/index.js";
 import { createProvider } from "../../providers/index.js";
+import { buildBaseUrl } from "../../providers/shared.js";
 import type { RuntimeFastifyInstance } from "../types.js";
 import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolApprovalMode } from "../state.js";
 import { clearManagedDependencyProbe, writeManagedDependencyProbe } from "./dependency-status-cache.js";
@@ -104,6 +105,24 @@ const updateConfigSchema = z.object({
   }).optional(),
 });
 
+const providerModelsPayloadSchema = z.object({
+  kind: z.enum(["openai-compatible", "openai-responses", "anthropic", "ollama"]),
+  base_url: z.string().trim().url(),
+  api_key: z.string().trim().optional(),
+  api_key_env: z.string().trim().min(1).optional(),
+}).superRefine((value, context) => {
+  const requiresApiKey =
+    value.kind === "openai-compatible" || value.kind === "openai-responses" || value.kind === "anthropic";
+
+  if (requiresApiKey && !value.api_key && !value.api_key_env) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["api_key"],
+      message: "api_key or api_key_env is required for the selected provider.",
+    });
+  }
+});
+
 const runtimeGovernanceConfigUpdateSchema = z.object({
   WRITEBACK_MAINTENANCE_ENABLED: z.boolean().optional(),
   WRITEBACK_MAINTENANCE_INTERVAL_MS: z.number().int().min(30_000).optional(),
@@ -163,6 +182,22 @@ type ManagedUnifiedSecrets = {
   embedding_api_key?: string;
   memory_llm_api_key?: string;
 };
+
+type ProviderModelOption = {
+  id: string;
+  label: string;
+};
+
+class ProviderModelListError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProviderModelListError";
+  }
+}
 
 function formatZodIssues(error: z.ZodError) {
   return error.issues
@@ -383,6 +418,181 @@ function mapMemoryLlmEffort(
   return undefined;
 }
 
+function resolvePayloadApiKey(payload: z.infer<typeof providerModelsPayloadSchema>, env: NodeJS.ProcessEnv) {
+  const inlineApiKey = payload.api_key?.trim();
+  if (inlineApiKey) {
+    return inlineApiKey;
+  }
+
+  const apiKeyEnv = payload.api_key_env?.trim();
+  if (!apiKeyEnv) {
+    return undefined;
+  }
+
+  return env[apiKeyEnv]?.trim() || undefined;
+}
+
+function normalizeProviderModels(models: ProviderModelOption[]) {
+  const seen = new Set<string>();
+  return models
+    .filter((model) => {
+      const id = model.id.trim();
+      if (!id || seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return true;
+    })
+    .map((model) => ({
+      id: model.id.trim(),
+      label: model.label.trim() || model.id.trim(),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function parseOpenAiModelList(payload: unknown): ProviderModelOption[] {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) {
+    return [];
+  }
+
+  return normalizeProviderModels(payload.data.flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== "string") {
+      return [];
+    }
+
+    return [{
+      id: item.id,
+      label: item.id,
+    }];
+  }));
+}
+
+function parseAnthropicModelList(payload: unknown): ProviderModelOption[] {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) {
+    return [];
+  }
+
+  return normalizeProviderModels(payload.data.flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== "string") {
+      return [];
+    }
+
+    return [{
+      id: item.id,
+      label: typeof item.display_name === "string" && item.display_name.trim()
+        ? `${item.display_name} (${item.id})`
+        : item.id,
+    }];
+  }));
+}
+
+function parseOllamaModelList(payload: unknown): ProviderModelOption[] {
+  if (!isRecord(payload) || !Array.isArray(payload.models)) {
+    return [];
+  }
+
+  return normalizeProviderModels(payload.models.flatMap((item) => {
+    if (!isRecord(item) || typeof item.name !== "string") {
+      return [];
+    }
+
+    return [{
+      id: item.name,
+      label: item.name,
+    }];
+  }));
+}
+
+async function fetchProviderModelsJson(url: URL, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("provider_models_timeout"), 10_000);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new ProviderModelListError(
+        response.status === 401 || response.status === 403 ? 400 : 502,
+        response.status === 401 || response.status === 403
+          ? "provider_models_auth_failed"
+          : "provider_models_unavailable",
+        `provider models request failed with ${response.status}.`,
+      );
+    }
+
+    return await response.json() as unknown;
+  } catch (error) {
+    if (error instanceof ProviderModelListError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ProviderModelListError(504, "provider_models_timeout", "provider models request timed out.");
+    }
+
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new ProviderModelListError(
+      502,
+      "provider_models_unavailable",
+      `provider models request failed: ${detail}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function listProviderModels(
+  payload: z.infer<typeof providerModelsPayloadSchema>,
+  env: NodeJS.ProcessEnv,
+): Promise<ProviderModelOption[]> {
+  const apiKey = resolvePayloadApiKey(payload, env);
+
+  if (
+    (payload.kind === "openai-compatible" || payload.kind === "openai-responses" || payload.kind === "anthropic")
+    && !apiKey
+  ) {
+    throw new ProviderModelListError(
+      400,
+      "provider_api_key_missing",
+      "api_key or api_key_env is required for the selected provider.",
+    );
+  }
+
+  if (payload.kind === "ollama") {
+    const json = await fetchProviderModelsJson(buildBaseUrl(payload.base_url, "/api/tags"), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    return parseOllamaModelList(json);
+  }
+
+  if (payload.kind === "anthropic") {
+    const json = await fetchProviderModelsJson(buildBaseUrl(payload.base_url, "/v1/models"), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "anthropic-version": "2023-06-01",
+        "x-api-key": apiKey ?? "",
+      },
+    });
+    return parseAnthropicModelList(json);
+  }
+
+  const json = await fetchProviderModelsJson(buildBaseUrl(payload.base_url, "/v1/models"), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+  return parseOpenAiModelList(json);
+}
+
 async function probeMemoryLlm(env: NodeJS.ProcessEnv, config: {
   baseUrl?: string;
   model?: string;
@@ -542,6 +752,38 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         provider_api_key_env: resolveProviderApiKeyEnvHint(app.runtimeState.env),
       },
     };
+  });
+
+  app.post("/v1/agent/provider-models", async (request, reply) => {
+    const parsed = providerModelsPayloadSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ok: false,
+        error: {
+          code: "invalid_provider_models_payload",
+          message: formatZodIssues(parsed.error),
+        },
+      });
+    }
+
+    try {
+      const models = await listProviderModels(parsed.data, app.runtimeState.env);
+      return {
+        models,
+      };
+    } catch (error) {
+      if (error instanceof ProviderModelListError) {
+        return reply.code(error.statusCode).send({
+          ok: false,
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+      }
+
+      throw error;
+    }
   });
 
   app.post("/v1/agent/config", async (request, reply) => {

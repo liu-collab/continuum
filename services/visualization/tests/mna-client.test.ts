@@ -261,6 +261,50 @@ describe("MnaClient", () => {
     );
   });
 
+  it("loads provider models through the mna proxy", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce({
+        json: async () => ({
+          status: "ok",
+          token: "token-1",
+          reason: null,
+          mnaBaseUrl: "http://127.0.0.1:4193",
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          models: [
+            { id: "qwen-plus", label: "qwen-plus" },
+          ],
+        }),
+      } as Response);
+
+    const client = new MnaClient();
+    const payload = await client.listProviderModels({
+      kind: "openai-compatible",
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      api_key: "sk-test",
+    });
+
+    expect(payload.models).toEqual([
+      { id: "qwen-plus", label: "qwen-plus" },
+    ]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:4193/v1/agent/provider-models",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          kind: "openai-compatible",
+          base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          api_key: "sk-test",
+        }),
+      }),
+    );
+  });
+
   it("triggers an active memory llm health check", async () => {
     const fetchMock = vi
       .spyOn(global, "fetch")

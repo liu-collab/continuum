@@ -750,6 +750,15 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     await refreshDependencyStatus();
   }
 
+  async function listProviderModels(payload: {
+    kind: "openai-compatible" | "openai-responses" | "anthropic" | "ollama";
+    base_url: string;
+    api_key?: string;
+    api_key_env?: string;
+  }) {
+    return client.listProviderModels(payload);
+  }
+
   async function checkEmbeddings() {
     const result = await client.checkEmbeddings();
     setDependencyStatus((current) => {
@@ -839,6 +848,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     updateProvider,
     updateRuntimeConfig,
     updateGovernanceConfig,
+    listProviderModels,
     checkEmbeddings,
     checkMemoryLlm,
     refreshMetrics,

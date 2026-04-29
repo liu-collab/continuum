@@ -16,6 +16,7 @@ import type {
   MnaMetricsResponse,
   MnaPickWorkspaceResponse,
   MnaPromptInspectorResponse,
+  MnaProviderModelListResponse,
   MnaRuntimeConfigResponse,
   MnaRuntimeGovernanceConfig,
   MnaServerEventEnvelope,
@@ -310,6 +311,18 @@ export class MnaClient {
     };
   }) {
     return this.requestJson<{ ok: true }>("/v1/agent/config", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listProviderModels(payload: {
+    kind: "openai-compatible" | "openai-responses" | "anthropic" | "ollama";
+    base_url: string;
+    api_key?: string;
+    api_key_env?: string;
+  }) {
+    return this.requestJson<MnaProviderModelListResponse>("/v1/agent/provider-models", {
       method: "POST",
       body: JSON.stringify(payload),
     });

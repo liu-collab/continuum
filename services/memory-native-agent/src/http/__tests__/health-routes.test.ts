@@ -80,7 +80,7 @@ vi.mock("../../providers/index.js", async (importOriginal) => {
       model: () => config.model,
       status: () => {
         const missingApiKey =
-          (config.kind === "openai-compatible" || config.kind === "anthropic")
+          (config.kind === "openai-compatible" || config.kind === "openai-responses" || config.kind === "anthropic")
           && !config.apiKey
           && !(config.apiKeyEnv && env?.[config.apiKeyEnv]);
 
@@ -882,6 +882,105 @@ describe("health routes", () => {
         },
       });
     } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("lists OpenAI-compatible provider models through the local proxy", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const providerServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+    let authHeader: string | undefined;
+    await providerServer.get("/v1/models", async (request) => {
+      authHeader = request.headers.authorization;
+      return {
+        object: "list",
+        data: [
+          { id: "qwen-plus", object: "model" },
+          { id: "qwen-turbo", object: "model" },
+        ],
+      };
+    });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      await providerServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = providerServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/provider-models",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+        payload: {
+          kind: "openai-compatible",
+          base_url: `http://127.0.0.1:${port}/v1`,
+          api_key: "provider-key",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(authHeader).toBe("Bearer provider-key");
+      expect(response.json()).toEqual({
+        models: [
+          { id: "qwen-plus", label: "qwen-plus" },
+          { id: "qwen-turbo", label: "qwen-turbo" },
+        ],
+      });
+    } finally {
+      await providerServer.close();
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("lists Ollama models through the local proxy", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const providerServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+    await providerServer.get("/api/tags", async () => ({
+      models: [
+        { name: "qwen2.5-coder:latest" },
+        { name: "nomic-embed-text:latest" },
+      ],
+    }));
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      await providerServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = providerServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/provider-models",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+        payload: {
+          kind: "ollama",
+          base_url: `http://127.0.0.1:${port}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        models: [
+          { id: "nomic-embed-text:latest", label: "nomic-embed-text:latest" },
+          { id: "qwen2.5-coder:latest", label: "qwen2.5-coder:latest" },
+        ],
+      });
+    } finally {
+      await providerServer.close();
       await app.close();
       fs.rmSync(home, { recursive: true, force: true });
     }
