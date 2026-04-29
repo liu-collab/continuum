@@ -244,6 +244,14 @@ function writeDaemonNotice(enabled: boolean) {
   )}\n`);
 }
 
+function writeProgress(message: string, english: string) {
+  process.stdout.write(`${bilingualMessage(message, english)}\n`);
+}
+
+function writeProgressDone(message: string, english: string) {
+  process.stdout.write(`✓ ${bilingualMessage(message, english)}\n`);
+}
+
 async function startManagedVisualizationDevServer(options: {
   packageRoot: string;
   bindHost: string;
@@ -569,8 +577,10 @@ export async function runStartCommand(
   await writeManagedMemoryLlmConfig(mergedMemoryLlmConfig);
 
   await mkdir(axisHomeDir(), { recursive: true });
+  writeProgress("正在检查 Docker...", "Checking Docker...");
   await ensureDockerInstalled();
   await ensureDockerDaemonReady();
+  writeProgressDone("Docker 检查完成。", "Docker check completed.");
   await stopLegacyAxisProcesses();
   await stopLegacyPostgresContainer();
   await stopManagedVisualizationDevServer().catch(() => undefined);
@@ -584,8 +594,13 @@ export async function runStartCommand(
   const stackImagePlan = await buildState.planStackImageBuild(packageRoot);
   if (stackImagePlan.needsBuild) {
     stackImageName = uiDev ? UI_DEV_STACK_IMAGE : DEFAULT_MANAGED_STACK_IMAGE;
+    writeProgress(
+      "正在构建服务镜像（首次约 3-8 分钟）...",
+      "Building service image (first run usually takes 3-8 minutes)...",
+    );
     const stageDir = await prepareStackContext(packageRoot, !uiDev);
     await buildStackImage(stageDir, stackImageName);
+    writeProgressDone("服务镜像构建完成。", "Service image build completed.");
     await pruneDanglingDockerImages().catch((error) => {
       process.stderr.write(`${bilingualMessage(
         `Docker dangling 镜像清理失败：${error instanceof Error ? error.message : String(error)}`,
@@ -597,6 +612,7 @@ export async function runStartCommand(
     }
   } else {
     process.stdout.write(`docker image 已是最新，跳过 build: ${stackImageName}\n`);
+    writeProgressDone("服务镜像已就绪。", "Service image is ready.");
     if (vendorRefresh.refreshed) {
       process.stdout.write("visualization 已刷新，沿用现有 stack image。\n");
     }
@@ -628,6 +644,7 @@ export async function runStartCommand(
     let startedVisualizationUrl = uiUrl;
     let startedVisualizationLogPath: string | null = null;
 
+    writeProgress("正在启动数据库...", "Starting database...");
     await startStackContainer(
       postgresPort,
       bindHost,
@@ -644,7 +661,9 @@ export async function runStartCommand(
       !uiDev,
       stackImageName,
     );
+    writeProgressDone("数据库启动命令已提交。", "Database start command submitted.");
 
+    writeProgress("正在等待服务就绪...", "Waiting for services to become ready...");
     await waitForHealthy(`${storageUrl}/health`, {
       timeoutMs: 120_000,
       intervalMs: 1_500,
@@ -687,6 +706,7 @@ export async function runStartCommand(
         fetcher: fetchJson,
       });
     }
+    writeProgressDone("服务已就绪。", "Services are ready.");
 
     const latestManagedState = await readManagedState();
     await writeManagedState({
@@ -702,7 +722,10 @@ export async function runStartCommand(
       services: latestManagedState.services,
     });
 
-    process.stdout.write("Axis 已启动。\n");
+    process.stdout.write(`${bilingualMessage(
+      `Axis 已启动，打开 ${startedVisualizationUrl}`,
+      `Axis started. Open ${startedVisualizationUrl}`,
+    )}\n`);
     process.stdout.write(`container: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
     process.stdout.write(`bind-host: ${bindHost}\n`);
     process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);

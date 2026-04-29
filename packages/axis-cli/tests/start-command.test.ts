@@ -353,6 +353,88 @@ describe("runStartCommand", () => {
     ).toBe(false);
   });
 
+  it("prints clear progress steps while starting the managed stack", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 2,
+      image: {
+        hash: "old-image-hash",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "old-image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "old-image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: true,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "new-image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(output).toContain("正在检查 Docker");
+    expect(output).toContain("✓ Docker 检查完成");
+    expect(output).toContain("正在构建服务镜像（首次约 3-8 分钟）");
+    expect(output).toContain("✓ 服务镜像构建完成");
+    expect(output).toContain("正在启动数据库");
+    expect(output).toContain("✓ 数据库启动命令已提交");
+    expect(output).toContain("正在等待服务就绪");
+    expect(output).toContain("✓ 服务已就绪");
+    expect(output).toContain("Axis 已启动，打开 http://127.0.0.1:3003");
+  });
+
   it("migrates legacy managed config files when axis start runs again", async () => {
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
