@@ -17,7 +17,6 @@ vi.mock("../src/utils.js", async (importOriginal) => {
 });
 
 import {
-  runCodexInstallCommand,
   runCodexUninstallCommand,
   runCodexUseCommand,
 } from "../src/codex-command.js";
@@ -31,25 +30,6 @@ describe("axis codex commands", () => {
     vi.restoreAllMocks();
     uninstallCodexMcpServerMock.mockReset();
     spawnMock.mockReset();
-  });
-
-  it("reports that Codex install uses platform forced injection", async () => {
-    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    await runCodexInstallCommand(
-      {
-        "runtime-url": "http://127.0.0.1:3002",
-        "codex-home": "C:/tmp/.codex",
-        "server-name": "memory",
-        force: true,
-      },
-      import.meta.url,
-    );
-
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      "Codex uses platform forced memory injection; no MCP server install is required.\n",
-    );
-    expect(stdoutSpy).toHaveBeenCalledWith("Runtime URL: http://127.0.0.1:3002\n");
   });
 
   it("removes the installed Codex MCP server", async () => {

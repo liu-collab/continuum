@@ -19,24 +19,6 @@ function resolveCodexMcpServerName(options: Record<string, string | boolean>) {
     : DEFAULT_CODEX_MCP_SERVER_NAME;
 }
 
-export async function runCodexInstallCommand(
-  options: Record<string, string | boolean>,
-  _importMetaUrl: string,
-) {
-  const runtimeUrl =
-    typeof options["runtime-url"] === "string"
-      ? options["runtime-url"]
-      : process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
-  const codexHome = resolveCodexHome(options);
-
-  process.stdout.write("Codex uses platform forced memory injection; no MCP server install is required.\n");
-  process.stdout.write(`Runtime URL: ${runtimeUrl}\n`);
-  if (codexHome) {
-    process.stdout.write(`CODEX_HOME=${codexHome}\n`);
-  }
-  process.stdout.write(`Start with: axis codex use${codexHome ? ` --codex-home "${codexHome}"` : ""}\n`);
-}
-
 export async function runCodexUninstallCommand(options: Record<string, string | boolean>) {
   const codexHome = resolveCodexHome(options);
   const name = resolveCodexMcpServerName(options);

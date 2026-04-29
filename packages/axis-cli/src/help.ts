@@ -13,7 +13,6 @@ Commands:
   axis mcp-server          直接启动打包后的记忆 MCP server
   axis claude install [--plugin-dir PATH] [--package PKG] [--force]
   axis claude uninstall [--plugin-dir PATH]
-  axis codex install [--runtime-url URL] [--codex-home PATH]
   axis codex uninstall [--codex-home PATH] [--server-name NAME]  # cleanup legacy MCP registration
   axis codex use [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
   axis codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]

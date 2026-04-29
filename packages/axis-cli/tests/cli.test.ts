@@ -166,20 +166,19 @@ describe("axis cli", () => {
     expect(renderHelp()).toContain("axis claude uninstall");
   });
 
-  it("parses the codex install command and exposes forced injection help", () => {
+  it("parses the codex command and exposes forced injection help", () => {
     const parsed = parseArgs([
       "codex",
-      "install",
       "--runtime-url",
       "http://127.0.0.1:3002",
       "--codex-home",
       "C:/tmp/.codex",
     ]);
 
-    expect(parsed.command).toEqual(["codex", "install"]);
+    expect(parsed.command).toEqual(["codex"]);
     expect(parsed.options["runtime-url"]).toBe("http://127.0.0.1:3002");
     expect(parsed.options["codex-home"]).toBe("C:/tmp/.codex");
-    expect(renderHelp()).toContain("axis codex install");
+    expect(renderHelp()).not.toContain("axis codex install");
     expect(renderHelp()).toContain("axis codex uninstall");
     expect(renderHelp()).toContain("cleanup legacy MCP registration");
     expect(renderHelp()).toContain("axis codex use");
@@ -192,7 +191,7 @@ describe("axis cli", () => {
 
     expect(exitCode).toBe(1);
     expect(stderrSpy).toHaveBeenCalledWith("未知的 codex 子命令: foo | Unknown codex subcommand: foo\n");
-    expect(stderrSpy).toHaveBeenCalledWith("可用: install, uninstall, use | Available: install, uninstall, use\n");
+    expect(stderrSpy).toHaveBeenCalledWith("可用: uninstall, use | Available: uninstall, use\n");
     expect(codexUseMock).not.toHaveBeenCalled();
   });
 

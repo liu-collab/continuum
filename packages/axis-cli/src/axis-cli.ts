@@ -3,7 +3,6 @@ import process from "node:process";
 import { parseArgs } from "./args.js";
 import { runClaudeInstallCommand, runClaudeUninstallCommand } from "./claude-command.js";
 import {
-  runCodexInstallCommand,
   runCodexUninstallCommand,
   runCodexUseCommand,
 } from "./codex-command.js";
@@ -18,7 +17,7 @@ import { runStatusCommand } from "./status-command.js";
 import { runUiCommand } from "./ui-command.js";
 import { readCliVersion } from "./version.js";
 
-const CODEX_VALID_SUBCOMMANDS = new Set(["install", "uninstall", "use"]);
+const CODEX_VALID_SUBCOMMANDS = new Set(["uninstall", "use"]);
 
 export async function runCli(argv: string[], importMetaUrl: string) {
   try {
@@ -101,10 +100,6 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
       return 1;
     }
 
-    if (subcommand === "install") {
-      await runCodexInstallCommand(parsed.options, importMetaUrl);
-      return 0;
-    }
 
     if (subcommand === "uninstall") {
       await runCodexUninstallCommand(parsed.options);

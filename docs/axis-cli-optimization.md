@@ -298,7 +298,7 @@ function normalizeOptions(raw: ParsedArgs): ParsedArgs {
 
 ```typescript
 if (primary === "codex") {
-  await runCodexUseCommand(args, options);  // codex install/uninstall 已在前分支处理
+  await runCodexUseCommand(args, options);  // codex uninstall 已在前分支处理
 }
 ```
 
@@ -307,7 +307,7 @@ if (primary === "codex") {
 ### 方案
 
 ```typescript
-const CODEX_VALID_SUBCOMMANDS = new Set(["install", "uninstall", "use"]);
+const CODEX_VALID_SUBCOMMANDS = new Set(["uninstall", "use"]);
 const sub = args[0] ?? "use";
 
 if (!CODEX_VALID_SUBCOMMANDS.has(sub)) {
