@@ -2,21 +2,15 @@
 
 import React from "react";
 import {
-  Bot,
-  BrainCircuit,
-  Database,
   LoaderCircle,
-  Orbit,
   SendHorizontal,
   Settings2,
-  Sparkles,
   Square
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { StatusBadge } from "@/components/status-badge";
-import { cn } from "@/lib/utils";
 
 import { useAgentI18n } from "@/lib/i18n/agent/provider";
 import type {
@@ -66,7 +60,7 @@ export function ChatPanel({
   const latestTurn = turns.at(-1) ?? null;
   const canSend = connection === "open" && !isBusy;
   const connectionLabel = formatConnection(connection);
-  const runtimeStatus = String(dependencyStatus?.runtime.status ?? "unknown");
+  const runtimeStatus = resolveRuntimeStatus(dependencyStatus?.runtime);
   const providerStatus = dependencyStatus?.provider.status ?? "unknown";
   const embeddingStatus = String(dependencyStatus?.runtime.embeddings?.status ?? "unknown");
   const memoryLlmStatus = String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown");
@@ -181,37 +175,37 @@ export function ChatPanel({
             <StatusDot
               tone={resolveConnectionTone(connection)}
               label={t("chatPanel.connectionLabel")}
-              value={connectionLabel}
               stateValue={connectionLabel}
+              titleValue={connectionLabel}
               testId="agent-connection-badge"
               stateTestId="agent-connection-state"
             />
             <StatusDot
               tone={resolveStatusTone(runtimeStatus)}
               label={t("workspace.runtimeLabel")}
-              value={formatStatus(runtimeStatus)}
               stateValue={runtimeStatus}
+              titleValue={runtimeStatus}
               testId="agent-runtime-badge"
             />
             <StatusDot
               tone={resolveStatusTone(providerStatus)}
               label={t("workspace.providerLabel")}
-              value={formatStatus(providerStatus)}
               stateValue={providerStatus}
+              titleValue={providerStatus}
               testId="agent-provider-badge"
             />
             <StatusDot
               tone={resolveStatusTone(embeddingStatus)}
               label={t("workspace.embeddingLabel")}
-              value={formatStatus(embeddingStatus)}
               stateValue={embeddingStatus}
+              titleValue={embeddingStatus}
               testId="agent-embedding-badge"
             />
             <StatusDot
               tone={resolveStatusTone(memoryLlmStatus)}
               label={t("workspace.memoryLlmLabel")}
-              value={formatStatus(memoryLlmStatus)}
               stateValue={memoryLlmStatus}
+              titleValue={memoryLlmStatus}
               testId="axis-memory-llm-badge"
             />
           </div>
@@ -425,27 +419,54 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
   return "neutral";
 }
 
-function formatStatus(status: string): string {
-  const map: Record<string, string> = {
-    healthy: "正常", configured: "已配置", unknown: "未知", unavailable: "不可用",
-    degraded: "降级", misconfigured: "配置错误", not_configured: "未配置",
-    reachable: "可达", ok: "正常", online: "在线", error: "异常",
-    closed: "已关闭", connecting: "连接中", reconnecting: "重连中",
-  };
-  return map[status] ?? status;
+function readNestedStatus(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const status = (value as { status?: unknown }).status;
+  return typeof status === "string" && status.trim().length > 0 ? status : null;
+}
+
+function resolveRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | undefined | null) {
+  if (!runtime) {
+    return "unknown";
+  }
+
+  const explicitStatus = typeof runtime.status === "string" ? runtime.status : null;
+  if (explicitStatus && explicitStatus !== "unknown") {
+    return explicitStatus;
+  }
+
+  const coreStatuses = [readNestedStatus(runtime.read_model), readNestedStatus(runtime.storage_writeback)]
+    .filter((status): status is string => Boolean(status));
+  if (coreStatuses.length === 0) {
+    return explicitStatus ?? "unknown";
+  }
+
+  if (coreStatuses.some((status) => ["unavailable", "closed", "misconfigured", "not_configured", "error"].includes(status))) {
+    return "unavailable";
+  }
+  if (coreStatuses.some((status) => status === "degraded")) {
+    return "degraded";
+  }
+  if (coreStatuses.every((status) => ["healthy", "configured", "reachable", "ok", "online"].includes(status))) {
+    return "healthy";
+  }
+  return explicitStatus ?? "unknown";
 }
 
 function StatusDot({
   label,
-  value,
   stateValue,
+  titleValue,
   tone,
   testId,
   stateTestId,
 }: {
   label: string;
-  value: string;
-  stateValue?: string;
+  stateValue: string;
+  titleValue: string;
   tone: "neutral" | "success" | "warning" | "danger";
   testId: string;
   stateTestId?: string;
@@ -457,14 +478,16 @@ function StatusDot({
     "var(--hairline)";
 
   return (
-    <span data-testid={testId} data-state={stateValue ?? value} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+    <span
+      data-testid={testId}
+      data-state={stateValue}
+      title={`${label}: ${titleValue}`}
+      aria-label={`${label}: ${titleValue}`}
+      className="inline-flex items-center gap-1.5 whitespace-nowrap"
+    >
       <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn(
-        tone === "success" && "text-[var(--primary)]",
-        tone === "danger" && "text-[var(--ink)]"
-      )}>{value}</span>
-      {stateTestId ? <span data-testid={stateTestId} data-state={stateValue ?? value} className="sr-only" /> : null}
+      {stateTestId ? <span data-testid={stateTestId} data-state={stateValue} className="sr-only" /> : null}
     </span>
   );
 }
