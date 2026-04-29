@@ -15,6 +15,7 @@ Commands:
   axis mna <install|start|stop|logs|token> [--mna-url URL] [--mna-host HOST] [--mna-port PORT] [--mna-home PATH] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV] [--rotate]
   axis runtime             直接启动打包后的 retrieval-runtime
   axis mcp-server          直接启动打包后的记忆 MCP server
+  axis claude [--plugin-dir PATH] [--package PKG]
   axis claude install [--plugin-dir PATH] [--package PKG] [--force]
   axis claude uninstall [--plugin-dir PATH]
   axis codex uninstall [--codex-home PATH] [--server-name NAME]  # cleanup legacy MCP registration

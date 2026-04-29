@@ -127,7 +127,7 @@ Launches a single Docker container with PostgreSQL + pgvector, storage, retrieva
 ### Connect hosts
 
 ```bash
-axis claude install   # Claude Code
+axis claude           # Claude Code
 axis codex            # Codex
 ```
 

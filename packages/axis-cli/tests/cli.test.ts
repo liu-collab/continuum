@@ -7,6 +7,9 @@ const runRestartCommandMock = vi.hoisted(() => vi.fn());
 const runUninstallCommandMock = vi.hoisted(() => vi.fn());
 const runUpdateCommandMock = vi.hoisted(() => vi.fn());
 const maybeWriteUpdateNoticeMock = vi.hoisted(() => vi.fn());
+const runClaudeCommandMock = vi.hoisted(() => vi.fn());
+const runClaudeInstallCommandMock = vi.hoisted(() => vi.fn());
+const runClaudeUninstallCommandMock = vi.hoisted(() => vi.fn());
 
 readManagedStateMock.mockResolvedValue({
   version: 1,
@@ -38,6 +41,12 @@ vi.mock("../src/codex-command.js", async (importOriginal) => {
     runCodexUseCommand: codexUseMock,
   };
 });
+
+vi.mock("../src/claude-command.js", () => ({
+  runClaudeCommand: runClaudeCommandMock,
+  runClaudeInstallCommand: runClaudeInstallCommandMock,
+  runClaudeUninstallCommand: runClaudeUninstallCommandMock,
+}));
 
 vi.mock("../src/doctor-command.js", () => ({
   runDoctorCommand: runDoctorCommandMock,
@@ -80,6 +89,9 @@ describe("axis cli", () => {
     runUninstallCommandMock.mockReset();
     runUpdateCommandMock.mockReset();
     maybeWriteUpdateNoticeMock.mockReset();
+    runClaudeCommandMock.mockReset();
+    runClaudeInstallCommandMock.mockReset();
+    runClaudeUninstallCommandMock.mockReset();
     readManagedStateMock.mockReset();
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -211,7 +223,16 @@ describe("axis cli", () => {
 
     expect(parsed.command).toEqual(["claude", "uninstall"]);
     expect(parsed.options["plugin-dir"]).toBe("C:/tmp/plugin");
+    expect(renderHelp()).toContain("axis claude [--plugin-dir PATH]");
     expect(renderHelp()).toContain("axis claude uninstall");
+  });
+
+  it("routes claude without a subcommand to install and launch", async () => {
+    runClaudeCommandMock.mockResolvedValue(undefined);
+
+    await expect(runCli(["claude"], import.meta.url)).resolves.toBe(0);
+
+    expect(runClaudeCommandMock).toHaveBeenCalledWith({}, import.meta.url);
   });
 
   it("parses the codex command and exposes forced injection help", () => {

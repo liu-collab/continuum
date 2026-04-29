@@ -1,7 +1,11 @@
 import process from "node:process";
 
 import { parseArgs } from "./args.js";
-import { runClaudeInstallCommand, runClaudeUninstallCommand } from "./claude-command.js";
+import {
+  runClaudeCommand,
+  runClaudeInstallCommand,
+  runClaudeUninstallCommand,
+} from "./claude-command.js";
 import {
   runCodexUninstallCommand,
   runCodexUseCommand,
@@ -104,6 +108,11 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
 
   if (primary === "claude" && secondary === "uninstall") {
     await runClaudeUninstallCommand(parsed.options);
+    return 0;
+  }
+
+  if (primary === "claude" && !secondary) {
+    await runClaudeCommand(parsed.options, importMetaUrl);
     return 0;
   }
 

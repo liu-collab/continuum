@@ -127,7 +127,7 @@ axis start \
 ### 接入宿主
 
 ```bash
-axis claude install   # Claude Code
+axis claude           # Claude Code
 axis codex            # Codex
 ```
 
