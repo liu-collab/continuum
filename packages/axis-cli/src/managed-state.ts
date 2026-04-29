@@ -30,7 +30,6 @@ export type AxisManagedState = {
 export const DEFAULT_MANAGED_POSTGRES_PORT = 54329;
 export const DEFAULT_MANAGED_STACK_CONTAINER = "axis-stack";
 export const DEFAULT_MANAGED_STACK_IMAGE = "axis-stack:latest";
-export const DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER = "axis-postgres";
 export const DEFAULT_MANAGED_DATABASE_NAME = "axis_db";
 export const DEFAULT_MANAGED_DATABASE_USER = "axis_user";
 

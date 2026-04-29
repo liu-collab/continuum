@@ -12,7 +12,6 @@ import {
 } from "./managed-state.js";
 import { bilingualMessage } from "./messages.js";
 import { stopManagedMna } from "./mna-command.js";
-import { stopLegacyAxisProcesses } from "./process-cleanup.js";
 import { removeDockerContainer, removeDockerImage } from "./docker-lifecycle.js";
 import { terminateProcess } from "./utils.js";
 
@@ -64,7 +63,6 @@ async function clearManagedRuntimeState() {
 
 export async function runStopCommand() {
   await stopManagedMna().catch(() => undefined);
-  await stopLegacyAxisProcesses();
   const state = await readManagedState();
   const containerName = state.postgres?.containerName ?? DEFAULT_MANAGED_STACK_CONTAINER;
   const visualizationDev = state.services.find((service) => service.name === "visualization-dev") ?? null;

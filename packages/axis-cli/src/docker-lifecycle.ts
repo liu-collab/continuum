@@ -7,7 +7,6 @@ import process from "node:process";
 import {
   axisLogsDir,
   axisHomeDir,
-  DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
 } from "./managed-state.js";
@@ -18,7 +17,6 @@ import { pathExists, runCommand, vendorPath } from "./utils.js";
 const STAGE_DIR_NAME = "stack-stage";
 const WINDOWS_DOCKER_DESKTOP_PATH = "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe";
 const DARWIN_DOCKER_DESKTOP_PATH = "/Applications/Docker.app/Contents/MacOS/Docker";
-const LEGACY_CONTINUUM_STACK_CONTAINER = "continuum-stack";
 
 type DockerLifecycleOptions = {
   platform?: NodeJS.Platform;
@@ -271,14 +269,6 @@ export async function ensureDockerDaemonReady(options: DockerLifecycleOptions = 
     options.daemonWaitTimeoutMs ?? 180_000,
     options.daemonWaitIntervalMs ?? 10_000,
   );
-}
-
-export async function stopLegacyPostgresContainer() {
-  await removeDockerContainer(DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER).catch(() => undefined);
-}
-
-export async function stopLegacyContinuumStackContainer() {
-  await removeDockerContainer(LEGACY_CONTINUUM_STACK_CONTAINER).catch(() => undefined);
 }
 
 type DockerCommandResult = {

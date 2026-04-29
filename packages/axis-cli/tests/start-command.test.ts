@@ -14,7 +14,6 @@ const migrateManagedConfigFilesMock = vi.hoisted(() => vi.fn());
 const readManagedStateMock = vi.hoisted(() => vi.fn());
 const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const startManagedMnaMock = vi.hoisted(() => vi.fn());
-const stopLegacyAxisProcessesMock = vi.hoisted(() => vi.fn());
 const cpMock = vi.hoisted(() => vi.fn());
 const mkdirMock = vi.hoisted(() => vi.fn());
 const openMock = vi.hoisted(() => vi.fn());
@@ -114,10 +113,6 @@ vi.mock("../src/mna-command.js", () => ({
   startManagedMna: startManagedMnaMock,
 }));
 
-vi.mock("../src/process-cleanup.js", () => ({
-  stopLegacyAxisProcesses: stopLegacyAxisProcessesMock,
-}));
-
 vi.mock("../src/build-state-loader.js", () => ({
   loadBuildStateHelpers: vi.fn(async () => ({
     planVendorBuild: planVendorBuildMock,
@@ -201,7 +196,6 @@ describe("runStartCommand", () => {
     readManagedStateMock.mockReset();
     writeManagedStateMock.mockReset();
     startManagedMnaMock.mockReset();
-    stopLegacyAxisProcessesMock.mockReset();
     cpMock.mockReset();
     mkdirMock.mockReset();
     openMock.mockReset();
@@ -234,7 +228,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -311,7 +304,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -392,7 +384,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -480,7 +471,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -558,7 +548,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -650,7 +639,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -737,7 +725,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -822,7 +809,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -900,7 +886,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -1021,7 +1006,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -1212,7 +1196,6 @@ describe("runStartCommand", () => {
         && options?.cwd?.includes("services\\visualization");
     });
 
-    expect(stopLegacyAxisProcessesMock).not.toHaveBeenCalled();
     expect(startManagedMnaMock).toHaveBeenCalledWith(
       expect.objectContaining({
         "runtime-url": "http://127.0.0.1:3002",
@@ -1266,7 +1249,6 @@ describe("runStartCommand", () => {
         services: [],
       });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -1347,7 +1329,6 @@ describe("runStartCommand", () => {
       return command === "cmd.exe" && options?.cwd?.includes("services\\visualization");
     });
 
-    expect(stopLegacyAxisProcessesMock).toHaveBeenCalled();
     expect(planVendorBuildMock).toHaveBeenCalled();
     expect(planStackImageBuildMock).toHaveBeenCalled();
     expect(spawnCommands.some((command) => command.includes("docker build -t axis-local-ui-dev:latest"))).toBe(true);
@@ -1370,7 +1351,6 @@ describe("runStartCommand", () => {
       services: [],
     });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -1430,7 +1410,6 @@ describe("runStartCommand", () => {
       return [command, ...args].join(" ");
     });
 
-    expect(stopLegacyAxisProcessesMock).toHaveBeenCalled();
     expect(planStackImageBuildMock).toHaveBeenCalled();
     expect(spawnCommands.some((command) => command.includes("docker run"))).toBe(true);
   });
@@ -1549,7 +1528,6 @@ describe("runStartCommand", () => {
         ],
       });
     writeManagedStateMock.mockResolvedValue(undefined);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     cpMock.mockResolvedValue(undefined);
     mkdirMock.mockResolvedValue(undefined);
     rmMock.mockResolvedValue(undefined);
@@ -1611,7 +1589,6 @@ describe("runStartCommand", () => {
       return command === "cmd.exe" && options?.cwd?.includes("services\\visualization");
     });
 
-    expect(stopLegacyAxisProcessesMock).not.toHaveBeenCalled();
     expect(planStackImageBuildMock).not.toHaveBeenCalled();
     expect(spawnCommands.some((command) => command.includes("docker run"))).toBe(false);
     expect(spawnCommands.some((command) => command.includes("docker build"))).toBe(false);

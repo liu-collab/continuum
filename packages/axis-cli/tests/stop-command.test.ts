@@ -6,7 +6,6 @@ const rmMock = vi.hoisted(() => vi.fn());
 const readManagedStateMock = vi.hoisted(() => vi.fn());
 const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const stopManagedMnaMock = vi.hoisted(() => vi.fn());
-const stopLegacyAxisProcessesMock = vi.hoisted(() => vi.fn());
 const removeDockerContainerMock = vi.hoisted(() => vi.fn());
 const removeDockerImageMock = vi.hoisted(() => vi.fn());
 
@@ -42,10 +41,6 @@ vi.mock("../src/mna-command.js", () => ({
   stopManagedMna: stopManagedMnaMock,
 }));
 
-vi.mock("../src/process-cleanup.js", () => ({
-  stopLegacyAxisProcesses: stopLegacyAxisProcessesMock,
-}));
-
 vi.mock("../src/docker-lifecycle.js", () => ({
   removeDockerContainer: removeDockerContainerMock,
   removeDockerImage: removeDockerImageMock,
@@ -77,7 +72,6 @@ describe("runStopCommand", () => {
     readManagedStateMock.mockReset();
     writeManagedStateMock.mockReset();
     stopManagedMnaMock.mockReset();
-    stopLegacyAxisProcessesMock.mockReset();
     removeDockerContainerMock.mockReset();
     removeDockerImageMock.mockReset();
     removeDockerImageMock.mockResolvedValue(false);
@@ -98,7 +92,6 @@ describe("runStopCommand", () => {
     });
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
@@ -151,7 +144,6 @@ describe("runStopCommand", () => {
     });
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
@@ -174,7 +166,6 @@ describe("runStopCommand", () => {
       services: [],
     });
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockRejectedValue(new Error("docker rm -f axis-stack failed with exit code 2"));
 
     await expect(runStopCommand()).rejects.toThrow(/docker rm -f axis-stack/);
@@ -201,7 +192,6 @@ describe("runStopCommand", () => {
     });
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(false);
 
     await expect(runStopCommand()).resolves.toBeUndefined();
@@ -229,7 +219,6 @@ describe("runStopCommand", () => {
     });
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(true);
 
     await runStopCommand();
@@ -250,7 +239,6 @@ describe("runStopCommand", () => {
     });
     writeManagedStateMock.mockResolvedValue(undefined);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(false);
     removeDockerImageMock.mockResolvedValue(true);
 

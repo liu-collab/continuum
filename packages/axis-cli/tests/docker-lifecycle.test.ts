@@ -50,7 +50,6 @@ import {
   removeDockerImage,
   resolveDockerDesktopPath,
   saveDockerContainerLogs,
-  stopLegacyContinuumStackContainer,
 } from "../src/docker-lifecycle.js";
 
 describe("docker lifecycle", () => {
@@ -129,17 +128,6 @@ describe("docker lifecycle", () => {
     });
 
     await expect(isDockerContainerRunning("axis-stack")).resolves.toBe(false);
-  });
-
-  it("removes the legacy continuum stack container before a managed start", async () => {
-    runCommandMock.mockResolvedValueOnce({
-      code: 0,
-      stdout: "",
-      stderr: "",
-    });
-
-    await expect(stopLegacyContinuumStackContainer()).resolves.toBeUndefined();
-    expect(runCommandMock).toHaveBeenCalledWith("docker", ["rm", "-f", "continuum-stack"], expect.any(Object));
   });
 
   it("does not install Docker Desktop on Linux when docker CLI is missing", async () => {

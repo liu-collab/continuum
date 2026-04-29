@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const rmMock = vi.hoisted(() => vi.fn());
 const stopManagedMnaMock = vi.hoisted(() => vi.fn());
-const stopLegacyAxisProcessesMock = vi.hoisted(() => vi.fn());
 const removeDockerContainerMock = vi.hoisted(() => vi.fn());
 const removeDockerImageMock = vi.hoisted(() => vi.fn());
 const pruneDanglingDockerImagesMock = vi.hoisted(() => vi.fn());
@@ -27,10 +26,6 @@ vi.mock("../src/mna-command.js", () => ({
   stopManagedMna: stopManagedMnaMock,
 }));
 
-vi.mock("../src/process-cleanup.js", () => ({
-  stopLegacyAxisProcesses: stopLegacyAxisProcessesMock,
-}));
-
 vi.mock("../src/docker-lifecycle.js", () => ({
   removeDockerContainer: removeDockerContainerMock,
   removeDockerImage: removeDockerImageMock,
@@ -44,7 +39,6 @@ describe("runUninstallCommand", () => {
     vi.restoreAllMocks();
     rmMock.mockReset();
     stopManagedMnaMock.mockReset();
-    stopLegacyAxisProcessesMock.mockReset();
     removeDockerContainerMock.mockReset();
     removeDockerImageMock.mockReset();
     pruneDanglingDockerImagesMock.mockReset();
@@ -53,7 +47,6 @@ describe("runUninstallCommand", () => {
   it("removes local axis data and docker resources with force", async () => {
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     stopManagedMnaMock.mockResolvedValue(true);
-    stopLegacyAxisProcessesMock.mockResolvedValue(undefined);
     removeDockerContainerMock.mockResolvedValue(false);
     removeDockerImageMock.mockResolvedValue(false);
     pruneDanglingDockerImagesMock.mockResolvedValue(true);

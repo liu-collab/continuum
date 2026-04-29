@@ -49,7 +49,6 @@ import {
   writeManagedMemoryLlmConfig,
 } from "./managed-config.js";
 import { bilingualMessage } from "./messages.js";
-import { stopLegacyAxisProcesses } from "./process-cleanup.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
 import {
   buildDockerHostGatewayArgs,
@@ -61,8 +60,6 @@ import {
   prepareStackContext,
   pruneDanglingDockerImages,
   saveDockerContainerLogs,
-  stopLegacyContinuumStackContainer,
-  stopLegacyPostgresContainer,
 } from "./docker-lifecycle.js";
 import { npmCommand, runForeground } from "./managed-process.js";
 import { resolvePlatformUserId } from "./platform-user.js";
@@ -220,18 +217,6 @@ function writeMissingPrimaryProviderWarning() {
   process.stdout.write(`${bilingualMessage(
     "⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。",
     "⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.",
-  )}\n`);
-}
-
-async function writeLegacyContinuumNotice() {
-  const legacyDir = path.join(path.dirname(axisHomeDir()), ".continuum");
-  if (!(await pathExists(legacyDir)) || await pathExists(axisHomeDir())) {
-    return;
-  }
-
-  process.stdout.write(`${bilingualMessage(
-    `检测到旧版 ~/.continuum/ 数据目录。Axis 现在使用 ~/.axis/，如需保留旧数据，请先迁移后再启动。旧目录: ${legacyDir}`,
-    `Detected the legacy ~/.continuum/ data directory. Axis now uses ~/.axis/. Migrate old data before starting if you need to keep it. Legacy directory: ${legacyDir}`,
   )}\n`);
 }
 
@@ -483,7 +468,6 @@ export async function runStartCommand(
   const uiDev = options["ui-dev"] === true;
   const open = options.open === true;
   const daemon = options.daemon === true;
-  await writeLegacyContinuumNotice();
   const platformUserId = await resolvePlatformUserId();
   const initialManagedState = await readManagedState();
   const storageUrl = buildServiceUrl(accessibleHost, storagePort);
@@ -580,9 +564,6 @@ export async function runStartCommand(
   await ensureDockerInstalled();
   await ensureDockerDaemonReady();
   writeProgressDone("Docker 检查完成。", "Docker check completed.");
-  await stopLegacyAxisProcesses();
-  await stopLegacyPostgresContainer();
-  await stopLegacyContinuumStackContainer();
   await stopManagedVisualizationDevServer().catch(() => undefined);
   const postgresPort = await resolveManagedPostgresPort(options, bindHost);
   const readModelDsn =

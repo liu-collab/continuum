@@ -4,14 +4,12 @@ import process from "node:process";
 
 import {
   axisHomeDir,
-  DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER,
   DEFAULT_MANAGED_STACK_CONTAINER,
   DEFAULT_MANAGED_STACK_IMAGE,
 } from "./managed-state.js";
 import { bilingualMessage, formatErrorMessage } from "./messages.js";
 import { removeDockerContainer, removeDockerImage, pruneDanglingDockerImages } from "./docker-lifecycle.js";
 import { stopManagedMna } from "./mna-command.js";
-import { stopLegacyAxisProcesses } from "./process-cleanup.js";
 
 const UI_DEV_STACK_IMAGE = "axis-local-ui-dev:latest";
 
@@ -62,11 +60,8 @@ export async function runUninstallCommand(options: Record<string, string | boole
 
   const failures: string[] = [];
   await collectFailure(failures, "memory-native-agent", async () => { await stopManagedMna(); });
-  await collectFailure(failures, "legacy processes", async () => { await stopLegacyAxisProcesses(); });
   await collectFailure(failures, DEFAULT_MANAGED_STACK_CONTAINER, () =>
     removeDockerContainer(DEFAULT_MANAGED_STACK_CONTAINER));
-  await collectFailure(failures, DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER, () =>
-    removeDockerContainer(DEFAULT_MANAGED_LEGACY_POSTGRES_CONTAINER));
   await collectFailure(failures, DEFAULT_MANAGED_STACK_IMAGE, () =>
     removeDockerImage(DEFAULT_MANAGED_STACK_IMAGE));
   await collectFailure(failures, UI_DEV_STACK_IMAGE, () =>
