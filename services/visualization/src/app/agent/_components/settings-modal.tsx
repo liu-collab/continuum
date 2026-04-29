@@ -274,7 +274,7 @@ export function SettingsModal({
   const [memoryLlmTimeoutMs, setMemoryLlmTimeoutMs] = useState("");
   const [memoryLlmEffort, setMemoryLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
   const [memoryLlmMaxTokens, setMemoryLlmMaxTokens] = useState("");
-  const [memoryModelMode, setMemoryModelMode] = useState<MemoryModelMode>("custom");
+  const [memoryModelMode, setMemoryModelMode] = useState<MemoryModelMode>("same_as_primary");
   const [governanceEnabled, setGovernanceEnabled] = useState(false);
   const [governanceIntervalMinutes, setGovernanceIntervalMinutes] = useState("15");
   const [governanceVerifyEnabled, setGovernanceVerifyEnabled] = useState(true);
