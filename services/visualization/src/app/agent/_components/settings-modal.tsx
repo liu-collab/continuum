@@ -53,6 +53,7 @@ type SettingsModalProps = {
       model: string;
       base_url?: string;
       api_key?: string;
+      api_key_env?: string;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number;
     };
@@ -113,6 +114,7 @@ function resolveStatusTone(status: string | undefined) {
 type MemoryModelMode = "same_as_primary" | "custom";
 type SetupWizardStep = 1 | 2 | 3;
 type SetupProviderId = "openai" | "anthropic" | "deepseek" | "ollama";
+type ProviderApiKeyEnv = "OPENAI_API_KEY" | "ANTHROPIC_API_KEY" | "DEEPSEEK_API_KEY";
 
 type SetupProviderPreset = {
   id: SetupProviderId;
@@ -121,6 +123,7 @@ type SetupProviderPreset = {
   baseUrl: string;
   model: string;
   apiKeyRequired: boolean;
+  apiKeyEnv?: ProviderApiKeyEnv;
 };
 
 const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
@@ -131,6 +134,7 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
     baseUrl: "https://api.openai.com/v1",
     model: "gpt-4.1-mini",
     apiKeyRequired: true,
+    apiKeyEnv: "OPENAI_API_KEY",
   },
   {
     id: "anthropic",
@@ -139,6 +143,7 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
     baseUrl: "https://api.anthropic.com",
     model: "claude-sonnet-4-20250514",
     apiKeyRequired: true,
+    apiKeyEnv: "ANTHROPIC_API_KEY",
   },
   {
     id: "deepseek",
@@ -147,6 +152,7 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
     baseUrl: "https://api.deepseek.com",
     model: "deepseek-chat",
     apiKeyRequired: true,
+    apiKeyEnv: "DEEPSEEK_API_KEY",
   },
   {
     id: "ollama",
@@ -160,6 +166,16 @@ const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
 
 function resolveSetupPreset(providerId: SetupProviderId) {
   return SETUP_PROVIDER_PRESETS.find((preset) => preset.id === providerId) ?? SETUP_PROVIDER_PRESETS[0];
+}
+
+function resolveSetupPresetFromEnvHint(envName: string | null | undefined) {
+  return SETUP_PROVIDER_PRESETS.find((preset) => preset.apiKeyEnv === envName) ?? null;
+}
+
+function resolveProviderApiKeyEnv(value: string | null | undefined): ProviderApiKeyEnv | "" {
+  return value === "OPENAI_API_KEY" || value === "ANTHROPIC_API_KEY" || value === "DEEPSEEK_API_KEY"
+    ? value
+    : "";
 }
 
 function resolveMemoryProtocolFromProviderKind(
@@ -216,6 +232,7 @@ export function SettingsModal({
   const [providerModel, setProviderModel] = useState("");
   const [providerBaseUrl, setProviderBaseUrl] = useState("");
   const [providerApiKey, setProviderApiKey] = useState("");
+  const [providerApiKeyEnv, setProviderApiKeyEnv] = useState<ProviderApiKeyEnv | "">("");
   const [providerEffort, setProviderEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
   const [providerMaxTokens, setProviderMaxTokens] = useState("");
   const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState("");
@@ -245,6 +262,7 @@ export function SettingsModal({
   const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
   const [setupProviderId, setSetupProviderId] = useState<SetupProviderId>("openai");
   const [setupApiKey, setSetupApiKey] = useState("");
+  const [setupApiKeyEnv, setSetupApiKeyEnv] = useState<ProviderApiKeyEnv | "">("");
   const [setupModel, setSetupModel] = useState("gpt-4.1-mini");
 
   const currentProviderKind: ProviderKind = useMemo(
@@ -272,6 +290,7 @@ export function SettingsModal({
     setProviderModel(config.provider.model ?? "");
     setProviderBaseUrl(config.provider.base_url ?? "");
     setProviderApiKey(config.provider.api_key ?? "");
+    setProviderApiKeyEnv(resolveProviderApiKeyEnv(config.provider.api_key_env));
     setProviderEffort(config.provider.effort ?? "");
     setProviderMaxTokens(config.provider.max_tokens ? String(config.provider.max_tokens) : "");
     setApprovalMode(config.tools.approval_mode ?? "confirm");
@@ -306,6 +325,24 @@ export function SettingsModal({
   }, [config, open]);
 
   useEffect(() => {
+    if (!config || config.provider.kind !== "demo") {
+      return;
+    }
+
+    const preset = resolveSetupPresetFromEnvHint(config.env_hints?.provider_api_key_env);
+    if (!preset) {
+      return;
+    }
+
+    setProviderKind(preset.kind);
+    setProviderKindToSave(preset.kind);
+    setProviderModel(preset.model);
+    setProviderBaseUrl(preset.baseUrl);
+    setProviderApiKey("");
+    setProviderApiKeyEnv(preset.apiKeyEnv ?? "");
+  }, [config]);
+
+  useEffect(() => {
     if (!runtimeConfig) {
       return;
     }
@@ -330,13 +367,16 @@ export function SettingsModal({
 
     const preset = SETUP_PROVIDER_PRESETS[0];
     setSetupStep(1);
-    setSetupProviderId(preset.id);
+    const envPreset = resolveSetupPresetFromEnvHint(config?.env_hints?.provider_api_key_env);
+    const nextPreset = envPreset ?? preset;
+    setSetupProviderId(nextPreset.id);
     setSetupApiKey("");
-    setSetupModel(preset.model);
+    setSetupApiKeyEnv(envPreset?.apiKeyEnv ?? "");
+    setSetupModel(nextPreset.model);
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
-  }, [open, setupWizard, config?.provider.kind]);
+  }, [open, setupWizard, config?.provider.kind, config?.env_hints?.provider_api_key_env]);
 
   const providerRequiresBaseUrl = useMemo(
     () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",
@@ -412,7 +452,7 @@ export function SettingsModal({
       return;
     }
 
-    if (providerRequiresApiKey && !trimmedProviderApiKey) {
+    if (providerRequiresApiKey && !trimmedProviderApiKey && !providerApiKeyEnv) {
       setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
@@ -471,6 +511,7 @@ export function SettingsModal({
           model: trimmedProviderModel,
           ...(trimmedProviderBaseUrl ? { base_url: trimmedProviderBaseUrl } : {}),
           ...(trimmedProviderApiKey ? { api_key: trimmedProviderApiKey } : {}),
+          ...(!trimmedProviderApiKey && providerApiKeyEnv ? { api_key_env: providerApiKeyEnv } : {}),
           effort: providerEffort || null,
           ...(trimmedProviderMaxTokens ? { max_tokens: Number(trimmedProviderMaxTokens) } : {})
         },
@@ -521,14 +562,16 @@ export function SettingsModal({
 
   function selectSetupProvider(providerId: SetupProviderId) {
     const preset = resolveSetupPreset(providerId);
+    const detectedEnvName = config?.env_hints?.provider_api_key_env;
     setSetupProviderId(providerId);
     setSetupApiKey("");
+    setSetupApiKeyEnv(resolveProviderApiKeyEnv(preset.apiKeyEnv === detectedEnvName ? preset.apiKeyEnv : ""));
     setSetupModel(preset.model);
     setErrorMessage(null);
   }
 
   function handleSetupNext() {
-    if (setupStep === 2 && setupProvider.apiKeyRequired && !setupApiKey.trim()) {
+    if (setupStep === 2 && setupProvider.apiKeyRequired && !setupApiKey.trim() && !setupApiKeyEnv) {
       setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
@@ -546,7 +589,7 @@ export function SettingsModal({
       return;
     }
 
-    if (setupProvider.apiKeyRequired && !trimmedApiKey) {
+    if (setupProvider.apiKeyRequired && !trimmedApiKey && !setupApiKeyEnv) {
       setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
@@ -561,6 +604,7 @@ export function SettingsModal({
           model: trimmedModel,
           base_url: setupProvider.baseUrl,
           ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
+          ...(!trimmedApiKey && setupApiKeyEnv ? { api_key_env: setupApiKeyEnv } : {}),
           effort: null,
         },
       });
@@ -756,17 +800,32 @@ export function SettingsModal({
                 {t("runtimeConfig.setupWizard.apiKeyStepTitle")}
               </div>
               {setupProvider.apiKeyRequired ? (
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.apiKeyLabel")}</span>
-                  <input
-                    aria-label={t("runtimeConfig.setupWizard.apiKeyLabel")}
-                    type="password"
-                    value={setupApiKey}
-                    onChange={(event) => setSetupApiKey(event.target.value)}
-                    placeholder={t("runtimeConfig.setupWizard.apiKeyPlaceholder")}
-                    className="field mt-1"
-                  />
-                </label>
+                <div className="space-y-3">
+                  {setupApiKeyEnv ? (
+                    <div
+                      className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
+                      data-testid="setup-api-key-env-detected"
+                    >
+                      {t("runtimeConfig.setupWizard.apiKeyEnvDetected", { name: setupApiKeyEnv })}
+                    </div>
+                  ) : null}
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.apiKeyLabel")}</span>
+                    <input
+                      aria-label={t("runtimeConfig.setupWizard.apiKeyLabel")}
+                      type="password"
+                      value={setupApiKey}
+                      onChange={(event) => {
+                        setSetupApiKey(event.target.value);
+                        if (event.target.value.trim()) {
+                          setSetupApiKeyEnv("");
+                        }
+                      }}
+                      placeholder={t("runtimeConfig.setupWizard.apiKeyPlaceholder")}
+                      className="field mt-1"
+                    />
+                  </label>
+                </div>
               ) : (
                 <div
                   className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
@@ -1027,10 +1086,20 @@ export function SettingsModal({
               <input
                 type="password"
                 value={providerApiKey}
-                onChange={(event) => setProviderApiKey(event.target.value)}
+                onChange={(event) => {
+                  setProviderApiKey(event.target.value);
+                  if (event.target.value.trim()) {
+                    setProviderApiKeyEnv("");
+                  }
+                }}
                 placeholder={t("runtimeConfig.providerApiKey")}
                 className="field mt-1"
               />
+              {providerApiKeyEnv ? (
+                <span className="mt-1 block text-xs text-muted-foreground" data-testid="runtime-config-provider-api-key-env">
+                  {t("runtimeConfig.setupWizard.apiKeyEnvDetected", { name: providerApiKeyEnv })}
+                </span>
+              ) : null}
             </label>
             <label className="block">
               <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerEffort")}</span>

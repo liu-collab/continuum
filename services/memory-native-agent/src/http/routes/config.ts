@@ -45,6 +45,7 @@ const providerPayloadSchema = z.object({
   model: z.string().trim().min(1),
   base_url: z.string().trim().url().optional(),
   api_key: z.string().trim().optional(),
+  api_key_env: z.string().trim().min(1).optional(),
   temperature: z.number().min(0).max(2).optional(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]).nullable().optional(),
   max_tokens: z.number().int().min(1).nullable().optional(),
@@ -63,11 +64,11 @@ const providerPayloadSchema = z.object({
     });
   }
 
-  if (requiresApiKey && !value.api_key) {
+  if (requiresApiKey && !value.api_key && !value.api_key_env) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["api_key"],
-      message: "api_key is required for the selected provider.",
+      message: "api_key or api_key_env is required for the selected provider.",
     });
   }
 });
@@ -156,6 +157,19 @@ function nowIso() {
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function resolveProviderApiKeyEnvHint(env: NodeJS.ProcessEnv) {
+  if (env.OPENAI_API_KEY?.trim()) {
+    return "OPENAI_API_KEY";
+  }
+  if (env.ANTHROPIC_API_KEY?.trim()) {
+    return "ANTHROPIC_API_KEY";
+  }
+  if (env.DEEPSEEK_API_KEY?.trim()) {
+    return "DEEPSEEK_API_KEY";
+  }
+  return null;
 }
 
 function normalizeTimeout(value: number | null | undefined) {
@@ -289,6 +303,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: app.runtimeState.config.provider.model,
         base_url: app.runtimeState.config.provider.baseUrl,
         api_key: app.runtimeState.config.provider.apiKey,
+        api_key_env: app.runtimeState.config.provider.apiKeyEnv,
         temperature: app.runtimeState.config.provider.temperature,
         effort: app.runtimeState.config.provider.effort ?? null,
         max_tokens: app.runtimeState.config.provider.maxTokens ?? null,
@@ -324,6 +339,9 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       },
       mcp: {
         servers: app.runtimeState.config.mcp.servers,
+      },
+      env_hints: {
+        provider_api_key_env: resolveProviderApiKeyEnvHint(app.runtimeState.env),
       },
     };
   });
@@ -372,7 +390,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         model: payload.provider.model,
         baseUrl: payload.provider.base_url ?? app.runtimeState.config.provider.baseUrl,
         apiKey: payload.provider.api_key || undefined,
-        apiKeyEnv: undefined,
+        apiKeyEnv: payload.provider.api_key ? undefined : payload.provider.api_key_env,
         temperature: payload.provider.temperature ?? app.runtimeState.config.provider.temperature,
         effort: payload.provider.effort !== undefined
           ? payload.provider.effort
@@ -393,6 +411,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
           model: nextProvider.model,
           base_url: nextProvider.baseUrl,
           ...(nextProvider.apiKey ? { api_key: nextProvider.apiKey } : {}),
+          ...(nextProvider.apiKeyEnv ? { api_key_env: nextProvider.apiKeyEnv } : {}),
           temperature: nextProvider.temperature,
           effort: nextProvider.effort ?? null,
           max_tokens: nextProvider.maxTokens ?? null,

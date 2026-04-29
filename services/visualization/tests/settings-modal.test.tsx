@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -54,6 +54,65 @@ const baseRuntimeConfig = {
 };
 
 describe("SettingsModal", () => {
+  it("uses a detected OpenAI API key env hint in the setup wizard", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          setupWizard
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "demo",
+              model: "axis-demo",
+              base_url: null,
+              api_key: null,
+            },
+            env_hints: {
+              provider_api_key_env: "OPENAI_API_KEY",
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByTestId("setup-provider-openai")).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    expect(screen.getByTestId("setup-api-key-env-detected")).toHaveTextContent(
+      "已检测到环境变量 OPENAI_API_KEY，可直接使用。",
+    );
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    expect(screen.getByLabelText("模型名")).toHaveValue("gpt-4.1-mini");
+    await user.click(screen.getByTestId("setup-wizard-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith({
+      provider: {
+        kind: "openai-compatible",
+        model: "gpt-4.1-mini",
+        base_url: "https://api.openai.com/v1",
+        api_key_env: "OPENAI_API_KEY",
+        effort: null,
+      },
+    });
+  });
+
   it("saves a real provider from the setup wizard", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -110,6 +169,67 @@ describe("SettingsModal", () => {
       },
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefills provider settings from a detected DeepSeek API key env hint", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "demo",
+              model: "axis-demo",
+              base_url: null,
+              api_key: null,
+            },
+            env_hints: {
+              provider_api_key_env: "DEEPSEEK_API_KEY",
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    const primaryConfig = screen.getByTestId("primary-model-config");
+    await waitFor(() => {
+      expect(within(primaryConfig).getByPlaceholderText("provider model")).toHaveValue("deepseek-chat");
+    });
+    expect(within(primaryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.deepseek.com");
+    expect(screen.getByTestId("runtime-config-provider-api-key-env")).toHaveTextContent(
+      "已检测到环境变量 DEEPSEEK_API_KEY，可直接使用。",
+    );
+
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: expect.objectContaining({
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key_env: "DEEPSEEK_API_KEY",
+        }),
+      }),
+    );
   });
 
   it("asks the user to save before running embedding health check on unsaved changes", async () => {

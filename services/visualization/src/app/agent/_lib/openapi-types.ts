@@ -309,6 +309,7 @@ export type MnaAgentConfigResponse = {
     model: string;
     base_url: string | null;
     api_key: string | null;
+    api_key_env?: string | null;
     temperature: number | null;
     effort: "low" | "medium" | "high" | "xhigh" | "max" | null;
     max_tokens: number | null;
@@ -349,6 +350,9 @@ export type MnaAgentConfigResponse = {
       request_timeout_ms?: number;
       reconnect_on_failure?: boolean;
     }>;
+  };
+  env_hints?: {
+    provider_api_key_env: string | null;
   };
 };
 

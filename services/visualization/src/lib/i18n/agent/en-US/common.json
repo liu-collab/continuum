@@ -192,6 +192,7 @@
       "modelStepTitle": "Confirm model name",
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "sk-...",
+      "apiKeyEnvDetected": "Detected {name}; it can be used directly.",
       "modelLabel": "Model name",
       "finish": "Save and start",
       "next": "Next",

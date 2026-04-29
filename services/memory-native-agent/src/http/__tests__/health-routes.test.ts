@@ -808,6 +808,82 @@ describe("health routes", () => {
     }
   });
 
+  it("reports provider API key env hints and accepts api_key_env updates", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), {
+      homeDirectory: home,
+      env: {
+        DEEPSEEK_API_KEY: "deepseek-key",
+      },
+    });
+
+    try {
+      const readResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+      });
+
+      expect(readResponse.statusCode).toBe(200);
+      expect(readResponse.json()).toMatchObject({
+        env_hints: {
+          provider_api_key_env: "DEEPSEEK_API_KEY",
+        },
+      });
+
+      const writeResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+        payload: {
+          provider: {
+            kind: "openai-compatible",
+            model: "deepseek-chat",
+            base_url: "https://api.deepseek.com",
+            api_key_env: "DEEPSEEK_API_KEY",
+          },
+        },
+      });
+
+      expect(writeResponse.statusCode).toBe(200);
+      expect(JSON.parse(fs.readFileSync(path.join(home, ".mna", "config.json"), "utf8"))).toMatchObject({
+        provider: {
+          kind: "openai-compatible",
+          model: "deepseek-chat",
+          base_url: "https://api.deepseek.com",
+          api_key_env: "DEEPSEEK_API_KEY",
+        },
+      });
+
+      const dependencyResponse = await app.inject({
+        method: "GET",
+        url: "/v1/agent/dependency-status",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+      });
+
+      expect(dependencyResponse.statusCode).toBe(200);
+      expect(dependencyResponse.json()).toMatchObject({
+        provider: {
+          id: "openai-compatible",
+          model: "deepseek-chat",
+          status: "configured",
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("rejects provider config when required api_key is missing", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");
@@ -836,7 +912,7 @@ describe("health routes", () => {
         ok: false,
         error: {
           code: "invalid_config_payload",
-          message: "provider.api_key: api_key is required for the selected provider.",
+          message: "provider.api_key: api_key or api_key_env is required for the selected provider.",
         },
       });
     } finally {

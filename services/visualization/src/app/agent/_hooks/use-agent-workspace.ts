@@ -690,6 +690,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       model: string;
       base_url?: string;
       api_key?: string;
+      api_key_env?: string;
       temperature?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number | null;
