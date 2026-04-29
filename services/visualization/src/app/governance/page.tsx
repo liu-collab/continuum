@@ -9,7 +9,7 @@ import { FormField } from "@/components/form-field";
 import { HealthModalButton } from "@/components/health-modal";
 import { SearchForm } from "@/components/search-form";
 import { StatusBadge } from "@/components/status-badge";
-import { GovernanceConfigButton } from "@/app/governance/_components/governance-config-button";
+import { GovernanceConfigEditor } from "@/app/governance/_components/governance-config-button";
 import { getGovernanceExecutionDetail, getGovernanceHistory } from "@/features/memory-catalog/service";
 import type { GovernanceExecutionDetail } from "@/lib/contracts";
 import { formatDebugReference, formatTimestamp, formatWorkspaceReference, governanceStatusTone, summarizeGovernanceTarget } from "@/lib/format";
@@ -217,7 +217,7 @@ export default async function GovernancePage({
               <div className="text-sm font-semibold text-text">{t("governance.autoConfig.title")}</div>
               <p className="mt-1 text-sm text-muted">{governanceSummary.join(" | ")}</p>
             </div>
-            <GovernanceConfigButton config={governanceConfig} label={t("governance.autoConfig.configure")} />
+            <GovernanceConfigEditor config={governanceConfig} label={t("governance.autoConfig.configure")} />
           </div>
         </div>
       </section>

@@ -1,14 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Modal } from "@/components/modal";
 import { useAppI18n } from "@/lib/i18n/client";
-import { MnaClient } from "@/app/agent/_lib/mna-client";
 import type { MnaRuntimeGovernanceConfig } from "@/app/agent/_lib/openapi-types";
 
-type GovernanceConfigButtonProps = {
+type GovernanceConfigEditorProps = {
   config: MnaRuntimeGovernanceConfig | null;
   label: string;
 };
@@ -25,10 +23,23 @@ function resolveConfig(config: MnaRuntimeGovernanceConfig | null) {
   return config ?? defaultConfig;
 }
 
-export function GovernanceConfigButton({ config, label }: GovernanceConfigButtonProps) {
+function readErrorMessage(payload: unknown, fallback: string) {
+  if (payload && typeof payload === "object") {
+    const error = (payload as { error?: unknown }).error;
+    if (error && typeof error === "object") {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) {
+        return message;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+export function GovernanceConfigEditor({ config, label }: GovernanceConfigEditorProps) {
   const { t } = useAppI18n();
   const router = useRouter();
-  const client = useMemo(() => new MnaClient(), []);
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [verifyEnabled, setVerifyEnabled] = useState(true);
@@ -74,7 +85,7 @@ export function GovernanceConfigButton({ config, label }: GovernanceConfigButton
     setErrorMessage(null);
     setSaving(true);
     try {
-      await client.updateRuntimeConfig({
+      const payload = {
         governance: {
           WRITEBACK_MAINTENANCE_ENABLED: enabled,
           WRITEBACK_MAINTENANCE_INTERVAL_MS: Number(trimmedIntervalMinutes) * 60_000,
@@ -82,7 +93,21 @@ export function GovernanceConfigButton({ config, label }: GovernanceConfigButton
           WRITEBACK_GOVERNANCE_SHADOW_MODE: shadowMode,
           WRITEBACK_MAINTENANCE_MAX_ACTIONS: Number(trimmedMaxActions)
         }
+      };
+      const response = await fetch("/api/runtime/config", {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
       });
+      const responsePayload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(readErrorMessage(responsePayload, t("common.requestFailedStatus", { status: response.status })));
+      }
+
       setOpen(false);
       router.refresh();
     } catch (error) {
@@ -94,33 +119,26 @@ export function GovernanceConfigButton({ config, label }: GovernanceConfigButton
 
   return (
     <>
-      <button type="button" className="btn-outline" onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className="btn-outline"
+        data-testid="governance-config-editor"
+        aria-expanded={open}
+        aria-controls="governance-config-inline-form"
+        onClick={() => setOpen((value) => !value)}
+      >
         {label}
       </button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={t("governance.autoConfig.title")}
-        description={t("governance.autoConfig.description")}
-        footer={
-          <>
-            <button type="button" className="btn-outline" onClick={() => setOpen(false)}>
-              {t("common.close")}
-            </button>
-            <button
-              type="button"
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={saving}
-              onClick={() => {
-                void handleSave();
-              }}
-            >
-              {saving ? t("governance.autoConfig.saving") : t("governance.autoConfig.save")}
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-4" data-testid="governance-config-form">
+
+      {open ? (
+        <div
+          id="governance-config-inline-form"
+          className="mt-2 basis-full space-y-4 rounded-lg border border-border bg-surface p-4"
+          data-testid="governance-config-form"
+        >
+          <p className="text-[14px] leading-[1.43] text-muted">
+            {t("governance.autoConfig.description")}
+          </p>
           {errorMessage ? (
             <p className="notice notice-warning" data-testid="governance-config-error">
               {errorMessage}
@@ -173,8 +191,24 @@ export function GovernanceConfigButton({ config, label }: GovernanceConfigButton
               className="field mt-1"
             />
           </label>
+
+          <div className="flex flex-wrap justify-end gap-3">
+            <button type="button" className="btn-outline" onClick={() => setOpen(false)}>
+              {t("common.close")}
+            </button>
+            <button
+              type="button"
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={saving}
+              onClick={() => {
+                void handleSave();
+              }}
+            >
+              {saving ? t("governance.autoConfig.saving") : t("governance.autoConfig.save")}
+            </button>
+          </div>
         </div>
-      </Modal>
+      ) : null}
     </>
   );
 }

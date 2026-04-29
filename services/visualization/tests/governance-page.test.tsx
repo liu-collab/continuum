@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -143,6 +143,74 @@ describe("governance page", () => {
 
     expect(screen.getByTestId("governance-config-form")).toBeInTheDocument();
     expect(screen.getByLabelText("启用自动治理")).toBeChecked();
+  });
+
+  it("saves automatic governance config through the runtime config route", async () => {
+    const user = userEvent.setup();
+    refreshMock.mockClear();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        governance: {
+          WRITEBACK_MAINTENANCE_ENABLED: false,
+          WRITEBACK_MAINTENANCE_INTERVAL_MS: 1200000,
+          WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+          WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+          WRITEBACK_MAINTENANCE_MAX_ACTIONS: 8
+        }
+      })
+    } as Response);
+    getGovernanceHistoryMock.mockResolvedValue({
+      items: [],
+      total: 0,
+      sourceStatus
+    });
+    getGovernanceExecutionDetailMock.mockResolvedValue({
+      detail: null,
+      status: sourceStatus
+    });
+    fetchRuntimeGovernanceConfigMock.mockResolvedValue({
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: false,
+        WRITEBACK_MAINTENANCE_INTERVAL_MS: 900000,
+        WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10
+      },
+      status: sourceStatus
+    });
+
+    const element = await GovernancePage({
+      searchParams: Promise.resolve({})
+    });
+    render(element);
+
+    await user.click(screen.getByRole("button", { name: "配置" }));
+    await user.clear(screen.getByLabelText("扫描间隔（分钟）"));
+    await user.type(screen.getByLabelText("扫描间隔（分钟）"), "20");
+    await user.clear(screen.getByLabelText("最大动作数"));
+    await user.type(screen.getByLabelText("最大动作数"), "8");
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/runtime/config",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          governance: {
+            WRITEBACK_MAINTENANCE_ENABLED: false,
+            WRITEBACK_MAINTENANCE_INTERVAL_MS: 1200000,
+            WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+            WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+            WRITEBACK_MAINTENANCE_MAX_ACTIONS: 8
+          }
+        })
+      })
+    ));
+    expect(refreshMock).toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
   });
 
   it("uses client navigation links for execution cards", async () => {
