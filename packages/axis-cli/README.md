@@ -22,13 +22,12 @@
 | **macOS** | 支持，需自行安装 Docker Desktop，`axis start` 自动检测并启动 |
 | **Linux** | 部分支持，需自行安装 Docker Engine 并手动配置 |
 
-macOS / Linux 环境变量设置示例：
+所有平台统一启动：
 ```bash
-export EMBEDDING_BASE_URL="https://api.openai.com/v1"
-export EMBEDDING_MODEL="text-embedding-3-small"
-export EMBEDDING_API_KEY="your-key"
 axis start
 ```
+
+`embedding` 和 `memory_llm` 为可选配置，启动后可在 Agent 页面的设置面板中配置，不影响页面启动和 Agent 对话。
 
 ## 命令说明
 
