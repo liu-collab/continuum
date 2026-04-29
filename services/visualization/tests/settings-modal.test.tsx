@@ -54,6 +54,64 @@ const baseRuntimeConfig = {
 };
 
 describe("SettingsModal", () => {
+  it("saves a real provider from the setup wizard", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          setupWizard
+          onClose={onClose}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "demo",
+              model: "axis-demo",
+              base_url: null,
+              api_key: null,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    expect(screen.getByText("配置聊天模型")).toBeInTheDocument();
+    expect(screen.getByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
+    await user.click(screen.getByTestId("setup-provider-deepseek"));
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    expect(screen.getByLabelText("模型名")).toHaveValue("deepseek-chat");
+    await user.click(screen.getByTestId("setup-wizard-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith({
+      provider: {
+        kind: "openai-compatible",
+        model: "deepseek-chat",
+        base_url: "https://api.deepseek.com",
+        api_key: "sk-test",
+        effort: null,
+      },
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("asks the user to save before running embedding health check on unsaved changes", async () => {
     const user = userEvent.setup();
 
@@ -592,4 +650,3 @@ describe("SettingsModal", () => {
     });
   });
 });
-

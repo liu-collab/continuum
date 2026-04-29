@@ -179,6 +179,31 @@
       "max": "最大"
     },
     "save": "保存配置",
+    "setupWizard": {
+      "title": "配置聊天模型",
+      "description": "当前仍在 demo 模式。完成这 3 步后，就可以使用真实模型对话。",
+      "steps": {
+        "1": "1. 选择提供商",
+        "2": "2. 输入 API Key",
+        "3": "3. 确认模型"
+      },
+      "providerStepTitle": "选择提供商",
+      "apiKeyStepTitle": "输入 API Key",
+      "modelStepTitle": "确认模型名",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "sk-...",
+      "modelLabel": "模型名",
+      "finish": "保存并开始",
+      "next": "下一步",
+      "back": "上一步",
+      "ollamaNoApiKey": "Ollama 本地服务不需要 API Key。",
+      "providers": {
+        "openai": "使用 OpenAI 官方接口。",
+        "anthropic": "使用 Anthropic Claude 接口。",
+        "deepseek": "使用 DeepSeek OpenAI-compatible 接口。",
+        "ollama": "使用本机 Ollama 服务。"
+      }
+    },
     "errors": {
       "providerModelRequired": "provider model 不能为空。",
       "providerBaseUrlRequired": "当前 provider 需要填写 base_url。",
@@ -438,4 +463,3 @@
     "mcp": "MCP: {name}"
   }
 }
-

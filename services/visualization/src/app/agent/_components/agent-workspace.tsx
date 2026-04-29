@@ -28,6 +28,8 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
   const { locale, t, formatAgentError } = useAgentI18n();
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMode, setSettingsMode] = useState<"runtime" | "setup">("runtime");
+  const [demoSetupPrompted, setDemoSetupPrompted] = useState(false);
   const sessionErrorContent = workspace.state.sessionErrorCode
     ? formatAgentError(workspace.state.sessionErrorCode, workspace.state.sessionError)
     : null;
@@ -50,9 +52,24 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("settings") === "governance") {
+      setSettingsMode("runtime");
       setSettingsOpen(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (
+      demoSetupPrompted ||
+      workspace.state.bootstrapStatus !== "ok" ||
+      workspace.agentConfig?.provider.kind !== "demo"
+    ) {
+      return;
+    }
+
+    setSettingsMode("setup");
+    setSettingsOpen(true);
+    setDemoSetupPrompted(true);
+  }, [demoSetupPrompted, workspace.agentConfig?.provider.kind, workspace.state.bootstrapStatus]);
 
   if (workspace.state.bootstrapStatus === "loading") {
     return (
@@ -179,7 +196,10 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               onOpenPrompt={(turnId) => {
                 void workspace.openPromptInspector(turnId);
               }}
-              onOpenSettings={() => setSettingsOpen(true)}
+              onOpenSettings={() => {
+                setSettingsMode("runtime");
+                setSettingsOpen(true);
+              }}
             />
           </div>
         </div>
@@ -188,6 +208,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
       <SettingsModal
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        setupWizard={settingsMode === "setup" && workspace.agentConfig?.provider.kind === "demo"}
         config={workspace.agentConfig}
         runtimeConfig={workspace.runtimeConfig}
         dependencyStatus={workspace.dependencyStatus}

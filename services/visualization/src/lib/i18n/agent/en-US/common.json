@@ -179,6 +179,31 @@
       "max": "Max"
     },
     "save": "Save config",
+    "setupWizard": {
+      "title": "Configure chat model",
+      "description": "Axis is still using demo mode. Complete these 3 steps to use a real model.",
+      "steps": {
+        "1": "1. Choose provider",
+        "2": "2. Enter API Key",
+        "3": "3. Confirm model"
+      },
+      "providerStepTitle": "Choose provider",
+      "apiKeyStepTitle": "Enter API Key",
+      "modelStepTitle": "Confirm model name",
+      "apiKeyLabel": "API Key",
+      "apiKeyPlaceholder": "sk-...",
+      "modelLabel": "Model name",
+      "finish": "Save and start",
+      "next": "Next",
+      "back": "Back",
+      "ollamaNoApiKey": "Local Ollama does not need an API Key.",
+      "providers": {
+        "openai": "Use the official OpenAI API.",
+        "anthropic": "Use the Anthropic Claude API.",
+        "deepseek": "Use the DeepSeek OpenAI-compatible API.",
+        "ollama": "Use the local Ollama service."
+      }
+    },
     "errors": {
       "providerModelRequired": "provider model is required.",
       "providerBaseUrlRequired": "base_url is required for the selected provider.",
@@ -438,4 +463,3 @@
     "mcp": "MCP: {name}"
   }
 }
-

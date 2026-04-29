@@ -25,6 +25,7 @@ import { useAgentI18n } from "@/lib/i18n/agent/provider";
 type SettingsModalProps = {
   open: boolean;
   onClose(): void;
+  setupWizard?: boolean;
   config: MnaAgentConfigResponse | null;
   runtimeConfig?: MnaRuntimeConfigResponse | null;
   dependencyStatus?: {
@@ -47,7 +48,7 @@ type SettingsModalProps = {
   memoryMode: AgentMemoryMode;
   onMemoryModeChange(value: AgentMemoryMode): void;
   onSaveRuntime(payload: {
-    provider: {
+    provider?: {
       kind: ProviderKind;
       model: string;
       base_url?: string;
@@ -55,18 +56,18 @@ type SettingsModalProps = {
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number;
     };
-    embedding: {
+    embedding?: {
       base_url?: string;
       model?: string;
       api_key?: string;
     };
-    tools: {
+    tools?: {
       approval_mode: "confirm" | "yolo";
     };
-    planning: {
+    planning?: {
       plan_mode: "advisory" | "confirm";
     };
-    memory_llm: {
+    memory_llm?: {
       base_url?: string;
       model?: string;
       api_key?: string;
@@ -75,7 +76,7 @@ type SettingsModalProps = {
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number;
     };
-    mcp: {
+    mcp?: {
       servers: Array<{
         name: string;
         transport: "stdio" | "http";
@@ -110,6 +111,56 @@ function resolveStatusTone(status: string | undefined) {
 }
 
 type MemoryModelMode = "same_as_primary" | "custom";
+type SetupWizardStep = 1 | 2 | 3;
+type SetupProviderId = "openai" | "anthropic" | "deepseek" | "ollama";
+
+type SetupProviderPreset = {
+  id: SetupProviderId;
+  label: string;
+  kind: EditableProviderKind;
+  baseUrl: string;
+  model: string;
+  apiKeyRequired: boolean;
+};
+
+const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
+  {
+    id: "openai",
+    label: "OpenAI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4.1-mini",
+    apiKeyRequired: true,
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    kind: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    model: "claude-sonnet-4-20250514",
+    apiKeyRequired: true,
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    kind: "openai-compatible",
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-chat",
+    apiKeyRequired: true,
+  },
+  {
+    id: "ollama",
+    label: "Ollama",
+    kind: "ollama",
+    baseUrl: "http://127.0.0.1:11434",
+    model: "qwen2.5-coder",
+    apiKeyRequired: false,
+  },
+];
+
+function resolveSetupPreset(providerId: SetupProviderId) {
+  return SETUP_PROVIDER_PRESETS.find((preset) => preset.id === providerId) ?? SETUP_PROVIDER_PRESETS[0];
+}
 
 function resolveMemoryProtocolFromProviderKind(
   kind: ProviderKind,
@@ -145,6 +196,7 @@ function buildEffortOptions(t: (key: string) => string) {
 export function SettingsModal({
   open,
   onClose,
+  setupWizard = false,
   config,
   runtimeConfig = null,
   dependencyStatus,
@@ -190,11 +242,17 @@ export function SettingsModal({
   const [saving, setSaving] = useState(false);
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
   const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
+  const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
+  const [setupProviderId, setSetupProviderId] = useState<SetupProviderId>("openai");
+  const [setupApiKey, setSetupApiKey] = useState("");
+  const [setupModel, setSetupModel] = useState("gpt-4.1-mini");
 
   const currentProviderKind: ProviderKind = useMemo(
     () => (isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave),
     [providerKind, providerKindToSave],
   );
+
+  const setupProvider = useMemo(() => resolveSetupPreset(setupProviderId), [setupProviderId]);
 
   const primaryMemoryProtocol = useMemo(
     () => resolveMemoryProtocolFromProviderKind(currentProviderKind),
@@ -264,6 +322,21 @@ export function SettingsModal({
       setMemoryModelMode("custom");
     }
   }, [canMirrorPrimaryModel, memoryModelMode]);
+
+  useEffect(() => {
+    if (!open || !setupWizard) {
+      return;
+    }
+
+    const preset = SETUP_PROVIDER_PRESETS[0];
+    setSetupStep(1);
+    setSetupProviderId(preset.id);
+    setSetupApiKey("");
+    setSetupModel(preset.model);
+    setErrorMessage(null);
+    setFeedbackMessage(null);
+    setSaving(false);
+  }, [open, setupWizard, config?.provider.kind]);
 
   const providerRequiresBaseUrl = useMemo(
     () => currentProviderKind === "openai-compatible" || currentProviderKind === "anthropic" || currentProviderKind === "ollama",
@@ -446,6 +519,59 @@ export function SettingsModal({
     }
   }
 
+  function selectSetupProvider(providerId: SetupProviderId) {
+    const preset = resolveSetupPreset(providerId);
+    setSetupProviderId(providerId);
+    setSetupApiKey("");
+    setSetupModel(preset.model);
+    setErrorMessage(null);
+  }
+
+  function handleSetupNext() {
+    if (setupStep === 2 && setupProvider.apiKeyRequired && !setupApiKey.trim()) {
+      setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
+      return;
+    }
+
+    setErrorMessage(null);
+    setSetupStep((current) => (current < 3 ? ((current + 1) as SetupWizardStep) : current));
+  }
+
+  async function handleSetupSave() {
+    const trimmedModel = setupModel.trim();
+    const trimmedApiKey = setupApiKey.trim();
+
+    if (!trimmedModel) {
+      setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
+      return;
+    }
+
+    if (setupProvider.apiKeyRequired && !trimmedApiKey) {
+      setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
+      return;
+    }
+
+    setErrorMessage(null);
+    setFeedbackMessage(null);
+    setSaving(true);
+    try {
+      await onSaveRuntime({
+        provider: {
+          kind: setupProvider.kind,
+          model: trimmedModel,
+          base_url: setupProvider.baseUrl,
+          ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
+          effort: null,
+        },
+      });
+      onClose();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleCheckEmbeddings() {
     setErrorMessage(null);
     setFeedbackMessage(null);
@@ -525,6 +651,158 @@ export function SettingsModal({
           label: formatProviderKindLabel(providerKindToSave)
         }
       ];
+
+  if (setupWizard) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        title={t("runtimeConfig.setupWizard.title")}
+        description={t("runtimeConfig.setupWizard.description")}
+        size="lg"
+        footer={
+          <>
+            <button type="button" onClick={onClose} className="btn-outline">
+              {t("promptInspector.close")}
+            </button>
+            {setupStep > 1 ? (
+              <button
+                type="button"
+                onClick={() => setSetupStep((current) => (current > 1 ? ((current - 1) as SetupWizardStep) : current))}
+                className="btn-outline"
+                data-testid="setup-wizard-back"
+              >
+                {t("runtimeConfig.setupWizard.back")}
+              </button>
+            ) : null}
+            {setupStep < 3 ? (
+              <button
+                type="button"
+                onClick={handleSetupNext}
+                className="btn-primary"
+                data-testid="setup-wizard-next"
+              >
+                {t("runtimeConfig.setupWizard.next")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSetupSave();
+                }}
+                disabled={saving}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="setup-wizard-save"
+              >
+                {saving ? t("runtimeConfig.saving") : t("runtimeConfig.setupWizard.finish")}
+              </button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-5" data-testid="provider-setup-wizard">
+          {errorMessage ? (
+            <p className="text-sm text-[var(--ink)]" data-testid="runtime-config-error">
+              {errorMessage}
+            </p>
+          ) : null}
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {([1, 2, 3] as SetupWizardStep[]).map((step) => (
+              <div
+                key={step}
+                className={`rounded-md border px-3 py-2 text-sm ${
+                  setupStep === step ? "border-accent bg-accent/10 text-foreground" : "bg-surface-muted/30 text-muted-foreground"
+                }`}
+              >
+                <div className="text-xs font-semibold">{t(`runtimeConfig.setupWizard.steps.${step}`)}</div>
+              </div>
+            ))}
+          </div>
+
+          {setupStep === 1 ? (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-foreground">
+                {t("runtimeConfig.setupWizard.providerStepTitle")}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {SETUP_PROVIDER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => selectSetupProvider(preset.id)}
+                    aria-pressed={setupProviderId === preset.id}
+                    data-testid={`setup-provider-${preset.id}`}
+                    className={`rounded-md border bg-surface p-4 text-left transition ${
+                      setupProviderId === preset.id
+                        ? "border-accent ring-2 ring-accent/30"
+                        : "hover:border-accent/60"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold text-foreground">{preset.label}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {t(`runtimeConfig.setupWizard.providers.${preset.id}`)}
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground">{preset.model}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {setupStep === 2 ? (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-foreground">
+                {t("runtimeConfig.setupWizard.apiKeyStepTitle")}
+              </div>
+              {setupProvider.apiKeyRequired ? (
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.apiKeyLabel")}</span>
+                  <input
+                    aria-label={t("runtimeConfig.setupWizard.apiKeyLabel")}
+                    type="password"
+                    value={setupApiKey}
+                    onChange={(event) => setSetupApiKey(event.target.value)}
+                    placeholder={t("runtimeConfig.setupWizard.apiKeyPlaceholder")}
+                    className="field mt-1"
+                  />
+                </label>
+              ) : (
+                <div
+                  className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
+                  data-testid="setup-api-key-optional"
+                >
+                  {t("runtimeConfig.setupWizard.ollamaNoApiKey")}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {setupStep === 3 ? (
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-foreground">
+                {t("runtimeConfig.setupWizard.modelStepTitle")}
+              </div>
+              <label className="block">
+                <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.modelLabel")}</span>
+                <input
+                  aria-label={t("runtimeConfig.setupWizard.modelLabel")}
+                  value={setupModel}
+                  onChange={(event) => setSetupModel(event.target.value)}
+                  placeholder={t("runtimeConfig.providerModel")}
+                  className="field mt-1"
+                />
+              </label>
+              <div className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">base_url</span>
+                <span className="ml-2" data-testid="setup-provider-base-url">{setupProvider.baseUrl}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

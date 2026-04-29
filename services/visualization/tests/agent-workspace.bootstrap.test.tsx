@@ -74,6 +74,133 @@ function createWorkspaceState(status: "loading" | "mna_not_running" | "token_mis
   };
 }
 
+function createReadyWorkspaceWithDemoProvider() {
+  return {
+    state: {
+      bootstrapStatus: "ok",
+      bootstrapReason: null,
+      sessionId: "session-1",
+      session: {
+        id: "session-1",
+        memory_mode: "workspace_plus_global",
+      },
+      sessionList: [],
+      connection: "open",
+      degraded: false,
+      turns: [],
+      pendingConfirm: null,
+      locale: "zh-CN",
+      activeTask: null,
+      recentTasks: [],
+      replayGapDetected: false,
+      sessionError: null,
+      sessionErrorCode: null
+    },
+    activeTurn: null,
+    fileTree: {
+      path: ".",
+      entries: []
+    },
+    workspaceList: [],
+    skillList: [],
+    selectedWorkspaceId: null,
+    selectedFile: null,
+    selectedFilePath: null,
+    metrics: null,
+    runtimeConfig: null,
+    dependencyStatus: {
+      runtime: {
+        status: "healthy",
+        embeddings: {
+          status: "healthy",
+          detail: "embedding ready"
+        },
+        memory_llm: {
+          status: "healthy",
+          detail: "memory llm ready"
+        }
+      },
+      provider: {
+        id: "demo",
+        model: "axis-demo",
+        status: "configured",
+        detail: "demo provider"
+      },
+      mcp: [],
+      provider_key: "demo:axis-demo"
+    },
+    agentConfig: {
+      provider: {
+        kind: "demo",
+        model: "axis-demo",
+        base_url: null,
+        api_key: null,
+        temperature: null,
+        effort: null,
+        max_tokens: null,
+        organization: null,
+        keep_alive: null
+      },
+      embedding: {
+        base_url: null,
+        model: null,
+        api_key: null
+      },
+      memory_llm: {
+        base_url: null,
+        model: "claude-haiku-4-5-20251001",
+        api_key: null,
+        protocol: "openai-compatible",
+        timeout_ms: 15000,
+        effort: null,
+        max_tokens: null
+      },
+      tools: {
+        approval_mode: "confirm"
+      },
+      planning: {
+        plan_mode: "advisory"
+      },
+      mcp: {
+        servers: []
+      }
+    },
+    mcpState: {
+      servers: [],
+      tools: []
+    },
+    promptInspector: null,
+    promptInspectorOpen: false,
+    setPromptInspectorOpen: vi.fn(),
+    createNewSession: vi.fn(),
+    openSession: vi.fn(),
+    sendInput: vi.fn(),
+    abortCurrentTurn: vi.fn(),
+    confirmTool: vi.fn(),
+    updateMemoryMode: vi.fn(),
+    renameSession: vi.fn(),
+    deleteSession: vi.fn(),
+    updateProvider: vi.fn(),
+    updateRuntimeConfig: vi.fn(),
+    updateGovernanceConfig: vi.fn(),
+    refreshMetrics: vi.fn(),
+    refreshDependencyStatus: vi.fn(),
+    refreshAgentConfig: vi.fn(),
+    refreshMcpState: vi.fn(),
+    refreshWorkspaceList: vi.fn(),
+    checkEmbeddings: vi.fn(),
+    checkMemoryLlm: vi.fn(),
+    registerWorkspace: vi.fn(),
+    pickWorkspace: vi.fn(),
+    selectWorkspace: vi.fn(),
+    refreshFileTree: vi.fn(),
+    openFile: vi.fn(),
+    openPromptInspector: vi.fn(),
+    restartMcpServer: vi.fn(),
+    disableMcpServer: vi.fn()
+  };
+}
+
 describe("AgentWorkspace bootstrap states", () => {
   it("shows a neutral bootstrap state while agent is initializing", () => {
     mockedUseAgentWorkspace.mockReturnValue(createWorkspaceState("loading") as never);
@@ -131,6 +258,19 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByTestId("agent-offline-state")).toHaveTextContent(
       "token 无法使用，请检查 token 文件或重新启动 mna。"
     );
+  });
+
+  it("opens the setup wizard automatically when the provider is still demo", async () => {
+    mockedUseAgentWorkspace.mockReturnValue(createReadyWorkspaceWithDemoProvider() as never);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <AgentWorkspace />
+      </AgentI18nProvider>
+    );
+
+    expect(await screen.findByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
+    expect(screen.getByText("当前仍在 demo 模式。完成这 3 步后，就可以使用真实模型对话。")).toBeInTheDocument();
   });
 
   it("renders two-column workspace and header dependency badges after bootstrap succeeds", () => {
