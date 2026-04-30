@@ -443,6 +443,18 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
   return "neutral";
 }
 
+function isDangerStatus(status: string) {
+  return ["unavailable", "closed", "misconfigured", "not_configured", "error"].includes(status.toLowerCase());
+}
+
+function isWarningStatus(status: string) {
+  return ["degraded", "connecting", "reconnecting"].includes(status.toLowerCase());
+}
+
+function isSuccessStatus(status: string) {
+  return ["healthy", "configured", "reachable", "ok", "online"].includes(status.toLowerCase());
+}
+
 function readNestedStatus(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -464,17 +476,23 @@ function resolveRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | 
 
   const coreStatuses = [readNestedStatus(runtime.read_model), readNestedStatus(runtime.storage_writeback)]
     .filter((status): status is string => Boolean(status));
-  if (coreStatuses.length === 0) {
+  const dependencyStatuses = [
+    ...coreStatuses,
+    readNestedStatus(runtime.embeddings),
+    readNestedStatus(runtime.memory_llm),
+  ].filter((status): status is string => Boolean(status))
+    .filter((status) => status !== "not_configured" && status !== "unknown");
+  if (dependencyStatuses.length === 0) {
     return explicitStatus ?? "unknown";
   }
 
-  if (coreStatuses.some((status) => ["unavailable", "closed", "misconfigured", "not_configured", "error"].includes(status))) {
+  if (dependencyStatuses.some(isDangerStatus)) {
     return "unavailable";
   }
-  if (coreStatuses.some((status) => status === "degraded")) {
+  if (dependencyStatuses.some(isWarningStatus)) {
     return "degraded";
   }
-  if (coreStatuses.every((status) => ["healthy", "configured", "reachable", "ok", "online"].includes(status))) {
+  if (dependencyStatuses.every(isSuccessStatus)) {
     return "healthy";
   }
   return explicitStatus ?? "unknown";
@@ -497,9 +515,9 @@ function StatusDot({
 }) {
   const dotColor =
     tone === "success" ? "var(--primary)" :
-    tone === "warning" ? "var(--ink-muted-48)" :
-    tone === "danger" ? "var(--ink)" :
-    "var(--hairline)";
+    tone === "warning" ? "#b7791f" :
+    tone === "danger" ? "#d92d20" :
+    "var(--ink-muted-48)";
 
   return (
     <span

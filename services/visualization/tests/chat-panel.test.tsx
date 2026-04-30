@@ -571,7 +571,6 @@ describe("ChatPanel", () => {
           providerLabel="openai · gpt-5.4"
           dependencyStatus={{
             runtime: {
-              status: "healthy",
               embeddings: {
                 status: "not_configured"
               },
@@ -599,13 +598,13 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("agent-connection-state")).toHaveAttribute("data-state", "在线");
     expect(screen.getByTestId("agent-connection-badge")).toHaveTextContent("连接");
     expect(screen.getByTestId("agent-connection-badge")).not.toHaveTextContent("在线");
-    expect(screen.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", "healthy");
+    expect(screen.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", "unavailable");
     expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "configured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
     expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "misconfigured");
   });
 
-  it("summarizes runtime state from core dependencies when runtime status is missing", () => {
+  it("summarizes runtime state from dependencies when runtime status is missing", () => {
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <ChatPanel
@@ -648,5 +647,43 @@ describe("ChatPanel", () => {
     expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
     expect(screen.getByTestId("agent-runtime-badge")).not.toHaveTextContent("正常");
     expect(screen.getByTestId("axis-memory-llm-badge")).not.toHaveTextContent("未知");
+  });
+
+  it("uses unavailable runtime state when embeddings are unavailable and memory llm is not configured", () => {
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <ChatPanel
+          turns={[]}
+          connection="open"
+          degraded={false}
+          activeTaskLabel={null}
+          dependencyStatus={{
+            runtime: {
+              embeddings: {
+                status: "unavailable"
+              },
+              memory_llm: {
+                status: "not_configured"
+              }
+            },
+            provider: {
+              id: "openai-compatible",
+              model: "gpt-4.1-mini",
+              status: "configured"
+            },
+            mcp: [],
+            provider_key: "openai-compatible:gpt-4.1-mini"
+          }}
+          skills={[]}
+          onSend={vi.fn()}
+          onAbort={vi.fn()}
+          onOpenPrompt={vi.fn()}
+        />
+      </AgentI18nProvider>
+    );
+
+    expect(screen.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", "unavailable");
+    expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "unavailable");
+    expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "not_configured");
   });
 });
