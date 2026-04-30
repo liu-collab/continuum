@@ -49,7 +49,7 @@ import {
   writeManagedEmbeddingConfig,
   writeManagedMemoryLlmConfig,
 } from "./managed-config.js";
-import { bilingualMessage } from "./messages.js";
+import { bilingualMessage, bilingualMessageLines } from "./messages.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
 import {
   buildDockerHostGatewayArgs,
@@ -825,14 +825,14 @@ export async function runStartCommand(
     const startupLogPath = path.join(axisLogsDir(), "startup-failure.log");
     const savedLogs = await saveDockerContainerLogs(DEFAULT_MANAGED_STACK_CONTAINER, startupLogPath).catch(() => false);
     if (savedLogs) {
-      process.stderr.write(`${bilingualMessage(
+      process.stderr.write(`${bilingualMessageLines(
         `已保存启动失败日志: ${startupLogPath}`,
         `Saved startup failure logs: ${startupLogPath}`,
       )}\n`);
     }
     const cleaned = await cleanupManagedStackContainer().catch(() => false);
     if (cleaned) {
-      process.stderr.write(`${bilingualMessage(
+      process.stderr.write(`${bilingualMessageLines(
         `Axis 启动失败，已清理未完成容器: ${DEFAULT_MANAGED_STACK_CONTAINER}`,
         `Axis startup failed. Removed incomplete container: ${DEFAULT_MANAGED_STACK_CONTAINER}`,
       )}\n`);

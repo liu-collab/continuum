@@ -440,6 +440,51 @@ describe("retrieval-runtime remediation", () => {
       duration_ms: 8,
       created_at: "2026-04-15T12:00:00.000Z",
     });
+    await repository.recordRecallRun({
+      trace_id: "trace-1",
+      phase: "before_response",
+      trigger_hit: true,
+      trigger_type: "history_reference",
+      trigger_reason:
+        "current input explicitly references prior context or preferences",
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task", "user"],
+      matched_scopes: ["user"],
+      scope_hit_counts: { user: 1 },
+      scope_reason:
+        "before_response can use workspace, task, session, and global user memory",
+      query_scope: "scope=user",
+      requested_memory_types: ["preference"],
+      candidate_count: 2,
+      selected_count: 1,
+      recently_filtered_record_ids: ["memory-older"],
+      recently_filtered_reasons: ["recently_injected"],
+      recently_soft_marked_record_ids: ["memory-current"],
+      replay_escape_reason: "history_reference_escape",
+      result_state: "matched",
+      degraded: false,
+      duration_ms: 12,
+      created_at: "2026-04-15T12:00:00.000Z",
+    });
+    await repository.recordInjectionRun({
+      trace_id: "trace-1",
+      phase: "before_response",
+      injected: true,
+      injected_count: 1,
+      token_estimate: 28,
+      memory_mode: "workspace_plus_global",
+      requested_scopes: ["workspace", "task", "user"],
+      selected_scopes: ["user"],
+      trimmed_record_ids: [],
+      trim_reasons: [],
+      recently_filtered_record_ids: ["memory-older"],
+      recently_filtered_reasons: ["recently_injected"],
+      recently_soft_marked_record_ids: ["memory-current"],
+      replay_escape_reason: "history_reference_escape",
+      result_state: "injected",
+      duration_ms: 4,
+      created_at: "2026-04-15T12:00:00.000Z",
+    });
     await repository.recordWritebackSubmission({
       trace_id: "trace-1",
       phase: "after_response",
@@ -484,6 +529,33 @@ describe("retrieval-runtime remediation", () => {
     expect(
       pool.queries.some((entry) =>
         entry.text.includes(".runtime_trigger_runs"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_recall_runs")
+        && entry.text.includes("ADD COLUMN IF NOT EXISTS recently_filtered_record_ids"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_injection_runs")
+        && entry.text.includes("ADD COLUMN IF NOT EXISTS replay_escape_reason"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes("INSERT INTO")
+        && entry.text.includes(".runtime_recall_runs")
+        && entry.text.includes("recently_filtered_record_ids")
+        && entry.text.includes("replay_escape_reason"),
+      ),
+    ).toBe(true);
+    expect(
+      pool.queries.some((entry) =>
+        entry.text.includes(".runtime_injection_runs")
+        && entry.text.includes("recently_filtered_reasons")
+        && entry.values?.includes("history_reference_escape"),
       ),
     ).toBe(true);
     expect(
@@ -775,6 +847,24 @@ describe("retrieval-runtime remediation", () => {
 
     expect(rendered).toContain('"runtime_private".runtime_recent_injections');
     expect(rendered).toContain("PRIMARY KEY (session_id, record_id)");
+    expect(rendered).not.toContain("__RUNTIME_SCHEMA_IDENT__");
+  });
+
+  it("renders recent injection observability migration sql with schema placeholders replaced", async () => {
+    const template = await readFile(
+      path.resolve(
+        path.join(runtimeRoot, "migrations", "0007_runtime_recent_injection_observability.sql"),
+      ),
+      "utf8",
+    );
+
+    const rendered = renderMigrationTemplate(template, {
+      RUNTIME_SCHEMA: "runtime_private",
+    });
+
+    expect(rendered).toContain('"runtime_private".runtime_recall_runs');
+    expect(rendered).toContain("ADD COLUMN IF NOT EXISTS recently_filtered_record_ids");
+    expect(rendered).toContain("ADD COLUMN IF NOT EXISTS replay_escape_reason");
     expect(rendered).not.toContain("__RUNTIME_SCHEMA_IDENT__");
   });
 

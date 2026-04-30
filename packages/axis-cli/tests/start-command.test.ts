@@ -217,6 +217,7 @@ describe("runStartCommand", () => {
   });
 
   it("cleans the managed stack container when startup fails after docker run", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     mockSuccessfulSpawn();
     pathExistsMock.mockResolvedValue(true);
     readManagedEmbeddingConfigMock.mockResolvedValue(null);
@@ -289,6 +290,9 @@ describe("runStartCommand", () => {
           command.includes("docker rm -f axis-stack"),
       ),
     ).toBe(true);
+    expect(stderrSpy.mock.calls.map((call) => String(call[0])).join("")).toContain(
+      "Axis 启动失败，已清理未完成容器: axis-stack\nAxis startup failed. Removed incomplete container: axis-stack\n",
+    );
   }, 130_000);
 
   it("skips docker build when the managed stack image inputs are unchanged", async () => {

@@ -177,9 +177,22 @@ describe("axis cli", () => {
     await expect(runCli(["start"], import.meta.url)).resolves.toBe(1);
 
     expect(stderrSpy).toHaveBeenCalledWith(
-      "Axis CLI 命令失败：Docker CLI 未安装或不可用 | Axis CLI command failed: Docker CLI 未安装或不可用\n",
+      "Axis CLI 命令失败：\nAxis CLI command failed:\nDocker CLI 未安装或不可用\n",
     );
     expect(stderrSpy.mock.calls.map((call) => String(call[0])).join("")).not.toContain("unexpected error");
+  });
+
+  it("prints bilingual command failures across separate lines", async () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    runStartCommandMock.mockRejectedValue(new Error(
+      "服务未在预期时间内就绪: http://127.0.0.1:3003/api/health/readiness | Service did not become ready in time: http://127.0.0.1:3003/api/health/readiness",
+    ));
+
+    await expect(runCli(["start"], import.meta.url)).resolves.toBe(1);
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      "Axis CLI 命令失败：\nAxis CLI command failed:\n服务未在预期时间内就绪: http://127.0.0.1:3003/api/health/readiness\nService did not become ready in time: http://127.0.0.1:3003/api/health/readiness\n",
+    );
   });
 
   it("parses the stop command and exposes it in help", () => {

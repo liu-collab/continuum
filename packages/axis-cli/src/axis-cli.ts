@@ -14,7 +14,7 @@ import { runDoctorCommand } from "./doctor-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
 import { runMnaCommand } from "./mna-command.js";
-import { bilingualMessage, formatErrorMessage } from "./messages.js";
+import { bilingualMessage, bilingualMessageLines, formatErrorMessageLines } from "./messages.js";
 import { runRestartCommand } from "./restart-command.js";
 import { runRuntimeCommand } from "./runtime-command.js";
 import { runStartCommand } from "./start-command.js";
@@ -31,11 +31,10 @@ export async function runCli(argv: string[], importMetaUrl: string) {
   try {
     return await runCliUnchecked(argv, importMetaUrl);
   } catch (error) {
-    const message = formatErrorMessage(error);
-    process.stderr.write(`${bilingualMessage(
-      `Axis CLI 命令失败：${message}`,
-      `Axis CLI command failed: ${message}`,
-    )}\n`);
+    process.stderr.write(`${bilingualMessageLines(
+      "Axis CLI 命令失败：",
+      "Axis CLI command failed:",
+    )}\n${formatErrorMessageLines(error)}\n`);
     if (process.env.NODE_ENV === "development" && error instanceof Error && error.stack) {
       process.stderr.write(`${error.stack}\n`);
     }

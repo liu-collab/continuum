@@ -73,6 +73,7 @@ interface RecallRunRow extends RuntimeRowBase {
   candidate_count: number;
   selected_count: number;
   recently_filtered_record_ids: unknown;
+  recently_filtered_reasons: unknown;
   recently_soft_marked_record_ids: unknown;
   replay_escape_reason: string | null;
   result_state: RecallRunRecord["result_state"];
@@ -91,6 +92,10 @@ interface InjectionRunRow extends RuntimeRowBase {
   selected_scopes: unknown;
   trimmed_record_ids: unknown;
   trim_reasons: unknown;
+  recently_filtered_record_ids: unknown;
+  recently_filtered_reasons: unknown;
+  recently_soft_marked_record_ids: unknown;
+  replay_escape_reason: string | null;
   result_state: InjectionRunRecord["result_state"];
   duration_ms: number;
 }
@@ -244,6 +249,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         requested_memory_types JSONB NOT NULL,
         candidate_count INTEGER NOT NULL,
         selected_count INTEGER NOT NULL,
+        recently_filtered_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        recently_filtered_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+        recently_soft_marked_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        replay_escape_reason TEXT NULL,
         result_state TEXT NOT NULL,
         degraded BOOLEAN NOT NULL,
         degradation_reason TEXT NULL,
@@ -264,11 +273,29 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         selected_scopes JSONB NOT NULL,
         trimmed_record_ids JSONB NOT NULL,
         trim_reasons JSONB NOT NULL,
+        recently_filtered_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        recently_filtered_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+        recently_soft_marked_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        replay_escape_reason TEXT NULL,
         result_state TEXT NOT NULL,
         duration_ms INTEGER NOT NULL,
         created_at TIMESTAMPTZ NOT NULL,
         PRIMARY KEY (trace_id, phase)
       )
+    `);
+    await this.pool.query(`
+      ALTER TABLE ${schema}.runtime_recall_runs
+        ADD COLUMN IF NOT EXISTS recently_filtered_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS recently_filtered_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS recently_soft_marked_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS replay_escape_reason TEXT NULL
+    `);
+    await this.pool.query(`
+      ALTER TABLE ${schema}.runtime_injection_runs
+        ADD COLUMN IF NOT EXISTS recently_filtered_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS recently_filtered_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS recently_soft_marked_record_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS replay_escape_reason TEXT NULL
     `);
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${schema}.runtime_memory_plan_runs (
@@ -454,8 +481,8 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_recall_runs (
         trace_id, phase, trigger_hit, trigger_type, trigger_reason, memory_mode, requested_scopes, matched_scopes, scope_hit_counts, scope_reason, query_scope, requested_memory_types,
-        candidate_count, selected_count, result_state, degraded, degradation_reason, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18,$19)
+        candidate_count, selected_count, recently_filtered_record_ids, recently_filtered_reasons, recently_soft_marked_record_ids, replay_escape_reason, result_state, degraded, degradation_reason, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12::jsonb,$13,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19,$20,$21,$22,$23)
       ON CONFLICT (trace_id, phase) DO UPDATE
       SET trigger_hit = EXCLUDED.trigger_hit,
           trigger_type = EXCLUDED.trigger_type,
@@ -469,6 +496,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
           requested_memory_types = EXCLUDED.requested_memory_types,
           candidate_count = EXCLUDED.candidate_count,
           selected_count = EXCLUDED.selected_count,
+          recently_filtered_record_ids = EXCLUDED.recently_filtered_record_ids,
+          recently_filtered_reasons = EXCLUDED.recently_filtered_reasons,
+          recently_soft_marked_record_ids = EXCLUDED.recently_soft_marked_record_ids,
+          replay_escape_reason = EXCLUDED.replay_escape_reason,
           result_state = EXCLUDED.result_state,
           degraded = EXCLUDED.degraded,
           degradation_reason = EXCLUDED.degradation_reason,
@@ -490,6 +521,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         JSON.stringify(run.requested_memory_types),
         run.candidate_count,
         run.selected_count,
+        JSON.stringify(run.recently_filtered_record_ids ?? []),
+        JSON.stringify(run.recently_filtered_reasons ?? []),
+        JSON.stringify(run.recently_soft_marked_record_ids ?? []),
+        run.replay_escape_reason ?? null,
         run.result_state,
         run.degraded,
         run.degradation_reason ?? null,
@@ -503,8 +538,9 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
     await this.pool.query(
       `
       INSERT INTO ${quoteIdentifier(this.runtimeSchema)}.runtime_injection_runs (
-        trace_id, phase, injected, injected_count, token_estimate, memory_mode, requested_scopes, selected_scopes, trimmed_record_ids, trim_reasons, result_state, duration_ms, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12,$13)
+        trace_id, phase, injected, injected_count, token_estimate, memory_mode, requested_scopes, selected_scopes, trimmed_record_ids, trim_reasons,
+        recently_filtered_record_ids, recently_filtered_reasons, recently_soft_marked_record_ids, replay_escape_reason, result_state, duration_ms, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14,$15,$16,$17)
       ON CONFLICT (trace_id, phase) DO UPDATE
       SET injected = EXCLUDED.injected,
           injected_count = EXCLUDED.injected_count,
@@ -514,6 +550,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
           selected_scopes = EXCLUDED.selected_scopes,
           trimmed_record_ids = EXCLUDED.trimmed_record_ids,
           trim_reasons = EXCLUDED.trim_reasons,
+          recently_filtered_record_ids = EXCLUDED.recently_filtered_record_ids,
+          recently_filtered_reasons = EXCLUDED.recently_filtered_reasons,
+          recently_soft_marked_record_ids = EXCLUDED.recently_soft_marked_record_ids,
+          replay_escape_reason = EXCLUDED.replay_escape_reason,
           result_state = EXCLUDED.result_state,
           duration_ms = EXCLUDED.duration_ms,
           created_at = EXCLUDED.created_at
@@ -529,6 +569,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         JSON.stringify(run.selected_scopes),
         JSON.stringify(run.trimmed_record_ids),
         JSON.stringify(run.trim_reasons),
+        JSON.stringify(run.recently_filtered_record_ids ?? []),
+        JSON.stringify(run.recently_filtered_reasons ?? []),
+        JSON.stringify(run.recently_soft_marked_record_ids ?? []),
+        run.replay_escape_reason ?? null,
         run.result_state,
         run.duration_ms,
         run.created_at,
@@ -1089,6 +1133,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         requested_memory_types: asStringArray(row.requested_memory_types) as RecallRunRecord["requested_memory_types"],
         candidate_count: Number(row.candidate_count),
         selected_count: Number(row.selected_count),
+        recently_filtered_record_ids: asStringArray(row.recently_filtered_record_ids),
+        recently_filtered_reasons: asStringArray(row.recently_filtered_reasons),
+        recently_soft_marked_record_ids: asStringArray(row.recently_soft_marked_record_ids),
+        replay_escape_reason: row.replay_escape_reason ?? undefined,
         result_state: row.result_state,
         degraded: row.degraded,
         degradation_reason: row.degradation_reason ?? undefined,
@@ -1106,6 +1154,10 @@ export class PostgresRuntimeRepository implements RuntimeRepository {
         selected_scopes: asStringArray(row.selected_scopes) as InjectionRunRecord["selected_scopes"],
         trimmed_record_ids: asStringArray(row.trimmed_record_ids),
         trim_reasons: asStringArray(row.trim_reasons),
+        recently_filtered_record_ids: asStringArray(row.recently_filtered_record_ids),
+        recently_filtered_reasons: asStringArray(row.recently_filtered_reasons),
+        recently_soft_marked_record_ids: asStringArray(row.recently_soft_marked_record_ids),
+        replay_escape_reason: row.replay_escape_reason ?? undefined,
         result_state: row.result_state,
         duration_ms: Number(row.duration_ms),
         created_at: toIso(row.created_at),
