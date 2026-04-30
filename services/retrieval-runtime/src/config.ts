@@ -51,6 +51,8 @@ const envSchema = z.object({
   MEMORY_LLM_EFFORT: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
   MEMORY_LLM_MAX_TOKENS: z.coerce.number().int().positive().optional(),
   RECALL_LLM_JUDGE_ENABLED: booleanCoerceSchema.default(true),
+  RECALL_LLM_JUDGE_WAIT_MS: z.coerce.number().int().positive().default(5_000),
+  RECALL_SEMANTIC_PREFETCH_ENABLED: booleanCoerceSchema.default(true),
   RECALL_LLM_JUDGE_MAX_TOKENS: z.coerce.number().int().positive().default(10000),
   RECALL_LLM_CANDIDATE_LIMIT: z.coerce.number().int().positive().max(50).default(12),
   MEMORY_LLM_REFINE_MAX_TOKENS: z.coerce.number().int().positive().default(800),

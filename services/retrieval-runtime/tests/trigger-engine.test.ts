@@ -6,6 +6,7 @@ import { DependencyGuard } from "../src/dependency/dependency-guard.js";
 import { InMemoryRuntimeRepository } from "../src/observability/in-memory-runtime-repository.js";
 import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import type { ReadModelRepository } from "../src/query/read-model-repository.js";
+import type { RecallSearchInput, RecallSearchPlan, RecallSearchPlanner } from "../src/memory-orchestrator/types.js";
 import type {
   CandidateMemory,
   ReadModelAvailabilityQuery,
@@ -39,6 +40,8 @@ const config: AppConfig = {
   MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
   MEMORY_LLM_RECOVERY_INTERVAL_MS: 5 * 60 * 1000,
   RECALL_LLM_JUDGE_ENABLED: false,
+  RECALL_LLM_JUDGE_WAIT_MS: 5_000,
+  RECALL_SEMANTIC_PREFETCH_ENABLED: true,
   RECALL_LLM_JUDGE_MAX_TOKENS: 400,
   RECALL_LLM_CANDIDATE_LIMIT: 12,
   MEMORY_LLM_REFINE_MAX_TOKENS: 800,
@@ -163,6 +166,24 @@ class CapturingReadModelRepository implements ReadModelRepository {
   }
 }
 
+class SlowRecallSearchPlanner implements RecallSearchPlanner {
+  public callCount = 0;
+
+  constructor(
+    private readonly delayMs: number,
+    private readonly planResult: RecallSearchPlan = {
+      should_search: false,
+      reason: "slow planner says no",
+    },
+  ) {}
+
+  async plan(_input: RecallSearchInput): Promise<RecallSearchPlan> {
+    this.callCount += 1;
+    await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    return this.planResult;
+  }
+}
+
 describe("semantic trigger fallback", () => {
   it("loads semantic trigger statistics controls from config", () => {
     const loaded = loadConfig({
@@ -173,12 +194,16 @@ describe("semantic trigger fallback", () => {
       SEMANTIC_TRIGGER_BEST_SCORE_THRESHOLD: "0.9",
       SEMANTIC_TRIGGER_TOP3_AVG_THRESHOLD: "0.8",
       SEMANTIC_TRIGGER_ABOVE_COUNT_THRESHOLD: "4",
+      RECALL_LLM_JUDGE_WAIT_MS: "7000",
+      RECALL_SEMANTIC_PREFETCH_ENABLED: "true",
     } as unknown as NodeJS.ProcessEnv);
 
     expect(loaded.SEMANTIC_TRIGGER_CANDIDATE_LIMIT).toBe(24);
     expect(loaded.SEMANTIC_TRIGGER_BEST_SCORE_THRESHOLD).toBe(0.9);
     expect(loaded.SEMANTIC_TRIGGER_TOP3_AVG_THRESHOLD).toBe(0.8);
     expect(loaded.SEMANTIC_TRIGGER_ABOVE_COUNT_THRESHOLD).toBe(4);
+    expect(loaded.RECALL_LLM_JUDGE_WAIT_MS).toBe(7000);
+    expect(loaded.RECALL_SEMANTIC_PREFETCH_ENABLED).toBe(true);
   });
 
   it("hits on a strong best score", () => {
@@ -234,5 +259,43 @@ describe("semantic trigger fallback", () => {
     expect(readModelRepository.query?.semantic_query_embedding).toEqual([1, 0]);
     expect(decision.hit).toBe(true);
     expect(decision.trigger_type).toBe("semantic_fallback");
+  });
+
+  it("falls back to semantic prefetch when the recall judge exceeds the wait budget", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const readModelRepository = new CapturingReadModelRepository();
+    const planner = new SlowRecallSearchPlanner(80);
+    const triggerEngine = new TriggerEngine(
+      {
+        ...config,
+        RECALL_LLM_JUDGE_ENABLED: true,
+        RECALL_LLM_JUDGE_WAIT_MS: 20,
+        RECALL_SEMANTIC_PREFETCH_ENABLED: true,
+      },
+      new StubEmbeddingsClient(),
+      readModelRepository,
+      new DependencyGuard(repository, pino({ enabled: false })),
+      pino({ enabled: false }),
+      planner,
+    );
+    const startedAt = Date.now();
+
+    const decision = await triggerEngine.decide({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "请分析这个模块的错误处理策略和边界情况",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(75);
+    expect(planner.callCount).toBe(1);
+    expect(readModelRepository.query?.candidate_limit).toBe(30);
+    expect(decision.hit).toBe(true);
+    expect(decision.trigger_type).toBe("semantic_fallback");
+    expect(decision.search_plan_degraded).toBe(true);
+    expect(decision.search_plan_degradation_reason).toBe("memory_llm_wait_timeout");
   });
 });

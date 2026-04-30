@@ -47,6 +47,29 @@ export interface SemanticTriggerDecisionConfig {
   aboveCountThreshold: number;
 }
 
+type SemanticFallbackScoreResult = {
+  score: number;
+  threshold: number;
+  hit: boolean;
+  degraded: boolean;
+  degradation_reason?: string;
+};
+
+type SemanticFallbackPrefetch = Promise<SemanticFallbackScoreResult>;
+
+type TimedOutResult = {
+  ok: false;
+  timedOut: true;
+};
+
+type CompletedResult<T> = {
+  ok: true;
+  value: T;
+} | {
+  ok: false;
+  timedOut?: false;
+};
+
 export function evaluateSemanticTriggerStats(
   scores: number[],
   config: SemanticTriggerDecisionConfig,
@@ -100,6 +123,23 @@ function hasPreferenceOrTaskStateSignal(text: string): boolean {
   ];
 
   return signalPatterns.some((pattern) => pattern.test(normalized));
+}
+
+function waitForLimitedResult<T>(promise: Promise<T>, timeoutMs: number): Promise<CompletedResult<T> | TimedOutResult> {
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise.then(
+      (value): CompletedResult<T> => ({ ok: true, value }),
+      (): CompletedResult<T> => ({ ok: false }),
+    ),
+    new Promise<TimedOutResult>((resolve) => {
+      timeoutHandle = setTimeout(() => resolve({ ok: false, timedOut: true }), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  });
 }
 
 export class TriggerEngine {
@@ -285,7 +325,10 @@ export class TriggerEngine {
     }
 
     if (this.config.RECALL_LLM_JUDGE_ENABLED && this.recallSearchPlanner) {
-      const llmDecision = await this.dependencyGuard.run(
+      const semanticPrefetch = this.config.RECALL_SEMANTIC_PREFETCH_ENABLED
+        ? this.semanticFallbackScorePrefetch(context, memoryMode, intentScopesForSearch)
+        : undefined;
+      const llmDecisionPromise = this.dependencyGuard.run(
         "memory_llm",
         this.config.MEMORY_LLM_TIMEOUT_MS,
         () =>
@@ -298,8 +341,14 @@ export class TriggerEngine {
             semantic_threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
           }),
       );
+      const limitedLlmDecision = await waitForLimitedResult(
+        llmDecisionPromise,
+        this.config.RECALL_LLM_JUDGE_WAIT_MS,
+      );
+      const llmWaitTimedOut = !limitedLlmDecision.ok && limitedLlmDecision.timedOut === true;
+      const llmDecision = limitedLlmDecision.ok ? limitedLlmDecision.value : undefined;
 
-      if (llmDecision.ok && llmDecision.value) {
+      if (llmDecision?.ok && llmDecision.value) {
         const plannerNeedsMemory = llmDecision.value.needs_memory ?? llmDecision.value.should_search;
         const plannerIntentConfidence = llmDecision.value.intent_confidence ?? (plannerNeedsMemory ? 0.8 : 0.6);
         const plannerIntentReason = llmDecision.value.intent_reason ?? llmDecision.value.reason;
@@ -376,10 +425,17 @@ export class TriggerEngine {
       this.logger.warn(
         {
           phase: context.phase,
-          reason: llmDecision.error?.message,
+          reason:
+            llmWaitTimedOut
+              ? `recall search planner exceeded ${this.config.RECALL_LLM_JUDGE_WAIT_MS}ms wait budget`
+              : llmDecision?.error?.message,
         },
         "llm recall search planner degraded, falling back to semantic trigger",
       );
+      const searchPlanDegradationReason =
+        llmWaitTimedOut
+          ? "memory_llm_wait_timeout"
+          : llmDecision?.error?.code ?? "memory_llm_unavailable";
 
       return {
         ...(await this.semanticFallbackDecision(
@@ -388,8 +444,9 @@ export class TriggerEngine {
           intentScopesForSearch,
           intentTypesForSearch,
           scopePlan.reason,
+          semanticPrefetch,
         )),
-        intent_reason: intentDecision?.reason ?? "recall_planner_unavailable",
+        intent_reason: intentDecision?.reason ?? (llmWaitTimedOut ? "recall_planner_wait_timeout" : "recall_planner_unavailable"),
         intent_confidence: intentDecision?.confidence ?? 0,
         intent_needs_memory: intentDecision?.needsMemory ?? true,
         intent_memory_types: intentDecision?.requestedMemoryTypes ?? intentTypesForSearch,
@@ -398,12 +455,10 @@ export class TriggerEngine {
         intent_plan_degraded: true,
         intent_plan_degradation_reason:
           intentDecision?.degradationReason ??
-          llmDecision.error?.code ??
-          "memory_llm_unavailable",
+          searchPlanDegradationReason,
         search_plan_attempted: true,
         search_plan_degraded: true,
-        search_plan_degradation_reason:
-          llmDecision.error?.code ?? "memory_llm_unavailable",
+        search_plan_degradation_reason: searchPlanDegradationReason,
       };
     }
 
@@ -479,6 +534,7 @@ export class TriggerEngine {
     requestedScopes: ScopeType[],
     requestedMemoryTypes: MemoryType[],
     scopeReason: string,
+    semanticPrefetch?: SemanticFallbackPrefetch,
   ): Promise<TriggerDecision> {
     const baseImportanceThreshold =
       context.preflight_importance_threshold ?? this.config.IMPORTANCE_THRESHOLD_DEFAULT;
@@ -496,10 +552,9 @@ export class TriggerEngine {
       };
     }
 
-    const semanticScore = await this.semanticFallbackScore(
-      context,
-      memoryMode,
-      requestedScopes,
+    const semanticScore = await (
+      semanticPrefetch ??
+      this.semanticFallbackScore(context, memoryMode, requestedScopes)
     );
     if (semanticScore.degraded) {
       return {
@@ -546,6 +601,29 @@ export class TriggerEngine {
       cooldown_applied: false,
       semantic_score: semanticScore.score,
     };
+  }
+
+  private semanticFallbackScorePrefetch(
+    context: TriggerContext,
+    memoryMode: MemoryMode,
+    requestedScopes: ScopeType[],
+  ): SemanticFallbackPrefetch {
+    return this.semanticFallbackScore(context, memoryMode, requestedScopes).catch((error: unknown) => {
+      this.logger.warn(
+        {
+          phase: context.phase,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        "semantic fallback prefetch failed",
+      );
+      return {
+        score: 0,
+        threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        hit: false,
+        degraded: true,
+        degradation_reason: "dependency_unavailable",
+      };
+    });
   }
 
   private async semanticFallbackScore(
