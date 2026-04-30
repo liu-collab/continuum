@@ -345,6 +345,29 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return payload.items;
   }
 
+  function mergeDependencyProbe(
+    current: Awaited<ReturnType<typeof client.getDependencyStatus>> | null,
+    name: "embeddings" | "memory_llm",
+    result: Awaited<ReturnType<typeof client.checkEmbeddings>>,
+  ) {
+    if (!current) {
+      return current;
+    }
+
+    return {
+      ...current,
+      runtime: {
+        ...current.runtime,
+        [name]: {
+          ...(current.runtime[name] ?? {}),
+          status: result.status,
+          detail: result.detail,
+          last_checked_at: result.last_checked_at,
+        },
+      },
+    };
+  }
+
   async function refreshSkillList() {
     const payload = await client.listSkills();
     setSkillList(payload.items);
@@ -834,47 +857,15 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
 
   async function checkEmbeddings() {
     const result = await client.checkEmbeddings();
-    setDependencyStatus((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        runtime: {
-          ...current.runtime,
-          embeddings: {
-            ...(current.runtime.embeddings ?? {}),
-            status: result.status,
-            detail: result.detail,
-            last_checked_at: result.last_checked_at,
-          },
-        },
-      };
-    });
+    setDependencyStatus((current) => mergeDependencyProbe(current, "embeddings", result));
+    await refreshDependencyStatus().catch(() => undefined);
     return result;
   }
 
   async function checkMemoryLlm() {
     const result = await client.checkMemoryLlm();
-    setDependencyStatus((current) => {
-      if (!current) {
-        return current;
-      }
-
-      return {
-        ...current,
-        runtime: {
-          ...current.runtime,
-          memory_llm: {
-            ...(current.runtime.memory_llm ?? {}),
-            status: result.status,
-            detail: result.detail,
-            last_checked_at: result.last_checked_at,
-          },
-        },
-      };
-    });
+    setDependencyStatus((current) => mergeDependencyProbe(current, "memory_llm", result));
+    await refreshDependencyStatus().catch(() => undefined);
     return result;
   }
 

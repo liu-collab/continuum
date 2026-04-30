@@ -61,7 +61,7 @@ export function ChatPanel({
   const providerNotConfigured = dependencyStatus?.provider.id === "not-configured";
   const canSend = connection === "open" && !isBusy && !providerNotConfigured;
   const connectionLabel = formatConnection(connection);
-  const runtimeStatus = resolveRuntimeStatus(dependencyStatus?.runtime);
+  const runtimeStatus = resolveSystemRuntimeStatus(dependencyStatus?.runtime);
   const providerStatus = dependencyStatus?.provider.status ?? "unknown";
   const embeddingStatus = String(dependencyStatus?.runtime.embeddings?.status ?? "unknown");
   const embeddingNotConfigured = embeddingStatus === "unavailable" || embeddingStatus === "not_configured";
@@ -464,7 +464,7 @@ function readNestedStatus(value: unknown): string | null {
   return typeof status === "string" && status.trim().length > 0 ? status : null;
 }
 
-function resolveRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | undefined | null) {
+function resolveSystemRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | undefined | null) {
   if (!runtime) {
     return "unknown";
   }
@@ -476,11 +476,7 @@ function resolveRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | 
 
   const coreStatuses = [readNestedStatus(runtime.read_model), readNestedStatus(runtime.storage_writeback)]
     .filter((status): status is string => Boolean(status));
-  const dependencyStatuses = [
-    ...coreStatuses,
-    readNestedStatus(runtime.embeddings),
-    readNestedStatus(runtime.memory_llm),
-  ].filter((status): status is string => Boolean(status))
+  const dependencyStatuses = coreStatuses
     .filter((status) => status !== "not_configured" && status !== "unknown");
   if (dependencyStatuses.length === 0) {
     return explicitStatus ?? "unknown";

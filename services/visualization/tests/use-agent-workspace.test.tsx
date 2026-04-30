@@ -744,7 +744,8 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       entries: []
     });
     client.getMetrics.mockResolvedValue(null);
-    client.getDependencyStatus.mockResolvedValue({
+    client.getDependencyStatus
+      .mockResolvedValueOnce({
       runtime: {
         status: "reachable",
         memory_llm: {
@@ -763,7 +764,28 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       },
       mcp: [],
       provider_key: "openai-compatible:deepseek-chat"
-    });
+    })
+      .mockResolvedValueOnce({
+        runtime: {
+          status: "reachable",
+          memory_llm: {
+            status: "healthy",
+            detail: "memory llm request completed",
+            last_checked_at: "now"
+          },
+          embeddings: {
+            status: "healthy",
+            detail: "embedding request completed"
+          }
+        },
+        provider: {
+          id: "openai-compatible",
+          model: "deepseek-chat",
+          status: "configured"
+        },
+        mcp: [],
+        provider_key: "openai-compatible:deepseek-chat"
+      });
     client.getConfig.mockResolvedValue(null);
     client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     client.checkMemoryLlm.mockResolvedValue({
@@ -791,7 +813,7 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       detail: "memory llm request completed",
       last_checked_at: "now"
     });
-    expect(client.getDependencyStatus).toHaveBeenCalledTimes(1);
+    expect(client.getDependencyStatus).toHaveBeenCalledTimes(2);
   });
 
   it("keeps runtime config save successful when post-save refresh fails", async () => {
