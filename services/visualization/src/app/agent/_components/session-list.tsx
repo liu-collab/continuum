@@ -83,7 +83,7 @@ export function SessionList({
               </div>
               <div
                 data-testid={`session-card-action-rail-${session.id}`}
-                className="flex shrink-0 items-start gap-0.5 self-start"
+                className="flex w-full shrink-0 items-start justify-end gap-0.5 self-start"
               >
                 <button
                   type="button"
