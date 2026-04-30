@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
@@ -7,6 +8,12 @@ const mode = process.argv[2];
 const runtimeBaseUrl =
   process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
 const runtimeApiMode = process.env.MEMORY_RUNTIME_API_MODE ?? "lite";
+const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "axis-runtime";
+const runtimeHealthPath = process.env.MEMORY_RUNTIME_HEALTH_PATH ?? "/v1/lite/healthz";
+const runtimeRecoveryTimeoutMs = Number.parseInt(
+  process.env.MEMORY_RUNTIME_RECOVERY_TIMEOUT_MS ?? "5000",
+  10,
+);
 
 const runtimeRoutes =
   runtimeApiMode === "full"
@@ -45,6 +52,49 @@ function safeJsonParse(text) {
   } catch {
     return {};
   }
+}
+
+function shouldRun(command) {
+  return Boolean(command) && command !== "off" && command !== "false";
+}
+
+function startDetached(command) {
+  const child = spawn(command, {
+    shell: true,
+    stdio: "ignore",
+    detached: true,
+  });
+  child.unref();
+}
+
+async function isRuntimeHealthy() {
+  try {
+    const response = await fetch(new URL(runtimeHealthPath, runtimeBaseUrl));
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForRuntimeHealthy() {
+  const deadline = Date.now() + Math.max(500, runtimeRecoveryTimeoutMs);
+  while (Date.now() < deadline) {
+    if (await isRuntimeHealthy()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+async function recoverRuntime() {
+  if (await isRuntimeHealthy()) {
+    return true;
+  }
+  if (shouldRun(runtimeStartCommand)) {
+    startDetached(runtimeStartCommand);
+  }
+  return waitForRuntimeHealthy();
 }
 
 export function resolveField(event, keys, envKey, label) {
@@ -163,7 +213,7 @@ function buildFinalizePayload(event) {
   };
 }
 
-async function postJson(path, payload) {
+async function postJsonOnce(path, payload) {
   const response = await fetch(new URL(path, runtimeBaseUrl), {
     method: "POST",
     headers: {
@@ -180,10 +230,26 @@ async function postJson(path, payload) {
     } catch {
       // ignore read errors
     }
-    throw new Error(`runtime request failed: ${response.status}${detail}`);
+    const error = new Error(`runtime request failed: ${response.status}${detail}`);
+    error.runtimeHttpError = true;
+    throw error;
   }
 
   return response.json();
+}
+
+async function postJson(path, payload) {
+  try {
+    return await postJsonOnce(path, payload);
+  } catch (error) {
+    if (error?.runtimeHttpError === true) {
+      throw error;
+    }
+    if (!(await recoverRuntime())) {
+      throw error;
+    }
+    return postJsonOnce(path, payload);
+  }
 }
 
 async function main() {

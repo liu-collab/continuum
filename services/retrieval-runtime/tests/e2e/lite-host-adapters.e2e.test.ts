@@ -4,6 +4,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { FastifyInstance } from "fastify";
 import { WebSocket, WebSocketServer } from "ws";
@@ -182,12 +183,52 @@ async function runBootstrap(scriptPath: string, tempDir: string) {
   });
 }
 
+async function writeLiteRuntimeStarter(tempDir: string) {
+  const runtimePort = await getFreePort();
+  const memoryDir = path.join(tempDir, "recovered-memory");
+  const pidPath = path.join(tempDir, "recovered-lite-runtime.pid");
+  const starterPath = path.join(tempDir, "start-lite-runtime.mjs");
+  const appModuleUrl = pathToFileURL(path.resolve(process.cwd(), "src", "lite", "http-app.ts")).href;
+  await writeFile(
+    starterPath,
+    [
+      `import { createLiteRuntimeApp } from ${JSON.stringify(appModuleUrl)};`,
+      "import { writeFileSync } from 'node:fs';",
+      "import process from 'node:process';",
+      "writeFileSync(process.env.LITE_RUNTIME_PID_PATH, String(process.pid));",
+      "const app = createLiteRuntimeApp({ memoryDir: process.env.AXIS_LITE_MEMORY_DIR });",
+      "await app.listen({ host: '127.0.0.1', port: Number(process.env.LITE_RUNTIME_PORT) });",
+    ].join("\n"),
+    "utf8",
+  );
+
+  return {
+    runtimePort,
+    memoryDir,
+    pidPath,
+    startCommand: `"${process.execPath}" --import tsx "${starterPath}"`,
+    baseUrl: `http://127.0.0.1:${runtimePort}`,
+  };
+}
+
+async function killPidFile(pidPath: string) {
+  try {
+    const pid = Number.parseInt(await readFile(pidPath, "utf8"), 10);
+    if (Number.isInteger(pid) && pid > 0) {
+      process.kill(pid);
+    }
+  } catch {
+    // Process may have already exited.
+  }
+}
+
 describe("lite host adapter E2E", () => {
   let tempDir: string;
   let store: FileMemoryStore;
   let liteApp: FastifyInstance;
   let liteBaseUrl: string;
   const children: ChildProcess[] = [];
+  const recoveryPidPaths: string[] = [];
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "axis-lite-host-e2e-"));
@@ -213,6 +254,7 @@ describe("lite host adapter E2E", () => {
     for (const child of children.splice(0)) {
       child.kill();
     }
+    await Promise.all(recoveryPidPaths.splice(0).map((pidPath) => killPidFile(pidPath)));
     await liteApp.close();
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -249,6 +291,37 @@ describe("lite host adapter E2E", () => {
   it("Claude and Codex bootstraps start lite runtime command when health check misses", async () => {
     await runBootstrap(claudeBootstrapScript, tempDir);
     await runBootstrap(codexBootstrapScript, tempDir);
+  });
+
+  it("Claude bridge recovers a stopped lite runtime and retries prepare-context", async () => {
+    const recovery = await writeLiteRuntimeStarter(tempDir);
+    recoveryPidPaths.push(recovery.pidPath);
+    const result = await runNodeScript(
+      claudeBridgeScript,
+      ["prepare-context"],
+      {
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        turn_id: "turn-lite-recovery",
+        user_prompt: "普通问题",
+      },
+      {
+        ...process.env,
+        MEMORY_RUNTIME_BASE_URL: recovery.baseUrl,
+        MEMORY_RUNTIME_API_MODE: "lite",
+        MEMORY_RUNTIME_START_COMMAND: recovery.startCommand,
+        MEMORY_RUNTIME_RECOVERY_TIMEOUT_MS: "5000",
+        AXIS_LITE_MEMORY_DIR: recovery.memoryDir,
+        LITE_RUNTIME_PORT: String(recovery.runtimePort),
+        LITE_RUNTIME_PID_PATH: recovery.pidPath,
+      },
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.traceId).toBeTruthy();
+    expect(output.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
   });
 
   it("Codex proxy injects lite prepared context into the upstream thread without MCP calls", async () => {

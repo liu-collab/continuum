@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,9 @@ import { WebSocket, WebSocketServer } from "ws";
 
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
 const runtimeApiMode = process.env.MEMORY_RUNTIME_API_MODE ?? "lite";
+const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "axis-runtime";
+const runtimeHealthPath = process.env.MEMORY_RUNTIME_HEALTH_PATH ?? "/v1/lite/healthz";
+const runtimeRecoveryTimeoutMs = Number.parseInt(process.env.MEMORY_RUNTIME_RECOVERY_TIMEOUT_MS ?? "5000", 10);
 const appServerUrl = process.env.CODEX_APP_SERVER_URL ?? "ws://127.0.0.1:3777";
 const proxyListenUrl = process.env.MEMORY_CODEX_PROXY_LISTEN_URL ?? "ws://127.0.0.1:3788";
 const workspaceNamespaceUuid =
@@ -121,6 +125,49 @@ function safeJsonParse(value) {
   }
 }
 
+function shouldRun(command) {
+  return Boolean(command) && command !== "off" && command !== "false";
+}
+
+function startDetached(command) {
+  const child = spawn(command, {
+    shell: true,
+    stdio: "ignore",
+    detached: true,
+  });
+  child.unref();
+}
+
+async function isRuntimeHealthy() {
+  try {
+    const response = await fetch(new URL(runtimeHealthPath, runtimeBaseUrl));
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForRuntimeHealthy() {
+  const deadline = Date.now() + Math.max(500, runtimeRecoveryTimeoutMs);
+  while (Date.now() < deadline) {
+    if (await isRuntimeHealthy()) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+async function recoverRuntime() {
+  if (await isRuntimeHealthy()) {
+    return true;
+  }
+  if (shouldRun(runtimeStartCommand)) {
+    startDetached(runtimeStartCommand);
+  }
+  return waitForRuntimeHealthy();
+}
+
 function createJsonRpcError(id, code, message) {
   return {
     jsonrpc: "2.0",
@@ -199,7 +246,7 @@ function extractToolSummary(item) {
   return null;
 }
 
-async function postJson(routePath, payload) {
+async function postJsonOnce(routePath, payload) {
   const response = await fetch(new URL(routePath, runtimeBaseUrl), {
     method: "POST",
     headers: {
@@ -210,10 +257,26 @@ async function postJson(routePath, payload) {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`runtime request failed: ${response.status}${body ? ` ${body}` : ""}`);
+    const error = new Error(`runtime request failed: ${response.status}${body ? ` ${body}` : ""}`);
+    error.runtimeHttpError = true;
+    throw error;
   }
 
   return response.json();
+}
+
+async function postJson(routePath, payload) {
+  try {
+    return await postJsonOnce(routePath, payload);
+  } catch (error) {
+    if (error?.runtimeHttpError === true) {
+      throw error;
+    }
+    if (!(await recoverRuntime())) {
+      throw error;
+    }
+    return postJsonOnce(routePath, payload);
+  }
 }
 
 async function prepareContext(context) {
