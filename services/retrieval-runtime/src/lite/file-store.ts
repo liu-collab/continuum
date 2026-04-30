@@ -155,10 +155,7 @@ export class FileMemoryStore {
 
     const matches = this.listRecords()
       .filter((record) => statuses.includes(record.status))
-      .filter((record) => !query.workspace_id || record.workspace_id === query.workspace_id)
-      .filter((record) => !query.user_id || record.user_id === query.user_id)
-      .filter((record) => !query.task_id || record.task_id === query.task_id)
-      .filter((record) => !query.session_id || record.session_id === query.session_id)
+      .filter((record) => matchesScopeIdentity(record, query))
       .filter((record) => memoryTypes.size === 0 || memoryTypes.has(record.memory_type))
       .filter((record) => scopes.size === 0 || scopes.has(record.scope))
       .filter((record) => record.importance >= (query.importance_min ?? 1))
@@ -337,6 +334,31 @@ function normalizeLimit(limit: number | undefined): number {
     return DEFAULT_SEARCH_LIMIT;
   }
   return Math.min(MAX_SEARCH_LIMIT, Math.max(1, Math.trunc(limit ?? DEFAULT_SEARCH_LIMIT)));
+}
+
+function matchesScopeIdentity(record: LiteMemoryRecord, query: FileMemorySearchQuery): boolean {
+  const hasAnyIdentityFilter = Boolean(
+    query.workspace_id || query.user_id || query.task_id || query.session_id,
+  );
+
+  switch (record.scope) {
+    case "workspace":
+      return !query.workspace_id || record.workspace_id === query.workspace_id;
+    case "user":
+      return !query.user_id || record.user_id === query.user_id;
+    case "task":
+      if (!query.task_id) {
+        return !hasAnyIdentityFilter;
+      }
+      return record.task_id === query.task_id
+        && (!query.workspace_id || record.workspace_id === query.workspace_id);
+    case "session":
+      if (!query.session_id) {
+        return !hasAnyIdentityFilter;
+      }
+      return record.session_id === query.session_id
+        && (!query.workspace_id || record.workspace_id === query.workspace_id);
+  }
 }
 
 function compareRecords(left: LiteMemoryRecord, right: LiteMemoryRecord): number {

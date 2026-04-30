@@ -142,6 +142,36 @@ describe("FileMemoryStore", () => {
     expect(result.records[0]?.score).toBe(2);
   });
 
+  it("matches identity by scope instead of requiring every id on every record", async () => {
+    const store = new FileMemoryStore({ memoryDir: tempDir });
+    await store.appendRecord({
+      ...baseRecord,
+      id: "rec-workspace",
+      user_id: null,
+      scope: "workspace",
+      memory_type: "fact",
+      summary: "项目事实：使用 PostgreSQL 16",
+      importance: 5,
+    });
+    await store.appendRecord({
+      ...baseRecord,
+      id: "rec-user",
+      workspace_id: "550e8400-e29b-41d4-a716-446655440099",
+      scope: "user",
+      summary: "用户偏好：中文回复",
+      importance: 5,
+    });
+
+    const result = store.search({
+      workspace_id: baseRecord.workspace_id,
+      user_id: baseRecord.user_id ?? undefined,
+      scopes: ["workspace", "user"],
+      limit: 10,
+    });
+
+    expect(result.records.map((record) => record.id).sort()).toEqual(["rec-user", "rec-workspace"]);
+  });
+
   it("limits results and excludes inactive records by default", async () => {
     const store = new FileMemoryStore({ memoryDir: tempDir });
     for (let index = 0; index < 35; index += 1) {
