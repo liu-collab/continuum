@@ -11,10 +11,12 @@ describe("memory orchestrator llm client", () => {
 
   it("targets the anthropic messages endpoint and extracts text blocks", async () => {
     let calledUrl = "";
+    let parsedBody: Record<string, unknown> = {};
 
     globalThis.fetch = (async (input, init) => {
       calledUrl = String(input);
       expect(new Headers(init?.headers).get("x-api-key")).toBe("test-key");
+      parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return {
         ok: true,
         json: async () => ({
@@ -43,6 +45,7 @@ describe("memory orchestrator llm client", () => {
     );
 
     expect(calledUrl).toBe("https://api.anthropic.com/v1/messages");
+    expect(String(parsedBody.system).toLowerCase()).toContain("json");
     expect(result).toBe("{\"ok\":true}");
   });
 
@@ -185,6 +188,7 @@ describe("memory orchestrator llm client", () => {
     globalThis.fetch = (async (_input, init) => {
       callCount += 1;
       const parsedBody = JSON.parse(String(init?.body)) as {
+        messages: Array<{ role: string; content: string }>;
         response_format?: unknown;
       };
 
@@ -198,6 +202,7 @@ describe("memory orchestrator llm client", () => {
       }
 
       expect(parsedBody.response_format).toBeUndefined();
+      expect(parsedBody.messages.find((message) => message.role === "system")?.content.toLowerCase()).toContain("json");
       return {
         ok: true,
         json: async () => ({

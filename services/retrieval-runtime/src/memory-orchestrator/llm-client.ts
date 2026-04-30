@@ -277,7 +277,7 @@ function buildAnthropicBody(
 ) {
   return {
     model: config.MEMORY_LLM_MODEL,
-    system: systemPrompt,
+    system: `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`,
     max_tokens: maxTokens,
     thinking: mapAnthropicThinking(config.MEMORY_LLM_EFFORT),
     messages: [
@@ -299,16 +299,12 @@ function buildOpenAiBody(
     includeReasoningEffort: boolean;
   },
 ) {
-  const effectiveSystemPrompt = options.includeResponseFormat
-    ? `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`
-    : systemPrompt;
-
   return {
     model: config.MEMORY_LLM_MODEL,
     messages: [
       {
         role: "system",
-        content: effectiveSystemPrompt,
+        content: `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`,
       },
       {
         role: "user",
