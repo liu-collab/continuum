@@ -667,14 +667,14 @@ export function SettingsModal({
           })),
         },
       });
-      await onSaveGovernanceConfig({
+      onClose();
+      void onSaveGovernanceConfig({
         WRITEBACK_MAINTENANCE_ENABLED: governanceEnabled,
         WRITEBACK_MAINTENANCE_INTERVAL_MS: Number(trimmedGovernanceIntervalMinutes) * 60_000,
         WRITEBACK_GOVERNANCE_VERIFY_ENABLED: governanceVerifyEnabled,
         WRITEBACK_GOVERNANCE_SHADOW_MODE: governanceShadowMode,
         WRITEBACK_MAINTENANCE_MAX_ACTIONS: Number(trimmedGovernanceMaxActions),
-      });
-      onClose();
+      }).catch(() => undefined);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {

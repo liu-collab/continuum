@@ -749,8 +749,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     WRITEBACK_MAINTENANCE_MAX_ACTIONS?: number;
   }) {
     await client.updateRuntimeConfig({ governance: payload });
-    await refreshRuntimeConfig();
-    await refreshDependencyStatus();
+    await Promise.allSettled([
+      refreshRuntimeConfig(),
+      refreshDependencyStatus(),
+    ]);
   }
 
   async function listProviderModels(payload: {

@@ -58,6 +58,7 @@ function createClientMock() {
     getMetrics: vi.fn(),
     getDependencyStatus: vi.fn(),
     getConfig: vi.fn(),
+    getRuntimeConfig: vi.fn(),
     getMcpServers: vi.fn(),
     getFile: vi.fn(),
     updateMemoryMode: vi.fn(),
@@ -65,6 +66,7 @@ function createClientMock() {
     deleteSession: vi.fn(),
     updateProvider: vi.fn(),
     updateConfig: vi.fn(),
+    updateRuntimeConfig: vi.fn(),
     checkEmbeddings: vi.fn(),
     checkMemoryLlm: vi.fn(),
     getPromptInspector: vi.fn(),
@@ -216,6 +218,11 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     client.connectSessionStream.mockReturnValue({
       send: vi.fn(),
       close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
     });
     client.getMetrics.mockResolvedValue(null);
     client.getDependencyStatus.mockResolvedValue(null);
@@ -522,6 +529,11 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       send: vi.fn(),
       close: vi.fn()
     });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
+    });
     client.getMetrics.mockResolvedValue(null);
     client.getDependencyStatus.mockResolvedValue({
       runtime: {
@@ -649,6 +661,45 @@ describe("useAgentWorkspace bootstrap recovery", () => {
         model: "text-embedding-v4",
         api_key: "embed-key"
       }
+    });
+  });
+
+  it("keeps governance config save successful when post-save refresh fails", async () => {
+    const client = createClientMock();
+    client.bootstrap.mockReturnValue(new Promise(() => undefined));
+    client.getDependencyStatus.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    client.getRuntimeConfig.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    client.updateRuntimeConfig.mockResolvedValue({
+      ok: true,
+      governance: {
+        WRITEBACK_MAINTENANCE_ENABLED: true,
+        WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+        WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+        WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+        WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4
+      }
+    });
+    mockUseAgentClient.mockReturnValue(client);
+    mockUsePathname.mockReturnValue("/agent");
+
+    render(<HookProbe />);
+
+    const payload = {
+      WRITEBACK_MAINTENANCE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: false,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: true,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 4
+    };
+
+    await expect(
+      act(async () => {
+        await (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook.updateGovernanceConfig(payload);
+      })
+    ).resolves.toBeUndefined();
+
+    expect(client.updateRuntimeConfig).toHaveBeenCalledWith({
+      governance: payload
     });
   });
 });

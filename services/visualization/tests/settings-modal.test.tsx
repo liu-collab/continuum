@@ -1162,28 +1162,32 @@ describe("SettingsModal", () => {
 
   it("saves automatic governance config with runtime settings", async () => {
     const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onSaveRuntime = vi.fn(async () => undefined);
     const onSaveGovernanceConfig = vi.fn(async () => undefined);
+    const onCheckEmbeddings = vi.fn(async () => ({
+      status: "healthy" as const,
+      detail: "embedding request completed",
+    }));
+    const onCheckMemoryLlm = vi.fn(async () => ({
+      status: "healthy" as const,
+      detail: "memory llm request completed",
+    }));
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
         <SettingsModal
           open
-          onClose={vi.fn()}
+          onClose={onClose}
           config={baseConfig}
           runtimeConfig={baseRuntimeConfig}
           dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
-          onSaveRuntime={vi.fn(async () => undefined)}
+          onSaveRuntime={onSaveRuntime}
           onSaveGovernanceConfig={onSaveGovernanceConfig}
-          onCheckEmbeddings={vi.fn(async () => ({
-            status: "healthy",
-            detail: "embedding request completed",
-          }))}
-          onCheckMemoryLlm={vi.fn(async () => ({
-            status: "healthy",
-            detail: "memory llm request completed",
-          }))}
+          onCheckEmbeddings={onCheckEmbeddings}
+          onCheckMemoryLlm={onCheckMemoryLlm}
         />
       </AgentI18nProvider>,
     );
@@ -1198,6 +1202,10 @@ describe("SettingsModal", () => {
     await user.type(within(governanceConfig).getByPlaceholderText("每次扫描最大动作数"), "4");
     await user.click(screen.getByTestId("runtime-config-save"));
 
+    expect(onSaveRuntime).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onCheckEmbeddings).not.toHaveBeenCalled();
+    expect(onCheckMemoryLlm).not.toHaveBeenCalled();
     expect(onSaveGovernanceConfig).toHaveBeenCalledWith({
       WRITEBACK_MAINTENANCE_ENABLED: true,
       WRITEBACK_MAINTENANCE_INTERVAL_MS: 300000,
