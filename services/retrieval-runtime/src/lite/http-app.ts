@@ -5,6 +5,7 @@ import { FileMemoryStore } from "./file-store.js";
 import { MemoryOrchestrator } from "./memory-orchestrator.js";
 import { resolveLiteMemoryModel, type LiteMemoryModelConfigSource, type LiteMemoryModelResolution } from "./memory-model-config.js";
 import { LiteTraceStore } from "./trace-store.js";
+import { buildLiteUpgradeSuggestion } from "./upgrade-suggestion.js";
 import { LiteWritebackEngine } from "./writeback-engine.js";
 import { LiteWritebackOutbox } from "./writeback-outbox.js";
 import { HttpMemoryWritebackPlanner } from "../memory-orchestrator/writeback/planner.js";
@@ -124,6 +125,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
 
   app.get("/v1/lite/healthz", async () => {
     await store.load();
+    const upgradeSuggestion = buildLiteUpgradeSuggestion({ recordCount: store.size() });
     return {
       ok: true,
       mode: "lite",
@@ -135,6 +137,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
         writeback_outbox_path: outbox.path,
       },
       memory_model_status: memoryModel.status,
+      upgrade_suggestion: upgradeSuggestion,
       traces: {
         count: traces.size(),
       },
@@ -167,6 +170,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       .filter((record) => parsed.data.memory_view_mode !== "workspace_only" || record.scope !== "user")
       .filter((record) => !parsed.data.status || record.status === parsed.data.status);
     const offset = (page - 1) * pageSize;
+    const upgradeSuggestion = buildLiteUpgradeSuggestion({ recordCount: store.size() });
 
     return {
       items: records.slice(offset, offset + pageSize),
@@ -174,6 +178,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       page,
       page_size: pageSize,
       memory_model_status: memoryModel.status,
+      upgrade_suggestion: upgradeSuggestion,
       storage: {
         path: store.path,
         records: store.size(),

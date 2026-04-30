@@ -235,6 +235,25 @@ function writeMissingThirdPartyEmbeddingsWarning() {
   );
 }
 
+function writeLiteUpgradeSuggestionWarning(healthBody: unknown) {
+  const suggestion = typeof healthBody === "object" && healthBody !== null
+    ? (healthBody as { upgrade_suggestion?: { should_upgrade?: unknown; message?: unknown; command?: unknown } }).upgrade_suggestion
+    : undefined;
+
+  if (!suggestion || suggestion.should_upgrade !== true) {
+    return;
+  }
+
+  const message = typeof suggestion.message === "string"
+    ? suggestion.message
+    : "精简模式数据量较大，建议切换到完整平台。";
+  const command = typeof suggestion.command === "string" ? suggestion.command : "axis start --full";
+  writeWarning(
+    `${message} 可运行 ${command}。`,
+    `${message} Run ${command}.`,
+  );
+}
+
 function writeWarning(message: string, english: string) {
   process.stdout.write(`${WARNING_COLOR}⚠ ${bilingualMessage(message, english)}${RESET_COLOR}\n`);
 }
@@ -401,6 +420,10 @@ async function startLiteRuntime(options: {
       "记忆模型未配置，lite 模式会使用规则降级。可运行 axis memory-model configure 配置。",
       "Memory model is not configured. Lite mode will use rule fallback. Run axis memory-model configure to configure it.",
     );
+  }
+  const healthAfterStart = await fetchJson(healthUrl, 1_000).catch(() => ({ ok: false as const }));
+  if (healthAfterStart.ok) {
+    writeLiteUpgradeSuggestionWarning(healthAfterStart.body);
   }
 
   if (options.open) {

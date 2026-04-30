@@ -286,6 +286,40 @@ describe("runStartCommand", () => {
     );
   });
 
+  it("prints full-mode suggestion when lite memory volume is high", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    fetchJsonMock
+      .mockResolvedValueOnce({ ok: true, body: {} })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          upgrade_suggestion: {
+            should_upgrade: true,
+            message: "精简模式已有 5001 条记忆，建议切换到完整平台以获得向量检索和治理能力。",
+            command: "axis start --full",
+          },
+        },
+      });
+    readManagedMemoryLlmConfigMock.mockResolvedValue({
+      version: 1,
+      baseUrl: "http://memory-model.test",
+      model: "memory-model",
+    });
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+
+    await runStartCommand({}, import.meta.url);
+
+    expect(stdoutSpy.mock.calls.map((call) => String(call[0])).join("")).toContain(
+      "精简模式已有 5001 条记忆",
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
   it("cleans the managed stack container when startup fails after docker run", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     mockSuccessfulSpawn();

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -72,6 +72,31 @@ describe("lite runtime HTTP app", () => {
       mode: "lite",
       storage: { records: 1 },
       memory_model_status: { degraded: true, degradationReason: "memory_model_not_configured" },
+      upgrade_suggestion: { should_upgrade: false, threshold: 5000 },
+    });
+  });
+
+  it("suggests full mode when lite memory volume is high", async () => {
+    await writeFile(
+      path.join(tempDir, "records.jsonl"),
+      `${Array.from({ length: 5001 }, (_, index) => JSON.stringify(record({
+        id: `rec-${index}`,
+        summary: `用户偏好中文回复 ${index}`,
+        updated_at: `2026-04-30T10:${String(index % 60).padStart(2, "0")}:00.000Z`,
+      }))).join("\n")}\n`,
+      "utf8",
+    );
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/lite/healthz",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().upgrade_suggestion).toMatchObject({
+      should_upgrade: true,
+      reason_code: "record_count_exceeded",
+      command: "axis start --full",
     });
   });
 
