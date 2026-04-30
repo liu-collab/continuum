@@ -13,6 +13,7 @@ import {
 import { runDoctorCommand } from "./doctor-command.js";
 import { renderHelp } from "./help.js";
 import { runMcpCommand } from "./mcp-command.js";
+import { runMemoryModelCommand } from "./memory-model-command.js";
 import { runMnaCommand } from "./mna-command.js";
 import { bilingualMessage, bilingualMessageLines, formatErrorMessageLines } from "./messages.js";
 import { runRestartCommand } from "./restart-command.js";
@@ -142,6 +143,10 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
   if (primary === "runtime") {
     await runRuntimeCommand(importMetaUrl, parsed.options);
     return 0;
+  }
+
+  if (primary === "memory-model") {
+    return runMemoryModelCommand(secondary, parsed.options);
   }
 
   if (primary === "mna") {

@@ -155,6 +155,30 @@ describe("runStopCommand", () => {
     expect(spawnCommands.some((command) => command.includes("taskkill /PID 5566 /T /F"))).toBe(true);
   });
 
+  it("stops lite runtime when it is recorded in managed state", async () => {
+    mockSpawnExit(0);
+    rmMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [
+        {
+          name: "lite-runtime",
+          pid: 7788,
+          logPath: "C:/Users/test/.axis/logs/lite-runtime.log",
+          url: "http://127.0.0.1:3002",
+        },
+      ],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopManagedMnaMock.mockResolvedValue(true);
+    removeDockerContainerMock.mockResolvedValue(false);
+
+    await runStopCommand();
+
+    const spawnCommands = spawnMock.mock.calls.map((call) => [call[0], ...(Array.isArray(call[1]) ? call[1] : [])].join(" "));
+    expect(spawnCommands.some((command) => command.includes("taskkill /PID 7788 /T /F"))).toBe(true);
+  });
+
   it("still clears local runtime residue before surfacing docker removal failures", async () => {
     mockSpawnExit(0);
     rmMock.mockResolvedValue(undefined);

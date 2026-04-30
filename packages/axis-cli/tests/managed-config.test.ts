@@ -14,10 +14,12 @@ import {
   type ManagedWritebackLlmConfig,
   mergeManagedConfig,
   readManagedEmbeddingConfig,
+  readManagedMemoryLlmConfig,
   readManagedMnaProviderConfig,
   resolveOptionalManagedMemoryLlmCliConfig,
   resolveOptionalManagedMemoryLlmEnvConfig,
   writeManagedMnaProviderConfig,
+  writeManagedMemoryLlmConfig,
 } from "../src/managed-config.js";
 
 describe("managed mna provider config", () => {
@@ -142,6 +144,37 @@ describe("managed mna provider config", () => {
       model: "gpt-4.1-mini",
       baseUrl: "https://api.openai.com/v1",
       apiKeyEnv: "OPENAI_API_KEY",
+    });
+  });
+
+  it("roundtrips memory model config through unified managed files", async () => {
+    await writeManagedMemoryLlmConfig({
+      version: 1,
+      baseUrl: "https://api.example.com/v1",
+      model: "memory-model",
+      apiKey: "memory-secret",
+      protocol: "openai-compatible",
+      timeoutMs: 9000,
+    });
+
+    await expect(readManagedMemoryLlmConfig()).resolves.toEqual({
+      version: 1,
+      baseUrl: "https://api.example.com/v1",
+      model: "memory-model",
+      apiKey: "memory-secret",
+      protocol: "openai-compatible",
+      timeoutMs: 9000,
+    });
+    await expect(readFile(axisManagedConfigPath(), "utf8").then(JSON.parse)).resolves.toMatchObject({
+      memory_llm: {
+        baseUrl: "https://api.example.com/v1",
+        model: "memory-model",
+        protocol: "openai-compatible",
+        timeoutMs: 9000,
+      },
+    });
+    await expect(readFile(axisManagedSecretsPath(), "utf8").then(JSON.parse)).resolves.toMatchObject({
+      memory_llm_api_key: "memory-secret",
     });
   });
 

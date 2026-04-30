@@ -2,6 +2,7 @@ import process from "node:process";
 import { spawn } from "node:child_process";
 
 import { bilingualMessage, formatErrorMessage } from "./messages.js";
+import { writeMemoryModelConfigurationHint } from "./memory-model-command.js";
 import {
   DEFAULT_CODEX_MCP_SERVER_NAME,
   packageRootFromImportMeta,
@@ -53,6 +54,7 @@ export async function runCodexUseCommand(
   const ensureRuntime = options["ensure-runtime"] !== false;
   const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime`;
   const codexHome = resolveCodexHome(options);
+  await writeMemoryModelConfigurationHint();
 
   const child = spawn(process.execPath, [launcherPath], {
     stdio: "inherit",

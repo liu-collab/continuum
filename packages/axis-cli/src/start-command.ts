@@ -13,6 +13,7 @@ import {
   pathExists,
   runCommand,
   terminateProcess,
+  vendorPath,
   waitForHealthy,
 } from "./utils.js";
 import {
@@ -259,16 +260,16 @@ function writeProgressDone(message: string, english: string) {
 
 function writeStartSummary(summary: {
   openUrl: string;
-  mode: "managed" | "ui-dev";
+  mode: "managed" | "ui-dev" | "lite";
   backend?: "reused";
   container?: string;
   bindHost: string;
   postgres?: string;
-  storageUrl: string;
-  runtimeUrl: string;
-  visualizationUrl: string;
+  storageUrl?: string | null;
+  runtimeUrl?: string | null;
+  visualizationUrl?: string | null;
   visualizationLogPath?: string | null;
-  mnaUrl: string;
+  mnaUrl?: string | null;
 }) {
   process.stdout.write(`✓ ${bilingualMessage("Axis 已启动。", "Axis started.")}\n`);
   const lines: Array<[string, string | undefined | null]> = [
@@ -289,6 +290,98 @@ function writeStartSummary(summary: {
     if (value) {
       process.stdout.write(`  ${label}: ${value}\n`);
     }
+  }
+}
+
+async function startLiteRuntime(options: {
+  packageRoot: string;
+  bindHost: string;
+  accessibleHost: string;
+  runtimePort: number;
+  runtimeUrl: string;
+  daemon: boolean;
+  open: boolean;
+  cliOptions: Record<string, string | boolean>;
+}) {
+  await migrateManagedConfigFiles();
+  const existingMemoryLlmConfig = await readManagedMemoryLlmConfig();
+  const mergedMemoryLlmConfig = mergeManagedConfig<ManagedWritebackLlmConfig>(
+    existingMemoryLlmConfig,
+    {
+      version: 1,
+      ...resolveOptionalManagedMemoryLlmEnvConfig(process.env),
+    },
+    resolveOptionalManagedMemoryLlmCliConfig(options.cliOptions),
+  );
+  await writeManagedMemoryLlmConfig(mergedMemoryLlmConfig);
+
+  const healthUrl = `${options.runtimeUrl}/v1/lite/healthz`;
+  const alreadyHealthy = await isHealthy(healthUrl, 1_000);
+  let pid: number | undefined;
+  const logPath = path.join(axisLogsDir(), "lite-runtime.log");
+
+  if (!alreadyHealthy) {
+    await assertFixedServicePortsAvailable(
+      options.bindHost,
+      [{ port: options.runtimePort, envName: "RUNTIME_PORT" }],
+    );
+    await mkdir(axisLogsDir(), { recursive: true });
+    const stdoutHandle = await open(logPath, "a");
+    const stderrHandle = await open(logPath, "a");
+    const entryPath = vendorPath(options.packageRoot, "runtime", "dist", "src", "index.js");
+    const child = spawn(process.execPath, [entryPath, "--lite"], {
+      detached: true,
+      stdio: ["ignore", stdoutHandle.fd, stderrHandle.fd],
+      env: {
+        ...process.env,
+        HOST: options.bindHost,
+        PORT: String(options.runtimePort),
+        AXIS_MANAGED_CONFIG_PATH: axisManagedConfigPath(),
+        AXIS_MANAGED_SECRETS_PATH: axisManagedSecretsPath(),
+      },
+    });
+    child.unref();
+    pid = child.pid;
+    await waitForHealthy(healthUrl, {
+      timeoutMs: 30_000,
+      intervalMs: 500,
+      fetcher: fetchJson,
+    });
+  }
+
+  const latestManagedState = await readManagedState();
+  await writeManagedState({
+    ...latestManagedState,
+    version: 1,
+    services: [
+      ...latestManagedState.services.filter((service) => service.name !== "lite-runtime"),
+      {
+        name: "lite-runtime",
+        pid: pid ?? 0,
+        logPath,
+        url: options.runtimeUrl,
+      },
+    ],
+  });
+
+  writeStartSummary({
+    openUrl: options.runtimeUrl,
+    mode: "lite",
+    backend: alreadyHealthy ? "reused" : undefined,
+    bindHost: options.bindHost,
+    runtimeUrl: options.runtimeUrl,
+    visualizationLogPath: logPath,
+  });
+  writeDaemonNotice(options.daemon);
+  if (!mergedMemoryLlmConfig.baseUrl || !mergedMemoryLlmConfig.model) {
+    writeWarning(
+      "记忆模型未配置，lite 模式会使用规则降级。可运行 axis memory-model configure 配置。",
+      "Memory model is not configured. Lite mode will use rule fallback. Run axis memory-model configure to configure it.",
+    );
+  }
+
+  if (options.open) {
+    await openBrowser(options.runtimeUrl);
   }
 }
 
@@ -538,6 +631,7 @@ export async function runStartCommand(
   const runtimePort = resolveRuntimePort();
   const visualizationPort = resolveVisualizationPort();
   const uiDev = options["ui-dev"] === true;
+  const full = options.full === true || uiDev;
   const open = options.open === true;
   const daemon = options.daemon === true;
   const platformUserId = await resolvePlatformUserId();
@@ -552,6 +646,21 @@ export async function runStartCommand(
   const providerConfigured = await isPrimaryProviderConfigured(options);
   const localManagedConfigPath = axisManagedConfigPath();
   const localManagedSecretsPath = axisManagedSecretsPath();
+
+  if (!full) {
+    await startLiteRuntime({
+      packageRoot,
+      bindHost,
+      accessibleHost,
+      runtimePort,
+      runtimeUrl,
+      daemon,
+      open,
+      cliOptions: options,
+    });
+    await maybeWriteUpdateNotice().catch(() => undefined);
+    return;
+  }
 
   if (uiDev && uiDevBackendHealthy) {
     let mna = resolveUiDevMna(options, initialManagedState, accessibleHost);

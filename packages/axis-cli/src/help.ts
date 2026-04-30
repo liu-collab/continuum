@@ -5,7 +5,7 @@ Commands:
   axis --version
   axis version
   axis doctor             无副作用检查本机运行环境
-  axis start [--open] [--daemon] [--ui-dev] [--postgres-port PORT] [--bind-host HOST] [--embedding-base-url URL] [--embedding-model MODEL] [--embedding-api-key KEY] [--memory-llm-base-url URL] [--memory-llm-model MODEL] [--memory-llm-api-key KEY] [--memory-llm-protocol PROTOCOL] [--memory-llm-effort EFFORT] [--memory-llm-timeout-ms MS] [--memory-llm-max-tokens TOKENS] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV]
+  axis start [--open] [--daemon] [--full] [--ui-dev] [--postgres-port PORT] [--bind-host HOST] [--embedding-base-url URL] [--embedding-model MODEL] [--embedding-api-key KEY] [--memory-llm-base-url URL] [--memory-llm-model MODEL] [--memory-llm-api-key KEY] [--memory-llm-protocol PROTOCOL] [--memory-llm-effort EFFORT] [--memory-llm-timeout-ms MS] [--memory-llm-max-tokens TOKENS] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV]
   axis stop
   axis restart <runtime|storage>
   axis uninstall [--force]
@@ -14,6 +14,9 @@ Commands:
   axis ui [--host HOST] [--port PORT] [--open] [--url URL] [--runtime-url URL] [--storage-url URL] [--database-url URL] [--mna-url URL] [--mna-token-path PATH]
   axis mna <install|start|stop|logs|token> [--mna-url URL] [--mna-host HOST] [--mna-port PORT] [--mna-home PATH] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV] [--rotate]
   axis runtime             直接启动打包后的 retrieval-runtime
+  axis runtime --full      直接启动完整 retrieval-runtime
+  axis memory-model configure --base-url URL --model MODEL [--api-key KEY] [--protocol PROTOCOL] [--timeout-ms MS]
+  axis memory-model status
   axis mcp-server          直接启动打包后的记忆 MCP server
   axis claude [--plugin-dir PATH] [--package PKG]
   axis claude install [--plugin-dir PATH] [--package PKG] [--force]
@@ -25,6 +28,7 @@ Commands:
 Options:
   --bind-host HOST    绑定地址（默认: 127.0.0.1，仅本机访问。使用 0.0.0.0 可允许局域网访问）
   --daemon            后台运行服务，并在启动完成后提示日志查看方式
+  --full              启动完整平台（Docker/Postgres/页面）；默认 axis start 为 lite runtime
   --ui-dev            仅把 visualization 切到本机 next dev，页面改动会自动热更新
   --embedding-base-url URL   第三方 embedding 接口地址，也可通过 EMBEDDING_BASE_URL 提供
   --embedding-model MODEL    第三方 embedding 模型名，也可通过 EMBEDDING_MODEL 提供

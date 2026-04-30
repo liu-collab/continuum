@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 
 const uninstallCodexMcpServerMock = vi.hoisted(() => vi.fn());
 const spawnMock = vi.hoisted(() => vi.fn());
+const writeMemoryModelConfigurationHintMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", () => ({
   spawn: spawnMock,
@@ -15,6 +16,10 @@ vi.mock("../src/utils.js", async (importOriginal) => {
     uninstallCodexMcpServer: uninstallCodexMcpServerMock,
   };
 });
+
+vi.mock("../src/memory-model-command.js", () => ({
+  writeMemoryModelConfigurationHint: writeMemoryModelConfigurationHintMock,
+}));
 
 import {
   runCodexUninstallCommand,
@@ -30,6 +35,7 @@ describe("axis codex commands", () => {
     vi.restoreAllMocks();
     uninstallCodexMcpServerMock.mockReset();
     spawnMock.mockReset();
+    writeMemoryModelConfigurationHintMock.mockReset();
   });
 
   it("removes the installed Codex MCP server", async () => {
@@ -85,5 +91,6 @@ describe("axis codex commands", () => {
         }),
       }),
     );
+    expect(writeMemoryModelConfigurationHintMock).toHaveBeenCalled();
   });
 });

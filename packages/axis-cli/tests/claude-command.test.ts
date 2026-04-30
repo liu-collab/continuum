@@ -5,6 +5,7 @@ const rewriteClaudePluginCommandsMock = vi.hoisted(() => vi.fn());
 const uninstallClaudePluginMock = vi.hoisted(() => vi.fn());
 const pathExistsMock = vi.hoisted(() => vi.fn());
 const runForegroundMock = vi.hoisted(() => vi.fn());
+const writeMemoryModelConfigurationHintMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/managed-process.js", () => ({
   runForeground: runForegroundMock,
@@ -21,6 +22,10 @@ vi.mock("../src/utils.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../src/memory-model-command.js", () => ({
+  writeMemoryModelConfigurationHint: writeMemoryModelConfigurationHintMock,
+}));
+
 import {
   runClaudeCommand,
   runClaudeInstallCommand,
@@ -35,6 +40,7 @@ describe("axis claude commands", () => {
     rewriteClaudePluginCommandsMock.mockReset();
     runForegroundMock.mockReset();
     uninstallClaudePluginMock.mockReset();
+    writeMemoryModelConfigurationHintMock.mockReset();
   });
 
   it("installs the Claude plugin and rewrites runtime commands", async () => {
@@ -64,6 +70,7 @@ describe("axis claude commands", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(
       "Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n",
     );
+    expect(writeMemoryModelConfigurationHintMock).toHaveBeenCalled();
   });
 
   it("installs the default plugin when missing and launches Claude", async () => {
@@ -94,6 +101,7 @@ describe("axis claude commands", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(
       "Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n",
     );
+    expect(writeMemoryModelConfigurationHintMock).toHaveBeenCalled();
     expect(runForegroundMock).toHaveBeenCalledWith("claude", ["--plugin-dir", "C:/tmp/axis-plugin"]);
   });
 

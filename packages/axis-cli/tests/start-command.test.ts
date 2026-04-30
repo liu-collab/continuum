@@ -216,6 +216,57 @@ describe("runStartCommand", () => {
     delete process.env.VISUALIZATION_PORT;
   });
 
+  it("starts lite runtime by default without Docker or embedding config", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    fetchJsonMock.mockResolvedValue({ ok: false, body: {} });
+    waitForHealthyMock.mockResolvedValue(undefined);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    openMock.mockResolvedValue({
+      fd: 1,
+      close: vi.fn(async () => undefined),
+    });
+    spawnMock.mockReturnValue({
+      pid: 12345,
+      unref: vi.fn(),
+      on: vi.fn(),
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("runtime"), "--lite"],
+      expect.objectContaining({
+        detached: true,
+        env: expect.objectContaining({
+          HOST: "127.0.0.1",
+          PORT: "3002",
+        }),
+      }),
+    );
+    expect(writeManagedEmbeddingConfigMock).not.toHaveBeenCalled();
+    expect(planStackImageBuildMock).not.toHaveBeenCalled();
+    expect(stdoutSpy.mock.calls.map((call) => String(call[0])).join("")).toContain("mode: lite");
+    expect(writeManagedStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        services: [
+          expect.objectContaining({
+            name: "lite-runtime",
+            pid: 12345,
+            url: "http://127.0.0.1:3002",
+          }),
+        ],
+      }),
+    );
+  });
+
   it("cleans the managed stack container when startup fails after docker run", async () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     mockSuccessfulSpawn();
@@ -276,7 +327,7 @@ describe("runStartCommand", () => {
     fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
     startManagedMnaMock.mockRejectedValue(new Error("mna failed"));
 
-    await expect(runStartCommand({}, import.meta.url)).rejects.toThrow(/mna failed/);
+    await expect(runStartCommand({ full: true }, import.meta.url)).rejects.toThrow(/mna failed/);
 
     const spawnCommands = spawnMock.mock.calls.map((call) => {
       const command = call[0];
@@ -359,7 +410,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     const spawnCommands = spawnMock.mock.calls.map((call) => {
       const command = call[0];
@@ -439,7 +490,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
     expect(output).toContain("正在检查 Docker");
@@ -531,7 +582,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     expect(migrateManagedConfigFilesMock).toHaveBeenCalled();
     expect(writeManagedMemoryLlmConfigMock).toHaveBeenCalledWith({
@@ -608,7 +659,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     const spawnCommands = spawnMock.mock.calls.map((call) => ({
       command: call[0],
@@ -703,6 +754,7 @@ describe("runStartCommand", () => {
     try {
       await runStartCommand(
         {
+          full: true,
           "memory-llm-model": "cli-model",
           "memory-llm-timeout-ms": "9000",
         },
@@ -786,7 +838,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     const dockerRun = spawnMock.mock.calls.find((call) => {
       const command = call[0];
@@ -870,7 +922,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     expect(startManagedMnaMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -987,7 +1039,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     expect(spawnMock).toHaveBeenCalledWith(
       "cmd",
@@ -1079,7 +1131,7 @@ describe("runStartCommand", () => {
       version: "0.1.0",
     });
 
-    await runStartCommand({}, import.meta.url);
+    await runStartCommand({ full: true }, import.meta.url);
 
     const npmVisualizationBuild = spawnMock.mock.calls.find((call) => {
       const command = call[0];
@@ -1684,3 +1736,4 @@ describe("runStartCommand", () => {
     });
   });
 });
+

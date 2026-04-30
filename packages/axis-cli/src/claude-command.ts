@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { runForeground } from "./managed-process.js";
+import { writeMemoryModelConfigurationHint } from "./memory-model-command.js";
 import {
   defaultClaudePluginInstallDir,
   installClaudePlugin,
@@ -50,6 +51,7 @@ export async function runClaudeInstallCommand(
 
   process.stdout.write(`Claude plugin installed to ${targetDir}\n`);
   process.stdout.write("Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n");
+  await writeMemoryModelConfigurationHint();
   process.stdout.write(`Start with: claude --plugin-dir "${targetDir}"\n`);
 }
 
@@ -64,6 +66,7 @@ export async function runClaudeCommand(
     await installManagedClaudePlugin(options, importMetaUrl, targetDir, false);
     process.stdout.write(`Claude plugin installed to ${targetDir}\n`);
     process.stdout.write("Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n");
+    await writeMemoryModelConfigurationHint();
   }
 
   await runForeground("claude", ["--plugin-dir", targetDir]);

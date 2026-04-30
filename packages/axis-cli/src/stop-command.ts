@@ -66,7 +66,16 @@ export async function runStopCommand() {
   const state = await readManagedState();
   const containerName = state.postgres?.containerName ?? DEFAULT_MANAGED_STACK_CONTAINER;
   const visualizationDev = state.services.find((service) => service.name === "visualization-dev") ?? null;
+  const liteRuntime = state.services.find((service) => service.name === "lite-runtime") ?? null;
   let containerCleanupError: Error | null = null;
+
+  if (liteRuntime) {
+    try {
+      await terminateProcess(liteRuntime.pid);
+    } catch {
+      // ignore and still clear managed state below
+    }
+  }
 
   if (visualizationDev) {
     try {
