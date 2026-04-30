@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import type { FileMemorySearchQuery, FileMemorySearchResult, FileMemoryStore } from "./file-store.js";
+import type { FileMemorySearchQuery, FileMemoryStore } from "./file-store.js";
+import { LiteMemoryFunctionHandler, type LiteMemorySearchFunctionResult } from "./search-handler.js";
 import {
   type LiteRuleTriggerContext,
   type LiteRuleTriggerDecision,
@@ -60,7 +61,7 @@ export interface LitePrepareContextResult {
 }
 
 export interface MemoryOrchestratorOptions {
-  store: Pick<FileMemoryStore, "load" | "search">;
+  store: Pick<FileMemoryStore, "load" | "search" | "get">;
   memoryModelStatus?: LiteMemoryModelStatus;
   recordLimit?: number;
   tokenBudget?: number;
@@ -76,12 +77,14 @@ export class MemoryOrchestrator {
   private readonly tokenBudget: number;
   private readonly traceIdFactory: () => string;
   private readonly now: () => string;
+  private readonly memoryFunctions: LiteMemoryFunctionHandler;
 
   constructor(private readonly options: MemoryOrchestratorOptions) {
     this.recordLimit = normalizePositiveInteger(options.recordLimit, DEFAULT_RECORD_LIMIT);
     this.tokenBudget = normalizePositiveInteger(options.tokenBudget, DEFAULT_TOKEN_BUDGET);
     this.traceIdFactory = options.traceIdFactory ?? (() => randomUUID());
     this.now = options.now ?? (() => new Date().toISOString());
+    this.memoryFunctions = new LiteMemoryFunctionHandler({ store: options.store });
   }
 
   async prepareContext(input: LitePrepareContextInput): Promise<LitePrepareContextResult> {
@@ -129,24 +132,25 @@ export class MemoryOrchestrator {
     input: LitePrepareContextInput,
     decision: LiteRuleTriggerDecision,
     functionCalls: LiteMemoryFunctionCallTrace[],
-  ): FileMemorySearchResult {
+  ): LiteMemorySearchFunctionResult {
     const baseQuery: FileMemorySearchQuery = {
       query: decision.query,
-      workspace_id: input.workspace_id,
-      user_id: input.user_id,
-      task_id: input.task_id,
-      session_id: input.session_id,
       memory_types: decision.requested_memory_types,
       scopes: decision.requested_scopes,
-      statuses: ["active"],
       importance_min: decision.importance_threshold,
       limit: normalizePositiveInteger(input.limit, this.recordLimit),
     };
+    const functionContext = {
+      workspace_id: input.workspace_id,
+      user_id: input.user_id,
+      session_id: input.session_id,
+      task_id: input.task_id,
+    };
 
-    const result = this.options.store.search(baseQuery);
+    const result = this.memoryFunctions.memorySearch(functionContext, baseQuery);
     functionCalls.push({
       name: "memory_search",
-      arguments: baseQuery,
+      arguments: result.effective_query,
       result_count: result.total,
       returned_count: result.records.length,
     });
@@ -156,10 +160,10 @@ export class MemoryOrchestrator {
     }
 
     const fallbackQuery = { ...baseQuery, query: "" };
-    const fallbackResult = this.options.store.search(fallbackQuery);
+    const fallbackResult = this.memoryFunctions.memorySearch(functionContext, fallbackQuery);
     functionCalls.push({
       name: "memory_search",
-      arguments: fallbackQuery,
+      arguments: fallbackResult.effective_query,
       result_count: fallbackResult.total,
       returned_count: fallbackResult.records.length,
     });
@@ -182,7 +186,7 @@ function buildRuleContext(input: LitePrepareContextInput): LiteRuleTriggerContex
 
 function buildInjectionBlock(input: {
   decision: LiteRuleTriggerDecision;
-  searchResult: FileMemorySearchResult;
+  searchResult: LiteMemorySearchFunctionResult;
   memoryMode: MemoryMode;
   tokenBudget: number;
   recordLimit: number;

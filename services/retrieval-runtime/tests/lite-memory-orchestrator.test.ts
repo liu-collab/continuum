@@ -137,6 +137,6 @@ describe("MemoryOrchestrator", () => {
 
     expect(result.injection_block?.memory_records.map((item) => item.id)).toEqual(["rec-task"]);
     expect(result.trace.function_calls).toHaveLength(2);
-    expect(result.trace.function_calls[1]?.arguments.query).toBe("");
+    expect(result.trace.function_calls[1]?.arguments.query).toBeUndefined();
   });
 });
