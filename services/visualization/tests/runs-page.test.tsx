@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { getRunTraceMock, getSourceHealthMock } = vi.hoisted(() => ({
   getRunTraceMock: vi.fn<() => Promise<any>>(),
@@ -65,13 +65,53 @@ const healthyStatus = {
   connectionLimit: null
 };
 
+function createSelectedTurn(traceId: string, narrative = `trace ${traceId} loaded`) {
+  return {
+    turn: {
+      traceId,
+      turnId: `turn-${traceId}`,
+      workspaceId: "workspace-1",
+      taskId: null,
+      sessionId: "session-1",
+      threadId: null,
+      host: "agent",
+      phase: "before_response",
+      inputSummary: "input",
+      assistantOutputSummary: "output",
+      turnStatus: "completed",
+      createdAt: "2026-04-22T00:00:00Z",
+      completedAt: "2026-04-22T00:00:01Z"
+    },
+    turns: [],
+    triggerRuns: [],
+    recallRuns: [],
+    injectionRuns: [],
+    memoryPlanRuns: [],
+    writeBackRuns: [],
+    dependencyStatus: [],
+    phaseNarratives: [],
+    narrative: {
+      outcomeCode: "completed",
+      outcomeLabel: "轨迹完成",
+      explanation: narrative,
+      incomplete: false
+    }
+  };
+}
+
 describe("runs page", () => {
-  it("links recent run cards by trace id instead of turn id", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("switches recent run details in place by trace id", async () => {
+    const traceId = "a048c6c0-900a-443e-9d34-d8db2981c2bf";
     getRunTraceMock.mockResolvedValue({
       items: [
         {
           turnId: "turn-a",
-          traceId: "a048c6c0-900a-443e-9d34-d8db2981c2bf",
+          traceId,
           phase: "before_response",
           createdAt: "2026-04-22T00:00:00Z",
           memoryMode: "workspace_plus_global",
@@ -95,6 +135,22 @@ describe("runs page", () => {
       },
       sourceStatus: healthyStatus
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        items: [],
+        total: 1,
+        selectedTurn: createSelectedTurn(traceId, "client detail loaded"),
+        appliedFilters: {
+          turnId: undefined,
+          sessionId: undefined,
+          traceId,
+          page: 1,
+          pageSize: 20
+        },
+        sourceStatus: healthyStatus
+      })
+    } as Response);
     getSourceHealthMock.mockResolvedValue({
       liveness: {
         status: "ok",
@@ -121,11 +177,20 @@ describe("runs page", () => {
       "href",
       "/runs?trace_id=a048c6c0-900a-443e-9d34-d8db2981c2bf"
     );
-    expect(screen.getByText("最近运行摘要").closest("a")).toHaveAttribute("data-scroll", "false");
 
     fireEvent.click(screen.getByText("最近运行摘要").closest("a")!);
 
     expect(screen.getByTestId("run-detail-pending")).toHaveTextContent("正在加载轨迹详情");
+    await waitFor(() => {
+      expect(screen.getByText("client detail loaded")).toBeInTheDocument();
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(`/api/runs?trace_id=${encodeURIComponent(traceId)}`, {
+      headers: {
+        accept: "application/json",
+      },
+    });
+    expect(window.location.pathname).toBe("/runs");
+    expect(window.location.search).toBe(`?trace_id=${encodeURIComponent(traceId)}`);
   });
 
   it("links injected record ids to memory detail pages", async () => {
