@@ -519,7 +519,7 @@ async function fetchProviderModelsJson(url: URL, init: RequestInit) {
         response.status === 401 || response.status === 403
           ? "provider_models_auth_failed"
           : "provider_models_unavailable",
-        `provider models request failed with ${response.status}.`,
+        `provider models request failed with ${response.status} at ${url.pathname}.`,
       );
     }
 
@@ -549,6 +549,7 @@ async function listProviderModels(
   env: NodeJS.ProcessEnv,
 ): Promise<ProviderModelOption[]> {
   const apiKey = resolvePayloadApiKey(payload, env);
+  const baseUrl = new URL(payload.base_url);
 
   if (
     (payload.kind === "openai-compatible" || payload.kind === "openai-responses" || payload.kind === "anthropic")
@@ -562,6 +563,14 @@ async function listProviderModels(
   }
 
   if (payload.kind === "ollama") {
+    if (baseUrl.pathname.replace(/\/+$/, "").endsWith("/v1")) {
+      throw new ProviderModelListError(
+        400,
+        "provider_kind_mismatch",
+        "当前选择的是 Ollama，但 base_url 是 OpenAI-compatible /v1 地址。请选择 OpenAI-compatible API。 | Provider kind is Ollama, but base_url points to an OpenAI-compatible /v1 endpoint. Choose OpenAI-compatible API.",
+      );
+    }
+
     const json = await fetchProviderModelsJson(buildBaseUrl(payload.base_url, "/api/tags"), {
       method: "GET",
       headers: {

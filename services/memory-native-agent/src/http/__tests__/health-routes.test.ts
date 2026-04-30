@@ -987,6 +987,39 @@ describe("health routes", () => {
     }
   });
 
+  it("rejects Ollama model listing when base_url points to an OpenAI-compatible endpoint", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/provider-models",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`,
+        },
+        payload: {
+          kind: "ollama",
+          base_url: "http://localhost:8090/v1",
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        ok: false,
+        error: {
+          code: "provider_kind_mismatch",
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("rejects provider config when required api_key is missing", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");

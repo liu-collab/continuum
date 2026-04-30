@@ -262,6 +262,14 @@ function buildSetupModelOptions(models: Array<{ id: string; label: string }>, pl
   ];
 }
 
+function looksLikeOpenAiCompatibleBaseUrl(baseUrl: string) {
+  try {
+    return new URL(baseUrl).pathname.replace(/\/+$/, "").endsWith("/v1");
+  } catch {
+    return false;
+  }
+}
+
 export function SettingsModal({
   open,
   onClose,
@@ -665,6 +673,11 @@ export function SettingsModal({
 
     if (setupStep === 2 && !setupBaseUrl.trim()) {
       setErrorMessage(t("runtimeConfig.errors.providerBaseUrlRequired"));
+      return;
+    }
+
+    if (setupStep === 2 && setupProvider.kind === "ollama" && looksLikeOpenAiCompatibleBaseUrl(setupBaseUrl.trim())) {
+      setErrorMessage(t("runtimeConfig.errors.providerKindMismatch"));
       return;
     }
 

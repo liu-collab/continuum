@@ -225,6 +225,7 @@
       "providerModelRequired": "provider model is required.",
       "providerBaseUrlRequired": "base_url is required for the selected provider.",
       "providerApiKeyRequired": "api_key is required for the selected provider.",
+      "providerKindMismatch": "This base_url is an OpenAI-compatible /v1 endpoint. Choose OpenAI-compatible API instead of Ollama.",
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",

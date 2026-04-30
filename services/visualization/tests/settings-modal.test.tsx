@@ -344,6 +344,57 @@ describe("SettingsModal", () => {
     });
   });
 
+  it("blocks Ollama setup when base_url is an OpenAI-compatible endpoint", async () => {
+    const user = userEvent.setup();
+    const onListProviderModels = vi.fn(async () => ({
+      models: [],
+    }));
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          setupWizard
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "not-configured",
+              model: "",
+              base_url: null,
+              api_key: null,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+          onListProviderModels={onListProviderModels}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByTestId("setup-provider-ollama"));
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.clear(screen.getByLabelText("provider base_url"));
+    await user.type(screen.getByLabelText("provider base_url"), "http://localhost:8090/v1");
+    await user.click(screen.getByTestId("setup-wizard-next"));
+
+    expect(onListProviderModels).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
+      "当前 base_url 是 OpenAI-compatible 的 /v1 地址",
+    );
+  });
+
   it("prefills provider settings from a detected DeepSeek API key env hint", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);

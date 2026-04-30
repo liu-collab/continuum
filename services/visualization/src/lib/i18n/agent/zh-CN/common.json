@@ -225,6 +225,7 @@
       "providerModelRequired": "provider model 不能为空。",
       "providerBaseUrlRequired": "当前 provider 需要填写 base_url。",
       "providerApiKeyRequired": "当前 provider 需要填写 api_key。",
+      "providerKindMismatch": "当前 base_url 是 OpenAI-compatible 的 /v1 地址，请选择 OpenAI-compatible API，不要选择 Ollama。",
       "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
       "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
