@@ -1360,6 +1360,9 @@ export function SettingsModal({
             <>
               <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="embedding-config">
                 <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
+                <p className="text-xs leading-5 text-foreground" data-testid="embedding-config-hint">
+                  {t("runtimeConfig.embeddingHint")}
+                </p>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingBaseUrl")}</span>
                   <input

@@ -185,6 +185,9 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       <div className="mt-5 grid gap-4">
         <div className="grid gap-3">
           <div className="text-[14px] font-semibold leading-[1.29] text-text">{t("runtimeConfig.embeddingTitle")}</div>
+          <p className="text-[13px] leading-[1.5] text-text" data-testid="embedding-config-hint">
+            {t("runtimeConfig.embeddingHint")}
+          </p>
           <input
             value={embeddingBaseUrl}
             onChange={(event) => setEmbeddingBaseUrl(event.target.value)}

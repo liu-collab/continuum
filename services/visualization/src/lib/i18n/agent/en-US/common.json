@@ -125,6 +125,7 @@
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
     "embeddingApiKey": "EMBEDDING_API_KEY",
+    "embeddingHint": "Embedding uses the OpenAI-compatible /embeddings endpoint. For DashScope, use https://dashscope.aliyuncs.com/compatible-mode/v1; do not use rerank URLs.",
     "memoryLlmTitle": "Memory model",
     "memoryLlmMode": "Memory model source",
     "memoryLlmModeOptions": {
