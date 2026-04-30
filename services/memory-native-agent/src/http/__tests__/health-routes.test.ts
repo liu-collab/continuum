@@ -258,7 +258,7 @@ describe("health routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({
+      expect(response.json()).toMatchObject({
         runtime: {
           status: "unavailable",
           base_url: "http://127.0.0.1:4100",
@@ -267,18 +267,49 @@ describe("health routes", () => {
             detail: "runtime dependency status is unavailable",
           },
           memory_llm: {
-            status: "unknown",
-            detail: "runtime dependency status is unavailable",
+            status: "unavailable",
+            detail: "memory llm is not configured",
+            last_checked_at: expect.any(String),
           }
         },
         provider: {
           id: "ollama",
           model: "qwen2.5-coder",
           status: "configured",
-          detail: undefined,
         },
         mcp: [],
         provider_key: "ollama:qwen2.5-coder"
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("reports memory llm as unavailable when it is not configured", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/agent/dependency-status",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        runtime: {
+          memory_llm: {
+            status: "unavailable",
+            detail: "memory llm is not configured",
+          }
+        }
       });
     } finally {
       await app.close();

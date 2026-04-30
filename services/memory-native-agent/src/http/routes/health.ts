@@ -1,6 +1,88 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import type { RuntimeFastifyInstance } from "../types.js";
 import { MNA_VERSION } from "../../shared/types.js";
 import { mergeManagedDependencyStatus, readManagedDependencyStatus } from "./dependency-status-cache.js";
+
+type MemoryLlmManagedConfig = {
+  memory_llm?: {
+    baseUrl?: string;
+    model?: string;
+  };
+};
+
+type LegacyMemoryLlmConfig = {
+  baseUrl?: string;
+  model?: string;
+};
+
+async function readJson<T>(filePath: string): Promise<T | null> {
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
+
+function resolveAxisManagedDir(app: RuntimeFastifyInstance) {
+  return path.dirname(path.dirname(app.mnaTokenPath));
+}
+
+function resolveManagedConfigPath(app: RuntimeFastifyInstance) {
+  const override = process.env.AXIS_MANAGED_CONFIG_PATH?.trim();
+  if (override) {
+    return override;
+  }
+
+  return path.join(resolveAxisManagedDir(app), "config.json");
+}
+
+function resolveManagedMemoryLlmConfigPath(app: RuntimeFastifyInstance) {
+  const override = process.env.AXIS_MEMORY_LLM_CONFIG_PATH?.trim();
+  if (override) {
+    return override;
+  }
+
+  return path.join(resolveAxisManagedDir(app), "memory-llm-config.json");
+}
+
+function normalizeOptionalText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isMemoryLlmConfigured(
+  config: MemoryLlmManagedConfig | null,
+  legacyConfig: LegacyMemoryLlmConfig | null,
+  env: NodeJS.ProcessEnv,
+) {
+  const baseUrl = normalizeOptionalText(config?.memory_llm?.baseUrl)
+    || normalizeOptionalText(legacyConfig?.baseUrl)
+    || normalizeOptionalText(env.MEMORY_LLM_BASE_URL);
+
+  return Boolean(baseUrl);
+}
+
+function applyMemoryLlmConfigurationStatus<T extends { memory_llm?: Record<string, unknown> }>(
+  runtime: T,
+  configured: boolean,
+): T {
+  if (configured) {
+    return runtime;
+  }
+
+  return {
+    ...runtime,
+    memory_llm: {
+      ...(runtime.memory_llm ?? {}),
+      name: "memory_llm",
+      status: "unavailable",
+      detail: "memory llm is not configured",
+      last_checked_at: new Date().toISOString(),
+    },
+  };
+}
 
 export function registerHealthRoutes(app: RuntimeFastifyInstance) {
   app.get("/healthz", async () => {
@@ -45,26 +127,42 @@ export function registerHealthRoutes(app: RuntimeFastifyInstance) {
   app.get("/v1/agent/dependency-status", async () => {
     const runtime = await app.runtimeState.memoryClient.dependencyStatus().catch(() => null);
     const cached = await readManagedDependencyStatus(app);
+    const managedConfig = await readJson<MemoryLlmManagedConfig>(resolveManagedConfigPath(app));
+    const legacyMemoryLlmConfig = await readJson<LegacyMemoryLlmConfig>(resolveManagedMemoryLlmConfigPath(app));
+    const memoryLlmConfigured = isMemoryLlmConfigured(
+      managedConfig,
+      legacyMemoryLlmConfig,
+      app.runtimeState.env,
+    );
     const providerKey = `${app.runtimeState.provider.id()}:${app.runtimeState.provider.model()}`;
     const providerStatus = app.runtimeState.provider.status?.() ?? {
       status: "configured" as const,
       detail: undefined,
     };
+    const runtimeStatus = runtime ?? {
+      status: "unavailable",
+      base_url: app.runtimeState.config.runtime.baseUrl,
+      embeddings: {
+        status: "unknown",
+        detail: "runtime dependency status is unavailable",
+      },
+      memory_llm: {
+        status: "unknown",
+        detail: "runtime dependency status is unavailable",
+      },
+    };
+
+    const cachedStatus = memoryLlmConfigured
+      ? cached
+      : {
+          ...cached,
+          memory_llm: undefined,
+        };
+
     return {
-      runtime: mergeManagedDependencyStatus(
-        runtime ?? {
-          status: "unavailable",
-          base_url: app.runtimeState.config.runtime.baseUrl,
-          embeddings: {
-            status: "unknown",
-            detail: "runtime dependency status is unavailable",
-          },
-          memory_llm: {
-            status: "unknown",
-            detail: "runtime dependency status is unavailable",
-          },
-        },
-        cached,
+      runtime: applyMemoryLlmConfigurationStatus(
+        mergeManagedDependencyStatus(runtimeStatus, cachedStatus),
+        memoryLlmConfigured,
       ),
       provider: {
         id: app.runtimeState.provider.id(),
