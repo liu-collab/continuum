@@ -734,8 +734,11 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     };
   }) {
     await client.updateConfig(payload);
-    await Promise.all([refreshAgentConfig(), refreshDependencyStatus()]);
-    await refreshMcpState();
+    await Promise.allSettled([
+      refreshAgentConfig(),
+      refreshDependencyStatus(),
+      refreshMcpState(),
+    ]);
   }
 
   async function updateGovernanceConfig(payload: {
