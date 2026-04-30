@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { Info } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { Modal } from "@/components/modal";
@@ -1359,10 +1360,10 @@ export function SettingsModal({
           {advancedSettingsOpen ? (
             <>
               <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="embedding-config">
-                <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
-                <p className="text-xs leading-5 text-foreground" data-testid="embedding-config-hint">
-                  {t("runtimeConfig.embeddingHint")}
-                </p>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.embeddingTitle")}</div>
+                  <EmbeddingHint text={t("runtimeConfig.embeddingHint")} />
+                </div>
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingBaseUrl")}</span>
                   <input
@@ -1741,5 +1742,23 @@ export function SettingsModal({
 
       </div>
     </Modal>
+  );
+}
+
+function EmbeddingHint({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={text}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        data-testid="embedding-config-hint"
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-72 -translate-x-1/2 rounded-md border bg-surface px-3 py-2 text-xs leading-5 text-foreground shadow-overlay group-focus-within:block group-hover:block">
+        {text}
+      </span>
+    </span>
   );
 }

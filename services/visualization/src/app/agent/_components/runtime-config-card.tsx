@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { Info } from "lucide-react";
 
 import { SelectField } from "@/components/select-field";
 import { StatusBadge } from "@/components/status-badge";
@@ -184,10 +185,10 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
 
       <div className="mt-5 grid gap-4">
         <div className="grid gap-3">
-          <div className="text-[14px] font-semibold leading-[1.29] text-text">{t("runtimeConfig.embeddingTitle")}</div>
-          <p className="text-[13px] leading-[1.5] text-text" data-testid="embedding-config-hint">
-            {t("runtimeConfig.embeddingHint")}
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="text-[14px] font-semibold leading-[1.29] text-text">{t("runtimeConfig.embeddingTitle")}</div>
+            <EmbeddingHint text={t("runtimeConfig.embeddingHint")} />
+          </div>
           <input
             value={embeddingBaseUrl}
             onChange={(event) => setEmbeddingBaseUrl(event.target.value)}
@@ -252,6 +253,24 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
         </button>
       </div>
     </section>
+  );
+}
+
+function EmbeddingHint({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={text}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        data-testid="embedding-config-hint"
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-72 -translate-x-1/2 rounded-md border bg-surface px-3 py-2 text-xs leading-5 text-foreground shadow-overlay group-focus-within:block group-hover:block">
+        {text}
+      </span>
+    </span>
   );
 }
 

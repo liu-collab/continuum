@@ -139,10 +139,10 @@ describe("RuntimeConfigCard", () => {
 
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("EMBEDDING_API_KEY 不能为空。");
-    expect(screen.getByTestId("embedding-config-hint")).toHaveTextContent(
-      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    expect(screen.getByTestId("embedding-config-hint")).toHaveAccessibleName(
+      /https:\/\/dashscope\.aliyuncs\.com\/compatible-mode\/v1/,
     );
-    expect(screen.getByTestId("embedding-config-hint")).toHaveTextContent("/embeddings");
+    expect(screen.getByTestId("embedding-config-hint")).toHaveAccessibleName(/\/embeddings/);
   });
 
   it("submits provider and embedding config after validation passes", async () => {

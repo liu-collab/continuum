@@ -512,10 +512,10 @@ describe("SettingsModal", () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText("EMBEDDING_MODEL")).toHaveValue("text-embedding-3-small");
     });
-    expect(screen.getByTestId("embedding-config-hint")).toHaveTextContent(
-      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    expect(screen.getByTestId("embedding-config-hint")).toHaveAccessibleName(
+      /https:\/\/dashscope\.aliyuncs\.com\/compatible-mode\/v1/,
     );
-    expect(screen.getByTestId("embedding-config-hint")).toHaveTextContent("/embeddings");
+    expect(screen.getByTestId("embedding-config-hint")).toHaveAccessibleName(/\/embeddings/);
     const memoryConfig = screen.getByTestId("memory-model-config");
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
     expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("OpenAI-compatible");
