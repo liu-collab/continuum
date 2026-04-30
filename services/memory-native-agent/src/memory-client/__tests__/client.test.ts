@@ -116,6 +116,45 @@ describe("memory client", () => {
     expect(response.injection_block?.memory_summary).toContain("默认用中文");
   });
 
+  it("sends recent context summary with finalize-turn", async () => {
+    let receivedRecentContextSummary: string | null = null;
+
+    const runtime = await startMockRuntime((app) => {
+      app.post("/v1/runtime/finalize-turn", async (request) => {
+        const body = request.body as Record<string, unknown>;
+        receivedRecentContextSummary = typeof body.recent_context_summary === "string"
+          ? body.recent_context_summary
+          : null;
+
+        return {
+          trace_id: "trace-finalize",
+          write_back_candidates: [],
+          submitted_jobs: [],
+          memory_mode: "workspace_plus_global",
+          candidate_count: 0,
+          filtered_count: 0,
+          filtered_reasons: [],
+          writeback_submitted: false,
+          degraded: false,
+          dependency_status: createDependencyStatus(),
+        };
+      });
+    });
+    startedApps.push(runtime.app);
+
+    const client = new MemoryClient({ baseUrl: runtime.baseUrl });
+    await client.finalizeTurn({
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "阿克斯",
+      assistant_output: "好，以后你可以叫我阿克斯。",
+      recent_context_summary: "用户刚刚说：给你起个名字吧。",
+    });
+
+    expect(receivedRecentContextSummary).toContain("起个名字");
+  });
+
   it("returns a degraded fallback when runtime reports dependency_unavailable", async () => {
     const runtime = await startMockRuntime((app) => {
       app.post("/v1/runtime/session-start-context", async (_request, reply) => {

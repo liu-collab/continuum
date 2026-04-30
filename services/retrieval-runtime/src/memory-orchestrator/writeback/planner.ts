@@ -23,6 +23,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
       {
         current_input: "health check",
         assistant_output: "health check",
+        recent_context_summary: "",
         tool_results_summary: "",
         task_id: null,
       },
@@ -33,6 +34,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
   async extract(input: {
     current_input: string;
     assistant_output: string;
+    recent_context_summary?: string;
     tool_results_summary?: string;
     task_id?: string;
     rule_hints?: Array<{
@@ -49,6 +51,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
       {
         current_input: input.current_input,
         assistant_output: input.assistant_output,
+        recent_context_summary: input.recent_context_summary ?? "",
         tool_results_summary: input.tool_results_summary ?? "",
         task_id: input.task_id ?? null,
         rule_hints: input.rule_hints ?? [],
@@ -73,6 +76,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
       {
         current_input: input.current_input,
         assistant_output: input.assistant_output,
+        recent_context_summary: input.recent_context_summary ?? "",
         tool_results_summary: input.tool_results_summary ?? "",
         task_id: input.task_id ?? null,
         rule_candidates: input.rule_candidates,

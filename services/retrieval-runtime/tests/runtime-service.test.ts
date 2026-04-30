@@ -429,11 +429,13 @@ class StubLlmExtractor implements LlmExtractor {
 class SpyLlmExtractor implements LlmExtractor {
   public callCount = 0;
   public refineCallCount = 0;
+  public lastExtractInput?: Parameters<LlmExtractor["extract"]>[0];
 
   constructor(private readonly result: LlmExtractionResult) {}
 
-  async extract(): Promise<LlmExtractionResult> {
+  async extract(input: Parameters<LlmExtractor["extract"]>[0]): Promise<LlmExtractionResult> {
     this.callCount += 1;
+    this.lastExtractInput = input;
     return this.result;
   }
 
@@ -770,6 +772,29 @@ describe("retrieval-runtime service", () => {
 
     expect(continuationResponse.trigger_reason).not.toContain("recall_preflight_skipped");
     expect(continuationEmbeddings.callCount).toBeGreaterThan(0);
+
+    const terseContinuationEmbeddings = new StubEmbeddingsClient();
+    const terseContinuationRuntime = createRuntime({
+      embeddingsClient: terseContinuationEmbeddings,
+      config: {
+        RECALL_LLM_JUDGE_ENABLED: false,
+      },
+    });
+
+    const terseContinuationResponse = await terseContinuationRuntime.service.prepareContext({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      task_id: ids.task,
+      phase: "before_response",
+      current_input: "继续",
+      recent_context_summary: "用户正在延续当前任务。",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(terseContinuationResponse.trigger_reason).not.toContain("recall_preflight_skipped");
+    expect(terseContinuationEmbeddings.callCount).toBeGreaterThan(0);
   });
 
   it("preflight respects memory mode visibility for global user memories", async () => {
@@ -2590,7 +2615,7 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates[0]?.source.source_type).toBe("memory_llm");
     expect(response.write_back_candidates[0]?.summary).toBe("用户希望助手以后叫自己贾维斯");
     expect(response.write_back_candidates[0]?.scope).toBe("user");
-    expect(response.filtered_reasons).toContain("no_stable_preference_detected");
+    expect(response.filtered_reasons).not.toContain("no_stable_preference_detected");
   });
 
   it("falls back to rules when llm extraction fails", async () => {
@@ -2612,7 +2637,7 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
   });
 
-  it("keeps writeback flow available when quality assessor is configured", async () => {
+  it("keeps model-led writeback candidates active when quality assessor only flags advisory risk", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({
         candidates: [
@@ -2655,10 +2680,59 @@ describe("retrieval-runtime service", () => {
       assistant_output: "收到，我会统一改成中文输出。",
     });
 
-    expect(response.filtered_reasons).toContain("quality_blocked:preference");
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.suggested_status).toBe("active");
+    expect(response.write_back_candidates[0]?.details).toMatchObject({
+      quality_score: 0.4,
+      quality_reason: "内容过于临时",
+      quality_suggested_status: "pending_confirmation",
+    });
+    expect(response.filtered_reasons).not.toContain("quality_blocked:preference");
   });
 
-  it("blocks llm-only new candidates when quality assessor is unavailable", async () => {
+  it("marks low-confidence model-led candidates pending instead of discarding them", async () => {
+    const { service } = createRuntime({
+      llmExtractor: new StubLlmExtractor({
+        candidates: [
+          {
+            candidate_type: "preference",
+            scope: "user",
+            summary: "默认用中文输出",
+            importance: 5,
+            confidence: 0.62,
+            write_reason: "model found a plausible but uncertain preference",
+          },
+        ],
+      }),
+      qualityAssessor: new StubQualityAssessor([
+        {
+          candidate_id: undefined,
+          quality_score: 0.72,
+          confidence: 0.8,
+          potential_conflicts: [],
+          suggested_importance: 4,
+          suggested_status: "active",
+          issues: [],
+          reason: "可保留",
+        },
+      ]),
+    });
+
+    const response = await service.finalizeTurn({
+      host: "codex_app_server",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      current_input: "后续都用中文输出",
+      assistant_output: "收到，我会统一改成中文输出。",
+    });
+
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.suggested_status).toBe("pending_confirmation");
+    expect(response.filtered_reasons).not.toContain("confidence_below_threshold:preference");
+  });
+
+  it("keeps llm-only new candidates pending when quality assessor is unavailable", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({
         candidates: [
@@ -2684,8 +2758,12 @@ describe("retrieval-runtime service", () => {
       assistant_output: "收到，我会统一改成中文输出。",
     });
 
-    expect(response.write_back_candidates).toHaveLength(0);
-    expect(response.filtered_reasons).toContain("quality_assessor_fallback_blocked:preference");
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.suggested_status).toBe("pending_confirmation");
+    expect(response.write_back_candidates[0]?.details).toMatchObject({
+      quality_assessor_unavailable: true,
+    });
+    expect(response.filtered_reasons).not.toContain("quality_assessor_fallback_blocked:preference");
   });
 
   it("keeps rule candidates when quality assessor is unavailable", async () => {
@@ -2706,6 +2784,40 @@ describe("retrieval-runtime service", () => {
     expect(response.write_back_candidates.length).toBeGreaterThan(0);
     expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
     expect(response.filtered_reasons).not.toContain("quality_assessor_fallback_blocked:preference");
+  });
+
+  it("passes recent context to llm extraction for short naming preference turns", async () => {
+    const llmExtractor = new SpyLlmExtractor({
+      candidates: [
+        {
+          candidate_type: "preference",
+          scope: "user",
+          summary: "用户希望助手以后叫阿克斯",
+          importance: 5,
+          confidence: 0.91,
+          write_reason: "recent context shows the user was naming the assistant",
+        },
+      ],
+    });
+    const { service } = createRuntime({
+      llmExtractor,
+    });
+
+    const response = await service.finalizeTurn({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      turn_id: "turn-short-name",
+      current_input: "阿克斯",
+      assistant_output: "好，以后你可以叫我阿克斯。",
+      recent_context_summary: "用户刚刚说：给你起个名字吧。",
+    });
+
+    expect(llmExtractor.lastExtractInput?.recent_context_summary).toContain("给你起个名字");
+    expect(response.write_back_candidates).toHaveLength(1);
+    expect(response.write_back_candidates[0]?.summary).toBe("用户希望助手以后叫阿克斯");
+    expect(response.write_back_candidates[0]?.scope).toBe("user");
   });
 
   it("keeps writeback candidates compatible when quality assessor suggests manual review", async () => {
@@ -2733,7 +2845,7 @@ describe("retrieval-runtime service", () => {
           issues: [
             {
               type: "conflict",
-              severity: "medium",
+              severity: "high",
               description: "与历史偏好接近",
             },
           ],
@@ -2780,7 +2892,7 @@ describe("retrieval-runtime service", () => {
           issues: [
             {
               type: "conflict",
-              severity: "medium",
+              severity: "high",
               description: "与历史偏好接近",
             },
           ],

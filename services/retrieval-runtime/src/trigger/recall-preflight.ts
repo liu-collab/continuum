@@ -13,7 +13,7 @@ import type {
   ScopeType,
   TriggerContext,
 } from "../shared/types.js";
-import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
+import { matchesContextDependentShortReference, matchesHistoryReference, normalizeText } from "../shared/utils.js";
 import { buildPhaseMemoryPlan } from "./phase-plan.js";
 
 export type RecallPreflightSkipReason =
@@ -77,6 +77,9 @@ function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
 function isCommandOrShortInput(input: string) {
   const normalized = normalizeText(input);
   if (!normalized || matchesHistoryReference(normalized)) {
+    return false;
+  }
+  if (matchesContextDependentShortReference(normalized)) {
     return false;
   }
   return COMMAND_OR_SHORT_SKIP_PATTERNS.some((pattern) => pattern.test(normalized));

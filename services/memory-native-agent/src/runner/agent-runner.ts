@@ -645,6 +645,7 @@ export class AgentRunner {
         turn_id: turnId,
         current_input: userInput,
         assistant_output: assistantOutput,
+        recent_context_summary: this.conversation.shortSummary(),
         tool_results_summary: summarizeToolResults(toolResults),
         memory_mode: this.deps.config.memory.mode,
       }).catch((error) => {

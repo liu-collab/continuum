@@ -22,6 +22,7 @@ import {
   buildSemanticQueryTerms,
   clamp,
   cosineSimilarity,
+  matchesContextDependentShortReference,
   matchesHistoryReference,
   normalizeText,
 } from "../shared/utils.js";
@@ -100,7 +101,10 @@ export function evaluateSemanticTriggerStats(
 
 function shouldSkipForShortInput(text: string): boolean {
   const normalized = normalizeText(text);
-  return normalized.length < 8 && !matchesHistoryReference(normalized) && !hasPreferenceOrTaskStateSignal(normalized);
+  return normalized.length < 8 &&
+    !matchesHistoryReference(normalized) &&
+    !hasPreferenceOrTaskStateSignal(normalized) &&
+    !matchesContextDependentShortReference(normalized);
 }
 
 function hasPreferenceOrTaskStateSignal(text: string): boolean {

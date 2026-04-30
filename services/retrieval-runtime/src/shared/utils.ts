@@ -200,3 +200,17 @@ export function matchesHistoryReference(text: string): boolean {
   const normalized = normalizeText(text).toLowerCase();
   return HISTORY_REFERENCE_PATTERNS.some((pattern) => normalized.includes(pattern.toLowerCase()));
 }
+
+export function matchesContextDependentShortReference(text: string): boolean {
+  const normalized = normalizeText(text).toLowerCase();
+  if (normalized.length < 2) {
+    return false;
+  }
+
+  return [
+    /^(继续|接着|照旧|还是那个|按之前|按上次|沿用|恢复)$/u,
+    /^(继续|接着).{0,8}(任务|方案|这个|那个|它)$/u,
+    /^(这个|那个|它|他|她|这版|上一版|刚才的).{0,8}(继续|照旧|可以|不行|改一下|删掉|保留)$/u,
+    /^.{1,12}(叫什么|名字|称呼)$/u,
+  ].some((pattern) => pattern.test(normalized));
+}

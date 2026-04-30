@@ -61,6 +61,7 @@ describe("turn loop helpers", () => {
     expect(shouldFinalizeTurn("记住默认用中文回复", "已记住，后续会默认用中文回复。")).toBe(true);
     expect(shouldFinalizeTurn("下一步继续修复登录接口", "已确认下一步处理登录接口修复。")).toBe(true);
     expect(shouldFinalizeTurn("以后不用 tab，用 4 空格", "好的，后续会按 4 空格缩进。")).toBe(true);
+    expect(shouldFinalizeTurn("阿克斯", "好，以后你可以叫我阿克斯。")).toBe(true);
   });
 
   it("wraps tool output with trust boundary tags", () => {

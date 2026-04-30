@@ -51,6 +51,7 @@ export class MemoryNativeAgentAdapter
       turn_id: input.turn_id,
       current_input: input.current_input,
       assistant_output: input.assistant_output,
+      recent_context_summary: input.recent_context_summary,
       tool_results_summary: input.tool_results_summary,
       memory_mode: input.memory_mode,
     };

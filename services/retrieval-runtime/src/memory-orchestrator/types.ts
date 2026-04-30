@@ -137,6 +137,7 @@ export interface WritebackRefineItem {
 export interface WritebackRefineInput {
   current_input: string;
   assistant_output: string;
+  recent_context_summary?: string;
   tool_results_summary?: string;
   task_id?: string;
   rule_candidates: RuleCandidateDigest[];
@@ -147,7 +148,7 @@ export interface WritebackRefineResult {
 }
 
 export interface WritebackPlanner {
-  extract(input: Pick<FinalizeTurnInput, "current_input" | "assistant_output" | "tool_results_summary" | "task_id"> & {
+  extract(input: Pick<FinalizeTurnInput, "current_input" | "assistant_output" | "recent_context_summary" | "tool_results_summary" | "task_id"> & {
     rule_hints?: WritebackRuleHint[];
   }): Promise<WritebackExtractionResult>;
   refine(input: WritebackRefineInput): Promise<WritebackRefineResult>;
@@ -177,6 +178,7 @@ export interface QualityAssessorInput {
   turn_context: {
     user_input: string;
     assistant_output: string;
+    recent_context_summary?: string;
   };
 }
 

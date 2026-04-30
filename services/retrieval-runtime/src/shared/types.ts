@@ -298,6 +298,7 @@ export interface FinalizeTurnInput {
   session_id: string;
   current_input: string;
   assistant_output: string;
+  recent_context_summary?: string;
   task_id?: string;
   thread_id?: string;
   turn_id?: string;

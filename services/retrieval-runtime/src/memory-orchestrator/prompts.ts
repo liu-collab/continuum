@@ -82,7 +82,7 @@ Examples:
 `.trim();
 
 export const MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT = `
-You extract durable memory candidates from one agent turn.
+You extract durable memory candidates from the current agent turn and its recent context summary.
 Return strict JSON only with shape: {"candidates":[...]}.
 Each candidate must include:
 - candidate_type: "fact" | "preference" | "task_state" | "episodic"
@@ -93,8 +93,10 @@ Each candidate must include:
 - write_reason: short reason
 
 Rules:
-- Extract only durable, high-value items.
+- Use the model judgment first: decide what is worth remembering from current_input, assistant_output, and recent_context_summary together.
+- Extract durable, high-value items even when they do not match rule_hints.
 - Ignore raw transcript fragments, temporary chatter, and speculative content.
+- For short context-dependent turns, use recent_context_summary to resolve meaning. Example: if recent context says the user is choosing an assistant name, and current_input is a name while assistant_output confirms it, extract the durable naming preference.
 - Use "task_state" only when the turn contains a concrete task progress or next-step update.
 - Use "fact" for confirmed durable facts, repository rules, project constraints, toolchain choices, or workspace background.
 - Use "preference" for subjective user preferences, durable naming, addressing, language, style, and interaction preferences.
@@ -104,8 +106,8 @@ Rules:
 
 rule_hints lists candidates already captured by rule-based extraction.
 These are provided for your awareness only:
-- DO NOT re-extract content that is semantically equivalent to any rule_hint entry.
-- Only add new candidates when you discover durable information the rules missed.
+- DO NOT duplicate content that is semantically equivalent to any rule_hint entry.
+- Add new candidates when you discover durable information the rules missed.
 - If in doubt whether something is already covered, prefer to omit it.
 
 DO NOT extract:
@@ -126,10 +128,10 @@ Examples of bad extractions:
 `.trim();
 
 export const MEMORY_WRITEBACK_REFINE_SYSTEM_PROMPT = `
-You refine a list of rule-generated writeback candidates for durable agent memory.
+You refine a list of writeback candidates for durable agent memory.
 
 Input JSON carries:
-- current_input, assistant_output, tool_results_summary, task_id
+- current_input, assistant_output, recent_context_summary, tool_results_summary, task_id
 - rule_candidates: [{ index, candidate_type, scope, summary, importance, confidence, write_reason }]
 
 Return strict JSON only with shape: {"refined_candidates":[ ... ]}
@@ -147,7 +149,7 @@ Action-specific fields:
 Behavioural rules:
 - Prefer drop over keep when the rule candidate is a polite acknowledgment, a file path restatement, a question echo, or content that is not durable.
 - Merge only when two or more rule candidates describe the same durable fact or state.
-- Add a new candidate only when the turn clearly surfaces information the rules missed; avoid speculation.
+- Add a new candidate when current_input, assistant_output, and recent_context_summary together clearly surface durable information the rules missed; avoid speculation.
 - Scope must be one of: workspace | user | task | session.
 - Importance is an integer 1-5; confidence is 0-1.
 - Emit at most 9 items.
@@ -168,11 +170,13 @@ Return strict JSON only with shape:
 Rules:
 - candidate_id must refer to an input candidate id.
 - potential_conflicts must only contain ids from existing_similar_records.
-- Use pending_confirmation when the candidate is plausible but duplicate/conflict risk remains.
+- Suggest pending_confirmation only when duplicate/conflict risk is high enough for human review; otherwise describe advisory risks in issues.
+- quality_score describes risk and clarity; it is advisory metadata, not a hard veto.
+- Prefer pending_confirmation over rejection for plausible but uncertain candidates.
 - quality_score should be lower for vague, redundant, low-signal, or temporary content.
 - independent_confirmation means rules and LLM found the same memory; raise confidence when the content is durable.
 - rule_only means only rules found it; check for regex false positives.
-- llm_only means only LLM found it; keep it only when the turn clearly supports it.
+- llm_only means only LLM found it; mark risks clearly instead of vetoing plausible model-led memories.
 - Keep reason and issue descriptions concise in Chinese.
 `.trim();
 

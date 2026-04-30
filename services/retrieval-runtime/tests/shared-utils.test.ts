@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchesHistoryReference, slugify } from "../src/shared/utils.js";
+import { matchesContextDependentShortReference, matchesHistoryReference, slugify } from "../src/shared/utils.js";
 
 describe("shared utils", () => {
   describe("slugify", () => {
@@ -42,6 +42,14 @@ describe("shared utils", () => {
     it("matches Chinese assistant name questions as history references", () => {
       expect(matchesHistoryReference("你还记得我让你叫什么吗？")).toBe(true);
       expect(matchesHistoryReference("我之前怎么称呼你来着")).toBe(true);
+    });
+  });
+
+  describe("matchesContextDependentShortReference", () => {
+    it("keeps terse continuation inputs available for memory recall", () => {
+      expect(matchesContextDependentShortReference("继续")).toBe(true);
+      expect(matchesContextDependentShortReference("这个继续")).toBe(true);
+      expect(matchesContextDependentShortReference("ls")).toBe(false);
     });
   });
 });

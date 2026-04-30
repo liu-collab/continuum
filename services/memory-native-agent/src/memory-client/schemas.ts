@@ -73,6 +73,7 @@ export const finalizeTurnRequestSchema = z.object({
   turn_id: z.string().min(1).optional(),
   current_input: z.string().min(1),
   assistant_output: z.string().min(1),
+  recent_context_summary: z.string().optional(),
   tool_results_summary: z.string().optional(),
   memory_mode: memoryModeSchema.optional(),
 });

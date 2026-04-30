@@ -218,7 +218,7 @@ class SemanticStubEmbeddingsClient implements EmbeddingsClient {
 }
 
 describe("writeback quality assessor integration", () => {
-  it("blocks candidates below the quality threshold", async () => {
+  it("keeps low-quality assessments as advisory metadata instead of hard filtering them", async () => {
     const engine = new WritebackEngine(
       config,
       new StubStorageClient(),
@@ -236,11 +236,17 @@ describe("writeback quality assessor integration", () => {
       assistant_output: "已确认: 后续都用中文。",
     });
 
-    expect(result.candidates).toHaveLength(0);
-    expect(result.filtered_reasons).toContain("quality_blocked:preference");
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.suggested_status).toBe("active");
+    expect(result.candidates[0]?.details).toMatchObject({
+      quality_score: 0.4,
+      quality_reason: "建议人工确认",
+      quality_suggested_status: "pending_confirmation",
+    });
+    expect(result.filtered_reasons).not.toContain("quality_blocked:preference");
   });
 
-  it("marks candidates as pending confirmation when quality assessor requests review", async () => {
+  it("stores assessor review requests as advisory metadata", async () => {
     const engine = new WritebackEngine(
       config,
       new StubStorageClient(),
@@ -259,11 +265,12 @@ describe("writeback quality assessor integration", () => {
     });
 
     expect(result.candidates).toHaveLength(1);
-    expect(result.candidates[0]?.suggested_status).toBe("pending_confirmation");
+    expect(result.candidates[0]?.suggested_status).toBe("active");
     expect(result.candidates[0]?.importance).toBe(4);
     expect(result.candidates[0]?.details).toMatchObject({
       quality_score: 0.72,
       quality_reason: "建议人工确认",
+      quality_suggested_status: "pending_confirmation",
       potential_conflicts: ["rec-existing"],
     });
   });

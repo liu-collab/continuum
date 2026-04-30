@@ -498,6 +498,7 @@ export class WritebackEngine {
       const extracted = await this.writebackPlanner.extract({
         current_input: input.current_input,
         assistant_output: input.assistant_output,
+        recent_context_summary: input.recent_context_summary,
         tool_results_summary: input.tool_results_summary,
         task_id: input.task_id,
         rule_hints: ruleResult.drafts.map((draft) => ({
@@ -540,9 +541,10 @@ export class WritebackEngine {
     }
 
     const mergedDrafts = this.mergeWithCrossReference(crossRefResult);
+    const baseFilteredReasons = llmDegraded ? ruleResult.filtered_reasons : [];
     const result = await this.applyQualityAssessment(
       input,
-      this.postProcess(input, mergedDrafts, ruleResult.filtered_reasons),
+      this.postProcess(input, mergedDrafts, baseFilteredReasons),
     );
 
     return {
@@ -806,7 +808,7 @@ export class WritebackEngine {
   ): { candidates: WriteBackCandidate[]; filtered_count: number; filtered_reasons: string[]; scope_reasons: string[] } {
     const classifiedDrafts = drafts.map((draft) => this.classifyScope(input, draft));
     const scopeReasons: string[] = [];
-    const sourceText = [input.current_input, input.assistant_output, input.tool_results_summary ?? ""].join(" ");
+    const sourceText = [input.current_input, input.assistant_output, input.recent_context_summary ?? "", input.tool_results_summary ?? ""].join(" ");
     const candidates = classifiedDrafts
       .map((draft) => {
         if (draft.scope === "task" && !input.task_id) {
@@ -822,6 +824,7 @@ export class WritebackEngine {
         }
 
         const extractionMethod = candidate.source.extraction_method ?? "unknown";
+        const modelLedCandidate = extractionMethod === "llm";
         const overlapThreshold =
           OVERLAP_THRESHOLD_BY_METHOD[extractionMethod] ??
           this.config.WRITEBACK_INPUT_OVERLAP_THRESHOLD;
@@ -842,13 +845,17 @@ export class WritebackEngine {
         }
 
         if (candidate.importance < 3) {
-          filteredReasons.push(`importance_below_threshold:${candidate.candidate_type}`);
-          return false;
+          if (!modelLedCandidate) {
+            filteredReasons.push(`importance_below_threshold:${candidate.candidate_type}`);
+            return false;
+          }
         }
 
         if (candidate.confidence < 0.7) {
-          filteredReasons.push(`confidence_below_threshold:${candidate.candidate_type}`);
-          return false;
+          if (!modelLedCandidate) {
+            filteredReasons.push(`confidence_below_threshold:${candidate.candidate_type}`);
+            return false;
+          }
         }
 
         return true;
@@ -1086,6 +1093,7 @@ export class WritebackEngine {
         turn_context: {
           user_input: input.current_input,
           assistant_output: input.assistant_output,
+          recent_context_summary: input.recent_context_summary,
         },
       });
 
@@ -1100,21 +1108,27 @@ export class WritebackEngine {
           continue;
         }
 
-        if (item.quality_score < 0.6) {
-          filteredReasons.push(`quality_blocked:${candidate.candidate_type}`);
-          continue;
-        }
+        const hasHighRiskIssue = item.issues.some(
+          (issue) =>
+            issue.severity === "high" &&
+            (issue.type === "conflict" || issue.type === "duplicate"),
+        );
+        const suggestedStatus =
+          candidate.confidence < 0.7 || hasHighRiskIssue
+            ? "pending_confirmation"
+            : "active";
 
         nextCandidates.push({
           ...candidate,
           importance: item.suggested_importance,
-          suggested_status: item.suggested_status,
+          suggested_status: suggestedStatus,
           details: {
             ...candidate.details,
             quality_score: item.quality_score,
             quality_confidence: item.confidence,
             quality_reason: item.reason,
             quality_issues: item.issues,
+            quality_suggested_status: item.suggested_status,
             potential_conflicts: item.potential_conflicts,
           },
         });
@@ -1127,30 +1141,29 @@ export class WritebackEngine {
         filtered_reasons: filteredReasons,
       };
     } catch (error) {
-      this.logger?.warn?.({ err: error }, "memory quality assessor failed, applying conservative fallback");
-      const filtered_reasons = [...result.filtered_reasons];
-      const candidates = result.candidates.filter((candidate) => {
+      this.logger?.warn?.({ err: error }, "memory quality assessor failed, keeping candidates with review metadata");
+      const candidates = result.candidates.map((candidate) => {
         const extractionMethod = candidate.source.extraction_method;
         const crossReference =
           typeof candidate.details.cross_reference === "string" ? candidate.details.cross_reference : undefined;
 
-        if (extractionMethod !== "llm") {
-          return true;
+        if (extractionMethod !== "llm" || crossReference === "independent_confirmation") {
+          return candidate;
         }
 
-        if (crossReference === "independent_confirmation") {
-          return true;
-        }
-
-        filtered_reasons.push(`quality_assessor_fallback_blocked:${candidate.candidate_type}`);
-        return false;
+        return {
+          ...candidate,
+          suggested_status: "pending_confirmation" as const,
+          details: {
+            ...candidate.details,
+            quality_assessor_unavailable: true,
+          },
+        };
       });
 
       return {
         ...result,
         candidates,
-        filtered_count: filtered_reasons.length,
-        filtered_reasons,
       };
     }
   }
