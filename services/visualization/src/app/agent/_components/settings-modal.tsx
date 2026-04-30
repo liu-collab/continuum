@@ -10,9 +10,7 @@ import { SelectField } from "@/components/select-field";
 
 import type {
   AgentMemoryMode,
-  MnaAgentConfigResponse,
-  MnaRuntimeConfigResponse,
-  MnaRuntimeGovernanceConfig
+  MnaAgentConfigResponse
 } from "../_lib/openapi-types";
 import {
   EDITABLE_PROVIDER_KIND_OPTIONS,
@@ -28,7 +26,6 @@ type SettingsModalProps = {
   onClose(): void;
   setupWizard?: boolean;
   config: MnaAgentConfigResponse | null;
-  runtimeConfig?: MnaRuntimeConfigResponse | null;
   dependencyStatus?: {
     runtime: {
       status?: string;
@@ -94,7 +91,6 @@ type SettingsModalProps = {
       }>;
     };
   }): Promise<void>;
-  onSaveGovernanceConfig?(payload: Partial<MnaRuntimeGovernanceConfig>): Promise<void>;
   onListProviderModels?(payload: {
     kind: EditableProviderKind;
     base_url: string;
@@ -292,12 +288,10 @@ export function SettingsModal({
   onClose,
   setupWizard = false,
   config,
-  runtimeConfig = null,
   dependencyStatus,
   memoryMode,
   onMemoryModeChange,
   onSaveRuntime,
-  onSaveGovernanceConfig = async () => undefined,
   onListProviderModels,
   onCheckEmbeddings,
   onCheckMemoryLlm
@@ -327,11 +321,6 @@ export function SettingsModal({
   const [memoryLlmEffort, setMemoryLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
   const [memoryLlmMaxTokens, setMemoryLlmMaxTokens] = useState("");
   const [memoryModelMode, setMemoryModelMode] = useState<MemoryModelMode>("same_as_primary");
-  const [governanceEnabled, setGovernanceEnabled] = useState(false);
-  const [governanceIntervalMinutes, setGovernanceIntervalMinutes] = useState("15");
-  const [governanceVerifyEnabled, setGovernanceVerifyEnabled] = useState(true);
-  const [governanceShadowMode, setGovernanceShadowMode] = useState(false);
-  const [governanceMaxActions, setGovernanceMaxActions] = useState("10");
   const [mcpServers, setMcpServers] = useState<MnaAgentConfigResponse["mcp"]["servers"]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
@@ -439,18 +428,6 @@ export function SettingsModal({
   }, [config]);
 
   useEffect(() => {
-    if (!runtimeConfig) {
-      return;
-    }
-
-    setGovernanceEnabled(runtimeConfig.governance.WRITEBACK_MAINTENANCE_ENABLED);
-    setGovernanceIntervalMinutes(String(Math.max(1, Math.round(runtimeConfig.governance.WRITEBACK_MAINTENANCE_INTERVAL_MS / 60000))));
-    setGovernanceVerifyEnabled(runtimeConfig.governance.WRITEBACK_GOVERNANCE_VERIFY_ENABLED);
-    setGovernanceShadowMode(runtimeConfig.governance.WRITEBACK_GOVERNANCE_SHADOW_MODE);
-    setGovernanceMaxActions(String(runtimeConfig.governance.WRITEBACK_MAINTENANCE_MAX_ACTIONS));
-  }, [runtimeConfig, open]);
-
-  useEffect(() => {
     if (!canMirrorPrimaryModel && memoryModelMode === "same_as_primary") {
       setMemoryModelMode("custom");
     }
@@ -556,8 +533,6 @@ export function SettingsModal({
     const trimmedMemoryLlmApiKey = memoryLlmApiKey.trim();
     const trimmedMemoryLlmTimeoutMs = memoryLlmTimeoutMs.trim();
     const trimmedMemoryLlmMaxTokens = memoryLlmMaxTokens.trim();
-    const trimmedGovernanceIntervalMinutes = governanceIntervalMinutes.trim();
-    const trimmedGovernanceMaxActions = governanceMaxActions.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
@@ -609,20 +584,6 @@ export function SettingsModal({
       return;
     }
 
-    if (!/^\d+$/.test(trimmedGovernanceIntervalMinutes) || Number(trimmedGovernanceIntervalMinutes) < 1) {
-      setErrorMessage(t("runtimeConfig.errors.governanceIntervalInvalid"));
-      return;
-    }
-
-    if (
-      !/^\d+$/.test(trimmedGovernanceMaxActions)
-      || Number(trimmedGovernanceMaxActions) < 1
-      || Number(trimmedGovernanceMaxActions) > 20
-    ) {
-      setErrorMessage(t("runtimeConfig.errors.governanceMaxActionsInvalid"));
-      return;
-    }
-
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(true);
@@ -668,13 +629,6 @@ export function SettingsModal({
         },
       });
       onClose();
-      void onSaveGovernanceConfig({
-        WRITEBACK_MAINTENANCE_ENABLED: governanceEnabled,
-        WRITEBACK_MAINTENANCE_INTERVAL_MS: Number(trimmedGovernanceIntervalMinutes) * 60_000,
-        WRITEBACK_GOVERNANCE_VERIFY_ENABLED: governanceVerifyEnabled,
-        WRITEBACK_GOVERNANCE_SHADOW_MODE: governanceShadowMode,
-        WRITEBACK_MAINTENANCE_MAX_ACTIONS: Number(trimmedGovernanceMaxActions),
-      }).catch(() => undefined);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1542,59 +1496,6 @@ export function SettingsModal({
               </div>
             </>
           ) : null}
-        </div>
-
-        <div className="space-y-4 rounded-lg border bg-surface-muted/20 p-4" data-testid="governance-config">
-          <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.governanceTitle")}</div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={governanceEnabled}
-                onChange={(event) => setGovernanceEnabled(event.target.checked)}
-                className="h-4 w-4"
-              />
-              {t("runtimeConfig.governanceEnabled")}
-            </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={governanceVerifyEnabled}
-                onChange={(event) => setGovernanceVerifyEnabled(event.target.checked)}
-                className="h-4 w-4"
-              />
-              {t("runtimeConfig.governanceVerifyEnabled")}
-            </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={governanceShadowMode}
-                onChange={(event) => setGovernanceShadowMode(event.target.checked)}
-                className="h-4 w-4"
-              />
-              {t("runtimeConfig.governanceShadowMode")}
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.governanceIntervalMinutes")}</span>
-              <input
-                value={governanceIntervalMinutes}
-                onChange={(event) => setGovernanceIntervalMinutes(event.target.value)}
-                placeholder={t("runtimeConfig.governanceIntervalMinutes")}
-                className="field mt-1"
-                inputMode="numeric"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.governanceMaxActions")}</span>
-              <input
-                value={governanceMaxActions}
-                onChange={(event) => setGovernanceMaxActions(event.target.value)}
-                placeholder={t("runtimeConfig.governanceMaxActions")}
-                className="field mt-1"
-                inputMode="numeric"
-              />
-            </label>
-          </div>
         </div>
 
         <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4">

@@ -197,7 +197,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onClose={() => setSettingsOpen(false)}
         setupWizard={settingsMode === "setup" && workspace.agentConfig?.provider.kind === "not-configured"}
         config={workspace.agentConfig}
-        runtimeConfig={workspace.runtimeConfig}
         dependencyStatus={workspace.dependencyStatus}
         memoryMode={workspace.state.session?.memory_mode ?? "workspace_plus_global"}
         onMemoryModeChange={(value) => {
@@ -205,9 +204,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         }}
         onSaveRuntime={(payload) => {
           return workspace.updateRuntimeConfig(payload);
-        }}
-        onSaveGovernanceConfig={(payload) => {
-          return workspace.updateGovernanceConfig(payload);
         }}
         onListProviderModels={(payload) => {
           return workspace.listProviderModels(payload);
