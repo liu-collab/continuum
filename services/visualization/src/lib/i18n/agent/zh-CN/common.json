@@ -136,6 +136,8 @@
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY（可选）",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
+    "memoryLlmAdvancedSettings": "高级参数",
+    "memoryLlmHideAdvancedSettings": "收起高级参数",
     "providerTitle": "主模型",
     "providerKind": "类型",
     "mcpTitle": "MCP 服务配置",

@@ -619,8 +619,9 @@ describe("SettingsModal", () => {
     );
 
     await openAdvancedSettings(user);
-    await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
-    await user.type(screen.getByPlaceholderText("MEMORY_LLM_MODEL"), "claude-sonnet-4-5");
+    const memoryConfig = screen.getByTestId("memory-model-config");
+    await user.clear(within(memoryConfig).getByPlaceholderText("provider model"));
+    await user.type(within(memoryConfig).getByPlaceholderText("provider model"), "claude-sonnet-4-5");
     await user.click(screen.getByTestId("runtime-config-check-memory-llm"));
 
     expect(onCheckMemoryLlm).not.toHaveBeenCalled();
@@ -763,7 +764,7 @@ describe("SettingsModal", () => {
     );
 
     await openAdvancedSettings(user);
-    await user.clear(screen.getByPlaceholderText("MEMORY_LLM_MODEL"));
+    await user.clear(within(screen.getByTestId("memory-model-config")).getByPlaceholderText("provider model"));
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).not.toHaveBeenCalled();
@@ -848,7 +849,12 @@ describe("SettingsModal", () => {
     );
 
     await openAdvancedSettings(user);
-    expect(screen.getByRole("button", { name: "MEMORY_LLM_PROTOCOL" })).toHaveTextContent("Anthropic");
+    const memoryConfig = screen.getByTestId("memory-model-config");
+    expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("Anthropic");
+    expect(within(memoryConfig).getByPlaceholderText("provider model")).toHaveValue("claude-haiku-4-5-20251001");
+    expect(within(memoryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.anthropic.com");
+    expect(within(memoryConfig).getByPlaceholderText("provider api_key")).toHaveValue("writeback-key");
+    expect(within(memoryConfig).queryByPlaceholderText("记忆模型最大输出 token")).not.toBeInTheDocument();
     expect(screen.getByTestId("memory-model-mode-select")).toBeInTheDocument();
   });
 
@@ -890,7 +896,7 @@ describe("SettingsModal", () => {
 
     await openAdvancedSettings(user);
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
-    expect(screen.queryByPlaceholderText("MEMORY_LLM_MODEL")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("memory-model-config")).queryByPlaceholderText("provider model")).not.toBeInTheDocument();
   });
 
   it("shows and submits provider and memory llm thinking config", async () => {
@@ -927,6 +933,8 @@ describe("SettingsModal", () => {
     await user.click(screen.getByRole("option", { name: "最大" }));
     await user.clear(within(primaryConfig).getByPlaceholderText("最大输出 token"));
     await user.type(within(primaryConfig).getByPlaceholderText("最大输出 token"), "8192");
+    expect(within(memoryConfig).queryByPlaceholderText("记忆模型最大输出 token")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("memory-model-advanced-toggle"));
     await user.click(within(memoryConfig).getByRole("button", { name: "记忆模型思考模式" }));
     await user.click(screen.getByRole("option", { name: "超高" }));
     await user.clear(within(memoryConfig).getByPlaceholderText("记忆模型最大输出 token"));

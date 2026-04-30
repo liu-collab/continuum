@@ -136,6 +136,8 @@
     "memoryLlmApiKey": "MEMORY_LLM_API_KEY (optional)",
     "memoryLlmProtocol": "MEMORY_LLM_PROTOCOL",
     "memoryLlmTimeoutMs": "MEMORY_LLM_TIMEOUT_MS",
+    "memoryLlmAdvancedSettings": "Advanced parameters",
+    "memoryLlmHideAdvancedSettings": "Hide advanced parameters",
     "providerTitle": "Primary model",
     "providerKind": "Kind",
     "mcpTitle": "MCP server config",

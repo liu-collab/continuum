@@ -346,6 +346,7 @@ export function SettingsModal({
   const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
   const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [memoryLlmAdvancedOpen, setMemoryLlmAdvancedOpen] = useState(false);
   const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
   const [setupProtocolId, setSetupProtocolId] = useState<SetupProtocolId>("openai-compatible");
   const [setupApiKey, setSetupApiKey] = useState("");
@@ -423,6 +424,7 @@ export function SettingsModal({
     setCheckingEmbeddings(false);
     setCheckingMemoryLlm(false);
     setAdvancedSettingsOpen(false);
+    setMemoryLlmAdvancedOpen(false);
   }, [config, open]);
 
   useEffect(() => {
@@ -460,6 +462,12 @@ export function SettingsModal({
       setMemoryModelMode("custom");
     }
   }, [canMirrorPrimaryModel, memoryModelMode]);
+
+  useEffect(() => {
+    if (memoryModelMode !== "custom") {
+      setMemoryLlmAdvancedOpen(false);
+    }
+  }, [memoryModelMode]);
 
   useEffect(() => {
     const defaultEmbedding = resolveDefaultEmbeddingConfig(currentProviderKind, providerBaseUrl);
@@ -1403,9 +1411,10 @@ export function SettingsModal({
                 {memoryModelMode === "custom" ? (
                   <>
                     <label className="block">
-                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmProtocol")}</span>
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerKind")}</span>
                       <SelectField
                         value={memoryLlmProtocol}
+                        ariaLabel={t("runtimeConfig.providerKind")}
                         onChange={(value) => setMemoryLlmProtocol(value as "anthropic" | "openai-compatible")}
                         options={[
                           { value: "openai-compatible", label: t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible") },
@@ -1414,51 +1423,65 @@ export function SettingsModal({
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmBaseUrl")}</span>
-                      <input
-                        value={memoryLlmBaseUrl}
-                        onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
-                        placeholder={t("runtimeConfig.memoryLlmBaseUrl")}
-                        className="field mt-1"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmModel")}</span>
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerModel")}</span>
                       <input
                         value={memoryLlmModel}
                         onChange={(event) => setMemoryLlmModel(event.target.value)}
-                        placeholder={t("runtimeConfig.memoryLlmModel")}
+                        placeholder={t("runtimeConfig.providerModel")}
                         className="field mt-1"
                       />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmApiKey")}</span>
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
+                      <input
+                        value={memoryLlmBaseUrl}
+                        onChange={(event) => setMemoryLlmBaseUrl(event.target.value)}
+                        placeholder={t("runtimeConfig.providerBaseUrl")}
+                        className="field mt-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerApiKey")}</span>
                       <input
                         type="password"
                         value={memoryLlmApiKey}
                         onChange={(event) => setMemoryLlmApiKey(event.target.value)}
-                        placeholder={t("runtimeConfig.memoryLlmApiKey")}
+                        placeholder={t("runtimeConfig.providerApiKey")}
                         className="field mt-1"
                       />
                     </label>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        aria-expanded={memoryLlmAdvancedOpen}
+                        data-testid="memory-model-advanced-toggle"
+                        onClick={() => setMemoryLlmAdvancedOpen((current) => !current)}
+                      >
+                        {memoryLlmAdvancedOpen
+                          ? t("runtimeConfig.memoryLlmHideAdvancedSettings")
+                          : t("runtimeConfig.memoryLlmAdvancedSettings")}
+                      </button>
+                    </div>
                   </>
                 ) : null}
-                <label className="block">
-                  <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
-                  <input
-                    value={memoryLlmTimeoutMs}
-                    onChange={(event) => setMemoryLlmTimeoutMs(event.target.value)}
-                    placeholder={t("runtimeConfig.memoryLlmTimeoutMs")}
-                    className="field mt-1"
-                    inputMode="numeric"
-                  />
-                </label>
-                {memoryModelMode === "custom" ? (
+                {memoryModelMode === "custom" && memoryLlmAdvancedOpen ? (
                   <>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmTimeoutMs")}</span>
+                      <input
+                        value={memoryLlmTimeoutMs}
+                        onChange={(event) => setMemoryLlmTimeoutMs(event.target.value)}
+                        placeholder={t("runtimeConfig.memoryLlmTimeoutMs")}
+                        className="field mt-1"
+                        inputMode="numeric"
+                      />
+                    </label>
                     <label className="block">
                       <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmEffort")}</span>
                       <SelectField
                         value={memoryLlmEffort}
+                        ariaLabel={t("runtimeConfig.memoryLlmEffort")}
                         onChange={(value) => setMemoryLlmEffort(value as typeof memoryLlmEffort)}
                         options={buildEffortOptions(t)}
                       />
