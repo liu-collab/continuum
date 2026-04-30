@@ -35,6 +35,11 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
     current_input: string;
     assistant_output: string;
     recent_context_summary?: string;
+    recent_turns?: Array<{
+      role: "user" | "assistant" | "system" | "tool";
+      summary: string;
+      turn_id?: string;
+    }>;
     tool_results_summary?: string;
     task_id?: string;
     rule_hints?: Array<{
@@ -52,6 +57,7 @@ export class HttpMemoryWritebackPlanner implements WritebackPlanner {
         current_input: input.current_input,
         assistant_output: input.assistant_output,
         recent_context_summary: input.recent_context_summary ?? "",
+        recent_turns: input.recent_turns ?? [],
         tool_results_summary: input.tool_results_summary ?? "",
         task_id: input.task_id ?? null,
         rule_hints: input.rule_hints ?? [],

@@ -149,6 +149,11 @@ export interface WritebackRefineResult {
 
 export interface WritebackPlanner {
   extract(input: Pick<FinalizeTurnInput, "current_input" | "assistant_output" | "recent_context_summary" | "tool_results_summary" | "task_id"> & {
+    recent_turns?: Array<{
+      role: "user" | "assistant" | "system" | "tool";
+      summary: string;
+      turn_id?: string;
+    }>;
     rule_hints?: WritebackRuleHint[];
   }): Promise<WritebackExtractionResult>;
   refine(input: WritebackRefineInput): Promise<WritebackRefineResult>;

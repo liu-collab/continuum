@@ -1,11 +1,13 @@
 import Fastify from "fastify";
 import { z } from "zod";
 
-import { FileMemoryStore, type LiteMemoryRecord } from "./file-store.js";
+import { FileMemoryStore } from "./file-store.js";
 import { MemoryOrchestrator } from "./memory-orchestrator.js";
-import { resolveLiteMemoryModel, type LiteMemoryModelConfigSource } from "./memory-model-config.js";
+import { resolveLiteMemoryModel, type LiteMemoryModelConfigSource, type LiteMemoryModelResolution } from "./memory-model-config.js";
 import { LiteTraceStore } from "./trace-store.js";
-import type { HostKind, MemoryMode, MemoryType, ScopeType, WriteBackCandidate } from "../shared/types.js";
+import { LiteWritebackEngine } from "./writeback-engine.js";
+import { LiteWritebackOutbox } from "./writeback-outbox.js";
+import { HttpMemoryWritebackPlanner } from "../memory-orchestrator/writeback/planner.js";
 
 const hostSchema = z.enum(["claude_code_plugin", "codex_app_server", "custom_agent", "memory_native_agent"]);
 const memoryModeSchema = z.enum(["workspace_only", "workspace_plus_global"]);
@@ -21,6 +23,16 @@ const runtimePhaseSchema = z.enum([
 const recentTurnSchema = z.object({
   role: z.enum(["user", "assistant", "system", "tool"]),
   content: z.string(),
+  turn_id: z.string().optional(),
+});
+
+const writebackRecentTurnSchema = z.object({
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.string().optional(),
+  summary: z.string().optional(),
+  turn_id: z.string().optional(),
+}).refine((turn) => Boolean(turn.content || turn.summary), {
+  message: "content or summary is required",
 });
 
 const prepareContextSchema = z.object({
@@ -52,6 +64,7 @@ const afterResponseSchema = z.object({
   thread_id: z.string().optional(),
   turn_id: z.string().optional(),
   recent_context_summary: z.string().optional(),
+  recent_turns: z.array(writebackRecentTurnSchema).optional(),
   tool_results_summary: z.string().optional(),
   memory_mode: memoryModeSchema.optional(),
   candidates: z.array(z.unknown()).optional(),
@@ -62,14 +75,8 @@ export interface LiteRuntimeHttpOptions {
   configSource?: LiteMemoryModelConfigSource;
   store?: FileMemoryStore;
   traces?: LiteTraceStore;
-}
-
-export interface LiteAfterResponseResult {
-  trace_id: string;
-  writeback_status: "accepted" | "skipped";
-  accepted_count: number;
-  filtered_reasons: string[];
-  accepted_record_ids: string[];
+  outbox?: LiteWritebackOutbox;
+  writebackEngine?: LiteWritebackEngine;
 }
 
 export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
@@ -81,6 +88,13 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
     memoryModelStatus: memoryModel.status,
   });
   const traces = options.traces ?? new LiteTraceStore();
+  const outbox = options.outbox ?? new LiteWritebackOutbox({ memoryDir: options.memoryDir });
+  const writebackEngine = options.writebackEngine ?? new LiteWritebackEngine({
+    store,
+    outbox,
+    memoryModelStatus: memoryModel.status,
+    writebackPlanner: createLiteWritebackPlanner(memoryModel),
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     const statusCode =
@@ -104,6 +118,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
         path: store.path,
         records: store.size(),
         write_queue: store.writeQueueStats(),
+        writeback_outbox_path: outbox.path,
       },
       memory_model_status: memoryModel.status,
       traces: {
@@ -143,14 +158,17 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       };
     }
 
-    await store.load();
-    const result = await appendLiteWritebackCandidates(store, parsed.data);
+    const result = await writebackEngine.process(parsed.data);
     traces.appendWriteback({
       trace_id: result.trace_id,
       accepted_record_ids: result.accepted_record_ids,
       accepted_count: result.accepted_count,
       filtered_reasons: result.filtered_reasons,
-      degraded: false,
+      outbox_queued_count: result.outbox_queued_count,
+      outbox_retry: result.outbox_retry,
+      extractor: result.extractor,
+      degraded: result.degraded,
+      degradation_reason: result.degradation_reason,
       created_at: new Date().toISOString(),
     });
     return result;
@@ -184,150 +202,20 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   return app;
 }
 
-async function appendLiteWritebackCandidates(
-  store: FileMemoryStore,
-  input: z.infer<typeof afterResponseSchema>,
-): Promise<LiteAfterResponseResult> {
-  const accepted: LiteMemoryRecord[] = [];
-  const filteredReasons: string[] = [];
-  const candidates = input.candidates ?? [];
-
-  for (const rawCandidate of candidates) {
-    const candidate = normalizeWriteBackCandidate(rawCandidate, input);
-    if (!candidate) {
-      filteredReasons.push("invalid_candidate");
-      continue;
-    }
-
-    if (containsSecret(candidate.summary) || containsSecret(JSON.stringify(candidate.details))) {
-      filteredReasons.push("sensitive_content");
-      continue;
-    }
-
-    if (isDuplicate(store, candidate)) {
-      filteredReasons.push("ignore_duplicate");
-      continue;
-    }
-
-    accepted.push(candidate);
+function createLiteWritebackPlanner(memoryModel: LiteMemoryModelResolution) {
+  if (!memoryModel.status.configured) {
+    return undefined;
   }
 
-  for (const record of accepted) {
-    await store.appendRecord(record);
-  }
-
-  return {
-    trace_id: input.trace_id ?? input.turn_id ?? `lite-${Date.now()}`,
-    writeback_status: accepted.length > 0 ? "accepted" : "skipped",
-    accepted_count: accepted.length,
-    filtered_reasons: filteredReasons,
-    accepted_record_ids: accepted.map((record) => record.id),
-  };
-}
-
-function normalizeWriteBackCandidate(
-  rawCandidate: unknown,
-  input: z.infer<typeof afterResponseSchema>,
-): LiteMemoryRecord | null {
-  if (!rawCandidate || typeof rawCandidate !== "object") {
-    return null;
-  }
-
-  const candidate = rawCandidate as Partial<WriteBackCandidate> & {
-    memory_type?: unknown;
-    candidate_type?: unknown;
-    scope?: unknown;
-    summary?: unknown;
-    details?: unknown;
-    importance?: unknown;
-    confidence?: unknown;
-    idempotency_key?: unknown;
-    status?: unknown;
-  };
-  const memoryType = normalizeMemoryType(candidate.candidate_type ?? candidate.memory_type);
-  const scope = normalizeScope(candidate.scope);
-  const summary = typeof candidate.summary === "string" ? candidate.summary.trim() : "";
-  const details = candidate.details && typeof candidate.details === "object" && !Array.isArray(candidate.details)
-    ? candidate.details as Record<string, unknown>
-    : {};
-
-  if (!memoryType || !scope || summary.length < 4) {
-    return null;
-  }
-
-  const now = new Date().toISOString();
-  const id = `lite_${hashLiteRecord([
-    input.workspace_id,
-    input.user_id,
-    input.session_id,
-    input.task_id ?? "",
-    memoryType,
-    scope,
-    summary,
-  ].join("|"))}`;
-
-  return {
-    id,
-    workspace_id: input.workspace_id,
-    user_id: scope === "workspace" ? null : input.user_id,
-    task_id: scope === "task" ? input.task_id ?? null : null,
-    session_id: scope === "session" ? input.session_id : null,
-    memory_type: memoryType,
-    scope,
-    status: candidate.status === "pending_confirmation" ? "pending_confirmation" : "active",
-    summary,
-    details,
-    importance: normalizeNumber(candidate.importance, 3, 1, 5),
-    confidence: normalizeNumber(candidate.confidence, 0.7, 0, 1),
-    dedupe_key: typeof candidate.idempotency_key === "string" ? candidate.idempotency_key : `${memoryType}:${scope}:${summary}`,
-    created_at: now,
-    updated_at: now,
-  };
-}
-
-function normalizeMemoryType(value: unknown): MemoryType | undefined {
-  return value === "fact" || value === "preference" || value === "task_state" || value === "episodic"
-    ? value
-    : undefined;
-}
-
-function normalizeScope(value: unknown): ScopeType | undefined {
-  return value === "workspace" || value === "user" || value === "task" || value === "session"
-    ? value
-    : undefined;
-}
-
-function normalizeNumber(value: unknown, fallback: number, min: number, max: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, value));
-}
-
-function isDuplicate(store: FileMemoryStore, record: LiteMemoryRecord): boolean {
-  const dedupeKey = record.dedupe_key;
-  return store.listRecords().some((existing) =>
-    existing.status === "active"
-    && (
-      (dedupeKey && existing.dedupe_key === dedupeKey)
-      || (
-        existing.memory_type === record.memory_type
-        && existing.scope === record.scope
-        && existing.summary === record.summary
-      )
-    ),
-  );
-}
-
-function containsSecret(value: string): boolean {
-  return /\b(sk-[a-z0-9_-]{12,}|api[_-]?key|bearer\s+[a-z0-9._-]{12,}|token\s*[:=])/iu.test(value);
-}
-
-function hashLiteRecord(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return new HttpMemoryWritebackPlanner({
+    MEMORY_LLM_BASE_URL: memoryModel.config.baseUrl,
+    MEMORY_LLM_MODEL: memoryModel.config.model ?? "memory-model",
+    MEMORY_LLM_API_KEY: memoryModel.config.apiKey,
+    MEMORY_LLM_PROTOCOL: memoryModel.config.protocol ?? "openai-compatible",
+    MEMORY_LLM_TIMEOUT_MS: memoryModel.config.timeoutMs ?? 45_000,
+    MEMORY_LLM_EFFORT: memoryModel.config.effort ?? undefined,
+    MEMORY_LLM_MAX_TOKENS: memoryModel.config.maxTokens ?? 600,
+    MEMORY_LLM_REFINE_MAX_TOKENS: 800,
+    WRITEBACK_MAX_CANDIDATES: 5,
+  });
 }

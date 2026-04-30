@@ -5,7 +5,21 @@ export interface LiteWritebackTrace {
   accepted_record_ids: string[];
   accepted_count: number;
   filtered_reasons: string[];
+  outbox_queued_count?: number;
+  outbox_retry?: {
+    attempted: number;
+    submitted: number;
+    failed: number;
+  };
+  extractor?: {
+    source: "provided_candidates" | "rules" | "rules_and_llm";
+    rules_count: number;
+    llm_attempted: boolean;
+    llm_degraded: boolean;
+    recent_turns_count: number;
+  };
   degraded: boolean;
+  degradation_reason?: string;
   created_at: string;
 }
 
