@@ -44,6 +44,7 @@ import {
   cleanupManagedStackContainer,
   ensureDockerDaemonReady,
   ensureDockerInstalled,
+  isDockerDaemonUnavailableMessage,
   isDockerMissingContainerResult,
   isDockerContainerRunning,
   pruneDanglingDockerImages,
@@ -100,6 +101,14 @@ describe("docker lifecycle", () => {
     });
 
     await expect(cleanupManagedStackContainer()).resolves.toBe(false);
+  });
+
+  it("detects Docker daemon unavailable messages", () => {
+    expect(isDockerDaemonUnavailableMessage(
+      "error during connect: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
+    )).toBe(true);
+    expect(isDockerDaemonUnavailableMessage("Cannot connect to the Docker daemon. Is the docker daemon running?")).toBe(true);
+    expect(isDockerDaemonUnavailableMessage("permission denied while trying to connect to Docker")).toBe(false);
   });
 
   it("detects whether the managed Docker container is running", async () => {

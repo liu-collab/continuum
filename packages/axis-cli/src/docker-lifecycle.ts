@@ -286,6 +286,17 @@ export function isDockerMissingContainerResult(result: Pick<DockerCommandResult,
   );
 }
 
+export function isDockerDaemonUnavailableMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("cannot connect to the docker daemon")
+    || normalized.includes("is the docker daemon running")
+    || normalized.includes("dockerdesktoplinuxengine")
+    || normalized.includes("docker_engine")
+    || normalized.includes("error during connect")
+  );
+}
+
 function buildDockerRemoveError(containerName: string, result: DockerCommandResult) {
   const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   return new Error(

@@ -12,7 +12,7 @@ import {
 } from "./managed-state.js";
 import { bilingualMessage } from "./messages.js";
 import { stopManagedMna } from "./mna-command.js";
-import { removeDockerContainer, removeDockerImage } from "./docker-lifecycle.js";
+import { isDockerDaemonUnavailableMessage, removeDockerContainer, removeDockerImage } from "./docker-lifecycle.js";
 import { terminateProcess } from "./utils.js";
 
 async function removePathIfExists(targetPath: string) {
@@ -85,8 +85,15 @@ export async function runStopCommand() {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${bilingualMessage(`停止容器失败: ${message}`, `Failed to stop container: ${message}`)}\n`);
-    containerCleanupError = error instanceof Error ? error : new Error(message);
+    if (isDockerDaemonUnavailableMessage(message)) {
+      process.stdout.write(`${bilingualMessage(
+        "Docker daemon 未运行，跳过容器清理。",
+        "Docker daemon is not running, skipping container cleanup.",
+      )}\n`);
+    } else {
+      process.stderr.write(`${bilingualMessage(`停止容器失败: ${message}`, `Failed to stop container: ${message}`)}\n`);
+      containerCleanupError = error instanceof Error ? error : new Error(message);
+    }
   }
 
   try {
@@ -98,14 +105,21 @@ export async function runStopCommand() {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${bilingualMessage(
-      `删除旧 Docker 镜像失败: ${message}`,
-      `Failed to remove old Docker image: ${message}`,
-    )}\n`);
-    process.stderr.write(`${bilingualMessage(
-      "如需强制删除，请手动运行 docker rmi -f axis-stack:latest。",
-      "To force removal, run docker rmi -f axis-stack:latest manually.",
-    )}\n`);
+    if (isDockerDaemonUnavailableMessage(message)) {
+      process.stdout.write(`${bilingualMessage(
+        "Docker daemon 未运行，跳过旧 Docker 镜像清理。",
+        "Docker daemon is not running, skipping old Docker image cleanup.",
+      )}\n`);
+    } else {
+      process.stderr.write(`${bilingualMessage(
+        `删除旧 Docker 镜像失败: ${message}`,
+        `Failed to remove old Docker image: ${message}`,
+      )}\n`);
+      process.stderr.write(`${bilingualMessage(
+        "如需强制删除，请手动运行 docker rmi -f axis-stack:latest。",
+        "To force removal, run docker rmi -f axis-stack:latest manually.",
+      )}\n`);
+    }
   }
 
   await clearManagedRuntimeState();

@@ -8,6 +8,7 @@ const writeManagedStateMock = vi.hoisted(() => vi.fn());
 const stopManagedMnaMock = vi.hoisted(() => vi.fn());
 const removeDockerContainerMock = vi.hoisted(() => vi.fn());
 const removeDockerImageMock = vi.hoisted(() => vi.fn());
+const isDockerDaemonUnavailableMessageMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -42,6 +43,7 @@ vi.mock("../src/mna-command.js", () => ({
 }));
 
 vi.mock("../src/docker-lifecycle.js", () => ({
+  isDockerDaemonUnavailableMessage: isDockerDaemonUnavailableMessageMock,
   removeDockerContainer: removeDockerContainerMock,
   removeDockerImage: removeDockerImageMock,
 }));
@@ -74,6 +76,7 @@ describe("runStopCommand", () => {
     stopManagedMnaMock.mockReset();
     removeDockerContainerMock.mockReset();
     removeDockerImageMock.mockReset();
+    isDockerDaemonUnavailableMessageMock.mockReset();
     removeDockerImageMock.mockResolvedValue(false);
   });
 
@@ -169,6 +172,34 @@ describe("runStopCommand", () => {
     removeDockerContainerMock.mockRejectedValue(new Error("docker rm -f axis-stack failed with exit code 2"));
 
     await expect(runStopCommand()).rejects.toThrow(/docker rm -f axis-stack/);
+    expect(rmMock).toHaveBeenCalledTimes(5);
+    expect(writeManagedStateMock).toHaveBeenCalledWith({
+      version: 1,
+      dbPassword: undefined,
+      services: [],
+    });
+  });
+
+  it("treats unavailable Docker daemon as a successful stop", async () => {
+    mockSpawnExit(0);
+    rmMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      postgres: {
+        containerName: "axis-stack",
+        port: 54329,
+        database: "axis_db",
+        username: "axis_user",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    stopManagedMnaMock.mockResolvedValue(true);
+    isDockerDaemonUnavailableMessageMock.mockReturnValue(true);
+    removeDockerContainerMock.mockRejectedValue(new Error("error during connect: open //./pipe/dockerDesktopLinuxEngine"));
+    removeDockerImageMock.mockRejectedValue(new Error("error during connect: open //./pipe/dockerDesktopLinuxEngine"));
+
+    await expect(runStopCommand()).resolves.toBeUndefined();
     expect(rmMock).toHaveBeenCalledTimes(5);
     expect(writeManagedStateMock).toHaveBeenCalledWith({
       version: 1,
