@@ -25,14 +25,11 @@ type AgentWorkspaceProps = {
 const PANEL_HEIGHT_CLASS = "min-h-0 xl:h-full";
 
 export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
-  const { locale, t, formatAgentError } = useAgentI18n();
+  const { locale, t } = useAgentI18n();
   const workspace = useAgentWorkspace({ sessionId, uiLocale: locale });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsMode, setSettingsMode] = useState<"runtime" | "setup">("runtime");
   const [setupPrompted, setSetupPrompted] = useState(false);
-  const sessionErrorContent = workspace.state.sessionErrorCode
-    ? formatAgentError(workspace.state.sessionErrorCode, workspace.state.sessionError)
-    : null;
   const bootstrapDescription =
     workspace.state.bootstrapReason ??
     (workspace.state.bootstrapStatus === "loading"
@@ -171,13 +168,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 testId="agent-replay-gap"
                 title={t("workspace.replayGapTitle")}
                 description={t("workspace.replayGapDescription")}
-              />
-            ) : null}
-            {workspace.state.sessionError && sessionErrorContent ? (
-              <ErrorState
-                testId="agent-session-error"
-                title={sessionErrorContent.title}
-                description={sessionErrorContent.description}
               />
             ) : null}
             <ChatPanel

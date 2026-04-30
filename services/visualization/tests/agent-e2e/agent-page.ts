@@ -249,8 +249,8 @@ export class AgentPage {
     await expect(this.page.getByTestId("agent-replay-gap")).toBeVisible();
   }
 
-  async expectSessionError(text: RegExp | string) {
-    await expect(this.page.getByTestId("agent-session-error")).toContainText(text);
+  async expectNoSessionErrorBanner() {
+    await expect(this.page.getByTestId("agent-session-error")).toHaveCount(0);
   }
 
   async expectInjectionOrEmptyState() {

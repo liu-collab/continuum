@@ -119,7 +119,7 @@ test.describe("agent extra ui flows", () => {
     await agent.expectLatestAssistantContains(/收到|继续回答|已收到/i);
   });
 
-  test("shows session errors without breaking the page", async ({ page }) => {
+  test("keeps session errors out of the top banner without breaking the page", async ({ page }) => {
     const agent = new AgentPage(page);
 
     await agent.goto();
@@ -129,7 +129,8 @@ test.describe("agent extra ui flows", () => {
     expect(sessionId).toBeTruthy();
 
     await triggerSessionError(sessionId ?? "");
-    await agent.expectSessionError(/会话存储不可用|Session store unavailable/i);
+    await agent.expectNoSessionErrorBanner();
+    await expect(page.getByTestId("agent-input")).toBeVisible();
 
     await agent.sendMessage("错误后继续回答");
     await agent.expectLatestAssistantContains(/收到|继续回答|已收到/i);
