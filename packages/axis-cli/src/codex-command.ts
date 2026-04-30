@@ -61,6 +61,8 @@ export async function runCodexUseCommand(
       ...(codexHome ? { CODEX_HOME: codexHome } : {}),
       MEMORY_RUNTIME_BASE_URL: runtimeUrl,
       MEMORY_RUNTIME_START_COMMAND: ensureRuntime ? runtimeCommand : "off",
+      MEMORY_RUNTIME_API_MODE: "lite",
+      MEMORY_RUNTIME_HEALTH_PATH: "/v1/lite/healthz",
       MEMORY_MCP_COMMAND: "off",
       MEMORY_CODEX_CLIENT_COMMAND:
         typeof options["client-command"] === "string"

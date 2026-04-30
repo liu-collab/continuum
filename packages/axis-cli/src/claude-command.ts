@@ -49,6 +49,7 @@ export async function runClaudeInstallCommand(
   await installManagedClaudePlugin(options, importMetaUrl, targetDir, force);
 
   process.stdout.write(`Claude plugin installed to ${targetDir}\n`);
+  process.stdout.write("Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n");
   process.stdout.write(`Start with: claude --plugin-dir "${targetDir}"\n`);
 }
 
@@ -62,6 +63,7 @@ export async function runClaudeCommand(
   if (!installed) {
     await installManagedClaudePlugin(options, importMetaUrl, targetDir, false);
     process.stdout.write(`Claude plugin installed to ${targetDir}\n`);
+    process.stdout.write("Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n");
   }
 
   await runForeground("claude", ["--plugin-dir", targetDir]);

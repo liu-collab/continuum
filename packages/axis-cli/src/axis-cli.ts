@@ -140,7 +140,7 @@ async function runCliUnchecked(argv: string[], importMetaUrl: string) {
   }
 
   if (primary === "runtime") {
-    await runRuntimeCommand(importMetaUrl);
+    await runRuntimeCommand(importMetaUrl, parsed.options);
     return 0;
   }
 

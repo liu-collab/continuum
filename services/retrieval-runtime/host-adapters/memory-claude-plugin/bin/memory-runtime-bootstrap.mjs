@@ -5,8 +5,9 @@ import process from "node:process";
 
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
 const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "axis-runtime";
-const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "axis-mcp-server";
+const mcpCommand = process.env.MEMORY_MCP_COMMAND ?? "off";
 const mode = process.argv.includes("--mode") ? process.argv[process.argv.indexOf("--mode") + 1] : "runtime";
+const healthPath = process.env.MEMORY_RUNTIME_HEALTH_PATH ?? "/v1/lite/healthz";
 
 function shouldRun(command) {
   return Boolean(command) && command !== "off" && command !== "false";
@@ -14,7 +15,7 @@ function shouldRun(command) {
 
 async function isHealthy() {
   try {
-    const response = await fetch(new URL("/healthz", runtimeBaseUrl));
+    const response = await fetch(new URL(healthPath, runtimeBaseUrl));
     return response.ok;
   } catch {
     return false;

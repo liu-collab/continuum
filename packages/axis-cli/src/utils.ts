@@ -349,8 +349,7 @@ export async function rewriteClaudePluginCommands(
   packageSpecifier: string,
 ) {
   const runtimeCommand = `npx -y -p ${packageSpecifier} axis runtime`;
-  const mcpCommand = `npx -y -p ${packageSpecifier} axis mcp-server`;
-
+  const mcpCommand = "off";
   const bootstrapPath = path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs");
   const bootstrapContent = await readFile(bootstrapPath, "utf8");
   await writeFile(
@@ -368,25 +367,7 @@ export async function rewriteClaudePluginCommands(
   );
 
   const mcpConfigPath = path.join(pluginDir, ".mcp.json");
-  const mcpConfig = JSON.parse(await readFile(mcpConfigPath, "utf8")) as {
-    mcpServers?: {
-      memory?: {
-        env?: Record<string, string>;
-      };
-    };
-  };
-
-  if (!mcpConfig.mcpServers) {
-    mcpConfig.mcpServers = {};
-  }
-  if (!mcpConfig.mcpServers.memory) {
-    mcpConfig.mcpServers.memory = { env: {} };
-  }
-  if (!mcpConfig.mcpServers.memory.env) {
-    mcpConfig.mcpServers.memory.env = {};
-  }
-  mcpConfig.mcpServers.memory.env.MEMORY_MCP_COMMAND = mcpCommand;
-  await writeFile(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), "utf8");
+  await writeFile(mcpConfigPath, `${JSON.stringify({ mcpServers: {} }, null, 2)}\n`, "utf8");
 }
 
 export function defaultClaudePluginInstallDir() {

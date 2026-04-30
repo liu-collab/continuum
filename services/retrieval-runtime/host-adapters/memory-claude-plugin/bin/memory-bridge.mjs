@@ -6,6 +6,20 @@ import { pathToFileURL } from "node:url";
 const mode = process.argv[2];
 const runtimeBaseUrl =
   process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
+const runtimeApiMode = process.env.MEMORY_RUNTIME_API_MODE ?? "lite";
+
+const runtimeRoutes =
+  runtimeApiMode === "full"
+    ? {
+        sessionStart: "/v1/runtime/session-start-context",
+        prepareContext: "/v1/runtime/prepare-context",
+        finalizeTurn: "/v1/runtime/finalize-turn",
+      }
+    : {
+        sessionStart: "/v1/lite/prepare-context",
+        prepareContext: "/v1/lite/prepare-context",
+        finalizeTurn: "/v1/lite/after-response",
+      };
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -178,17 +192,28 @@ async function main() {
   try {
     if (mode === "session-start" || mode === "session-start-context") {
       const response = await postJson(
-        "/v1/runtime/session-start-context",
-        buildSessionStartPayload(event),
+        runtimeRoutes.sessionStart,
+        runtimeApiMode === "full"
+          ? buildSessionStartPayload(event)
+          : {
+              ...buildSessionStartPayload(event),
+              phase: "session_start",
+              current_input: event.recent_context_summary ?? event.recentContextSummary ?? "session start",
+            },
       );
+      const additionalContext =
+        typeof response.additional_context === "string"
+          ? response.additional_context
+          : response.injection_block?.memory_summary ?? "";
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
             hookEventName: "SessionStart",
-            additionalContext: response.additional_context ?? "",
+            additionalContext,
           },
           traceId: response.trace_id,
           dependencyStatus: response.dependency_status,
+          memoryModelStatus: response.memory_model_status,
         }),
       );
       return;
@@ -196,7 +221,7 @@ async function main() {
 
     if (mode === "prepare-context") {
       const response = await postJson(
-        "/v1/runtime/prepare-context",
+        runtimeRoutes.prepareContext,
         buildPreparePayload(event),
       );
       const additionalContext = response.injection_block
@@ -221,6 +246,7 @@ async function main() {
           },
           traceId: response.trace_id,
           memoryPacketIds: response.memory_packet_ids ?? [],
+          memoryModelStatus: response.memory_model_status,
         }),
       );
       return;
@@ -228,8 +254,12 @@ async function main() {
 
     if (mode === "finalize-turn") {
       const response = await postJson(
-        "/v1/runtime/finalize-turn",
-        buildFinalizePayload(event),
+        runtimeRoutes.finalizeTurn,
+        {
+          ...buildFinalizePayload(event),
+          trace_id: event.trace_id ?? event.traceId,
+          candidates: event.memory_candidates ?? event.memoryCandidates,
+        },
       );
       process.stdout.write(
         JSON.stringify({
@@ -237,8 +267,8 @@ async function main() {
             hookEventName: "Stop",
           },
           traceId: response.trace_id,
-          writebackSubmitted: response.writeback_submitted,
-          candidateCount: response.candidate_count,
+          writebackSubmitted: response.writeback_submitted ?? response.writeback_status === "accepted",
+          candidateCount: response.candidate_count ?? response.accepted_count ?? 0,
         }),
       );
       return;

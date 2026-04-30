@@ -61,6 +61,9 @@ describe("axis claude commands", () => {
       "axis-agent@0.1.0",
     );
     expect(stdoutSpy).toHaveBeenCalledWith("Claude plugin installed to C:/tmp/axis-plugin\n");
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      "Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n",
+    );
   });
 
   it("installs the default plugin when missing and launches Claude", async () => {
@@ -88,6 +91,9 @@ describe("axis claude commands", () => {
       "axis-agent@0.1.0",
     );
     expect(stdoutSpy).toHaveBeenCalledWith("Claude plugin installed to C:/tmp/axis-plugin\n");
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      "Claude hooks will use lite runtime HTTP; MCP tools are not registered by default.\n",
+    );
     expect(runForegroundMock).toHaveBeenCalledWith("claude", ["--plugin-dir", "C:/tmp/axis-plugin"]);
   });
 

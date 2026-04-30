@@ -171,7 +171,7 @@ describe("axis utils", () => {
       await expect(readFile(path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs"), "utf8"))
         .resolves.toContain("npx -y -p axis-agent@0.1.0 axis runtime");
       await expect(readFile(path.join(pluginDir, ".mcp.json"), "utf8"))
-        .resolves.toContain("npx -y -p axis-agent@0.1.0 axis mcp-server");
+        .resolves.toContain("\"mcpServers\": {}");
     } finally {
       await rm(pluginDir, { recursive: true, force: true });
     }

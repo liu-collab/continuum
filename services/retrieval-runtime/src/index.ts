@@ -1,3 +1,6 @@
+import path from "node:path";
+import os from "node:os";
+
 import { loadConfig } from "./config.js";
 import { DependencyGuard } from "./dependency/dependency-guard.js";
 import { InjectionEngine } from "./injection/injection-engine.js";
@@ -28,6 +31,7 @@ import { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 import { EmbeddingCrossReferenceEngine } from "./writeback/cross-reference.js";
 import { WritebackEngine } from "./writeback/writeback-engine.js";
 import { createApp } from "./app.js";
+import { createLiteRuntimeApp } from "./lite/http-app.js";
 import { hasCompleteRuntimeEmbeddingConfig } from "./embedding-config.js";
 import {
   hasCompleteRuntimeWritebackLlmConfig,
@@ -36,6 +40,11 @@ import {
 import { nowIso } from "./shared/utils.js";
 
 async function main() {
+  if (process.argv.includes("--lite")) {
+    await startLiteRuntime();
+    return;
+  }
+
   const config = loadConfig();
   const logger = createLogger(config);
   const repository = new FallbackRuntimeRepository(
@@ -268,6 +277,25 @@ async function main() {
     logger.info({ host: config.HOST, port: config.PORT }, "retrieval-runtime listening");
   } catch (error) {
     logger.error({ err: error }, "failed to start retrieval-runtime");
+    process.exitCode = 1;
+  }
+}
+
+async function startLiteRuntime() {
+  const config = loadConfig();
+  const logger = createLogger(config);
+  const memoryDir = process.env.AXIS_LITE_MEMORY_DIR
+    ?? path.join(process.env.AXIS_HOME ?? path.join(os.homedir(), ".axis"), "memory");
+  const app = createLiteRuntimeApp({
+    memoryDir,
+    configSource: config,
+  });
+
+  try {
+    await app.listen({ host: config.HOST, port: config.PORT });
+    logger.info({ host: config.HOST, port: config.PORT, memoryDir }, "lite retrieval-runtime listening");
+  } catch (error) {
+    logger.error({ err: error }, "failed to start lite retrieval-runtime");
     process.exitCode = 1;
   }
 }

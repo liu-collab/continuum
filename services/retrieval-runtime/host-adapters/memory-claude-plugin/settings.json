@@ -8,6 +8,6 @@
   },
   "_runtimeCommands": {
     "MEMORY_RUNTIME_START_COMMAND": "默认使用 axis-runtime",
-    "MEMORY_MCP_COMMAND": "默认使用 axis-mcp-server"
+    "MEMORY_MCP_COMMAND": "默认关闭，lite 模式不通过 MCP 接入"
   }
 }

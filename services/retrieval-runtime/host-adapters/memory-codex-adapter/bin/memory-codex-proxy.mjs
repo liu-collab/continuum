@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
 
 const runtimeBaseUrl = process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
+const runtimeApiMode = process.env.MEMORY_RUNTIME_API_MODE ?? "lite";
 const appServerUrl = process.env.CODEX_APP_SERVER_URL ?? "ws://127.0.0.1:3777";
 const proxyListenUrl = process.env.MEMORY_CODEX_PROXY_LISTEN_URL ?? "ws://127.0.0.1:3788";
 const workspaceNamespaceUuid =
@@ -17,6 +18,18 @@ const defaultUserId =
   process.env.MEMORY_USER_ID ?? process.env.MNA_PLATFORM_USER_ID ?? "00000000-0000-4000-8000-000000000001";
 const defaultMemoryMode = process.env.MEMORY_MODE ?? "workspace_plus_global";
 const hookSource = "codex_app_server";
+const runtimeRoutes =
+  runtimeApiMode === "full"
+    ? {
+        sessionStart: "/v1/runtime/session-start-context",
+        prepareContext: "/v1/runtime/prepare-context",
+        finalizeTurn: "/v1/runtime/finalize-turn",
+      }
+    : {
+        sessionStart: "/v1/lite/prepare-context",
+        prepareContext: "/v1/lite/prepare-context",
+        finalizeTurn: "/v1/lite/after-response",
+      };
 
 function uuidStringToBytes(value) {
   const hex = value.replace(/-/g, "");
@@ -204,7 +217,7 @@ async function postJson(routePath, payload) {
 }
 
 async function prepareContext(context) {
-  return postJson("/v1/runtime/prepare-context", {
+  return postJson(runtimeRoutes.prepareContext, {
     host: hookSource,
     workspace_id: context.workspaceId,
     user_id: context.userId,
@@ -220,7 +233,7 @@ async function prepareContext(context) {
 }
 
 async function sessionStartContext(context) {
-  return postJson("/v1/runtime/session-start-context", {
+  return postJson(runtimeRoutes.sessionStart, {
     host: hookSource,
     workspace_id: context.workspaceId,
     user_id: context.userId,
@@ -229,11 +242,13 @@ async function sessionStartContext(context) {
     cwd: context.cwd,
     source: hookSource,
     memory_mode: context.memoryMode,
+    phase: "session_start",
+    current_input: "session start",
   });
 }
 
 async function finalizeTurn(context) {
-  return postJson("/v1/runtime/finalize-turn", {
+  return postJson(runtimeRoutes.finalizeTurn, {
     host: hookSource,
     workspace_id: context.workspaceId,
     user_id: context.userId,

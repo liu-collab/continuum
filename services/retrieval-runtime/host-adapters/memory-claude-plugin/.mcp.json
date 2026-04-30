@@ -1,15 +1,3 @@
 {
-  "mcpServers": {
-    "memory": {
-      "command": "node",
-      "args": [
-        "./bin/memory-runtime-bootstrap.mjs",
-        "--mode",
-        "mcp"
-      ],
-      "env": {
-        "MEMORY_MCP_COMMAND": "axis-mcp-server"
-      }
-    }
-  }
+  "mcpServers": {}
 }

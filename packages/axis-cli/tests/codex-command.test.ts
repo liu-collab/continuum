@@ -79,6 +79,8 @@ describe("axis codex commands", () => {
         env: expect.objectContaining({
           MEMORY_RUNTIME_BASE_URL: "http://127.0.0.1:3002",
           MEMORY_RUNTIME_START_COMMAND: "off",
+          MEMORY_RUNTIME_API_MODE: "lite",
+          MEMORY_RUNTIME_HEALTH_PATH: "/v1/lite/healthz",
           MEMORY_MCP_COMMAND: "off",
         }),
       }),
