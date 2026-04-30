@@ -2,6 +2,7 @@
 
 import React from "react";
 import {
+  Activity,
   LoaderCircle,
   SendHorizontal,
   Settings2,
@@ -32,6 +33,7 @@ type ChatPanelProps = {
   onSend(text: string): void;
   onAbort(): void;
   onOpenPrompt(turnId: string): void;
+  onCheckModels?(): Promise<void>;
   onOpenSettings?(): void;
 };
 
@@ -50,19 +52,18 @@ export function ChatPanel({
   onSend,
   onAbort,
   onOpenPrompt,
+  onCheckModels,
   onOpenSettings
 }: ChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [visibleTurnCount, setVisibleTurnCount] = useState(INITIAL_VISIBLE_TURNS);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
-  const { formatConnection, t } = useAgentI18n();
+  const [checkingModels, setCheckingModels] = useState(false);
+  const { t } = useAgentI18n();
   const isBusy = turns.some((turn) => turn.status === "streaming");
   const latestTurn = turns.at(-1) ?? null;
   const providerNotConfigured = dependencyStatus?.provider.id === "not-configured";
   const canSend = connection === "open" && !isBusy && !providerNotConfigured;
-  const connectionLabel = formatConnection(connection);
-  const runtimeStatus = resolveSystemRuntimeStatus(dependencyStatus?.runtime);
-  const providerStatus = dependencyStatus?.provider.status ?? "unknown";
   const embeddingStatus = String(dependencyStatus?.runtime.embeddings?.status ?? "unknown");
   const embeddingNotConfigured = embeddingStatus === "unavailable" || embeddingStatus === "not_configured";
   const memoryLlmStatus = String(dependencyStatus?.runtime.memory_llm?.status ?? "unknown");
@@ -158,6 +159,19 @@ export function ChatPanel({
     setSelectedCommandIndex(0);
   }
 
+  async function checkModels() {
+    if (!onCheckModels || checkingModels) {
+      return;
+    }
+
+    setCheckingModels(true);
+    try {
+      await onCheckModels();
+    } finally {
+      setCheckingModels(false);
+    }
+  }
+
   return (
     <div className={`panel flex flex-1 ${PANEL_HEIGHT_CLASS} flex-col overflow-hidden`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
@@ -174,28 +188,6 @@ export function ChatPanel({
             ) : null}
           </div>
           <div data-testid="chat-status-bar" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <StatusDot
-              tone={resolveConnectionTone(connection)}
-              label={t("chatPanel.connectionLabel")}
-              stateValue={connectionLabel}
-              titleValue={connectionLabel}
-              testId="agent-connection-badge"
-              stateTestId="agent-connection-state"
-            />
-            <StatusDot
-              tone={resolveStatusTone(runtimeStatus)}
-              label={t("workspace.runtimeLabel")}
-              stateValue={runtimeStatus}
-              titleValue={runtimeStatus}
-              testId="agent-runtime-badge"
-            />
-            <StatusDot
-              tone={resolveStatusTone(providerStatus)}
-              label={t("workspace.providerLabel")}
-              stateValue={providerStatus}
-              titleValue={providerStatus}
-              testId="agent-provider-badge"
-            />
             <StatusDot
               tone={resolveStatusTone(embeddingStatus)}
               label={t("workspace.embeddingLabel")}
@@ -219,6 +211,21 @@ export function ChatPanel({
             </StatusBadge>
           ) : null}
           {activeTaskLabel ? <StatusBadge tone="neutral">{activeTaskLabel}</StatusBadge> : null}
+          {onCheckModels ? (
+            <button
+              type="button"
+              onClick={() => {
+                void checkModels();
+              }}
+              disabled={checkingModels}
+              className="icon-button !h-11 !w-11 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={t("runtimeConfig.checkModelStatus")}
+              title={t("runtimeConfig.checkModelStatus")}
+              data-testid="check-model-status"
+            >
+              {checkingModels ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => onOpenSettings?.()}
@@ -409,18 +416,6 @@ export function ChatPanel({
   );
 }
 
-function resolveConnectionTone(connection: AgentConnectionState): "success" | "warning" | "danger" {
-  if (connection === "open") {
-    return "success";
-  }
-
-  if (connection === "connecting" || connection === "reconnecting") {
-    return "warning";
-  }
-
-  return "danger";
-}
-
 function resolveStatusTone(status?: string | null): "neutral" | "success" | "warning" | "danger" {
   if (!status) {
     return "neutral";
@@ -443,71 +438,18 @@ function resolveStatusTone(status?: string | null): "neutral" | "success" | "war
   return "neutral";
 }
 
-function isDangerStatus(status: string) {
-  return ["unavailable", "closed", "misconfigured", "not_configured", "error"].includes(status.toLowerCase());
-}
-
-function isWarningStatus(status: string) {
-  return ["degraded", "connecting", "reconnecting"].includes(status.toLowerCase());
-}
-
-function isSuccessStatus(status: string) {
-  return ["healthy", "configured", "reachable", "ok", "online"].includes(status.toLowerCase());
-}
-
-function readNestedStatus(value: unknown): string | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  const status = (value as { status?: unknown }).status;
-  return typeof status === "string" && status.trim().length > 0 ? status : null;
-}
-
-function resolveSystemRuntimeStatus(runtime: MnaDependencyStatusResponse["runtime"] | undefined | null) {
-  if (!runtime) {
-    return "unknown";
-  }
-
-  const explicitStatus = typeof runtime.status === "string" ? runtime.status : null;
-  if (explicitStatus && explicitStatus !== "unknown") {
-    return explicitStatus;
-  }
-
-  const coreStatuses = [readNestedStatus(runtime.read_model), readNestedStatus(runtime.storage_writeback)]
-    .filter((status): status is string => Boolean(status));
-  const dependencyStatuses = coreStatuses
-    .filter((status) => status !== "not_configured" && status !== "unknown");
-  if (dependencyStatuses.length === 0) {
-    return explicitStatus ?? "unknown";
-  }
-
-  if (dependencyStatuses.some(isDangerStatus)) {
-    return "unavailable";
-  }
-  if (dependencyStatuses.some(isWarningStatus)) {
-    return "degraded";
-  }
-  if (dependencyStatuses.every(isSuccessStatus)) {
-    return "healthy";
-  }
-  return explicitStatus ?? "unknown";
-}
-
 function StatusDot({
   label,
   stateValue,
   titleValue,
   tone,
   testId,
-  stateTestId,
 }: {
   label: string;
   stateValue: string;
   titleValue: string;
   tone: "neutral" | "success" | "warning" | "danger";
   testId: string;
-  stateTestId?: string;
 }) {
   const dotColor =
     tone === "success" ? "var(--primary)" :
@@ -525,7 +467,6 @@ function StatusDot({
     >
       <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
       <span className="text-muted-foreground">{label}</span>
-      {stateTestId ? <span data-testid={stateTestId} data-state={stateValue} className="sr-only" /> : null}
     </span>
   );
 }

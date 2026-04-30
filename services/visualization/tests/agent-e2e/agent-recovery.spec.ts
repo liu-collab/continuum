@@ -16,14 +16,12 @@ test.describe("agent degrade and recovery", () => {
     await agent.sendMessage("runtime 挂掉后继续回答");
     await agent.expectLatestAssistantContains(/收到|继续回答|已收到/i);
     await expect(page.getByTestId("agent-degraded-banner")).toBeVisible();
-    await agent.expectRuntimeDependencyState(/unavailable|degraded|unknown/i);
 
     await restartRuntime();
     await waitForControlState();
     await page.reload();
     await agent.expectConnected();
     await agent.refreshProviderStatus();
-    await agent.expectRuntimeDependencyState(/reachable|healthy|正常|ok/i);
     await agent.sendMessage("runtime 恢复后继续回答");
     await agent.expectLatestAssistantContains(/收到|继续回答|已收到/i);
   });

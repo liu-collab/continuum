@@ -17,16 +17,13 @@ export class AgentPage {
     return match?.[1] ?? null;
   }
 
-  connectionState() {
-    return this.page.getByTestId("agent-connection-state");
-  }
-
   async expectConnected() {
-    await expect(this.connectionState()).toHaveAttribute("data-state", /open|connecting|reconnecting|在线|连接中|重连中|online/);
+    await expect(this.page.getByTestId("agent-offline-state")).toHaveCount(0);
+    await expect(this.page.getByTestId("agent-input")).toBeVisible();
   }
 
   async expectReadyToSend() {
-    await expect(this.connectionState()).toHaveAttribute("data-state", /open|在线|online/);
+    await expect(this.page.getByTestId("agent-offline-state")).toHaveCount(0);
     await expect(this.page.getByTestId("agent-input")).toBeEnabled();
     await expect(this.page.getByTestId("send-message")).toBeDisabled();
   }
@@ -35,12 +32,9 @@ export class AgentPage {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
-      const connection = this.page.getByTestId("agent-connection-state");
-      if (await connection.count()) {
-        const state = (await connection.first().getAttribute("data-state")) ?? "";
-        if (/open|connecting|reconnecting|在线|连接中|重连中|online/.test(state)) {
-          return;
-        }
+      if (await this.page.getByTestId("agent-input").count()) {
+        await this.expectConnected();
+        return;
       }
 
       await this.page.reload();
@@ -137,10 +131,6 @@ export class AgentPage {
     await expect(this.page.getByTestId("agent-offline-state")).toBeVisible();
   }
 
-  async expectRuntimeDependencyState(text: RegExp | string) {
-    await expect(this.page.getByTestId("agent-runtime-badge")).toHaveAttribute("data-state", text);
-  }
-
   async createNewSession() {
     await this.page.getByRole("button", { name: /新建会话|New Session/i }).click();
   }
@@ -225,7 +215,6 @@ export class AgentPage {
       await this.expectSessionSelected(title);
     }
     await expect(this.page.getByTestId("agent-input")).toBeVisible();
-    await expect(this.connectionState()).toHaveAttribute("data-state", /open|在线|online/);
     await expect(this.page.getByTestId("agent-input")).toBeEnabled();
   }
 

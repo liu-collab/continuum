@@ -15,13 +15,11 @@ test.describe("agent refresh control", () => {
 
     await stopRuntime();
     await agent.clickWorkspaceRefresh();
-    await agent.expectRuntimeDependencyState(/unavailable|degraded|unknown/i);
     await agent.expectLatestUserContains("刷新前先保留这条消息");
 
     await restartRuntime();
     await waitForControlState();
     await agent.clickWorkspaceRefresh();
-    await agent.expectRuntimeDependencyState(/healthy|正常|ok/i);
     await agent.expectLatestUserContains("刷新前先保留这条消息");
   });
 });

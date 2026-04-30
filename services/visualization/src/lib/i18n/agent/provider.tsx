@@ -9,7 +9,6 @@ import { APP_LOCALE_STORAGE_KEY } from "@/lib/i18n/messages";
 import type { AgentLocale } from "@/app/agent/_lib/openapi-types";
 import { resolveBrowserLocale } from "@/app/agent/_lib/config";
 import {
-  formatConnectionState,
   formatDefaultSessionTitle,
   formatFinishReason,
   formatAgentError,
@@ -24,7 +23,6 @@ type AgentI18nValue = {
   locale: AgentLocale;
   setLocale(nextLocale: AgentLocale): void;
   t(key: string, variables?: Record<string, string | number>): string;
-  formatConnection(connection: "connecting" | "open" | "reconnecting" | "closed"): string;
   formatMemoryModeLabel(mode: "workspace_only" | "workspace_plus_global"): string;
   formatMcpStateLabel(state: "ok" | "unavailable" | "dead" | "disabled"): string;
   formatTrustLevelLabel(level: `${string}`): string;
@@ -86,9 +84,6 @@ export function useAgentI18n() {
     },
     t(key, variables) {
       return translateMessage(locale, key, variables);
-    },
-    formatConnection(connection) {
-      return formatConnectionState(locale, connection);
     },
     formatMemoryModeLabel(mode) {
       return formatMemoryMode(locale, mode);

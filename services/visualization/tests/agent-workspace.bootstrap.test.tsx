@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentWorkspace } from "@/app/agent/_components/agent-workspace";
@@ -273,8 +274,11 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.getByText("尚未配置主模型。完成这 3 步后，就可以开始对话。")).toBeInTheDocument();
   });
 
-  it("renders two-column workspace and header dependency badges after bootstrap succeeds", () => {
+  it("renders two-column workspace and model dependency controls after bootstrap succeeds", async () => {
+    const user = userEvent.setup();
     const createNewSession = vi.fn();
+    const checkEmbeddings = vi.fn(async () => undefined);
+    const checkMemoryLlm = vi.fn(async () => undefined);
     mockedUseAgentWorkspace.mockReturnValue({
       state: {
         bootstrapStatus: "ok",
@@ -382,8 +386,8 @@ describe("AgentWorkspace bootstrap states", () => {
       refreshAgentConfig: vi.fn(),
       refreshMcpState: vi.fn(),
       refreshWorkspaceList: vi.fn(),
-      checkEmbeddings: vi.fn(),
-      checkMemoryLlm: vi.fn(),
+      checkEmbeddings,
+      checkMemoryLlm,
       registerWorkspace: vi.fn(),
       pickWorkspace: vi.fn(),
       selectWorkspace: vi.fn(),
@@ -402,7 +406,6 @@ describe("AgentWorkspace bootstrap states", () => {
 
     expect(screen.getByText("OpenAI-compatible · deepseek-chat")).toBeInTheDocument();
     expect(screen.getByTestId("chat-provider-model")).toHaveTextContent("OpenAI-compatible · deepseek-chat");
-    expect(screen.getByTestId("agent-provider-badge")).toHaveAttribute("data-state", "misconfigured");
     expect(screen.getByTestId("agent-embedding-badge")).toHaveAttribute("data-state", "not_configured");
     expect(screen.getByTestId("axis-memory-llm-badge")).toHaveAttribute("data-state", "unknown");
     expect(screen.getByTestId("agent-workspace-layout")).toHaveClass("h-full");
@@ -414,6 +417,12 @@ describe("AgentWorkspace bootstrap states", () => {
     expect(screen.queryByTestId("runtime-config-summary-card")).not.toBeInTheDocument();
     expect(screen.queryByText("轮次")).not.toBeInTheDocument();
     expect(screen.queryByTitle("会话")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("check-model-status"));
+    await waitFor(() => {
+      expect(checkEmbeddings).toHaveBeenCalledTimes(1);
+      expect(checkMemoryLlm).toHaveBeenCalledTimes(1);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /运行时配置/ }));
     expect(screen.getByTestId("runtime-config-card")).toBeInTheDocument();

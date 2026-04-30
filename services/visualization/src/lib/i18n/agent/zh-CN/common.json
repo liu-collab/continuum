@@ -22,25 +22,14 @@
     "newSession": "新建会话",
     "sessionsEyebrow": "会话",
     "sessionsTitle": "最近会话",
-    "dependencyTitle": "依赖状态",
-    "dependencyEmptyTitle": "依赖状态未加载",
-    "dependencyEmptyDescription": "稍后这里会显示 runtime、provider 和 MCP 的整体状态。",
     "replayGapTitle": "连接已恢复，但部分事件丢失",
     "replayGapDescription": "本次重连没有补回全部事件。已有内容会保留，后续消息仍可继续发送。",
-    "runtimeLabel": "runtime",
-    "providerLabel": "provider",
     "embeddingLabel": "embeddings",
     "memoryLlmLabel": "memory llm",
     "loading": "加载中",
     "contextTitle": "当前会话上下文",
     "currentTurnMemories": "查看本轮记忆",
     "currentTurnRuns": "查看本轮运行"
-  },
-  "connectionStates": {
-    "connecting": "连接中",
-    "open": "在线",
-    "reconnecting": "重连中",
-    "closed": "已断开"
   },
   "chatPanel": {
     "eyebrow": "Agent",
@@ -72,7 +61,6 @@
     "statusMisconfigured": "配置错误",
     "statusNotConfigured": "未配置",
     "statusOnline": "在线",
-    "connectionLabel": "连接",
     "connectionClosedTitle": "连接已关闭",
     "connectionClosedDescription": "请先恢复 `memory-native-agent`，然后再继续发送消息。",
     "providerNotConfiguredTitle": "尚未配置主模型",
@@ -124,6 +112,7 @@
     "eyebrow": "配置",
     "title": "运行时配置",
     "saving": "保存中...",
+    "checkModelStatus": "检查模型状态",
     "embeddingTitle": "Embedding 配置",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
@@ -172,12 +161,6 @@
       "advisory": "advisory",
       "confirm": "confirm"
     },
-    "checkEmbedding": "检查 embedding 配置",
-    "checkingEmbedding": "检查中...",
-    "checkMemoryLlm": "检查 memory llm 配置",
-    "checkingMemoryLlm": "检查中...",
-    "saveEmbeddingBeforeCheck": "请先保存当前 embedding 配置，再执行检查。",
-    "saveMemoryLlmBeforeCheck": "请先保存当前 memory llm 配置，再执行检查。",
     "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"

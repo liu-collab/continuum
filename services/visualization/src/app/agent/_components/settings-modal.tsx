@@ -102,14 +102,6 @@ type SettingsModalProps = {
       label: string;
     }>;
   }>;
-  onCheckEmbeddings(): Promise<{
-    status: string;
-    detail: string;
-  }>;
-  onCheckMemoryLlm(): Promise<{
-    status: string;
-    detail: string;
-  }>;
 };
 
 function resolveStatusTone(status: string | undefined) {
@@ -292,9 +284,7 @@ export function SettingsModal({
   memoryMode,
   onMemoryModeChange,
   onSaveRuntime,
-  onListProviderModels,
-  onCheckEmbeddings,
-  onCheckMemoryLlm
+  onListProviderModels
 }: SettingsModalProps) {
   const { formatMemoryModeLabel, t } = useAgentI18n();
 
@@ -325,8 +315,6 @@ export function SettingsModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [checkingEmbeddings, setCheckingEmbeddings] = useState(false);
-  const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [memoryLlmAdvancedOpen, setMemoryLlmAdvancedOpen] = useState(false);
   const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
@@ -403,8 +391,6 @@ export function SettingsModal({
     setErrorMessage(null);
     setFeedbackMessage(null);
     setSaving(false);
-    setCheckingEmbeddings(false);
-    setCheckingMemoryLlm(false);
     setAdvancedSettingsOpen(false);
     setMemoryLlmAdvancedOpen(false);
   }, [config, open]);
@@ -752,76 +738,6 @@ export function SettingsModal({
     }
   }
 
-  async function handleCheckEmbeddings() {
-    setErrorMessage(null);
-    setFeedbackMessage(null);
-    const currentBaseUrl = config?.embedding.base_url?.trim() ?? "";
-    const currentModel = config?.embedding.model?.trim() ?? "";
-    const currentApiKey = config?.embedding.api_key?.trim() ?? "";
-    if (
-      embeddingBaseUrl.trim() !== currentBaseUrl ||
-      embeddingModel.trim() !== currentModel ||
-      embeddingApiKey.trim() !== currentApiKey
-    ) {
-      setFeedbackMessage({
-        tone: "warning",
-        text: t("runtimeConfig.saveEmbeddingBeforeCheck"),
-      });
-      return;
-    }
-    setCheckingEmbeddings(true);
-    try {
-      const result = await onCheckEmbeddings();
-      setFeedbackMessage({
-        tone: result.status === "healthy" ? "success" : "warning",
-        text: `${result.status}: ${result.detail}`,
-      });
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setCheckingEmbeddings(false);
-    }
-  }
-
-  async function handleCheckMemoryLlm() {
-    setErrorMessage(null);
-    setFeedbackMessage(null);
-    const currentBaseUrl = config?.memory_llm.base_url?.trim() ?? "";
-    const currentModel = config?.memory_llm.model?.trim() ?? "";
-    const currentApiKey = config?.memory_llm.api_key?.trim() ?? "";
-    const currentProtocol = config?.memory_llm.protocol ?? "openai-compatible";
-    const currentTimeout = config?.memory_llm.timeout_ms ? String(config.memory_llm.timeout_ms) : "";
-    const currentEffort = config?.memory_llm.effort ?? "";
-    const currentMaxTokens = config?.memory_llm.max_tokens ? String(config.memory_llm.max_tokens) : "";
-    if (
-      effectiveMemoryConfig.baseUrl !== currentBaseUrl ||
-      effectiveMemoryConfig.model !== currentModel ||
-      effectiveMemoryConfig.apiKey !== currentApiKey ||
-      effectiveMemoryConfig.protocol !== currentProtocol ||
-      effectiveMemoryConfig.timeoutMs !== currentTimeout ||
-      effectiveMemoryConfig.effort !== currentEffort ||
-      effectiveMemoryConfig.maxTokens !== currentMaxTokens
-    ) {
-      setFeedbackMessage({
-        tone: "warning",
-        text: t("runtimeConfig.saveMemoryLlmBeforeCheck"),
-      });
-      return;
-    }
-    setCheckingMemoryLlm(true);
-    try {
-      const result = await onCheckMemoryLlm();
-      setFeedbackMessage({
-        tone: result.status === "healthy" ? "success" : "warning",
-        text: `${result.status}: ${result.detail}`,
-      });
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setCheckingMemoryLlm(false);
-    }
-  }
-
   const providerKindOptions = isEditableProviderKind(providerKindToSave)
     ? EDITABLE_PROVIDER_KIND_OPTIONS
     : [
@@ -1105,19 +1021,6 @@ export function SettingsModal({
                 {dependencyStatus.runtime.embeddings.detail}
               </p>
             ) : null}
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleCheckEmbeddings();
-                }}
-                disabled={checkingEmbeddings}
-                className="btn-outline"
-                data-testid="runtime-config-check-embeddings"
-              >
-                {checkingEmbeddings ? t("runtimeConfig.checkingEmbedding") : t("runtimeConfig.checkEmbedding")}
-              </button>
-            </div>
           </div>
           <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
@@ -1131,19 +1034,6 @@ export function SettingsModal({
                 {dependencyStatus.runtime.memory_llm.detail}
               </p>
             ) : null}
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  void handleCheckMemoryLlm();
-                }}
-                disabled={checkingMemoryLlm}
-                className="btn-outline"
-                data-testid="runtime-config-check-memory-llm"
-              >
-                {checkingMemoryLlm ? t("runtimeConfig.checkingMemoryLlm") : t("runtimeConfig.checkMemoryLlm")}
-              </button>
-            </div>
           </div>
         </div>
 

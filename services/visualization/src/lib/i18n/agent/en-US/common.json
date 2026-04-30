@@ -22,25 +22,14 @@
     "newSession": "New session",
     "sessionsEyebrow": "Sessions",
     "sessionsTitle": "Recent sessions",
-    "dependencyTitle": "Dependency status",
-    "dependencyEmptyTitle": "Dependency status not loaded",
-    "dependencyEmptyDescription": "Runtime, provider, and MCP status will appear here once loaded.",
     "replayGapTitle": "Connection recovered, but some events were lost",
     "replayGapDescription": "The reconnect flow could not replay every event. Existing content is preserved and you can continue sending messages.",
-    "runtimeLabel": "runtime",
-    "providerLabel": "provider",
     "embeddingLabel": "embeddings",
     "memoryLlmLabel": "memory llm",
     "loading": "loading",
     "contextTitle": "Current session context",
     "currentTurnMemories": "Open current-turn memories",
     "currentTurnRuns": "Open current-turn run"
-  },
-  "connectionStates": {
-    "connecting": "connecting",
-    "open": "online",
-    "reconnecting": "reconnecting",
-    "closed": "closed"
   },
   "chatPanel": {
     "eyebrow": "Agent",
@@ -72,7 +61,6 @@
     "statusMisconfigured": "Bad config",
     "statusNotConfigured": "Not set",
     "statusOnline": "Online",
-    "connectionLabel": "Connection",
     "connectionClosedTitle": "Connection closed",
     "connectionClosedDescription": "Restore `memory-native-agent` before sending more messages.",
     "providerNotConfiguredTitle": "Primary model is not configured",
@@ -124,6 +112,7 @@
     "eyebrow": "Config",
     "title": "Runtime config",
     "saving": "Saving...",
+    "checkModelStatus": "Check model status",
     "embeddingTitle": "Embedding config",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
@@ -172,12 +161,6 @@
       "advisory": "advisory",
       "confirm": "confirm"
     },
-    "checkEmbedding": "Check embedding config",
-    "checkingEmbedding": "Checking...",
-    "checkMemoryLlm": "Check memory llm config",
-    "checkingMemoryLlm": "Checking...",
-    "saveEmbeddingBeforeCheck": "Save the current embedding config before running the check.",
-    "saveMemoryLlmBeforeCheck": "Save the current memory llm config before running the check.",
     "memoryLlmProtocolOptions": {
       "openai-compatible": "OpenAI-compatible",
       "anthropic": "Anthropic"

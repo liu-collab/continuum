@@ -183,6 +183,12 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
               onOpenPrompt={(turnId) => {
                 void workspace.openPromptInspector(turnId);
               }}
+              onCheckModels={async () => {
+                await Promise.allSettled([
+                  workspace.checkEmbeddings(),
+                  workspace.checkMemoryLlm(),
+                ]);
+              }}
               onOpenSettings={() => {
                 setSettingsMode(workspace.agentConfig?.provider.kind === "not-configured" ? "setup" : "runtime");
                 setSettingsOpen(true);
@@ -207,12 +213,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         }}
         onListProviderModels={(payload) => {
           return workspace.listProviderModels(payload);
-        }}
-        onCheckEmbeddings={() => {
-          return workspace.checkEmbeddings();
-        }}
-        onCheckMemoryLlm={() => {
-          return workspace.checkMemoryLlm();
         }}
       />
 

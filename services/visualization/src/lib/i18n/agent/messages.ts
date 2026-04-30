@@ -1,13 +1,9 @@
 import { createTranslator } from "@/lib/i18n/messages";
 
-import type { AgentConnectionState, AgentLocale, AgentMemoryMode, AgentToolTrustLevel, MnaMcpServerStatus } from "@/app/agent/_lib/openapi-types";
+import type { AgentLocale, AgentMemoryMode, AgentToolTrustLevel, MnaMcpServerStatus } from "@/app/agent/_lib/openapi-types";
 
 export function translateMessage(locale: AgentLocale, key: string, variables?: Record<string, string | number>) {
   return createTranslator(locale, "agent")(key, variables);
-}
-
-export function formatConnectionState(locale: AgentLocale, connection: AgentConnectionState) {
-  return translateMessage(locale, `connectionStates.${connection}`);
 }
 
 export function formatMemoryMode(locale: AgentLocale, memoryMode: AgentMemoryMode) {
