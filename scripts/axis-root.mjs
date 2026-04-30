@@ -21,6 +21,10 @@ const axisHome = path.join(os.homedir(), ".axis");
 const lifecycleLockPath = path.join(axisHome, "lifecycle.lock");
 const sharedEnv = {
   ...process.env,
+  NPM_CONFIG_AUDIT: process.env.NPM_CONFIG_AUDIT ?? process.env.npm_config_audit ?? "false",
+  NPM_CONFIG_FUND: process.env.NPM_CONFIG_FUND ?? process.env.npm_config_fund ?? "false",
+  npm_config_audit: process.env.npm_config_audit ?? "false",
+  npm_config_fund: process.env.npm_config_fund ?? "false",
   DATABASE_URL: process.env.DATABASE_URL ?? "postgres://postgres:postgres@127.0.0.1:5432/agent_memory",
   AXIS_REPO_ROOT: process.env.AXIS_REPO_ROOT ?? repoRoot,
   PLATFORM_USER_ID: process.env.PLATFORM_USER_ID ?? process.env.MNA_PLATFORM_USER_ID ?? process.env.MEMORY_USER_ID,
@@ -101,11 +105,11 @@ async function managedBackendIsHealthy() {
 async function ensureCliBuilt() {
   const plan = await planCliBuild(cliRoot);
   if (!plan.needsBuild) {
-    console.log("axis-cli 已是最新，跳过 build。");
+    console.log("- axis-cli 已是最新，跳过 build。 | axis-cli is up to date, skipped build.");
     return;
   }
 
-  const exitCode = await spawnCommand(npmCommand(), ["run", "build"], { cwd: cliRoot });
+  const exitCode = await spawnCommand(npmCommand(), ["run", "--silent", "build"], { cwd: cliRoot });
   if (exitCode !== 0) {
     throw new Error("axis-cli build 失败。");
   }
@@ -114,7 +118,7 @@ async function ensureCliBuilt() {
 }
 
 async function prepareLatestVendor(args = []) {
-  const exitCode = await spawnCommand(npmCommand(), ["run", "prepare:vendor", ...args], { cwd: cliRoot });
+  const exitCode = await spawnCommand(npmCommand(), ["run", "--silent", "prepare:vendor", ...args], { cwd: cliRoot });
   if (exitCode !== 0) {
     throw new Error("axis-cli prepare:vendor 失败。");
   }
@@ -197,7 +201,7 @@ async function run() {
     if (command === "start") {
       if (hasBooleanOption(passthroughArgs, "ui-dev")) {
         if (await managedBackendIsHealthy()) {
-          console.log("--ui-dev 检测到 storage/runtime 已健康，跳过 visualization vendor 刷新。");
+          console.log("- --ui-dev 检测到 storage/runtime 已健康，跳过 visualization vendor 刷新。 | --ui-dev detected healthy storage/runtime, skipped visualization vendor refresh.");
         } else {
           await prepareLatestVendor(["--", "--skip-visualization"]);
         }
@@ -206,7 +210,7 @@ async function run() {
         if (vendorPlan.needsRefresh) {
           await prepareLatestVendor();
         } else {
-          console.log("vendor 已是最新，跳过 prepare:vendor。");
+          console.log("- vendor 已是最新，跳过 prepare:vendor。 | vendor is up to date, skipped prepare:vendor.");
         }
       }
     }

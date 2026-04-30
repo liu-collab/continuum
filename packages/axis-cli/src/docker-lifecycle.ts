@@ -110,7 +110,7 @@ async function checkDockerDaemon(platform: NodeJS.Platform) {
 
 function writeDockerDaemonWaitProgress(elapsedMs: number) {
   const elapsedSeconds = Math.max(0, Math.round(elapsedMs / 1000));
-  process.stdout.write(`${bilingualMessage(
+  process.stdout.write(`→ ${bilingualMessage(
     `正在等待 Docker daemon 就绪（已等待 ${elapsedSeconds} 秒）...`,
     `Waiting for Docker daemon to become ready (${elapsedSeconds}s elapsed)...`,
   )}\n`);
@@ -194,10 +194,10 @@ export async function ensureDockerInstalled(options: DockerLifecycleOptions = {}
     throw new Error(DOCKER_INSTALL_GUIDE);
   }
 
-  process.stdout.write(bilingualMessage(
+  process.stdout.write(`→ ${bilingualMessage(
     "Docker 未安装，开始通过 winget 安装 Docker Desktop。",
     "Docker is not installed. Installing Docker Desktop with winget.",
-  ) + "\n");
+  )}\n`);
   try {
     await runForeground("winget", [
       "install",
@@ -231,19 +231,19 @@ export async function ensureDockerDaemonReady(options: DockerLifecycleOptions = 
     }
 
     if (platform === "darwin") {
-      process.stdout.write(bilingualMessage(
+      process.stdout.write(`→ ${bilingualMessage(
         "Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。",
         "Docker is installed but not running. Attempting to start Docker Desktop.",
-      ) + "\n");
+      )}\n`);
       spawn("open", ["-a", "Docker"], {
         detached: true,
         stdio: "ignore",
       }).unref();
     } else if (platform === "win32") {
-      process.stdout.write(bilingualMessage(
+      process.stdout.write(`→ ${bilingualMessage(
         "Docker 已安装，但当前未启动，正在尝试启动 Docker Desktop。",
         "Docker is installed but not running. Attempting to start Docker Desktop.",
-      ) + "\n");
+      )}\n`);
       const dockerDesktopExe = resolveDockerDesktopPath(env, platform);
       if (dockerDesktopExe && await pathExists(dockerDesktopExe)) {
         spawn(dockerDesktopExe, [], {

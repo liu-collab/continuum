@@ -2,6 +2,7 @@ import { cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import type { loadBuildStateHelpers } from "./build-state-loader.js";
+import { bilingualMessage } from "./messages.js";
 import { npmCommand, runForeground } from "./managed-process.js";
 import { pathExists, vendorPath } from "./utils.js";
 
@@ -39,12 +40,15 @@ export async function refreshVisualizationVendor(
     };
   }
 
-  process.stdout.write("检测到 visualization 变更，正在刷新前端产物...\n");
+  process.stdout.write(`→ ${bilingualMessage(
+    "检测到 visualization 变更，正在刷新前端产物...",
+    "Detected visualization changes, refreshing frontend artifacts...",
+  )}\n`);
   if (visualizationNeedsBuild) {
     const repoRoot = path.resolve(packageRoot, "..", "..");
     const visualizationDir = path.join(repoRoot, "services", "visualization");
     await rm(path.join(visualizationDir, ".next"), { recursive: true, force: true }).catch(() => undefined);
-    await runForeground(npmCommand(), ["run", "build"], visualizationDir);
+    await runForeground(npmCommand(), ["run", "--silent", "build"], visualizationDir);
   }
   await copyVisualizationVendorBundle(packageRoot);
   await buildState.writeBuildState({
@@ -97,11 +101,14 @@ export async function refreshMemoryNativeAgentVendor(
     };
   }
 
-  process.stdout.write("检测到 memory-native-agent 变更，正在刷新 MNA 产物...\n");
+  process.stdout.write(`→ ${bilingualMessage(
+    "检测到 memory-native-agent 变更，正在刷新 MNA 产物...",
+    "Detected memory-native-agent changes, refreshing MNA artifacts...",
+  )}\n`);
   if (needsBuild) {
     const repoRoot = path.resolve(packageRoot, "..", "..");
     const serviceDir = path.join(repoRoot, "services", "memory-native-agent");
-    await runForeground(npmCommand(), ["run", "build"], serviceDir);
+    await runForeground(npmCommand(), ["run", "--silent", "build"], serviceDir);
   }
   await copyMemoryNativeAgentVendorBundle(packageRoot);
   await buildState.writeBuildState({

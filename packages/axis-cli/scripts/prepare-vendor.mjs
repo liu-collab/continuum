@@ -25,6 +25,10 @@ const buildPlatformUserId =
   ?? process.env.MEMORY_USER_ID
   ?? "550e8400-e29b-41d4-a716-446655440000";
 
+function bilingualMessage(chinese, english) {
+  return `${chinese} | ${english}`;
+}
+
 async function copyEntries(sourceDir, targetDir, entries) {
   await mkdir(targetDir, { recursive: true });
 
@@ -106,7 +110,7 @@ async function pruneVendorArtifacts() {
 }
 
 async function pruneStageProductionDependencies(targetDir) {
-  await run(npmCommand(), ["prune", "--omit=dev", "--ignore-scripts"], targetDir);
+  await run(npmCommand(), ["prune", "--omit=dev", "--ignore-scripts", "--silent"], targetDir);
   await pruneGeneratedArtifacts(targetDir);
 }
 
@@ -141,6 +145,10 @@ async function run(command, args, cwd) {
             stdio: "inherit",
             env: {
               ...process.env,
+              NPM_CONFIG_AUDIT: process.env.NPM_CONFIG_AUDIT ?? process.env.npm_config_audit ?? "false",
+              NPM_CONFIG_FUND: process.env.NPM_CONFIG_FUND ?? process.env.npm_config_fund ?? "false",
+              npm_config_audit: process.env.npm_config_audit ?? "false",
+              npm_config_fund: process.env.npm_config_fund ?? "false",
               PLATFORM_USER_ID: buildPlatformUserId,
             },
           })
@@ -149,6 +157,10 @@ async function run(command, args, cwd) {
             stdio: "inherit",
             env: {
               ...process.env,
+              NPM_CONFIG_AUDIT: process.env.NPM_CONFIG_AUDIT ?? process.env.npm_config_audit ?? "false",
+              NPM_CONFIG_FUND: process.env.NPM_CONFIG_FUND ?? process.env.npm_config_fund ?? "false",
+              npm_config_audit: process.env.npm_config_audit ?? "false",
+              npm_config_fund: process.env.npm_config_fund ?? "false",
               PLATFORM_USER_ID: buildPlatformUserId,
             },
           });
@@ -335,11 +347,15 @@ async function main() {
 
   if (!plan.needsRefresh) {
     await pruneVendorArtifacts();
-    console.log(
-      skipVisualization
-        ? "vendor 已是最新，跳过 prepare:vendor；--ui-dev 下 visualization 由 next dev 直接读取源码。"
-        : "vendor 已是最新，跳过 prepare:vendor。",
-    );
+    console.log(skipVisualization
+      ? `- ${bilingualMessage(
+          "vendor 已是最新，跳过 prepare:vendor；--ui-dev 下 visualization 由 next dev 直接读取源码。",
+          "vendor is up to date, skipped prepare:vendor; --ui-dev reads visualization directly from source.",
+        )}`
+      : `- ${bilingualMessage(
+          "vendor 已是最新，跳过 prepare:vendor。",
+          "vendor is up to date, skipped prepare:vendor.",
+        )}`);
     return;
   }
 
@@ -348,17 +364,17 @@ async function main() {
   await mkdir(vendorStageDir, { recursive: true });
 
   if (plan.buildServices.includes("storage")) {
-    await run(npmCommand(), ["run", "build"], storageDir);
+    await run(npmCommand(), ["run", "--silent", "build"], storageDir);
   }
   if (plan.buildServices.includes("runtime")) {
-    await run(npmCommand(), ["run", "build"], runtimeDir);
+    await run(npmCommand(), ["run", "--silent", "build"], runtimeDir);
   }
   if (plan.buildServices.includes("visualization")) {
     await removeWithRetry(visualizationBuildDir).catch(() => undefined);
-    await run(npmCommand(), ["run", "build"], visualizationDir);
+    await run(npmCommand(), ["run", "--silent", "build"], visualizationDir);
   }
   if (plan.buildServices.includes("memory-native-agent")) {
-    await run(npmCommand(), ["run", "build"], memoryNativeAgentDir);
+    await run(npmCommand(), ["run", "--silent", "build"], memoryNativeAgentDir);
   }
 
   if (plan.changedEntries.includes("storage")) {

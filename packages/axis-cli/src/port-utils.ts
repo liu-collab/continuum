@@ -103,7 +103,12 @@ export async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_
     const candidate = preferredPort + offset;
     if (await isTcpPortAvailable(host, candidate)) {
       if (candidate !== preferredPort) {
-        process.stdout.write(`默认 visualization dev 端口 ${preferredPort} 不可用，自动切换到 ${candidate}。\n`);
+        process.stdout.write(
+          `- ${bilingualMessage(
+            `默认 visualization dev 端口 ${preferredPort} 不可用，自动切换到 ${candidate}。`,
+            `Default visualization dev port ${preferredPort} is unavailable, switched to ${candidate}.`,
+          )}\n`,
+        );
       }
 
       return candidate;
@@ -170,7 +175,10 @@ export async function resolveManagedPostgresPort(
 
     if (candidate !== requestedPort) {
       process.stdout.write(
-        `默认 postgres 端口 ${requestedPort} 不可用，自动切换到 ${candidate}。\n`,
+        `- ${bilingualMessage(
+          `默认 postgres 端口 ${requestedPort} 不可用，自动切换到 ${candidate}。`,
+          `Default postgres port ${requestedPort} is unavailable, switched to ${candidate}.`,
+        )}\n`,
       );
     }
 

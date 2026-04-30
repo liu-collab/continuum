@@ -23,7 +23,7 @@ describe("start-command module layout", () => {
     expect(startCommand).toContain(`from "./vendor-refresh.js"`);
     expect(startCommand).toContain(`from "./managed-process.js"`);
     expect(startCommand).not.toMatch(
-      /function\s+(ensureDockerInstalled|ensureDockerDaemonReady|prepareStackContext|resolveUiDevPort|refreshVisualizationVendor|runForeground)\b/,
+      /function\s+(ensureDockerInstalled|ensureDockerDaemonReady|prepareStackContext|resolveUiDevPort|refreshVisualizationVendor)\b/,
     );
 
     expect(dockerLifecycle).toContain("export async function ensureDockerInstalled");

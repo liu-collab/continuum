@@ -11,6 +11,7 @@ import {
   openBrowser,
   packageRootFromImportMeta,
   pathExists,
+  runCommand,
   terminateProcess,
   waitForHealthy,
 } from "./utils.js";
@@ -61,7 +62,7 @@ import {
   pruneDanglingDockerImages,
   saveDockerContainerLogs,
 } from "./docker-lifecycle.js";
-import { npmCommand, runForeground } from "./managed-process.js";
+import { npmCommand } from "./managed-process.js";
 import { resolvePlatformUserId } from "./platform-user.js";
 import {
   assertFixedServicePortsAvailable,
@@ -216,16 +217,25 @@ async function isPrimaryProviderConfigured(options: Record<string, string | bool
 }
 
 function writeMissingPrimaryProviderWarning() {
-  writeWarning("⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。");
-  writeWarning("⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.");
+  writeWarning(
+    "尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。",
+    "Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.",
+  );
 }
 
 function writeMissingThirdPartyEmbeddingsWarning() {
-  writeWarning("⚠ third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。");
+  writeWarning(
+    "third-party embeddings 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。",
+    "Third-party embeddings are not configured. Add EMBEDDING_BASE_URL and EMBEDDING_MODEL in the UI.",
+  );
 }
 
-function writeWarning(message: string) {
-  process.stdout.write(`${WARNING_COLOR}${message}${RESET_COLOR}\n`);
+function writeWarning(message: string, english: string) {
+  process.stdout.write(`${WARNING_COLOR}⚠ ${bilingualMessage(message, english)}${RESET_COLOR}\n`);
+}
+
+function writeNotice(message: string, english: string) {
+  process.stdout.write(`- ${bilingualMessage(message, english)}\n`);
 }
 
 function writeDaemonNotice(enabled: boolean) {
@@ -240,11 +250,46 @@ function writeDaemonNotice(enabled: boolean) {
 }
 
 function writeProgress(message: string, english: string) {
-  process.stdout.write(`${bilingualMessage(message, english)}\n`);
+  process.stdout.write(`→ ${bilingualMessage(message, english)}\n`);
 }
 
 function writeProgressDone(message: string, english: string) {
   process.stdout.write(`✓ ${bilingualMessage(message, english)}\n`);
+}
+
+function writeStartSummary(summary: {
+  openUrl: string;
+  mode: "managed" | "ui-dev";
+  backend?: "reused";
+  container?: string;
+  bindHost: string;
+  postgres?: string;
+  storageUrl: string;
+  runtimeUrl: string;
+  visualizationUrl: string;
+  visualizationLogPath?: string | null;
+  mnaUrl: string;
+}) {
+  process.stdout.write(`✓ ${bilingualMessage("Axis 已启动。", "Axis started.")}\n`);
+  const lines: Array<[string, string | undefined | null]> = [
+    ["open", summary.openUrl],
+    ["mode", summary.mode],
+    ["backend", summary.backend],
+    ["container", summary.container],
+    ["bind-host", summary.bindHost],
+    ["postgres", summary.postgres],
+    ["storage", summary.storageUrl],
+    ["runtime", summary.runtimeUrl],
+    ["visualization", summary.visualizationUrl],
+    ["visualization-log", summary.visualizationLogPath],
+    ["memory-native-agent", summary.mnaUrl],
+  ];
+
+  for (const [label, value] of lines) {
+    if (value) {
+      process.stdout.write(`  ${label}: ${value}\n`);
+    }
+  }
 }
 
 async function startManagedVisualizationDevServer(options: {
@@ -460,7 +505,24 @@ async function startStackContainer(
 
   dockerArgs.push(imageName);
 
-  await runForeground("docker", dockerArgs);
+  const result = await runCommand("docker", dockerArgs, {
+    captureOutput: true,
+    env: process.env,
+  });
+  if (result.code !== 0) {
+    const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+    throw new Error(
+      output
+        ? bilingualMessage(
+            `Docker 容器启动失败。${output}`,
+            `Docker container failed to start. ${output}`,
+          )
+        : bilingualMessage(
+            `docker run 失败，退出码 ${result.code}`,
+            `docker run failed with exit code ${result.code}`,
+          ),
+    );
+  }
 }
 
 export async function runStartCommand(
@@ -518,14 +580,19 @@ export async function runStartCommand(
       runtimePort,
     });
 
-    process.stdout.write("Axis visualization dev 已启动。\n");
-    process.stdout.write("backend: 复用现有 storage/runtime，未重启其他服务。\n");
-    process.stdout.write(`bind-host: ${bindHost}\n`);
-    process.stdout.write(`storage: ${storageUrl}\n`);
-    process.stdout.write(`runtime: ${runtimeUrl}\n`);
-    process.stdout.write(`visualization: ${devServer.url} (dev)\n`);
-    process.stdout.write(`log: ${devServer.logPath}\n`);
-    process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    writeStartSummary({
+      openUrl: devServer.url,
+      mode: "ui-dev",
+      backend: "reused",
+      container: DEFAULT_MANAGED_STACK_CONTAINER,
+      bindHost,
+      postgres: initialManagedState.postgres ? `${accessibleHost}:${initialManagedState.postgres.port}` : undefined,
+      storageUrl,
+      runtimeUrl,
+      visualizationUrl: `${devServer.url} (dev)`,
+      visualizationLogPath: devServer.logPath,
+      mnaUrl: mna.url,
+    });
     writeDaemonNotice(daemon);
     if (!providerConfigured) {
       writeMissingPrimaryProviderWarning();
@@ -604,13 +671,22 @@ export async function runStartCommand(
       await buildState.writeBuildState(stackImagePlan.nextState);
     }
   } else {
-    process.stdout.write(`docker image 已是最新，跳过 build: ${stackImageName}\n`);
+    writeNotice(
+      `docker image 已是最新，跳过 build: ${stackImageName}`,
+      `Docker image is up to date, skipped build: ${stackImageName}`,
+    );
     writeProgressDone("服务镜像已就绪。", "Service image is ready.");
     if (vendorRefresh.refreshed) {
-      process.stdout.write("visualization 已刷新，沿用现有 stack image。\n");
+      writeNotice(
+        "visualization 已刷新，沿用现有 stack image。",
+        "Visualization was refreshed; keeping the existing stack image.",
+      );
     }
     if (mnaVendorRefresh.refreshed) {
-      process.stdout.write("memory-native-agent 已刷新，沿用现有 stack image。\n");
+      writeNotice(
+        "memory-native-agent 已刷新，沿用现有 stack image。",
+        "memory-native-agent was refreshed; keeping the existing stack image.",
+      );
     }
   }
 
@@ -715,27 +791,25 @@ export async function runStartCommand(
       services: latestManagedState.services,
     });
 
-    process.stdout.write(`${bilingualMessage(
-      `Axis 已启动，打开 ${startedVisualizationUrl}`,
-      `Axis started. Open ${startedVisualizationUrl}`,
-    )}\n`);
-    process.stdout.write(`container: ${DEFAULT_MANAGED_STACK_CONTAINER}\n`);
-    process.stdout.write(`bind-host: ${bindHost}\n`);
-    process.stdout.write(`postgres: ${accessibleHost}:${postgresPort}\n`);
-    process.stdout.write(`storage: ${storageUrl}\n`);
-    process.stdout.write(`runtime: ${runtimeUrl}\n`);
-    process.stdout.write(`visualization: ${startedVisualizationUrl}${uiDev ? " (dev)" : ""}\n`);
-    if (startedVisualizationLogPath) {
-      process.stdout.write(`visualization log: ${startedVisualizationLogPath}\n`);
-    }
-    process.stdout.write(`memory-native-agent: ${mna.url}\n`);
+    writeStartSummary({
+      openUrl: startedVisualizationUrl,
+      mode: uiDev ? "ui-dev" : "managed",
+      container: DEFAULT_MANAGED_STACK_CONTAINER,
+      bindHost,
+      postgres: `${accessibleHost}:${postgresPort}`,
+      storageUrl,
+      runtimeUrl,
+      visualizationUrl: `${startedVisualizationUrl}${uiDev ? " (dev)" : ""}`,
+      visualizationLogPath: startedVisualizationLogPath,
+      mnaUrl: mna.url,
+    });
     writeDaemonNotice(daemon);
     if (!providerConfigured) {
       writeMissingPrimaryProviderWarning();
     }
     if (mergedEmbeddingConfig.baseUrl && mergedEmbeddingConfig.model) {
       process.stdout.write(
-        `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
+        `- third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
       );
     } else {
       writeMissingThirdPartyEmbeddingsWarning();

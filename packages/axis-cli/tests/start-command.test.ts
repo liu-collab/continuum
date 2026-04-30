@@ -446,10 +446,12 @@ describe("runStartCommand", () => {
     expect(output).toContain("✓ 数据库启动命令已提交");
     expect(output).toContain("正在等待服务就绪");
     expect(output).toContain("✓ 服务已就绪");
-    expect(output).toContain("Axis 已启动，打开 http://127.0.0.1:3003");
+    expect(output).toContain("✓ Axis 已启动。");
+    expect(output).toContain("  open: http://127.0.0.1:3003");
+    expect(output).toContain("  mode: managed");
     expect(output).toContain("\u001b[33m⚠ 尚未配置主模型。");
-    expect(output).toContain("\u001b[0m\n\u001b[33m⚠ Primary model is not configured.");
-    expect(output).toContain("\u001b[0m\n\u001b[33m⚠ third-party embeddings: 未配置");
+    expect(output).toContain("Primary model is not configured.");
+    expect(output).toContain("\u001b[0m\n\u001b[33m⚠ third-party embeddings 未配置");
   });
 
   it("migrates legacy managed config files when axis start runs again", async () => {
