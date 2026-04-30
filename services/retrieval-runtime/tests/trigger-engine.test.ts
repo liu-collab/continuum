@@ -123,6 +123,7 @@ class StubEmbeddingsClient implements EmbeddingsClient {
 
 class CapturingReadModelRepository implements ReadModelRepository {
   public query?: RetrievalQuery;
+  public searchCallCount = 0;
 
   async estimateAvailability(_query: ReadModelAvailabilityQuery) {
     return {
@@ -132,6 +133,7 @@ class CapturingReadModelRepository implements ReadModelRepository {
   }
 
   async searchCandidates(query: RetrievalQuery): Promise<CandidateMemory[]> {
+    this.searchCallCount += 1;
     this.query = query;
     return [
       this.memory("mem-1", [0.76, Math.sqrt(1 - 0.76 ** 2)]),
@@ -143,7 +145,7 @@ class CapturingReadModelRepository implements ReadModelRepository {
     ];
   }
 
-  private memory(id: string, summaryEmbedding: number[]): CandidateMemory {
+  protected memory(id: string, summaryEmbedding: number[]): CandidateMemory {
     return {
       id,
       workspace_id: ids.workspace,
@@ -163,6 +165,17 @@ class CapturingReadModelRepository implements ReadModelRepository {
       summary_embedding: summaryEmbedding,
       embedding_status: "ok",
     };
+  }
+}
+
+class LowScoreReadModelRepository extends CapturingReadModelRepository {
+  override async searchCandidates(query: RetrievalQuery): Promise<CandidateMemory[]> {
+    this.searchCallCount += 1;
+    this.query = query;
+    return [
+      this.memory("mem-low-1", [0.2, Math.sqrt(1 - 0.2 ** 2)]),
+      this.memory("mem-low-2", [0.1, Math.sqrt(1 - 0.1 ** 2)]),
+    ];
   }
 }
 
@@ -261,7 +274,7 @@ describe("semantic trigger fallback", () => {
     expect(decision.trigger_type).toBe("semantic_fallback");
   });
 
-  it("falls back to semantic prefetch when the recall judge exceeds the wait budget", async () => {
+  it("uses semantic prefetch early only when the recall judge soft wait has a semantic hit", async () => {
     const repository = new InMemoryRuntimeRepository();
     const readModelRepository = new CapturingReadModelRepository();
     const planner = new SlowRecallSearchPlanner(80);
@@ -296,6 +309,49 @@ describe("semantic trigger fallback", () => {
     expect(decision.hit).toBe(true);
     expect(decision.trigger_type).toBe("semantic_fallback");
     expect(decision.search_plan_degraded).toBe(true);
-    expect(decision.search_plan_degradation_reason).toBe("memory_llm_wait_timeout");
+    expect(decision.search_plan_degradation_reason).toBe("memory_llm_soft_wait_semantic_hit");
+  });
+
+  it("keeps waiting for the recall judge after soft wait when semantic prefetch misses", async () => {
+    const repository = new InMemoryRuntimeRepository();
+    const readModelRepository = new LowScoreReadModelRepository();
+    const planner = new SlowRecallSearchPlanner(40, {
+      should_search: true,
+      reason: "planner eventually found memory need",
+      requested_scopes: ["user"],
+      requested_memory_types: ["fact_preference"],
+      candidate_limit: 6,
+    });
+    const triggerEngine = new TriggerEngine(
+      {
+        ...config,
+        RECALL_LLM_JUDGE_ENABLED: true,
+        RECALL_LLM_JUDGE_WAIT_MS: 10,
+        RECALL_SEMANTIC_PREFETCH_ENABLED: true,
+      },
+      new StubEmbeddingsClient(),
+      readModelRepository,
+      new DependencyGuard(repository, pino({ enabled: false })),
+      pino({ enabled: false }),
+      planner,
+    );
+    const startedAt = Date.now();
+
+    const decision = await triggerEngine.decide({
+      host: "memory_native_agent",
+      workspace_id: ids.workspace,
+      user_id: ids.user,
+      session_id: ids.session,
+      phase: "before_response",
+      current_input: "请分析这个模块的错误处理策略和边界情况",
+      memory_mode: "workspace_plus_global",
+    });
+
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(35);
+    expect(planner.callCount).toBe(1);
+    expect(readModelRepository.searchCallCount).toBe(1);
+    expect(decision.hit).toBe(true);
+    expect(decision.trigger_type).toBe("llm_recall_judge");
+    expect(decision.search_plan_degraded).toBe(false);
   });
 });

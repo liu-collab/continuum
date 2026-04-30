@@ -345,8 +345,16 @@ export class TriggerEngine {
         llmDecisionPromise,
         this.config.RECALL_LLM_JUDGE_WAIT_MS,
       );
-      const llmWaitTimedOut = !limitedLlmDecision.ok && limitedLlmDecision.timedOut === true;
-      const llmDecision = limitedLlmDecision.ok ? limitedLlmDecision.value : undefined;
+      const llmSoftWaitTimedOut = !limitedLlmDecision.ok && limitedLlmDecision.timedOut === true;
+      let llmDecision = limitedLlmDecision.ok ? limitedLlmDecision.value : undefined;
+      let earlySemanticScore: SemanticFallbackScoreResult | undefined;
+
+      if (llmSoftWaitTimedOut && semanticPrefetch) {
+        earlySemanticScore = await semanticPrefetch;
+        if (!earlySemanticScore.hit) {
+          llmDecision = await llmDecisionPromise;
+        }
+      }
 
       if (llmDecision?.ok && llmDecision.value) {
         const plannerNeedsMemory = llmDecision.value.needs_memory ?? llmDecision.value.should_search;
@@ -426,15 +434,15 @@ export class TriggerEngine {
         {
           phase: context.phase,
           reason:
-            llmWaitTimedOut
+            llmSoftWaitTimedOut && earlySemanticScore?.hit
               ? `recall search planner exceeded ${this.config.RECALL_LLM_JUDGE_WAIT_MS}ms wait budget`
               : llmDecision?.error?.message,
         },
         "llm recall search planner degraded, falling back to semantic trigger",
       );
       const searchPlanDegradationReason =
-        llmWaitTimedOut
-          ? "memory_llm_wait_timeout"
+        llmSoftWaitTimedOut && earlySemanticScore?.hit
+          ? "memory_llm_soft_wait_semantic_hit"
           : llmDecision?.error?.code ?? "memory_llm_unavailable";
 
       return {
@@ -444,9 +452,9 @@ export class TriggerEngine {
           intentScopesForSearch,
           intentTypesForSearch,
           scopePlan.reason,
-          semanticPrefetch,
+          earlySemanticScore ? Promise.resolve(earlySemanticScore) : semanticPrefetch,
         )),
-        intent_reason: intentDecision?.reason ?? (llmWaitTimedOut ? "recall_planner_wait_timeout" : "recall_planner_unavailable"),
+        intent_reason: intentDecision?.reason ?? (llmSoftWaitTimedOut && earlySemanticScore?.hit ? "recall_planner_soft_wait_semantic_hit" : "recall_planner_unavailable"),
         intent_confidence: intentDecision?.confidence ?? 0,
         intent_needs_memory: intentDecision?.needsMemory ?? true,
         intent_memory_types: intentDecision?.requestedMemoryTypes ?? intentTypesForSearch,
