@@ -87,13 +87,13 @@ export class AgentPage {
   }
 
   async openPromptInspector() {
-    await this.page.getByRole("button", { name: /查看 prompt|View Prompt/i }).last().click();
-    await expect(this.page.getByText(/Prompt Inspector|Prompt 检查/i)).toBeVisible();
+    await this.page.getByRole("button", { name: /查看提示词|View Prompt/i }).last().click();
+    await expect(this.page.getByText(/Prompt Inspector|提示词检查/i)).toBeVisible();
   }
 
   async closePromptInspector() {
     await this.page.getByTestId("prompt-inspector-close").click();
-    await expect(this.page.getByText(/Prompt Inspector|Prompt 检查/i)).toHaveCount(0);
+    await expect(this.page.getByText(/Prompt Inspector|提示词检查/i)).toHaveCount(0);
   }
 
   async switchMemoryMode(value: "workspace_only" | "workspace_plus_global") {

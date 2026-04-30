@@ -72,7 +72,9 @@ describe("PromptInspector", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByText("最终 Prompt 片段")).toBeInTheDocument();
+    expect(screen.getByText("提示词检查")).toBeInTheDocument();
+    expect(screen.getByLabelText("关闭提示词检查")).toBeInTheDocument();
+    expect(screen.getByText("最终提示词片段")).toBeInTheDocument();
     expect(screen.getByText("阶段命中记录")).toBeInTheDocument();
     expect(screen.getByText("core_system · fixed")).toBeInTheDocument();
     expect(screen.getByText("memory_high · high")).toBeInTheDocument();

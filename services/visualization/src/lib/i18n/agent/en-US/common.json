@@ -6,6 +6,9 @@
       "en-US": "English"
     }
   },
+  "common": {
+    "close": "Close"
+  },
   "workspace": {
     "offlineTitle": "Agent offline",
     "offlineDescription": "Start memory-native-agent first, then refresh this page. Suggested command: `axis start`.",

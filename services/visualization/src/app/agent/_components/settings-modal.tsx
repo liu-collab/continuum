@@ -889,7 +889,7 @@ export function SettingsModal({
         footer={
           <>
             <button type="button" onClick={onClose} className="btn-outline">
-              {t("promptInspector.close")}
+              {t("common.close")}
             </button>
             {setupStep > 1 ? (
               <button
@@ -1096,7 +1096,7 @@ export function SettingsModal({
       footer={
         <>
           <button type="button" onClick={onClose} className="btn-outline">
-            {t("promptInspector.close")}
+            {t("common.close")}
           </button>
           <button
             type="button"

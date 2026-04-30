@@ -6,6 +6,9 @@
       "en-US": "English"
     }
   },
+  "common": {
+    "close": "关闭"
+  },
   "workspace": {
     "offlineTitle": "agent 离线",
     "offlineDescription": "请先启动 memory-native-agent，然后刷新页面。建议命令：`axis start`。",
@@ -424,9 +427,9 @@
     "disabled": "已禁用"
   },
   "promptInspector": {
-    "title": "Prompt Inspector",
-    "description": "查看当前轮次发给 provider 的 messages 和 tools。",
-    "close": "关闭 Prompt Inspector",
+    "title": "提示词检查",
+    "description": "查看当前轮次发给模型提供方的消息和工具。",
+    "close": "关闭提示词检查",
     "meta": "元信息",
     "turn": "轮次",
     "trace": "调试标识",
@@ -439,16 +442,16 @@
     "budgetTotal": "总量：{total} / 预留：{reserve}",
     "budgetAllocationPrimary": "固定 {fixed} · 记忆 {memory} · 工具 {tools}",
     "budgetAllocationSecondary": "历史 {history} · 当前轮 {current}",
-    "rawPayload": "原始 payload",
+    "rawPayload": "原始请求内容",
     "segmentPhase": "阶段：{phase}",
     "dropped": "已丢弃",
     "plan": "计划",
     "planRevisions": "计划修订",
     "evaluation": "评估",
     "notLoaded": "未加载",
-    "finalPrompt": "最终 Prompt 片段",
+    "finalPrompt": "最终提示词片段",
     "phaseHits": "阶段命中记录",
-    "noPromptSegments": "没有 Prompt 片段",
+    "noPromptSegments": "没有提示词片段",
     "noPhaseHits": "没有阶段命中记录",
     "noInjection": "本阶段未注入记忆"
   },
