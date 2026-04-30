@@ -64,6 +64,7 @@ const TRANSIENT_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const TRANSIENT_ATTEMPTS = 4;
 const TRANSIENT_BACKOFF_MS = [0, 500, 1_500, 4_000];
 const JSON_OBJECT_SYSTEM_PREFIX = "Return a valid json object only.";
+const JSON_OBJECT_INPUT_PREFIX = "Return the result as a valid json object.";
 
 export async function callMemoryLlm(
   config: MemoryLlmConfig,
@@ -345,7 +346,7 @@ function buildOpenAiResponsesBody(
   return {
     model: config.MEMORY_LLM_MODEL,
     instructions: `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`,
-    input: JSON.stringify(userPayload),
+    input: `${JSON_OBJECT_INPUT_PREFIX}\n${JSON.stringify(userPayload)}`,
     max_output_tokens: maxTokens,
     store: false,
     ...(options.includeTextFormat

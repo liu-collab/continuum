@@ -136,6 +136,7 @@ describe("memory orchestrator llm client", () => {
       store: false,
       max_output_tokens: 64,
     });
+    expect(String(parsedBody.input).toLowerCase()).toContain("json");
     expect(result).toBe("{\"ok\":true,\"source\":\"responses\"}");
   });
 
