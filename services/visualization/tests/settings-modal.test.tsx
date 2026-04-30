@@ -475,7 +475,7 @@ describe("SettingsModal", () => {
             embedding: {
               base_url: null,
               model: null,
-              api_key: null,
+              api_key: "openai-key",
             },
             memory_llm: {
               base_url: null,
@@ -523,6 +523,7 @@ describe("SettingsModal", () => {
         embedding: expect.objectContaining({
           base_url: "https://api.openai.com/v1",
           model: "text-embedding-3-small",
+          api_key: "openai-key",
         }),
         memory_llm: expect.objectContaining({
           base_url: "https://api.openai.com/v1",
@@ -776,6 +777,45 @@ describe("SettingsModal", () => {
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
       "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
     );
+  });
+
+  it("validates embedding api key before saving", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            embedding: {
+              ...baseConfig.embedding,
+              api_key: "",
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await openAdvancedSettings(user);
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("EMBEDDING_API_KEY 不能为空。");
   });
 
   it("runs memory llm health check with the saved config", async () => {

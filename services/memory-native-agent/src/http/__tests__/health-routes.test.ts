@@ -1219,6 +1219,42 @@ describe("health routes", () => {
     }
   });
 
+  it("rejects embedding config when api_key is missing", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          embedding: {
+            base_url: "https://api.openai.com/v1",
+            model: "text-embedding-3-small"
+          }
+        }
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        ok: false,
+        error: {
+          code: "invalid_config_payload",
+          message: "embedding.api_key: Required",
+        },
+      });
+    } finally {
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("rejects mcp config when stdio transport is missing command", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");

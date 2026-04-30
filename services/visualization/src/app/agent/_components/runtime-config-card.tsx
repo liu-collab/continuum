@@ -115,6 +115,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
     const trimmedProviderApiKey = providerApiKey.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
+    const trimmedEmbeddingApiKey = embeddingApiKey.trim();
 
     if (!trimmedProviderModel) {
       setErrorMessage(t("runtimeConfig.errors.providerModelRequired"));
@@ -136,6 +137,11 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       return;
     }
 
+    if (!trimmedEmbeddingApiKey) {
+      setErrorMessage(t("runtimeConfig.errors.embeddingApiKeyRequired"));
+      return;
+    }
+
     setErrorMessage(null);
     const currentProviderKind: ProviderKind =
       isEditableProviderKind(providerKindToSave) ? providerKind : providerKindToSave;
@@ -149,7 +155,7 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
       embedding: {
         ...(trimmedEmbeddingBaseUrl ? { base_url: trimmedEmbeddingBaseUrl } : {}),
         ...(trimmedEmbeddingModel ? { model: trimmedEmbeddingModel } : {}),
-        ...(embeddingApiKey.trim() ? { api_key: embeddingApiKey.trim() } : {}),
+        api_key: trimmedEmbeddingApiKey,
       },
     });
   }

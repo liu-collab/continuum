@@ -78,7 +78,7 @@ const providerPayloadSchema = z.object({
 const embeddingPayloadSchema = z.object({
   base_url: z.string().trim().url().optional(),
   model: z.string().trim().min(1).optional(),
-  api_key: z.string().trim().optional(),
+  api_key: z.string().trim().min(1),
 });
 
 const memoryLlmPayloadSchema = z.object({

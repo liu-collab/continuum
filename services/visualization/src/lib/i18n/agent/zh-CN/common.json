@@ -124,7 +124,7 @@
     "embeddingTitle": "Embedding 配置",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
-    "embeddingApiKey": "EMBEDDING_API_KEY（可选）",
+    "embeddingApiKey": "EMBEDDING_API_KEY",
     "memoryLlmTitle": "记忆模型",
     "memoryLlmMode": "记忆模型来源",
     "memoryLlmModeOptions": {
@@ -225,6 +225,7 @@
       "providerKindMismatch": "当前 base_url 是 OpenAI-compatible 的 /v1 地址，请选择 OpenAI-compatible 协议，不要选择 Ollama。",
       "providerMaxTokensInvalid": "provider 最大输出 token 需要是正整数。",
       "embeddingModelRequired": "填写 EMBEDDING_BASE_URL 后，还需要填写 EMBEDDING_MODEL。",
+      "embeddingApiKeyRequired": "EMBEDDING_API_KEY 不能为空。",
       "memoryLlmModelRequired": "填写 MEMORY_LLM_BASE_URL 后，还需要填写 MEMORY_LLM_MODEL。",
       "memoryLlmFollowUnsupported": "当前主模型不能直接同步为记忆模型，请改为独立配置。",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS 需要是正整数。",

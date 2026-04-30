@@ -549,6 +549,7 @@ export function SettingsModal({
     const trimmedProviderMaxTokens = providerMaxTokens.trim();
     const trimmedEmbeddingBaseUrl = embeddingBaseUrl.trim();
     const trimmedEmbeddingModel = embeddingModel.trim();
+    const trimmedEmbeddingApiKey = embeddingApiKey.trim();
     const trimmedMemoryLlmBaseUrl = memoryLlmBaseUrl.trim();
     const trimmedMemoryLlmModel = memoryLlmModel.trim();
     const trimmedMemoryLlmApiKey = memoryLlmApiKey.trim();
@@ -574,6 +575,11 @@ export function SettingsModal({
 
     if (trimmedEmbeddingBaseUrl && !trimmedEmbeddingModel) {
       setErrorMessage(t("runtimeConfig.errors.embeddingModelRequired"));
+      return;
+    }
+
+    if (!trimmedEmbeddingApiKey) {
+      setErrorMessage(t("runtimeConfig.errors.embeddingApiKeyRequired"));
       return;
     }
 
@@ -633,7 +639,7 @@ export function SettingsModal({
         embedding: {
           ...(trimmedEmbeddingBaseUrl ? { base_url: trimmedEmbeddingBaseUrl } : {}),
           ...(trimmedEmbeddingModel ? { model: trimmedEmbeddingModel } : {}),
-          ...(embeddingApiKey.trim() ? { api_key: embeddingApiKey.trim() } : {})
+          api_key: trimmedEmbeddingApiKey,
         },
         tools: {
           approval_mode: approvalMode,

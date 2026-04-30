@@ -26,7 +26,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
 
   async embedText(text: string, signal?: AbortSignal): Promise<number[]> {
     const activeConfig = resolveRuntimeEmbeddingConfig(this.config);
-    if (!activeConfig.baseUrl || !activeConfig.model) {
+    if (!activeConfig.baseUrl || !activeConfig.model || !activeConfig.apiKey) {
       throw new Error("embedding config is not complete");
     }
 
@@ -34,7 +34,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(activeConfig.apiKey ? { authorization: `Bearer ${activeConfig.apiKey}` } : {}),
+        authorization: `Bearer ${activeConfig.apiKey}`,
       },
       body: JSON.stringify({
         model: activeConfig.model,

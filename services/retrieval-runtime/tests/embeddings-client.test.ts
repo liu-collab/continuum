@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../src/config.js";
+import { hasCompleteRuntimeEmbeddingConfig } from "../src/embedding-config.js";
 import type { EmbeddingsClient } from "../src/query/embeddings-client.js";
 import { CachedEmbeddingsClient, HttpEmbeddingsClient } from "../src/query/embeddings-client.js";
 import { hasCompleteRuntimeWritebackLlmConfig, resolveRuntimeWritebackLlmConfig } from "../src/writeback-llm-config.js";
@@ -471,6 +472,23 @@ describe("retrieval-runtime embeddings client", () => {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it("requires an embedding api key for complete runtime embedding config", () => {
+    expect(
+      hasCompleteRuntimeEmbeddingConfig({
+        EMBEDDING_BASE_URL: "https://api.openai.com/v1",
+        EMBEDDING_MODEL: "text-embedding-3-small",
+      }),
+    ).toBe(false);
+
+    expect(
+      hasCompleteRuntimeEmbeddingConfig({
+        EMBEDDING_BASE_URL: "https://api.openai.com/v1",
+        EMBEDDING_MODEL: "text-embedding-3-small",
+        EMBEDDING_API_KEY: "test-key",
+      }),
+    ).toBe(true);
   });
 
   it("caches normalized embedding requests and returns defensive copies", async () => {

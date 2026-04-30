@@ -107,6 +107,40 @@ describe("RuntimeConfigCard", () => {
     );
   });
 
+  it("blocks save when embedding api key is empty", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <RuntimeConfigCard
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-compatible",
+              model: "deepseek-chat",
+              base_url: "https://api.deepseek.com",
+              api_key: "demo-key",
+            },
+            embedding: {
+              base_url: "https://api.openai.com/v1",
+              model: "text-embedding-3-small",
+              api_key: "",
+            },
+          }}
+          dependencyStatus={null}
+          onSave={onSave}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("EMBEDDING_API_KEY 不能为空。");
+  });
+
   it("submits provider and embedding config after validation passes", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -146,6 +180,9 @@ describe("RuntimeConfigCard", () => {
     fireEvent.change(screen.getByPlaceholderText("EMBEDDING_MODEL"), {
       target: { value: "text-embedding-3-small" },
     });
+    fireEvent.change(screen.getByPlaceholderText("EMBEDDING_API_KEY"), {
+      target: { value: "embed-key" },
+    });
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(onSave).toHaveBeenCalledWith({
@@ -158,6 +195,7 @@ describe("RuntimeConfigCard", () => {
       embedding: {
         base_url: "https://api.openai.com/v1",
         model: "text-embedding-3-small",
+        api_key: "embed-key",
       },
     });
     expect(screen.getByText("misconfigured")).toBeInTheDocument();
@@ -181,7 +219,7 @@ describe("RuntimeConfigCard", () => {
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前 provider 需要填写 base_url。");
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前接口协议需要填写 base_url。");
   });
 
   it("requires provider api_key for openai-compatible provider", async () => {
@@ -209,7 +247,7 @@ describe("RuntimeConfigCard", () => {
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前 provider 需要填写 api_key。");
+    expect(screen.getByTestId("runtime-config-error")).toHaveTextContent("当前接口协议需要填写 api_key。");
   });
 
   it("exposes the common provider kinds in the selector", async () => {

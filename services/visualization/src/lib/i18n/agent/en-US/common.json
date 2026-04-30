@@ -124,7 +124,7 @@
     "embeddingTitle": "Embedding config",
     "embeddingBaseUrl": "EMBEDDING_BASE_URL",
     "embeddingModel": "EMBEDDING_MODEL",
-    "embeddingApiKey": "EMBEDDING_API_KEY (optional)",
+    "embeddingApiKey": "EMBEDDING_API_KEY",
     "memoryLlmTitle": "Memory model",
     "memoryLlmMode": "Memory model source",
     "memoryLlmModeOptions": {
@@ -225,6 +225,7 @@
       "providerKindMismatch": "This base_url is an OpenAI-compatible /v1 endpoint. Choose the OpenAI-compatible protocol instead of Ollama.",
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
+      "embeddingApiKeyRequired": "EMBEDDING_API_KEY is required.",
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
       "memoryLlmFollowUnsupported": "The current primary model cannot be mirrored directly as the memory model. Switch to custom mode.",
       "memoryLlmTimeoutInvalid": "MEMORY_LLM_TIMEOUT_MS must be a positive integer.",

@@ -78,5 +78,5 @@ export function resolveRuntimeEmbeddingConfig(source: EmbeddingConfigSource): Ru
 
 export function hasCompleteRuntimeEmbeddingConfig(source: EmbeddingConfigSource) {
   const config = resolveRuntimeEmbeddingConfig(source);
-  return Boolean(config.baseUrl && config.model);
+  return Boolean(config.baseUrl && config.model && config.apiKey);
 }
