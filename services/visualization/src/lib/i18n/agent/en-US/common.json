@@ -214,13 +214,7 @@
       "finish": "Save and start",
       "next": "Next",
       "back": "Back",
-      "ollamaNoApiKey": "Local Ollama does not need an API Key.",
-      "protocols": {
-        "openai-compatible": "Compatible with /v1/chat/completions for third-party OpenAI-compatible APIs.",
-        "openai-responses": "Official OpenAI /v1/responses protocol.",
-        "anthropic": "Anthropic /v1/messages protocol.",
-        "ollama": "Local Ollama /api/chat protocol."
-      }
+      "ollamaNoApiKey": "Local Ollama does not need an API Key."
     },
     "errors": {
       "providerModelRequired": "provider model is required.",

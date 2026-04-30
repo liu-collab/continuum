@@ -105,7 +105,7 @@ describe("SettingsModal", () => {
     );
 
     expect(screen.getByTestId("setup-protocol-select")).toHaveTextContent("OpenAI Responses");
-    expect(screen.getByTestId("setup-protocol-summary")).toHaveTextContent("/v1/responses");
+    expect(screen.queryByTestId("setup-protocol-summary")).not.toBeInTheDocument();
     expect(screen.getByLabelText("base_url")).toHaveValue("https://api.openai.com/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
     expect(screen.getByTestId("setup-api-key-env-detected")).toHaveTextContent(

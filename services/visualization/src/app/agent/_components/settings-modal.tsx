@@ -132,7 +132,6 @@ type SetupProtocolPreset = {
   label: string;
   kind: EditableProviderKind;
   baseUrl: string;
-  endpoint: string;
   apiKeyRequired: boolean;
   apiKeyEnv?: ProviderApiKeyEnv;
 };
@@ -149,7 +148,6 @@ const SETUP_PROTOCOL_PRESETS: SetupProtocolPreset[] = [
     label: "OpenAI-compatible (/v1/chat/completions)",
     kind: "openai-compatible",
     baseUrl: "",
-    endpoint: "/v1/chat/completions",
     apiKeyRequired: true,
   },
   {
@@ -157,7 +155,6 @@ const SETUP_PROTOCOL_PRESETS: SetupProtocolPreset[] = [
     label: "OpenAI Responses (/v1/responses)",
     kind: "openai-responses",
     baseUrl: "https://api.openai.com/v1",
-    endpoint: "/v1/responses",
     apiKeyRequired: true,
     apiKeyEnv: "OPENAI_API_KEY",
   },
@@ -166,7 +163,6 @@ const SETUP_PROTOCOL_PRESETS: SetupProtocolPreset[] = [
     label: "Anthropic Messages (/v1/messages)",
     kind: "anthropic",
     baseUrl: "https://api.anthropic.com",
-    endpoint: "/v1/messages",
     apiKeyRequired: true,
     apiKeyEnv: "ANTHROPIC_API_KEY",
   },
@@ -175,7 +171,6 @@ const SETUP_PROTOCOL_PRESETS: SetupProtocolPreset[] = [
     label: "Ollama (/api/chat)",
     kind: "ollama",
     baseUrl: "http://127.0.0.1:11434",
-    endpoint: "/api/chat",
     apiKeyRequired: false,
   },
 ];
@@ -982,16 +977,6 @@ export function SettingsModal({
                   testId="setup-protocol-select"
                 />
               </label>
-              <div
-                className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
-                data-testid="setup-protocol-summary"
-              >
-                <div className="font-medium text-foreground">{setupProtocol.label}</div>
-                <div className="mt-1 leading-5">
-                  {t(`runtimeConfig.setupWizard.protocols.${setupProtocol.id}`)}
-                </div>
-                <div className="mt-2 text-xs">{setupProtocol.endpoint}</div>
-              </div>
             </div>
           ) : null}
 

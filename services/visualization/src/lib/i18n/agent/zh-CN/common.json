@@ -214,13 +214,7 @@
       "finish": "保存并开始",
       "next": "下一步",
       "back": "上一步",
-      "ollamaNoApiKey": "Ollama 本地服务不需要 API Key。",
-      "protocols": {
-        "openai-compatible": "兼容 /v1/chat/completions，适合第三方 OpenAI-compatible API。",
-        "openai-responses": "OpenAI 官方 /v1/responses 协议。",
-        "anthropic": "Anthropic /v1/messages 协议。",
-        "ollama": "本机 Ollama /api/chat 协议。"
-      }
+      "ollamaNoApiKey": "Ollama 本地服务不需要 API Key。"
     },
     "errors": {
       "providerModelRequired": "provider model 不能为空。",
