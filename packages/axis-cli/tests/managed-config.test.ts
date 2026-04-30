@@ -65,7 +65,7 @@ describe("managed mna provider config", () => {
         MEMORY_LLM_BASE_URL: "https://api.example.com/v1/",
         MEMORY_LLM_MODEL: "env-model",
         MEMORY_LLM_API_KEY: "env-key",
-        MEMORY_LLM_PROTOCOL: "openai-compatible",
+        MEMORY_LLM_PROTOCOL: "openai-responses",
         MEMORY_LLM_TIMEOUT_MS: "7000",
         MEMORY_LLM_EFFORT: "medium",
         MEMORY_LLM_MAX_TOKENS: "2048",
@@ -74,7 +74,7 @@ describe("managed mna provider config", () => {
       baseUrl: "https://api.example.com/v1",
       model: "env-model",
       apiKey: "env-key",
-      protocol: "openai-compatible",
+      protocol: "openai-responses",
       timeoutMs: 7000,
       effort: "medium",
       maxTokens: 2048,
@@ -83,10 +83,12 @@ describe("managed mna provider config", () => {
     expect(
       resolveOptionalManagedMemoryLlmCliConfig({
         "memory-llm-model": "cli-model",
+        "memory-llm-protocol": "ollama",
         "memory-llm-timeout-ms": "9000",
       }),
     ).toEqual({
       model: "cli-model",
+      protocol: "ollama",
       timeoutMs: 9000,
     });
   });

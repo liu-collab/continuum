@@ -20,7 +20,7 @@ export type ManagedWritebackLlmConfig = {
   model?: string;
   apiKey?: string;
   timeoutMs?: number;
-  protocol?: "anthropic" | "openai-compatible";
+  protocol?: "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
   maxTokens?: number | null;
 };
@@ -113,12 +113,12 @@ function readProtocol(value: string | undefined, fieldName: string) {
   if (!value) {
     return undefined;
   }
-  if (value === "anthropic" || value === "openai-compatible") {
+  if (value === "anthropic" || value === "openai-compatible" || value === "openai-responses" || value === "ollama") {
     return value;
   }
   throw new Error(bilingualMessage(
-    `${fieldName} 必须是 anthropic 或 openai-compatible。`,
-    `${fieldName} must be anthropic or openai-compatible.`,
+    `${fieldName} 必须是 anthropic、openai-compatible、openai-responses 或 ollama。`,
+    `${fieldName} must be anthropic, openai-compatible, openai-responses, or ollama.`,
   ));
 }
 

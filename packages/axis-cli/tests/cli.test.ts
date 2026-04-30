@@ -167,6 +167,7 @@ describe("axis cli", () => {
     expect(renderHelp()).toContain("--embedding-base-url URL");
     expect(renderHelp()).toContain("--provider-kind KIND");
     expect(renderHelp()).toContain("openai-responses");
+    expect(renderHelp()).toContain("openai-compatible / openai-responses / anthropic / ollama");
   });
 
   it("reports expected start failures without calling them unexpected errors", async () => {

@@ -394,6 +394,7 @@ describe("SettingsModal", () => {
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
       "当前 base_url 是 OpenAI-compatible 的 /v1 地址",
     );
+    expect(screen.getByTestId("runtime-config-error")).toHaveClass("notice-danger");
   });
 
   it("prefills provider settings from a detected DeepSeek API key env hint", async () => {
@@ -450,6 +451,7 @@ describe("SettingsModal", () => {
     expect(screen.getByTestId("runtime-config-error")).toHaveTextContent(
       "provider model 不能为空。",
     );
+    expect(screen.getByTestId("runtime-config-error")).toHaveClass("notice-danger");
   });
 
   it("defaults embedding and memory llm to the primary model path for OpenAI users", async () => {

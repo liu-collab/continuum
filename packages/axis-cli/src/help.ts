@@ -32,7 +32,7 @@ Options:
   --memory-llm-base-url URL  记忆模型接口地址，也可通过 MEMORY_LLM_BASE_URL 提供
   --memory-llm-model MODEL   记忆模型名，也可通过 MEMORY_LLM_MODEL 提供
   --memory-llm-api-key KEY   记忆模型鉴权，可选，也可通过 MEMORY_LLM_API_KEY 提供
-  --memory-llm-protocol PROTOCOL  记忆模型协议，支持 anthropic / openai-compatible
+  --memory-llm-protocol PROTOCOL  记忆模型协议，支持 anthropic / openai-compatible / openai-responses / ollama
   --memory-llm-effort EFFORT      记忆模型推理强度，支持 low / medium / high / xhigh / max
   --memory-llm-timeout-ms MS      记忆模型请求超时毫秒数
   --memory-llm-max-tokens TOKENS  记忆模型最大输出 token 数

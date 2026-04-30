@@ -930,7 +930,7 @@ export function SettingsModal({
       >
         <div className="space-y-5" data-testid="provider-setup-wizard">
           {errorMessage ? (
-            <p className="text-sm text-[var(--ink)]" data-testid="runtime-config-error">
+            <p className="notice notice-danger" data-testid="runtime-config-error">
               {errorMessage}
             </p>
           ) : null}
@@ -1061,7 +1061,7 @@ export function SettingsModal({
                 <>
                   {setupModelListError ? (
                     <div
-                      className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
+                      className="notice notice-danger"
                       data-testid="setup-model-list-error"
                     >
                       {t("runtimeConfig.setupWizard.modelListFallback")}: {setupModelListError}
@@ -1113,7 +1113,7 @@ export function SettingsModal({
     >
       <div className="space-y-6" data-testid="runtime-config-card">
         {errorMessage ? (
-          <p className="text-sm text-[var(--ink)]" data-testid="runtime-config-error">
+          <p className="notice notice-danger" data-testid="runtime-config-error">
             {errorMessage}
           </p>
         ) : null}
