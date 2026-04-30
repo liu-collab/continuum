@@ -1,159 +1,44 @@
-import { createHash, randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 
 import type { AppConfig } from "./config.js";
 import type { DependencyGuard } from "./dependency/dependency-guard.js";
 import { RuntimeDependencyHealthChecker } from "./dependency/runtime-dependency-health-checker.js";
-import { buildMemoryPacket } from "./injection/packet-builder.js";
 import {
   DEFAULT_RECENT_INJECTION_CONFIG,
   pickRecentInjectionConfig,
-  RecentInjectionPolicy,
 } from "./injection/recent-injection-policy.js";
-import { updateLogContext } from "./logger.js";
-import type {
-  MemoryOrchestrator,
-  RecallEffectivenessInputMemory,
-  RecallInjectionPlanner,
-  WritebackPlanner,
-} from "./memory-orchestrator/index.js";
+import type { MemoryOrchestrator } from "./memory-orchestrator/index.js";
 import type { RuntimeRepository } from "./observability/runtime-repository.js";
 import {
   pickRuntimeGovernanceConfig,
   type RuntimeGovernanceConfig,
 } from "./runtime-config.js";
-import { RecallAugmentationService } from "./query/recall-augmentation-service.js";
+import { PrepareContextService } from "./query/prepare-context-service.js";
+import { createRuntimeServiceGraph } from "./runtime-service-graph.js";
 import { nowIso } from "./shared/utils.js";
 import type {
-  CandidateMemory,
   CacheClearResponse,
   DependencyStatus,
   DependencyStatusSnapshot,
-  FinalizeIdempotencyRecord,
   FinalizeTurnInput,
   FinalizeTurnResponse,
   MaintenanceRunSummary,
-  MemoryPacket,
-  MemoryMode,
   ObserveRunsFilters,
-  ProactiveRecommendation,
   PrepareContextResponse,
-  RetrievalQuery,
   SessionStartResponse,
-  ScopeType,
-  TriggerDecision,
   TriggerContext,
   WriteProjectionStatusSnapshot,
 } from "./shared/types.js";
 import type { EmbeddingCacheProvider, EmbeddingsClient } from "./query/embeddings-client.js";
-import { compareRankedCandidates } from "./query/query-engine.js";
 import type { QueryEngine } from "./query/query-engine.js";
-import { RecallPreflight, type RecallPreflightSkip } from "./trigger/recall-preflight.js";
+import { RecallPreflight } from "./trigger/recall-preflight.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
 import type { WritebackEngine } from "./writeback/writeback-engine.js";
 import type { InjectionEngine } from "./injection/injection-engine.js";
 import type { FinalizeIdempotencyCache } from "./writeback/finalize-idempotency-cache.js";
+import { FinalizeTurnService } from "./writeback/finalize-turn-service.js";
 import type { WritebackMaintenanceWorker } from "./writeback/maintenance-worker.js";
 import type { StorageWritebackClient } from "./writeback/storage-client.js";
-
-const MEMORY_SEARCH_PROMPT_VERSION = "memory-recall-search-v1";
-const MEMORY_INTENT_PROMPT_VERSION = "memory-intent-plan-v1";
-const MEMORY_INJECTION_PROMPT_VERSION = "memory-recall-injection-v1";
-const MEMORY_EFFECTIVENESS_PROMPT_VERSION = "memory-recall-effectiveness-v1";
-const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
-const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
-const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
-
-function resolveMemoryMode(memoryMode?: MemoryMode): MemoryMode {
-  return memoryMode ?? "workspace_plus_global";
-}
-
-function isWritebackAccepted(status: FinalizeTurnResponse["submitted_jobs"][number]["status"]): boolean {
-  return status === "accepted" || status === "accepted_async" || status === "merged";
-}
-
-function buildFinalizeCacheKey(input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "current_input">): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        session_id: input.session_id,
-        turn_id: input.turn_id ?? null,
-        current_input: input.current_input,
-      }),
-    )
-    .digest("hex");
-}
-
-function buildFinalizeIdempotencyRecord(
-  key: string,
-  response: FinalizeTurnResponse,
-  ttlMs: number,
-): FinalizeIdempotencyRecord {
-  const createdAt = nowIso();
-  return {
-    idempotency_key: key,
-    response,
-    created_at: createdAt,
-    expires_at: new Date(Date.parse(createdAt) + ttlMs).toISOString(),
-  };
-}
-
-function summarizeText(value: string | undefined, maxLength = 220) {
-  if (!value) {
-    return "";
-  }
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
-function summarizeCandidateIds(candidates: CandidateMemory[], selectedIds?: string[]) {
-  if (selectedIds && selectedIds.length > 0) {
-    return `selected=${selectedIds.join(",")}`;
-  }
-  return `candidate_count=${candidates.length}`;
-}
-
-function dedupeCandidates(candidates: CandidateMemory[]) {
-  const seen = new Set<string>();
-  return candidates.filter((candidate) => {
-    if (seen.has(candidate.id)) {
-      return false;
-    }
-    seen.add(candidate.id);
-    return true;
-  });
-}
-
-function mergeTriggerReason(primary: string, secondary?: string) {
-  if (!secondary || secondary.trim().length === 0 || secondary === primary) {
-    return primary;
-  }
-  return `${primary}; ${secondary}`;
-}
-
-function shouldEnqueueUrgentMaintenance(input: {
-  candidates: FinalizeTurnResponse["write_back_candidates"];
-  submittedJobs: FinalizeTurnResponse["submitted_jobs"];
-}): { source: "open_conflict" | "pending_confirmation"; reason: string } | null {
-  if (input.candidates.some((candidate) => candidate.suggested_status === "pending_confirmation")) {
-    return {
-      source: "pending_confirmation",
-      reason: "writeback produced pending confirmation candidates",
-    };
-  }
-
-  if (input.submittedJobs.some((job) => job.reason?.includes("open_conflict"))) {
-    return {
-      source: "open_conflict",
-      reason: "writeback reported an open conflict",
-    };
-  }
-
-  return null;
-}
 
 function hasEmbeddingCacheProvider(client: EmbeddingsClient): client is EmbeddingsClient & EmbeddingCacheProvider {
   return (
@@ -162,60 +47,19 @@ function hasEmbeddingCacheProvider(client: EmbeddingsClient): client is Embeddin
   );
 }
 
-async function resolveTraceId(
-  repository: RuntimeRepository,
-  input: {
-    session_id: string;
-    turn_id?: string;
-    phase: TriggerContext["phase"] | "after_response";
-  },
-) {
-  if (input.turn_id) {
-    return (
-      (await repository.findTraceIdByTurn({
-        session_id: input.session_id,
-        turn_id: input.turn_id,
-      })) ?? randomUUID()
-    );
-  }
-
-  if (input.phase === "session_start") {
-    return (
-      (await repository.findLatestTraceIdBySession({
-        session_id: input.session_id,
-      })) ?? randomUUID()
-    );
-  }
-
-  return randomUUID();
-}
-
 export class RetrievalRuntimeService {
-  private readonly triggerEngine: TriggerEngine;
-  private readonly queryEngine: QueryEngine;
   private readonly embeddingsClient: EmbeddingsClient;
-  private readonly injectionEngine: InjectionEngine;
-  private readonly writebackEngine: WritebackEngine;
   private readonly repository: RuntimeRepository;
   private readonly dependencyGuard: DependencyGuard;
   private readonly logger: Logger;
   private readonly finalizeIdempotencyCache?: FinalizeIdempotencyCache;
   private readonly embeddingTimeoutMs: number;
-  private readonly memoryLlmTimeoutMs: number;
-  private readonly memoryOrchestrator?: MemoryOrchestrator;
   private readonly maintenanceWorker?: WritebackMaintenanceWorker;
   private readonly storageClient?: StorageWritebackClient;
-  private readonly recallPreflight?: RecallPreflight;
   private readonly dependencyHealthChecker: RuntimeDependencyHealthChecker;
-  private readonly recentInjectionPolicy: RecentInjectionPolicy;
-  private readonly recallAugmentationService: RecallAugmentationService;
+  private readonly prepareContextService: PrepareContextService;
+  private readonly finalizeTurnService: FinalizeTurnService;
   private runtimeGovernanceConfig: RuntimeGovernanceConfig;
-  private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
-  private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
-  private readonly recentInjectionContexts = new Map<string, {
-    memories: RecallEffectivenessInputMemory[];
-    created_at: number;
-  }>();
 
   constructor(
     config: AppConfig,
@@ -265,11 +109,9 @@ export class RetrievalRuntimeService {
     storageClient?: StorageWritebackClient,
   ) {
     if (isAppConfig(configOrTriggerEngine)) {
-      this.triggerEngine = triggerEngineOrQueryEngine as TriggerEngine;
-      this.queryEngine = queryEngineOrEmbeddingsClient as QueryEngine;
+      const triggerEngine = triggerEngineOrQueryEngine as TriggerEngine;
+      const queryEngine = queryEngineOrEmbeddingsClient as QueryEngine;
       this.embeddingsClient = embeddingsClientOrInjectionEngine as EmbeddingsClient;
-      this.injectionEngine = injectionEngineOrWritebackEngine as InjectionEngine;
-      this.writebackEngine = writebackEngineOrRepository as WritebackEngine;
       this.repository = repositoryOrDependencyGuard as RuntimeRepository;
       this.dependencyGuard = dependencyGuardOrLogger as DependencyGuard;
       this.logger = loggerOrFinalizeIdempotencyCache as Logger;
@@ -278,15 +120,15 @@ export class RetrievalRuntimeService {
         | undefined;
       this.embeddingTimeoutMs =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number" ? embeddingTimeoutMsOrMemoryOrchestrator : 800;
-      this.memoryLlmTimeoutMs = configOrTriggerEngine.MEMORY_LLM_TIMEOUT_MS;
+      const memoryLlmTimeoutMs = configOrTriggerEngine.MEMORY_LLM_TIMEOUT_MS;
       this.runtimeGovernanceConfig = pickRuntimeGovernanceConfig(configOrTriggerEngine);
-      this.recallPreflight = new RecallPreflight(
+      const recallPreflight = new RecallPreflight(
         configOrTriggerEngine,
-        this.queryEngine,
+        queryEngine,
         this.dependencyGuard,
         this.logger,
       );
-      this.memoryOrchestrator =
+      const memoryOrchestrator =
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
           ? memoryOrchestratorOrMaintenanceWorker as MemoryOrchestrator | undefined
           : embeddingTimeoutMsOrMemoryOrchestrator;
@@ -298,35 +140,32 @@ export class RetrievalRuntimeService {
         typeof embeddingTimeoutMsOrMemoryOrchestrator === "number"
           ? storageClient
           : maintenanceWorkerOrStorageClient as StorageWritebackClient | undefined;
-      this.recentInjectionPolicy = new RecentInjectionPolicy({
-        config: pickRecentInjectionConfig(configOrTriggerEngine),
-        repository: this.repository,
-        logger: this.logger,
-      });
-      this.dependencyHealthChecker = new RuntimeDependencyHealthChecker({
+      const graph = createRuntimeServiceGraph({
+        triggerEngine,
+        queryEngine,
         embeddingsClient: this.embeddingsClient,
+        injectionEngine: injectionEngineOrWritebackEngine as InjectionEngine,
+        writebackEngine: writebackEngineOrRepository as WritebackEngine,
         repository: this.repository,
-        logger: this.logger,
-        embeddingTimeoutMs: this.embeddingTimeoutMs,
-        memoryOrchestrator: this.memoryOrchestrator,
-      });
-      this.recallAugmentationService = new RecallAugmentationService({
         dependencyGuard: this.dependencyGuard,
-        repository: this.repository,
         logger: this.logger,
+        finalizeIdempotencyCache: this.finalizeIdempotencyCache,
         embeddingTimeoutMs: this.embeddingTimeoutMs,
-        memoryLlmTimeoutMs: this.memoryLlmTimeoutMs,
-        memoryOrchestrator: this.memoryOrchestrator,
+        memoryLlmTimeoutMs,
+        memoryOrchestrator,
         storageClient: this.storageClient,
+        recallPreflight,
+        recentInjectionConfig: pickRecentInjectionConfig(configOrTriggerEngine),
       });
+      this.dependencyHealthChecker = graph.dependencyHealthChecker;
+      this.prepareContextService = graph.prepareContextService;
+      this.finalizeTurnService = graph.finalizeTurnService;
       return;
     }
 
-    this.triggerEngine = configOrTriggerEngine;
-    this.queryEngine = triggerEngineOrQueryEngine as QueryEngine;
+    const triggerEngine = configOrTriggerEngine;
+    const queryEngine = triggerEngineOrQueryEngine as QueryEngine;
     this.embeddingsClient = queryEngineOrEmbeddingsClient as EmbeddingsClient;
-    this.injectionEngine = embeddingsClientOrInjectionEngine as InjectionEngine;
-    this.writebackEngine = injectionEngineOrWritebackEngine as WritebackEngine;
     this.repository = writebackEngineOrRepository as RuntimeRepository;
     this.dependencyGuard = repositoryOrDependencyGuard as DependencyGuard;
     this.logger = dependencyGuardOrLogger as Logger;
@@ -335,7 +174,7 @@ export class RetrievalRuntimeService {
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? finalizeIdempotencyCacheOrEmbeddingTimeoutMs
         : 800;
-    this.memoryLlmTimeoutMs = this.embeddingTimeoutMs;
+    const memoryLlmTimeoutMs = this.embeddingTimeoutMs;
     this.runtimeGovernanceConfig = {
       WRITEBACK_MAINTENANCE_ENABLED: false,
       WRITEBACK_MAINTENANCE_INTERVAL_MS: 15 * 60 * 1000,
@@ -343,7 +182,7 @@ export class RetrievalRuntimeService {
       WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
       WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
     };
-    this.memoryOrchestrator =
+    const memoryOrchestrator =
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? embeddingTimeoutMsOrMemoryOrchestrator as MemoryOrchestrator | undefined
         : finalizeIdempotencyCacheOrEmbeddingTimeoutMs as MemoryOrchestrator | undefined;
@@ -355,28 +194,25 @@ export class RetrievalRuntimeService {
       typeof finalizeIdempotencyCacheOrEmbeddingTimeoutMs === "number"
         ? maintenanceWorkerOrStorageClient as StorageWritebackClient | undefined
         : memoryOrchestratorOrMaintenanceWorker as StorageWritebackClient | undefined;
-    this.recallPreflight = undefined;
-    this.recentInjectionPolicy = new RecentInjectionPolicy({
-      config: DEFAULT_RECENT_INJECTION_CONFIG,
-      repository: this.repository,
-      logger: this.logger,
-    });
-    this.dependencyHealthChecker = new RuntimeDependencyHealthChecker({
+    const graph = createRuntimeServiceGraph({
+      triggerEngine,
+      queryEngine,
       embeddingsClient: this.embeddingsClient,
+      injectionEngine: embeddingsClientOrInjectionEngine as InjectionEngine,
+      writebackEngine: injectionEngineOrWritebackEngine as WritebackEngine,
       repository: this.repository,
-      logger: this.logger,
-      embeddingTimeoutMs: this.embeddingTimeoutMs,
-      memoryOrchestrator: this.memoryOrchestrator,
-    });
-    this.recallAugmentationService = new RecallAugmentationService({
       dependencyGuard: this.dependencyGuard,
-      repository: this.repository,
       logger: this.logger,
+      finalizeIdempotencyCache: this.finalizeIdempotencyCache,
       embeddingTimeoutMs: this.embeddingTimeoutMs,
-      memoryLlmTimeoutMs: this.memoryLlmTimeoutMs,
-      memoryOrchestrator: this.memoryOrchestrator,
+      memoryLlmTimeoutMs,
+      memoryOrchestrator,
       storageClient: this.storageClient,
+      recentInjectionConfig: DEFAULT_RECENT_INJECTION_CONFIG,
     });
+    this.dependencyHealthChecker = graph.dependencyHealthChecker;
+    this.prepareContextService = graph.prepareContextService;
+    this.finalizeTurnService = graph.finalizeTurnService;
   }
 
   async runMaintenance(input?: { workspace_id?: string; force?: boolean }): Promise<MaintenanceRunSummary> {
@@ -415,449 +251,7 @@ export class RetrievalRuntimeService {
   }
 
   async prepareContext(context: TriggerContext): Promise<PrepareContextResponse> {
-    const normalizedContext = {
-      ...context,
-      memory_mode: resolveMemoryMode(context.memory_mode),
-    };
-    const idempotencyKey = normalizedContext.turn_id
-      ? `${normalizedContext.session_id}:${normalizedContext.turn_id}`
-      : undefined;
-    const existing = idempotencyKey
-      ? this.inflightPrepareContexts.get(idempotencyKey)
-      : undefined;
-
-    if (existing) {
-      return existing;
-    }
-
-    const execution = this.runSerializedPrepare(
-      normalizedContext.session_id,
-      () => this.prepareContextInternal(normalizedContext),
-    );
-
-    if (!idempotencyKey) {
-      return execution;
-    }
-
-    this.inflightPrepareContexts.set(idempotencyKey, execution);
-    execution.finally(() => {
-      if (this.inflightPrepareContexts.get(idempotencyKey) === execution) {
-        this.inflightPrepareContexts.delete(idempotencyKey);
-      }
-    });
-
-    return execution;
-  }
-
-  private async prepareContextInternal(
-    normalizedContext: TriggerContext & { memory_mode: MemoryMode },
-  ): Promise<PrepareContextResponse> {
-    await this.recentInjectionPolicy.cleanupExpired();
-    await this.recentInjectionPolicy.ensureLoaded(normalizedContext.session_id);
-    const turnIndex = this.recentInjectionPolicy.nextTurnIndex(normalizedContext.session_id);
-    const traceId = await resolveTraceId(this.repository, {
-      session_id: normalizedContext.session_id,
-      turn_id: normalizedContext.turn_id,
-      phase: normalizedContext.phase,
-    });
-    updateLogContext({ trace_id: traceId });
-    const turnStartedAt = Date.now();
-    await this.repository.recordTurn({
-      trace_id: traceId,
-      host: normalizedContext.host,
-      workspace_id: normalizedContext.workspace_id,
-      user_id: normalizedContext.user_id,
-      session_id: normalizedContext.session_id,
-      phase: normalizedContext.phase,
-      task_id: normalizedContext.task_id,
-      thread_id: normalizedContext.thread_id,
-      turn_id: normalizedContext.turn_id,
-      current_input: normalizedContext.current_input,
-      created_at: nowIso(),
-    });
-
-    const triggerStartedAt = Date.now();
-    const preflight = await this.recallPreflight?.evaluate(normalizedContext);
-    if (preflight && !preflight.should_continue) {
-      return this.returnPreflightSkipped({
-        context: normalizedContext,
-        traceId,
-        preflight,
-        triggerStartedAt,
-        turnStartedAt,
-      });
-    }
-    const triggerContext = preflight
-      ? {
-          ...normalizedContext,
-          preflight_scopes: preflight.requested_scopes,
-          preflight_memory_types: preflight.requested_memory_types,
-          preflight_importance_threshold: preflight.importance_threshold,
-        }
-      : normalizedContext;
-    const decision = await this.triggerEngine.decide(triggerContext);
-    if (normalizedContext.phase === "before_response") {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: normalizedContext.phase,
-        plan_kind: "memory_search_plan",
-        input_summary: summarizeText(
-          `input=${normalizedContext.current_input}; scopes=${(decision.requested_scopes ?? []).join(",")}; types=${(
-            decision.requested_memory_types ?? []
-          ).join(",")}`,
-        ),
-        output_summary: summarizeText(
-          `hit=${decision.hit}; reason=${decision.llm_decision_reason ?? decision.trigger_reason}; query_hint=${decision.query_hint ?? ""}; candidate_limit=${decision.candidate_limit ?? ""}`,
-        ),
-        prompt_version: decision.search_plan_attempted ? MEMORY_SEARCH_PROMPT_VERSION : MEMORY_SEARCH_RULES_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: Boolean(decision.search_plan_degraded),
-        degradation_reason: decision.search_plan_degradation_reason,
-        result_state: decision.search_plan_degraded ? "fallback" : decision.hit ? "planned" : "skipped",
-        duration_ms: Date.now() - triggerStartedAt,
-        created_at: nowIso(),
-      });
-    }
-    await this.repository.recordTriggerRun({
-      trace_id: traceId,
-      phase: normalizedContext.phase,
-      trigger_hit: decision.hit,
-      trigger_type: decision.trigger_type,
-      trigger_reason: decision.trigger_reason,
-      requested_memory_types: decision.requested_memory_types,
-      memory_mode: decision.memory_mode,
-      requested_scopes: decision.requested_scopes,
-      scope_reason: decision.scope_reason,
-      importance_threshold: decision.importance_threshold,
-      cooldown_applied: decision.cooldown_applied,
-      semantic_score: decision.semantic_score,
-      degraded: decision.degraded,
-      degradation_reason: decision.degradation_reason,
-      duration_ms: Date.now() - triggerStartedAt,
-      created_at: nowIso(),
-    });
-
-    if (normalizedContext.phase === "before_response" && decision.intent_plan_attempted) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: normalizedContext.phase,
-        plan_kind: "memory_intent_plan",
-        input_summary: summarizeText(`input=${normalizedContext.current_input}`),
-        output_summary: summarizeText(
-          `needs_memory=${decision.intent_needs_memory ?? decision.hit}; reason=${decision.intent_reason ?? ""}; confidence=${decision.intent_confidence ?? ""}; scopes=${(decision.intent_scopes ?? []).join(",")}; types=${(decision.intent_memory_types ?? []).join(",")}`,
-        ),
-        prompt_version: MEMORY_INTENT_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: Boolean(decision.intent_plan_degraded),
-        degradation_reason: decision.intent_plan_degradation_reason,
-        result_state: decision.intent_needs_memory === false ? "skipped" : decision.intent_plan_degraded ? "fallback" : "planned",
-        duration_ms: Date.now() - triggerStartedAt,
-        created_at: nowIso(),
-      });
-    }
-
-    if (!decision.hit) {
-      await this.repository.recordRecallRun({
-        trace_id: traceId,
-        phase: normalizedContext.phase,
-        trigger_hit: false,
-        trigger_type: decision.trigger_type,
-        trigger_reason: decision.trigger_reason,
-        memory_mode: decision.memory_mode,
-        requested_scopes: decision.requested_scopes,
-        matched_scopes: [],
-        scope_hit_counts: {},
-        scope_reason: decision.scope_reason,
-        query_scope: "not_triggered",
-        requested_memory_types: [],
-        candidate_count: 0,
-        selected_count: 0,
-        result_state: decision.degraded ? "dependency_unavailable" : "not_triggered",
-        degraded: Boolean(decision.degraded),
-        degradation_reason: decision.degradation_reason,
-        duration_ms: Date.now() - turnStartedAt,
-        created_at: nowIso(),
-      });
-
-      await this.repository.recordInjectionRun({
-        trace_id: traceId,
-        phase: normalizedContext.phase,
-        injected: false,
-        injected_count: 0,
-        token_estimate: 0,
-        memory_mode: decision.memory_mode,
-        requested_scopes: decision.requested_scopes,
-        selected_scopes: [],
-        trimmed_record_ids: [],
-        trim_reasons: [],
-        result_state: "not_triggered",
-        duration_ms: 0,
-        created_at: nowIso(),
-      });
-
-      return {
-        trace_id: traceId,
-        trigger: false,
-        trigger_reason: decision.trigger_reason,
-        memory_packet: null,
-        injection_block: null,
-        proactive_recommendations: [],
-        degraded: Boolean(decision.degraded),
-        degraded_skip_reason: decision.degraded && !decision.hit ? decision.degraded_skip_reason : undefined,
-        dependency_status: await this.dependencyGuard.snapshot(),
-        budget_used: 0,
-        memory_packet_ids: [],
-      };
-    }
-
-    const recallStartedAt = Date.now();
-    const queryResult = await this.queryEngine.query(normalizedContext, decision);
-    const conflictAwareCandidates = await this.recallAugmentationService.annotateOpenConflicts(
-      normalizedContext,
-      queryResult.candidates,
-    );
-    let selectedCandidates = conflictAwareCandidates;
-    let plannedCandidates = conflictAwareCandidates;
-    let finalTriggerReason = mergeTriggerReason(decision.trigger_reason, decision.intent_reason);
-    let forceNoInjection = false;
-    let degraded = queryResult.degraded;
-    let degradationReason = queryResult.degradation_reason;
-    let recentlyFilteredCandidates: CandidateMemory[] = [];
-    let recentlySoftMarkedCandidates: CandidateMemory[] = [];
-    let replayEscapeReason: string | undefined;
-    const proactiveRecommendations = normalizedContext.phase === "session_start"
-      ? await this.recallAugmentationService.collectProactiveRecommendations(normalizedContext, traceId)
-      : [];
-
-    const relationCandidates = await this.recallAugmentationService.expandCandidatesWithRelations(
-      normalizedContext,
-      selectedCandidates,
-      traceId,
-    );
-    if (relationCandidates.length > 0) {
-      selectedCandidates = dedupeCandidates([...selectedCandidates, ...relationCandidates]).sort(compareRankedCandidates);
-      plannedCandidates = selectedCandidates;
-      finalTriggerReason = mergeTriggerReason(finalTriggerReason, "包含关联记忆补充");
-    }
-
-    const recentInjectionDecision = this.recentInjectionPolicy.apply({
-      context: normalizedContext,
-      turnIndex,
-      candidates: plannedCandidates,
-    });
-    recentlyFilteredCandidates = recentInjectionDecision.hardFiltered;
-    recentlySoftMarkedCandidates = recentInjectionDecision.softMarked;
-    replayEscapeReason = recentInjectionDecision.replayEscapeReason;
-    plannedCandidates = recentInjectionDecision.remaining;
-    selectedCandidates = plannedCandidates;
-
-    if (
-      normalizedContext.phase === "before_response"
-      && this.memoryOrchestrator?.recall?.injection
-      && this.queryResultCanBePlanned(plannedCandidates)
-    ) {
-      const recallInjectionPlanner = this.memoryOrchestrator.recall.injection;
-      const injectionPlanStartedAt = Date.now();
-      const planResult = await this.dependencyGuard.run(
-        "memory_llm",
-        this.memoryLlmTimeoutMs,
-        () =>
-          recallInjectionPlanner.plan({
-            context: normalizedContext,
-            memory_mode: decision.memory_mode,
-            requested_scopes: decision.requested_scopes,
-            requested_memory_types: decision.requested_memory_types,
-            candidates: plannedCandidates,
-            search_reason: decision.llm_decision_reason,
-            semantic_score: decision.semantic_score,
-            semantic_threshold: undefined,
-            allow_recent_replay: Boolean(replayEscapeReason),
-          }),
-      );
-
-      if (planResult.ok && planResult.value) {
-        await this.repository.recordMemoryPlanRun({
-          trace_id: traceId,
-          phase: normalizedContext.phase,
-          plan_kind: "memory_injection_plan",
-          input_summary: summarizeText(
-            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(plannedCandidates)}`,
-          ),
-          output_summary: summarizeText(
-            `should_inject=${planResult.value.should_inject}; reason=${planResult.value.reason}; ${summarizeCandidateIds(
-              plannedCandidates,
-              planResult.value.selected_record_ids,
-            )}; summary=${planResult.value.memory_summary ?? ""}`,
-          ),
-          prompt_version: MEMORY_INJECTION_PROMPT_VERSION,
-          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-          degraded: false,
-          result_state: planResult.value.should_inject ? "planned" : "skipped",
-          duration_ms: Date.now() - injectionPlanStartedAt,
-          created_at: nowIso(),
-        });
-
-        finalTriggerReason = mergeTriggerReason(finalTriggerReason, planResult.value.reason);
-        if (!planResult.value.should_inject) {
-          selectedCandidates = [];
-          forceNoInjection = true;
-        } else {
-          selectedCandidates = reorderSelectedCandidates(
-            plannedCandidates,
-            planResult.value.selected_record_ids ?? [],
-          );
-        }
-
-        const plannedMemorySummary = planResult.value.memory_summary?.trim() ?? "";
-        if (planResult.value.should_inject && plannedMemorySummary.length > 0) {
-          const packet = buildMemoryPacket(queryResult.query, decision, selectedCandidates);
-          packet.packet_summary = plannedMemorySummary;
-          return this.finalizePreparedContextResponse({
-            traceId,
-            sessionId: normalizedContext.session_id,
-            turnId: normalizedContext.turn_id,
-            decision,
-            triggerReason: finalTriggerReason,
-            queryResult: {
-              ...queryResult,
-              candidates: conflictAwareCandidates,
-              degraded,
-              degradation_reason: degradationReason,
-            },
-            packet,
-            recallStartedAt,
-            injectionStartedAt: Date.now(),
-            dependencyStatus: await this.dependencyGuard.snapshot(),
-            proactiveRecommendations,
-            injectionTokenBudget: normalizedContext.injection_token_budget,
-            turnIndex,
-            recentlyFilteredCandidates,
-            recentlySoftMarkedCandidates,
-            replayEscapeReason,
-          });
-        }
-      } else {
-        await this.repository.recordMemoryPlanRun({
-          trace_id: traceId,
-          phase: normalizedContext.phase,
-          plan_kind: "memory_injection_plan",
-          input_summary: summarizeText(
-            `input=${normalizedContext.current_input}; ${summarizeCandidateIds(plannedCandidates)}`,
-          ),
-          output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
-          prompt_version: MEMORY_INJECTION_PROMPT_VERSION,
-          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-          degraded: true,
-          degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
-          result_state: "fallback",
-          duration_ms: Date.now() - injectionPlanStartedAt,
-          created_at: nowIso(),
-        });
-        degraded = true;
-        degradationReason = degradationReason ?? planResult.error?.code ?? "memory_llm_unavailable";
-      }
-    }
-
-    const packet = buildMemoryPacket(queryResult.query, decision, selectedCandidates);
-    if (forceNoInjection) {
-      packet.packet_summary = finalTriggerReason;
-    }
-    const scopeHitCounts = conflictAwareCandidates.reduce<Partial<Record<typeof packet.selected_scopes[number], number>>>((acc, candidate) => {
-      acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    await this.repository.recordRecallRun({
-      trace_id: traceId,
-      phase: normalizedContext.phase,
-      trigger_hit: true,
-      trigger_type: decision.trigger_type,
-      trigger_reason: finalTriggerReason,
-      memory_mode: decision.memory_mode,
-      requested_scopes: decision.requested_scopes,
-      matched_scopes: packet.selected_scopes,
-      scope_hit_counts: scopeHitCounts,
-      scope_reason: decision.scope_reason,
-      query_scope: packet.query_scope,
-      requested_memory_types: decision.requested_memory_types,
-      candidate_count: conflictAwareCandidates.length,
-      selected_count: packet.records.length,
-      recently_filtered_record_ids: recentlyFilteredCandidates.map((candidate) => candidate.id),
-      recently_filtered_reasons: recentlyFilteredCandidates.map((candidate) => `hard_window_active:${candidate.memory_type}`),
-      recently_soft_marked_record_ids: recentlySoftMarkedCandidates.map((candidate) => candidate.id),
-      replay_escape_reason: replayEscapeReason,
-      result_state:
-        degraded && packet.records.length === 0
-          ? "dependency_unavailable"
-          : packet.records.length === 0
-            ? "empty"
-            : "matched",
-      degraded,
-      degradation_reason: degradationReason,
-      duration_ms: Date.now() - recallStartedAt,
-      created_at: nowIso(),
-    });
-
-    const injectionStartedAt = Date.now();
-    const injectionBlock = this.injectionEngine.build(packet, {
-      tokenBudget: normalizedContext.injection_token_budget,
-    });
-
-    await this.repository.recordInjectionRun({
-      trace_id: traceId,
-      phase: normalizedContext.phase,
-      injected: Boolean(injectionBlock),
-      injected_count: injectionBlock?.memory_records.length ?? 0,
-      token_estimate: injectionBlock?.token_estimate ?? 0,
-      memory_mode: decision.memory_mode,
-      requested_scopes: packet.requested_scopes,
-      selected_scopes: injectionBlock?.selected_scopes ?? [],
-      trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
-      trim_reasons: injectionBlock?.trim_reasons ?? [],
-      recently_filtered_record_ids: recentlyFilteredCandidates.map((candidate) => candidate.id),
-      recently_filtered_reasons: recentlyFilteredCandidates.map((candidate) => `hard_window_active:${candidate.memory_type}`),
-      recently_soft_marked_record_ids: recentlySoftMarkedCandidates.map((candidate) => candidate.id),
-      replay_escape_reason: replayEscapeReason,
-      result_state:
-        packet.records.length === 0
-          ? "no_records"
-          : injectionBlock && injectionBlock.memory_records.length > 0
-            ? "injected"
-            : "trimmed_to_zero",
-      duration_ms: Date.now() - injectionStartedAt,
-      created_at: nowIso(),
-    });
-
-    if (injectionBlock?.memory_records.length) {
-      this.storeInjectionContext(normalizedContext, injectionBlock.memory_records);
-      this.recentInjectionPolicy.remember({
-        sessionId: normalizedContext.session_id,
-        turnId: normalizedContext.turn_id,
-        traceId,
-        turnIndex,
-        sourcePhase: normalizedContext.phase,
-        records: selectedCandidates.filter((candidate) =>
-          injectionBlock.memory_records.some((record) => record.id === candidate.id),
-        ),
-      });
-    }
-
-    return {
-      trace_id: traceId,
-      trigger: !forceNoInjection,
-      trigger_reason: finalTriggerReason,
-      memory_packet: forceNoInjection ? null : packet,
-      injection_block: injectionBlock,
-      proactive_recommendations: proactiveRecommendations,
-      degraded,
-      degraded_skip_reason:
-        degraded && (forceNoInjection || packet.records.length === 0)
-          ? decision.degraded_skip_reason
-          : undefined,
-      dependency_status: await this.dependencyGuard.snapshot(),
-      budget_used: injectionBlock?.token_estimate ?? 0,
-      memory_packet_ids: forceNoInjection ? [] : [packet.packet_id],
-    };
+    return this.prepareContextService.prepareContext(context);
   }
 
   async sessionStartContext(context: TriggerContext): Promise<SessionStartResponse> {
@@ -881,154 +275,7 @@ export class RetrievalRuntimeService {
   }
 
   async finalizeTurn(input: FinalizeTurnInput): Promise<FinalizeTurnResponse> {
-    const normalizedInput = {
-      ...input,
-      memory_mode: resolveMemoryMode(input.memory_mode),
-    };
-    const finalizeCacheKey = buildFinalizeCacheKey(normalizedInput);
-    const cached = await this.finalizeIdempotencyCache?.get(finalizeCacheKey);
-    if (cached) {
-      updateLogContext({ trace_id: cached.trace_id });
-      return cached;
-    }
-    const persisted = await this.repository.findFinalizeIdempotencyRecord(finalizeCacheKey);
-    if (persisted) {
-      await this.finalizeIdempotencyCache?.set(finalizeCacheKey, persisted.response);
-      updateLogContext({ trace_id: persisted.response.trace_id });
-      return persisted.response;
-    }
-    const traceId = await resolveTraceId(this.repository, {
-      session_id: normalizedInput.session_id,
-      turn_id: normalizedInput.turn_id,
-      phase: "after_response",
-    });
-    updateLogContext({ trace_id: traceId });
-    const startedAt = Date.now();
-
-    await this.repository.recordTurn({
-      trace_id: traceId,
-      host: normalizedInput.host,
-      workspace_id: normalizedInput.workspace_id,
-      user_id: normalizedInput.user_id,
-      session_id: normalizedInput.session_id,
-      phase: "after_response",
-      task_id: normalizedInput.task_id,
-      thread_id: normalizedInput.thread_id,
-      turn_id: normalizedInput.turn_id,
-      current_input: normalizedInput.current_input,
-      assistant_output: normalizedInput.assistant_output,
-      created_at: nowIso(),
-    });
-
-    const extraction = await this.writebackEngine.submit(normalizedInput);
-    if (extraction.plan_observation) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: "after_response",
-        plan_kind: "memory_writeback_plan",
-        input_summary: extraction.plan_observation.input_summary,
-        output_summary: extraction.plan_observation.output_summary,
-        prompt_version: extraction.plan_observation.prompt_version,
-        schema_version: extraction.plan_observation.schema_version,
-        degraded: extraction.plan_observation.degraded,
-        degradation_reason: extraction.plan_observation.degradation_reason,
-        result_state: extraction.plan_observation.result_state,
-        duration_ms: extraction.plan_observation.duration_ms,
-        created_at: nowIso(),
-      });
-    }
-
-    let submittedJobs = extraction.candidates.map((candidate) => ({
-      candidate_summary: candidate.summary,
-      status: "accepted_async",
-    })) as FinalizeTurnResponse["submitted_jobs"];
-    let degraded = false;
-    let degradationReason: string | undefined;
-
-    if (extraction.candidates.length > 0) {
-      const now = nowIso();
-      const outboxRows = await this.repository.enqueueWritebackOutbox(
-        extraction.candidates.map((candidate) => ({
-          trace_id: traceId,
-          session_id: normalizedInput.session_id,
-          turn_id: normalizedInput.turn_id,
-          candidate,
-          idempotency_key: candidate.idempotency_key,
-          next_retry_at: now,
-        })),
-      );
-
-      const writebackResult = await this.writebackEngine.submitCandidates(extraction.candidates);
-
-      if (writebackResult.ok) {
-        submittedJobs = writebackResult.submitted_jobs;
-        await this.repository.markWritebackOutboxSubmitted(
-          outboxRows.map((row) => row.id),
-          now,
-        );
-      } else {
-        degraded = true;
-        degradationReason = writebackResult.degradation_reason;
-        submittedJobs = writebackResult.submitted_jobs;
-      }
-    }
-
-    await this.repository.recordWritebackSubmission({
-      trace_id: traceId,
-      phase: "after_response",
-      candidate_count: extraction.candidates.length,
-      submitted_count: submittedJobs.filter((job) => job.status !== "dependency_unavailable" && job.status !== "rejected").length,
-      memory_mode: normalizedInput.memory_mode,
-      final_scopes: [...new Set(extraction.candidates.map((candidate) => candidate.scope))],
-      filtered_count: extraction.filtered_count,
-      filtered_reasons: extraction.filtered_reasons,
-      scope_reasons: extraction.scope_reasons,
-      result_state:
-        extraction.candidates.length === 0
-          ? "no_candidates"
-          : degraded
-            ? "failed"
-            : "submitted",
-      degraded,
-      degradation_reason: degradationReason,
-      duration_ms: Date.now() - startedAt,
-      created_at: nowIso(),
-    });
-
-    const response = {
-      trace_id: traceId,
-      write_back_candidates: extraction.candidates,
-      submitted_jobs: submittedJobs,
-      memory_mode: normalizedInput.memory_mode,
-      candidate_count: extraction.candidates.length,
-      filtered_count: extraction.filtered_count,
-      filtered_reasons: extraction.filtered_reasons,
-      writeback_submitted: submittedJobs.some((job) => isWritebackAccepted(job.status)),
-      degraded,
-      dependency_status: await this.dependencyGuard.snapshot(),
-    };
-    const urgentMaintenance = shouldEnqueueUrgentMaintenance({
-      candidates: response.write_back_candidates,
-      submittedJobs: response.submitted_jobs,
-    });
-    if (urgentMaintenance) {
-      await this.repository.enqueueUrgentMaintenanceWorkspace({
-        workspace_id: normalizedInput.workspace_id,
-        enqueued_at: nowIso(),
-        reason: urgentMaintenance.reason,
-        source: urgentMaintenance.source,
-      });
-    }
-    await this.finalizeIdempotencyCache?.set(finalizeCacheKey, response);
-    await this.repository.upsertFinalizeIdempotencyRecord(
-      buildFinalizeIdempotencyRecord(
-        finalizeCacheKey,
-        response,
-        this.finalizeIdempotencyCache?.ttlMs() ?? 5 * 60 * 1000,
-      ),
-    );
-    await this.evaluateRecallEffectivenessIfNeeded(normalizedInput, traceId);
-    return response;
+    return this.finalizeTurnService.finalize(input);
   }
 
   async getWriteProjectionStatuses(jobIds: string[]): Promise<WriteProjectionStatusSnapshot[]> {
@@ -1124,421 +371,8 @@ export class RetrievalRuntimeService {
     };
   }
 
-  private queryResultCanBePlanned(candidates: CandidateMemory[]) {
-    return Array.isArray(candidates) && candidates.length > 0;
-  }
-
-  private runSerializedPrepare<T>(
-    sessionId: string,
-    task: () => Promise<T>,
-  ): Promise<T> {
-    const previous = this.sessionPrepareQueues.get(sessionId) ?? Promise.resolve();
-    const scheduled = previous.catch(() => undefined).then(task);
-    const settled = scheduled.then(
-      () => undefined,
-      () => undefined,
-    );
-
-    this.sessionPrepareQueues.set(sessionId, settled);
-    settled.finally(() => {
-      if (this.sessionPrepareQueues.get(sessionId) === settled) {
-        this.sessionPrepareQueues.delete(sessionId);
-      }
-    });
-
-    return scheduled;
-  }
-
-  private async returnPreflightSkipped(input: {
-    context: TriggerContext & { memory_mode: MemoryMode };
-    traceId: string;
-    preflight: RecallPreflightSkip;
-    triggerStartedAt: number;
-    turnStartedAt: number;
-  }): Promise<PrepareContextResponse> {
-    const triggerType: TriggerDecision["trigger_type"] = "no_trigger";
-
-    await this.repository.recordTriggerRun({
-      trace_id: input.traceId,
-      phase: input.context.phase,
-      trigger_hit: false,
-      trigger_type: triggerType,
-      trigger_reason: input.preflight.trigger_reason,
-      requested_memory_types: input.preflight.requested_memory_types,
-      memory_mode: input.context.memory_mode,
-      requested_scopes: input.preflight.requested_scopes,
-      scope_reason: input.preflight.scope_reason,
-      importance_threshold: input.preflight.importance_threshold,
-      cooldown_applied: false,
-      duration_ms: Date.now() - input.triggerStartedAt,
-      created_at: nowIso(),
-    });
-
-    await this.repository.recordRecallRun({
-      trace_id: input.traceId,
-      phase: input.context.phase,
-      trigger_hit: false,
-      trigger_type: triggerType,
-      trigger_reason: input.preflight.trigger_reason,
-      memory_mode: input.context.memory_mode,
-      requested_scopes: input.preflight.requested_scopes,
-      matched_scopes: [],
-      scope_hit_counts: {},
-      scope_reason: input.preflight.scope_reason,
-      query_scope: `preflight_skipped:${input.preflight.reason}`,
-      requested_memory_types: input.preflight.requested_memory_types,
-      candidate_count: 0,
-      selected_count: 0,
-      result_state:
-        input.preflight.reason === "no_visible_candidates" || input.preflight.reason === "no_matching_memory_types"
-          ? "empty"
-          : "not_triggered",
-      degraded: false,
-      duration_ms: Date.now() - input.turnStartedAt,
-      created_at: nowIso(),
-    });
-
-    await this.repository.recordInjectionRun({
-      trace_id: input.traceId,
-      phase: input.context.phase,
-      injected: false,
-      injected_count: 0,
-      token_estimate: 0,
-      memory_mode: input.context.memory_mode,
-      requested_scopes: input.preflight.requested_scopes,
-      selected_scopes: [],
-      trimmed_record_ids: [],
-      trim_reasons: [],
-      result_state: "not_triggered",
-      duration_ms: 0,
-      created_at: nowIso(),
-    });
-
-    return {
-      trace_id: input.traceId,
-      trigger: false,
-      trigger_reason: input.preflight.trigger_reason,
-      memory_packet: null,
-      injection_block: null,
-      proactive_recommendations: [],
-      degraded: false,
-      dependency_status: await this.dependencyGuard.snapshot(),
-      budget_used: 0,
-      memory_packet_ids: [],
-    };
-  }
-
-  private async finalizePreparedContextResponse(input: {
-    traceId: string;
-    sessionId: string;
-    turnId?: string;
-    turnIndex?: number;
-    decision: TriggerDecision;
-    triggerReason: string;
-    queryResult: {
-      query: RetrievalQuery;
-      candidates: CandidateMemory[];
-      degraded: boolean;
-      degradation_reason?: string;
-    };
-    packet: MemoryPacket;
-    recallStartedAt: number;
-    injectionStartedAt: number;
-    dependencyStatus: DependencyStatusSnapshot;
-    proactiveRecommendations: ProactiveRecommendation[];
-    injectionTokenBudget?: number;
-    recentlyFilteredCandidates?: CandidateMemory[];
-    recentlySoftMarkedCandidates?: CandidateMemory[];
-    replayEscapeReason?: string;
-  }): Promise<PrepareContextResponse> {
-    const scopeHitCounts = input.queryResult.candidates.reduce<Partial<Record<typeof input.packet.selected_scopes[number], number>>>((acc, candidate) => {
-      acc[candidate.scope] = (acc[candidate.scope] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    await this.repository.recordRecallRun({
-      trace_id: input.traceId,
-      phase: "before_response",
-      trigger_hit: true,
-      trigger_type: input.decision.trigger_type,
-      trigger_reason: input.triggerReason,
-      memory_mode: input.decision.memory_mode,
-      requested_scopes: input.decision.requested_scopes,
-      matched_scopes: input.packet.selected_scopes,
-      scope_hit_counts: scopeHitCounts,
-      scope_reason: input.decision.scope_reason,
-      query_scope: input.packet.query_scope,
-      requested_memory_types: input.decision.requested_memory_types,
-      candidate_count: input.queryResult.candidates.length,
-      selected_count: input.packet.records.length,
-      recently_filtered_record_ids: input.recentlyFilteredCandidates?.map((candidate) => candidate.id) ?? [],
-      recently_filtered_reasons: input.recentlyFilteredCandidates?.map((candidate) => `hard_window_active:${candidate.memory_type}`) ?? [],
-      recently_soft_marked_record_ids: input.recentlySoftMarkedCandidates?.map((candidate) => candidate.id) ?? [],
-      replay_escape_reason: input.replayEscapeReason,
-      result_state:
-        input.queryResult.degraded && input.packet.records.length === 0
-          ? "dependency_unavailable"
-          : input.packet.records.length === 0
-            ? "empty"
-            : "matched",
-      degraded: input.queryResult.degraded,
-      degradation_reason: input.queryResult.degradation_reason,
-      duration_ms: Date.now() - input.recallStartedAt,
-      created_at: nowIso(),
-    });
-
-    const injectionBlock = this.injectionEngine.build(input.packet, {
-      tokenBudget: input.injectionTokenBudget,
-    });
-    await this.repository.recordInjectionRun({
-      trace_id: input.traceId,
-      phase: "before_response",
-      injected: Boolean(injectionBlock),
-      injected_count: injectionBlock?.memory_records.length ?? 0,
-      token_estimate: injectionBlock?.token_estimate ?? 0,
-      memory_mode: input.decision.memory_mode,
-      requested_scopes: input.packet.requested_scopes,
-      selected_scopes: injectionBlock?.selected_scopes ?? [],
-      trimmed_record_ids: injectionBlock?.trimmed_record_ids ?? [],
-      trim_reasons: injectionBlock?.trim_reasons ?? [],
-      recently_filtered_record_ids: input.recentlyFilteredCandidates?.map((candidate) => candidate.id) ?? [],
-      recently_filtered_reasons: input.recentlyFilteredCandidates?.map((candidate) => `hard_window_active:${candidate.memory_type}`) ?? [],
-      recently_soft_marked_record_ids: input.recentlySoftMarkedCandidates?.map((candidate) => candidate.id) ?? [],
-      replay_escape_reason: input.replayEscapeReason,
-      result_state:
-        input.packet.records.length === 0
-          ? "no_records"
-          : injectionBlock && injectionBlock.memory_records.length > 0
-            ? "injected"
-            : "trimmed_to_zero",
-      duration_ms: Date.now() - input.injectionStartedAt,
-      created_at: nowIso(),
-    });
-
-    if (injectionBlock?.memory_records.length) {
-      this.storeInjectionContext(
-        {
-          session_id: input.sessionId,
-          turn_id: input.turnId,
-        },
-        injectionBlock.memory_records,
-        input.traceId,
-      );
-      this.recentInjectionPolicy.remember({
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        traceId: input.traceId,
-        turnIndex: input.turnIndex ?? this.recentInjectionPolicy.peekTurnIndex(input.sessionId),
-        sourcePhase: "before_response",
-        records: input.packet.records.filter((candidate) =>
-          injectionBlock.memory_records.some((record) => record.id === candidate.id),
-        ),
-      });
-    }
-
-    return {
-      trace_id: input.traceId,
-      trigger: true,
-      trigger_reason: input.triggerReason,
-      memory_packet: input.packet,
-      injection_block: injectionBlock,
-      proactive_recommendations: input.proactiveRecommendations,
-      degraded: input.queryResult.degraded,
-      dependency_status: input.dependencyStatus,
-      budget_used: injectionBlock?.token_estimate ?? 0,
-      memory_packet_ids: [input.packet.packet_id],
-    };
-  }
-
-  private storeInjectionContext(
-    context: Pick<TriggerContext, "session_id" | "turn_id">,
-    records: Array<{ id: string; summary: string; importance: number }>,
-    traceIdOverride?: string,
-  ) {
-    this.cleanupExpiredInjectionContexts();
-    const key = this.getInjectionContextKey(
-      context.session_id,
-      context.turn_id,
-      traceIdOverride,
-    );
-    if (!key || records.length === 0) {
-      return;
-    }
-    this.recentInjectionContexts.set(key, {
-      memories: records.map((record) => ({
-        record_id: record.id,
-        summary: record.summary,
-        importance: record.importance,
-      })),
-      created_at: Date.now(),
-    });
-  }
-
-  private async evaluateRecallEffectivenessIfNeeded(
-    input: Pick<FinalizeTurnInput, "session_id" | "turn_id" | "assistant_output" | "tool_results_summary">,
-    traceId: string,
-  ): Promise<void> {
-    const evaluator = this.memoryOrchestrator?.recall?.effectiveness;
-    if (!evaluator) {
-      return;
-    }
-
-    this.cleanupExpiredInjectionContexts();
-    const key = this.getInjectionContextKey(input.session_id, input.turn_id, traceId);
-    if (!key) {
-      return;
-    }
-    const context = this.recentInjectionContexts.get(key);
-    if (!context || context.memories.length === 0) {
-      return;
-    }
-
-    const startedAt = Date.now();
-    const planResult = await this.dependencyGuard.run(
-      "memory_llm",
-      this.memoryLlmTimeoutMs,
-      () =>
-        evaluator.evaluate({
-          injected_memories: context.memories,
-          assistant_output: input.assistant_output,
-          tool_behavior_summary: buildToolBehaviorSummary(input.tool_results_summary),
-        }),
-    );
-
-    if (!planResult.ok || !planResult.value) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: "after_response",
-        plan_kind: "memory_effectiveness_plan",
-        input_summary: summarizeText(`memories=${context.memories.length}`),
-        output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
-        prompt_version: MEMORY_EFFECTIVENESS_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: true,
-        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
-        result_state: "fallback",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return;
-    }
-
-    await this.repository.recordMemoryPlanRun({
-      trace_id: traceId,
-      phase: "after_response",
-      plan_kind: "memory_effectiveness_plan",
-      input_summary: summarizeText(`memories=${context.memories.length}`),
-      output_summary: summarizeText(
-        `evaluations=${planResult.value.evaluations.length}; used=${planResult.value.evaluations.filter((item) => item.was_used).length}`,
-      ),
-      prompt_version: MEMORY_EFFECTIVENESS_PROMPT_VERSION,
-      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-      degraded: false,
-      result_state: planResult.value.evaluations.length > 0 ? "planned" : "skipped",
-      duration_ms: Date.now() - startedAt,
-      created_at: nowIso(),
-    });
-
-    await Promise.all(planResult.value.evaluations.map(async (evaluation) => {
-      if (evaluation.suggested_importance_adjustment === 0) {
-        return;
-      }
-      const current = context.memories.find((memory) => memory.record_id === evaluation.record_id);
-      if (!current) {
-        return;
-      }
-      const nextImportance = Math.max(1, Math.min(5, current.importance + evaluation.suggested_importance_adjustment));
-      await this.dependencyGuard.run(
-        "storage_writeback",
-        this.embeddingTimeoutMs,
-        () =>
-          this.writebackEngine.patchRecord(evaluation.record_id, {
-            importance: nextImportance,
-            ...(evaluation.was_used ? { last_used_at: nowIso() } : {}),
-            actor: {
-              actor_type: "system",
-              actor_id: "retrieval-runtime",
-            },
-            reason: evaluation.reason,
-          }),
-      );
-    }));
-
-    this.recentInjectionContexts.delete(key);
-  }
-
-  private cleanupExpiredInjectionContexts() {
-    const now = Date.now();
-    for (const [key, value] of this.recentInjectionContexts.entries()) {
-      if (now - value.created_at > INJECTION_EVALUATION_TTL_MS) {
-        this.recentInjectionContexts.delete(key);
-      }
-    }
-  }
-
-  private getInjectionContextKey(
-    sessionId: string,
-    turnId?: string,
-    traceId?: string,
-  ) {
-    if (turnId) {
-      return `${sessionId}:${turnId}`;
-    }
-    if (traceId) {
-      return `${sessionId}:${traceId}`;
-    }
-    return undefined;
-  }
-
 }
 
 function isAppConfig(value: AppConfig | TriggerEngine): value is AppConfig {
   return typeof value === "object" && value !== null && "DATABASE_URL" in value;
-}
-
-function reorderSelectedCandidates(
-  candidates: CandidateMemory[],
-  selectedRecordIds: string[],
-) {
-  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-  const selected = selectedRecordIds
-    .map((id) => byId.get(id))
-    .filter((candidate): candidate is CandidateMemory => Boolean(candidate));
-
-  if (selected.length > 0) {
-    return selected;
-  }
-
-  return candidates.slice(0, Math.min(3, candidates.length));
-}
-
-function buildToolBehaviorSummary(toolResultsSummary?: string): string | undefined {
-  const normalized = summarizeText(toolResultsSummary, 1_000);
-  if (!normalized) {
-    return undefined;
-  }
-
-  const indicators = new Set<string>();
-  const patterns = [
-    /(?:indentation|indent|spaces|space|tab|format)\s*[:=]\s*[\w:-]+/gi,
-    /(?:language|lang|locale)\s*[:=]\s*[\w-]+/gi,
-    /(?:import|require|from)\s+['"][^'"]+['"]/gi,
-    /(?:created|updated|modified|wrote|formatted|installed|deployed)\s+[^;\n]+/gi,
-    /(?:缩进|空格|制表符|格式化|语言|中文|英文|导入|安装|部署)[^;\n。.!]*/gi,
-  ];
-
-  for (const pattern of patterns) {
-    for (const match of normalized.matchAll(pattern)) {
-      const value = match[0]?.trim();
-      if (value) {
-        indicators.add(value);
-      }
-    }
-  }
-
-  if (indicators.size === 0) {
-    return undefined;
-  }
-
-  return `工具行为摘要: ${[...indicators].slice(0, 8).join("; ")}`;
 }
