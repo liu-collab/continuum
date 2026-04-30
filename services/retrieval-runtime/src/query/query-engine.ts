@@ -14,7 +14,14 @@ import type {
   TriggerContext,
   TriggerDecision,
 } from "../shared/types.js";
-import { clamp, cosineSimilarity, normalizeText, tokenizeForOverlap, truncateFromTail } from "../shared/utils.js";
+import {
+  buildSemanticQueryTerms,
+  clamp,
+  cosineSimilarity,
+  normalizeText,
+  tokenizeForOverlap,
+  truncateFromTail,
+} from "../shared/utils.js";
 import type { EmbeddingsClient } from "./embeddings-client.js";
 import type { ReadModelRepository } from "./read-model-repository.js";
 
@@ -31,7 +38,6 @@ const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
   episodic: 14,
 };
 const OPEN_CONFLICT_SCORE_PENALTY = 0.2;
-const MAX_SEMANTIC_QUERY_TERMS = 48;
 const QUERY_CANDIDATE_CACHE_TTL_MS = 30_000;
 const QUERY_CANDIDATE_CACHE_MAX_ENTRIES = 500;
 
@@ -133,26 +139,6 @@ function buildSemanticQueryText(context: TriggerContext): string {
     normalizeText([currentInput, recallExpansion, recentContextSummary].filter(Boolean).join("\n")),
     1024,
   );
-}
-
-function buildSemanticQueryTerms(text: string): string[] {
-  const seen = new Set<string>();
-  const terms: string[] = [];
-
-  for (const rawToken of tokenizeForOverlap(text)) {
-    const term = rawToken.trim().toLowerCase();
-    if (!term || seen.has(term)) {
-      continue;
-    }
-
-    seen.add(term);
-    terms.push(term);
-    if (terms.length >= MAX_SEMANTIC_QUERY_TERMS) {
-      break;
-    }
-  }
-
-  return terms;
 }
 
 function buildRecallQueryExpansion(currentInput: string): string {

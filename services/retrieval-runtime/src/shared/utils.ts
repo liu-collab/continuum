@@ -126,6 +126,26 @@ export function tokenizeForOverlap(text: string): string[] {
   return tokens;
 }
 
+export function buildSemanticQueryTerms(text: string, maxTerms = 48): string[] {
+  const seen = new Set<string>();
+  const terms: string[] = [];
+
+  for (const rawToken of tokenizeForOverlap(text)) {
+    const term = rawToken.trim().toLowerCase();
+    if (!term || seen.has(term)) {
+      continue;
+    }
+
+    seen.add(term);
+    terms.push(term);
+    if (terms.length >= maxTerms) {
+      break;
+    }
+  }
+
+  return terms;
+}
+
 export function jaccardOverlap(left: string, right: string): number {
   const leftTokens = new Set(tokenizeForOverlap(left));
   const rightTokens = new Set(tokenizeForOverlap(right));

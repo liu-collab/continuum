@@ -18,7 +18,13 @@ import type {
   TriggerDecision,
 } from "../shared/types.js";
 import type { Logger } from "pino";
-import { matchesHistoryReference, normalizeText } from "../shared/utils.js";
+import {
+  buildSemanticQueryTerms,
+  clamp,
+  cosineSimilarity,
+  matchesHistoryReference,
+  normalizeText,
+} from "../shared/utils.js";
 import {
   dedupeScopes,
   importanceThresholdByPhase,
@@ -26,8 +32,48 @@ import {
   scopePlanByPhase,
 } from "./phase-plan.js";
 
-const SEMANTIC_TRIGGER_FLOOR_RATIO = 0.8;
-const SEMANTIC_TRIGGER_MEDIAN_DELTA = 0.15;
+export interface SemanticTriggerStats {
+  best_score: number;
+  top3_avg: number;
+  above_count: number;
+  sample_count: number;
+  hit: boolean;
+}
+
+export interface SemanticTriggerDecisionConfig {
+  semanticThreshold: number;
+  bestScoreThreshold: number;
+  top3AvgThreshold: number;
+  aboveCountThreshold: number;
+}
+
+export function evaluateSemanticTriggerStats(
+  scores: number[],
+  config: SemanticTriggerDecisionConfig,
+): SemanticTriggerStats {
+  const sortedScores = [...scores].sort((left, right) => right - left);
+  const bestScore = sortedScores[0] ?? 0;
+  const top3 = sortedScores.slice(0, 3);
+  const top3Avg =
+    top3.length === 0
+      ? 0
+      : top3.reduce((sum, score) => sum + score, 0) / top3.length;
+  const aboveCount = scores.filter((score) => score >= config.semanticThreshold).length;
+  const hit =
+    bestScore >= config.bestScoreThreshold ||
+    (
+      top3Avg >= config.top3AvgThreshold &&
+      aboveCount >= config.aboveCountThreshold
+    );
+
+  return {
+    best_score: bestScore,
+    top3_avg: top3Avg,
+    above_count: aboveCount,
+    sample_count: scores.length,
+    hit,
+  };
+}
 
 function shouldSkipForShortInput(text: string): boolean {
   const normalized = normalizeText(text);
@@ -398,7 +444,7 @@ export class TriggerEngine {
       });
     }
 
-    if (semanticScore.score >= semanticScore.threshold) {
+    if (semanticScore.hit) {
       return withIntent({
         hit: true,
         trigger_type: "semantic_fallback",
@@ -473,7 +519,7 @@ export class TriggerEngine {
       };
     }
 
-    if (semanticScore.score >= semanticScore.threshold) {
+    if (semanticScore.hit) {
       return {
         hit: true,
         trigger_type: "semantic_fallback",
@@ -509,6 +555,7 @@ export class TriggerEngine {
   ): Promise<{
     score: number;
     threshold: number;
+    hit: boolean;
     degraded: boolean;
     degradation_reason?: string;
   }> {
@@ -517,6 +564,7 @@ export class TriggerEngine {
       return {
         score: 0,
         threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        hit: false,
         degraded: false,
       };
     }
@@ -526,6 +574,9 @@ export class TriggerEngine {
       this.config.EMBEDDING_TIMEOUT_MS,
       (signal) => this.embeddingsClient.embedText(queryText, signal),
     );
+    const queryEmbedding = embeddingResult.ok && Array.isArray(embeddingResult.value)
+      ? embeddingResult.value
+      : [];
     const sampleResult = await this.dependencyGuard.run(
       "read_model",
       this.config.QUERY_TIMEOUT_MS,
@@ -543,7 +594,9 @@ export class TriggerEngine {
             status_filter: ["active"],
             importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
             semantic_query_text: queryText,
-            candidate_limit: 8,
+            semantic_query_terms: buildSemanticQueryTerms(queryText),
+            semantic_query_embedding: queryEmbedding.length > 0 ? queryEmbedding : undefined,
+            candidate_limit: this.config.SEMANTIC_TRIGGER_CANDIDATE_LIMIT,
           },
           signal,
         ),
@@ -560,6 +613,7 @@ export class TriggerEngine {
       return {
         score: 0,
         threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        hit: false,
         degraded: true,
         degradation_reason:
           embeddingResult.error?.code ??
@@ -568,52 +622,38 @@ export class TriggerEngine {
       };
     }
 
-    const queryEmbedding = embeddingResult.value ?? [];
     const samples = sampleResult.value ?? [];
 
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) {
       return {
         score: 0,
         threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+        hit: false,
         degraded: false,
       };
     }
 
-    let best = 0;
     const scores: number[] = [];
     for (const sample of samples) {
       const embedding = sample.summary_embedding;
       if (!embedding || embedding.length !== queryEmbedding.length) {
         continue;
       }
-      let dot = 0;
-      let leftNorm = 0;
-      let rightNorm = 0;
-      for (let index = 0; index < embedding.length; index += 1) {
-        const left = queryEmbedding[index] ?? 0;
-        const right = embedding[index] ?? 0;
-        dot += left * right;
-        leftNorm += left * left;
-        rightNorm += right * right;
-      }
-      if (leftNorm === 0 || rightNorm === 0) {
-        continue;
-      }
-      const score = dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
-      scores.push(score);
-      best = Math.max(best, score);
+      scores.push(clamp(cosineSimilarity(queryEmbedding, embedding), 0, 1));
     }
 
-    const sortedScores = scores.sort((left, right) => right - left);
-    const median =
-      sortedScores.length === 0
-        ? 0
-        : (sortedScores[Math.floor(sortedScores.length / 2)] ?? 0);
-    const threshold = Math.max(
-      median + SEMANTIC_TRIGGER_MEDIAN_DELTA,
-      this.config.SEMANTIC_TRIGGER_THRESHOLD * SEMANTIC_TRIGGER_FLOOR_RATIO,
-    );
+    const stats = evaluateSemanticTriggerStats(scores, {
+      semanticThreshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+      bestScoreThreshold: this.config.SEMANTIC_TRIGGER_BEST_SCORE_THRESHOLD,
+      top3AvgThreshold: this.config.SEMANTIC_TRIGGER_TOP3_AVG_THRESHOLD,
+      aboveCountThreshold: this.config.SEMANTIC_TRIGGER_ABOVE_COUNT_THRESHOLD,
+    });
 
-    return { score: best, threshold, degraded: false };
+    return {
+      score: stats.best_score,
+      threshold: this.config.SEMANTIC_TRIGGER_THRESHOLD,
+      hit: stats.hit,
+      degraded: false,
+    };
   }
 }

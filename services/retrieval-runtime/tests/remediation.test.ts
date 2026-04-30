@@ -160,6 +160,10 @@ const config: AppConfig = {
   INJECTION_RECENT_STATE_TTL_MS: 60 * 60 * 1000,
   INJECTION_RECENT_STATE_MAX_SESSIONS: 500,
   SEMANTIC_TRIGGER_THRESHOLD: 0.72,
+  SEMANTIC_TRIGGER_CANDIDATE_LIMIT: 30,
+  SEMANTIC_TRIGGER_BEST_SCORE_THRESHOLD: 0.85,
+  SEMANTIC_TRIGGER_TOP3_AVG_THRESHOLD: 0.75,
+  SEMANTIC_TRIGGER_ABOVE_COUNT_THRESHOLD: 5,
   IMPORTANCE_THRESHOLD_SESSION_START: 4,
   IMPORTANCE_THRESHOLD_DEFAULT: 3,
   IMPORTANCE_THRESHOLD_SEMANTIC: 4,
@@ -1027,7 +1031,7 @@ describe("retrieval-runtime remediation", () => {
     expect(estimateTokens("  ")).toBe(0);
   });
 
-  it("keeps semantic fallback model-aware by using a sample-distribution threshold", async () => {
+  it("keeps semantic fallback model-aware by using multi-score statistics", async () => {
     const repository = new InMemoryRuntimeRepository();
     const guard = new DependencyGuard(repository, pino({ enabled: false }));
     const triggerEngine = new TriggerEngine(
@@ -1036,15 +1040,33 @@ describe("retrieval-runtime remediation", () => {
       new InMemoryReadModelRepository([
         {
           ...baseCandidateRecord,
-          id: "semantic-low-1",
-          summary: "和当前输入弱相关的样本一",
-          summary_embedding: [0.69, 0.72, 0],
+          id: "semantic-medium-1",
+          summary: "和当前输入中等相关的样本一",
+          summary_embedding: [0.76, 0.65, 0],
         },
         {
           ...baseCandidateRecord,
-          id: "semantic-low-2",
-          summary: "和当前输入弱相关的样本二",
-          summary_embedding: [0.52, 0.85, 0],
+          id: "semantic-medium-2",
+          summary: "和当前输入中等相关的样本二",
+          summary_embedding: [0.76, 0.65, 0],
+        },
+        {
+          ...baseCandidateRecord,
+          id: "semantic-medium-3",
+          summary: "和当前输入中等相关的样本三",
+          summary_embedding: [0.75, 0.66, 0],
+        },
+        {
+          ...baseCandidateRecord,
+          id: "semantic-medium-4",
+          summary: "和当前输入中等相关的样本四",
+          summary_embedding: [0.72, 0.69, 0],
+        },
+        {
+          ...baseCandidateRecord,
+          id: "semantic-medium-5",
+          summary: "和当前输入中等相关的样本五",
+          summary_embedding: [0.72, 0.69, 0],
         },
       ]),
       guard,
@@ -1057,14 +1079,14 @@ describe("retrieval-runtime remediation", () => {
       user_id: ids.user,
       session_id: ids.session,
       phase: "before_response",
-      current_input: "继续沿用这套输出格式和说明方式",
+      current_input: "请分析这套输出格式和说明方式",
       memory_mode: "workspace_plus_global",
     });
 
     expect(decision.hit).toBe(true);
     expect(decision.trigger_type).toBe("semantic_fallback");
     expect(decision.semantic_score ?? 0).toBeLessThan(
-      config.SEMANTIC_TRIGGER_THRESHOLD,
+      config.SEMANTIC_TRIGGER_BEST_SCORE_THRESHOLD,
     );
   });
 
