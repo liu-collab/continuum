@@ -17,6 +17,7 @@ Commands:
   axis runtime --full      直接启动完整 retrieval-runtime
   axis memory-model configure --base-url URL --model MODEL [--api-key KEY] [--protocol PROTOCOL] [--timeout-ms MS]
   axis memory-model status
+  axis migrate --to full [--no-start] [--storage-url URL]
   axis mcp-server          直接启动打包后的记忆 MCP server
   axis claude [--plugin-dir PATH] [--package PKG]
   axis claude install [--plugin-dir PATH] [--package PKG] [--force]

@@ -11,6 +11,7 @@ const runClaudeCommandMock = vi.hoisted(() => vi.fn());
 const runClaudeInstallCommandMock = vi.hoisted(() => vi.fn());
 const runClaudeUninstallCommandMock = vi.hoisted(() => vi.fn());
 const runStartCommandMock = vi.hoisted(() => vi.fn());
+const runMigrateCommandMock = vi.hoisted(() => vi.fn());
 
 readManagedStateMock.mockResolvedValue({
   version: 1,
@@ -70,6 +71,10 @@ vi.mock("../src/start-command.js", () => ({
   runStartCommand: runStartCommandMock,
 }));
 
+vi.mock("../src/migrate-command.js", () => ({
+  runMigrateCommand: runMigrateCommandMock,
+}));
+
 import { parseArgs } from "../src/args.js";
 import { runCli } from "../src/axis-cli.js";
 import {
@@ -98,6 +103,7 @@ describe("axis cli", () => {
     runClaudeInstallCommandMock.mockReset();
     runClaudeUninstallCommandMock.mockReset();
     runStartCommandMock.mockReset();
+    runMigrateCommandMock.mockReset();
     readManagedStateMock.mockReset();
     readManagedStateMock.mockResolvedValue({
       version: 1,
@@ -304,6 +310,21 @@ describe("axis cli", () => {
     expect(parsed.options["mna-port"]).toBe("4193");
     expect(parsed.options["mna-home"]).toBe("C:/tmp/.axis/managed/mna");
     expect(renderHelp()).toContain("axis mna <install|start|stop|logs|token>");
+  });
+
+  it("routes lite migration command", async () => {
+    runMigrateCommandMock.mockResolvedValue(0);
+
+    await expect(runCli(["migrate", "--to", "full", "--no-start"], import.meta.url)).resolves.toBe(0);
+
+    expect(runMigrateCommandMock).toHaveBeenCalledWith(
+      {
+        to: "full",
+        "no-start": true,
+      },
+      import.meta.url,
+    );
+    expect(renderHelp()).toContain("axis migrate --to full");
   });
 
   it("returns non-zero when strict status checks fail", async () => {
