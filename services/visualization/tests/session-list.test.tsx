@@ -44,7 +44,6 @@ const workspaces: MnaWorkspaceSummary[] = [
 
 function renderSessionList(props?: Partial<React.ComponentProps<typeof SessionList>>) {
   const onSelect = vi.fn();
-  const onRename = vi.fn();
   const onDelete = vi.fn();
 
   render(
@@ -54,7 +53,6 @@ function renderSessionList(props?: Partial<React.ComponentProps<typeof SessionLi
         workspaces={workspaces}
         activeSessionId="session-1"
         onSelect={onSelect}
-        onRename={onRename}
         onDelete={onDelete}
         {...props}
       />
@@ -63,25 +61,11 @@ function renderSessionList(props?: Partial<React.ComponentProps<typeof SessionLi
 
   return {
     onSelect,
-    onRename,
     onDelete
   };
 }
 
 describe("session list", () => {
-  it("renames the targeted session without forcing active session coupling", async () => {
-    const user = userEvent.setup();
-    const { onRename } = renderSessionList();
-
-    await user.click(screen.getAllByLabelText("重命名会话")[1]!);
-    const input = screen.getByRole("textbox");
-    await user.clear(input);
-    await user.type(input, "新的会话名");
-    await user.keyboard("{Enter}");
-
-    expect(onRename).toHaveBeenCalledWith(sessions[1], "新的会话名");
-  });
-
   it("deletes a session without selecting it first", async () => {
     const user = userEvent.setup();
     const { onDelete, onSelect } = renderSessionList();
@@ -158,9 +142,9 @@ describe("session list", () => {
     const actionRail = screen.getByTestId("session-card-action-rail-session-1");
     const statusRow = screen.getByTestId("session-card-status-row-session-1");
     const quickActions = screen.getByTestId("session-card-quick-actions-session-1");
-    const renameButton = screen.getAllByLabelText("重命名会话")[0];
 
-    expect(renameButton.parentElement).toBe(actionRail);
+    expect(screen.queryByLabelText("重命名会话")).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("删除会话")[0]?.parentElement).toBe(actionRail);
     expect(statusRow.parentElement?.nextElementSibling).toContainElement(quickActions);
   });
 

@@ -177,27 +177,24 @@ export class AgentPage {
     await this.page.getByTestId("abort-turn").click();
   }
 
-  sessionRenameButtons() {
-    return this.page.getByLabel(/重命名会话|rename session/i);
-  }
-
   sessionDeleteButtons() {
     return this.page.getByLabel(/删除会话|delete session/i);
+  }
+
+  sessionCards() {
+    return this.page.getByTestId(/^session-card-/);
+  }
+
+  activeSessionCard() {
+    return this.page.locator('[data-testid^="session-card-"][data-active="true"]').first();
   }
 
   sessionCardByTitle(title: string): Locator {
     return this.page.getByTestId(/^session-card-/).filter({ hasText: title }).first();
   }
 
-  async renameFirstSession(title: string) {
-    const renameButton = this.sessionRenameButtons().first();
-    const card = renameButton.locator("..").locator("..");
-    await renameButton.click();
-    const renameInput = card.locator("form input");
-    await expect(renameInput).toBeVisible();
-    await renameInput.fill(title);
-    await renameInput.press("Enter");
-    await expect(this.page.getByText(title)).toBeVisible();
+  sessionCardById(sessionId: string): Locator {
+    return this.page.getByTestId(`session-card-${sessionId}`);
   }
 
   async deleteSessionByTitle(title: string) {
@@ -206,8 +203,21 @@ export class AgentPage {
     await expect(this.page.getByText(title)).toHaveCount(0);
   }
 
+  async deleteActiveSession() {
+    const activeCard = this.activeSessionCard();
+    const activeCardTestId = await activeCard.getAttribute("data-testid");
+    await activeCard.getByLabel(/删除会话|delete session/i).click();
+    if (activeCardTestId) {
+      await expect(this.page.getByTestId(activeCardTestId)).toHaveCount(0);
+    }
+  }
+
   async openSessionByTitle(title: string) {
     await this.sessionCardByTitle(title).getByRole("button").first().click();
+  }
+
+  async openSessionById(sessionId: string) {
+    await this.sessionCardById(sessionId).getByRole("button").first().click();
   }
 
   async waitForSessionReady(title?: string) {
@@ -220,7 +230,11 @@ export class AgentPage {
   }
 
   async expectSessionSelected(title: string) {
-    await expect(this.sessionCardByTitle(title)).toHaveClass(/border-accent/);
+    await expect(this.sessionCardByTitle(title)).toHaveAttribute("data-active", "true");
+  }
+
+  async expectSessionSelectedById(sessionId: string) {
+    await expect(this.sessionCardById(sessionId)).toHaveAttribute("data-active", "true");
   }
 
   async openDirectory(name: string) {

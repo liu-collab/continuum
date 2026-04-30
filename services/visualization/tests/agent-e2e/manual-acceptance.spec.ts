@@ -29,11 +29,10 @@ test.describe("manual acceptance checks", () => {
     await agent.openReadmePreview();
     await expect(page.getByTestId("file-preview")).toContainText("README.md");
 
-    const sessionCountBefore = await agent.sessionRenameButtons().count();
+    const sessionCountBefore = await agent.sessionCards().count();
     await agent.createNewSession();
-    await expect(agent.sessionRenameButtons()).toHaveCount(sessionCountBefore + 1);
+    await expect(agent.sessionCards()).toHaveCount(sessionCountBefore + 1);
 
-    await agent.renameFirstSession("手工验收会话");
-    await agent.deleteSessionByTitle("手工验收会话");
+    await agent.deleteActiveSession();
   });
 });

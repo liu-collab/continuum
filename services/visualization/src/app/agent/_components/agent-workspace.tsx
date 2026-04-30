@@ -121,7 +121,7 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 {t("workspace.newSession")}
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-3">
+            <div className="agent-session-scroll min-h-0 flex-1 overflow-y-scroll p-3">
               <SessionList
                 sessions={workspace.state.sessionList}
                 workspaces={workspace.workspaceList}
@@ -130,9 +130,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
                 activeSessionRunsHref={currentTurnRunsHref}
                 onSelect={(nextSessionId) => {
                   void workspace.openSession(nextSessionId);
-                }}
-                onRename={(session, title) => {
-                  void workspace.renameSession(session.id, title);
                 }}
                 onDelete={(session) => {
                   void workspace.deleteSession(session.id);

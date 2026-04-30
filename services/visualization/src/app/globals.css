@@ -267,6 +267,10 @@ a {
     padding: 24px;
   }
 
+  .agent-session-scroll {
+    scrollbar-gutter: stable;
+  }
+
   .page-shell {
     display: grid;
     gap: 0;

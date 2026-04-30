@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import { Brain, PencilLine, Trash2, Workflow } from "lucide-react";
-import { useState } from "react";
+import { Brain, Trash2, Workflow } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { createTranslator } from "@/lib/i18n/messages";
@@ -25,7 +24,6 @@ type SessionListProps = {
   activeSessionMemoriesHref?: string | null;
   activeSessionRunsHref?: string | null;
   onSelect(sessionId: string): void;
-  onRename(session: MnaSessionSummary, title: string): void;
   onDelete(session: MnaSessionSummary): void;
 };
 
@@ -36,11 +34,8 @@ export function SessionList({
   activeSessionMemoriesHref,
   activeSessionRunsHref,
   onSelect,
-  onRename,
   onDelete
 }: SessionListProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
   const { formatMemoryModeLabel, locale, t } = useAgentI18n();
 
   if (sessions.length === 0) {
@@ -55,7 +50,6 @@ export function SessionList({
     <div className="grid gap-3">
       {sessions.map((session) => {
         const isActive = session.id === activeSessionId;
-        const isEditing = editingId === session.id;
         const workspace = workspaces.find((item) => item.workspace_id === session.workspace_id) ?? null;
         const workspaceLabel = getSessionWorkspaceLabel(locale, session, workspace);
         const workspaceTitle = workspace
@@ -66,6 +60,7 @@ export function SessionList({
           <div
             key={session.id}
             data-testid={`session-card-${session.id}`}
+            data-active={isActive ? "true" : "false"}
             className={cn(
               "w-full rounded-[var(--radius-lg)] border border-[var(--hairline)] bg-[var(--canvas)] p-4 text-left transition hover:border-[var(--primary)]",
               isActive && "border-[var(--primary-focus)] bg-[var(--cyan-bg)]"
@@ -73,57 +68,23 @@ export function SessionList({
           >
             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3">
               <div className="min-w-0">
-                {isEditing ? (
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const nextTitle = draftTitle.trim();
-                      if (!nextTitle) return;
-                      onRename(session, nextTitle);
-                      setEditingId(null);
-                    }}
-                  >
-                    <input
-                      autoFocus
-                      value={draftTitle}
-                      onChange={(event) => setDraftTitle(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") setEditingId(null);
-                      }}
-                      className="field"
-                    />
-                  </form>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => onSelect(session.id)}
-                    className="w-full text-left"
-                  >
-                    <div className="truncate text-[17px] font-semibold leading-[1.24] text-foreground">
-                      {session.title ?? formatFallbackSessionTitle(locale, session)}
-                    </div>
-                    <div className="mt-2 truncate text-[14px] leading-[1.43] text-muted-foreground" title={workspaceTitle}>
-                      {t("sessionList.workspace", { label: workspaceLabel })}
-                    </div>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => onSelect(session.id)}
+                  className="w-full text-left"
+                >
+                  <div className="truncate text-[17px] font-semibold leading-[1.24] text-foreground">
+                    {session.title ?? formatFallbackSessionTitle(locale, session)}
+                  </div>
+                  <div className="mt-2 truncate text-[14px] leading-[1.43] text-muted-foreground" title={workspaceTitle}>
+                    {t("sessionList.workspace", { label: workspaceLabel })}
+                  </div>
+                </button>
               </div>
               <div
                 data-testid={`session-card-action-rail-${session.id}`}
                 className="flex shrink-0 items-start gap-0.5 self-start"
               >
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditingId(session.id);
-                    setDraftTitle(session.title ?? "");
-                  }}
-                  className="icon-button !h-8 !w-8 !bg-transparent text-muted-foreground hover:!bg-[var(--surface-pearl)] hover:text-foreground"
-                  aria-label={t("sessionList.renameAria")}
-                >
-                  <PencilLine className="h-3.5 w-3.5" />
-                </button>
                 <button
                   type="button"
                   onClick={(event) => {
@@ -136,49 +97,40 @@ export function SessionList({
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
-              {isEditing ? (
-                <>
-                  <div />
-                  <div />
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(session.id)}
-                    className="flex min-w-0 items-center gap-3 text-left"
+              <button
+                type="button"
+                onClick={() => onSelect(session.id)}
+                className="flex min-w-0 items-center gap-3 text-left"
+              >
+                <div
+                  data-testid={`session-card-status-row-${session.id}`}
+                  className="flex min-w-0 flex-wrap items-center gap-1.5"
+                >
+                  <StatusBadge tone={session.closed_at ? "warning" : "success"}>
+                    {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
+                  </StatusBadge>
+                  <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
+                </div>
+              </button>
+              <div className="flex min-h-8 shrink-0 items-center justify-end">
+                {isActive ? (
+                  <div
+                    data-testid={`session-card-quick-actions-${session.id}`}
+                    className="flex items-center gap-2"
                   >
-                    <div
-                      data-testid={`session-card-status-row-${session.id}`}
-                      className="flex min-w-0 flex-wrap items-center gap-1.5"
-                    >
-                      <StatusBadge tone={session.closed_at ? "warning" : "success"}>
-                        {session.closed_at ? t("sessionList.closed") : t("sessionList.active")}
-                      </StatusBadge>
-                      <StatusBadge tone="neutral">{formatMemoryModeLabel(session.memory_mode)}</StatusBadge>
-                    </div>
-                  </button>
-                  <div className="flex shrink-0 items-center justify-end">
-                    {isActive ? (
-                      <div
-                        data-testid={`session-card-quick-actions-${session.id}`}
-                        className="flex items-center gap-2"
-                      >
-                        <QuickActionLink
-                          href={activeSessionMemoriesHref ?? null}
-                          title={t("workspace.currentTurnMemories")}
-                          icon={<Brain className="h-3.5 w-3.5" />}
-                        />
-                        <QuickActionLink
-                          href={activeSessionRunsHref ?? null}
-                          title={t("workspace.currentTurnRuns")}
-                          icon={<Workflow className="h-3.5 w-3.5" />}
-                        />
-                      </div>
-                    ) : null}
+                    <QuickActionLink
+                      href={activeSessionMemoriesHref ?? null}
+                      title={t("workspace.currentTurnMemories")}
+                      icon={<Brain className="h-3.5 w-3.5" />}
+                    />
+                    <QuickActionLink
+                      href={activeSessionRunsHref ?? null}
+                      title={t("workspace.currentTurnRuns")}
+                      icon={<Workflow className="h-3.5 w-3.5" />}
+                    />
                   </div>
-                </>
-              )}
+                ) : null}
+              </div>
             </div>
           </div>
         );

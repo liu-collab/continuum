@@ -63,7 +63,6 @@ test.describe("agent extra ui flows", () => {
 
     await agent.goto();
     await agent.expectConnected();
-    await agent.renameFirstSession("会话一");
     await agent.sendMessage("这是会话一");
     await agent.expectLatestAssistantContains(/收到/i);
     const firstSessionId = await agent.currentSessionId();
@@ -77,8 +76,9 @@ test.describe("agent extra ui flows", () => {
     await agent.expectLatestAssistantContains(/收到/i);
     await agent.expectLatestUserContains("这是会话二");
 
-    await agent.openSessionByTitle("会话一");
-    await agent.waitForSessionReady("会话一");
+    await agent.openSessionById(firstSessionId ?? "");
+    await agent.waitForSessionReady();
+    await agent.expectSessionSelectedById(firstSessionId ?? "");
     await agent.expectLatestUserContains("这是会话一");
     await agent.sendMessage("切回会话一后继续");
     await agent.expectLatestAssistantContains(/收到|继续回答|已收到/i);
