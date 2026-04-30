@@ -43,6 +43,34 @@ function createSessionSummary(id: string, workspaceId = "workspace-1") {
   };
 }
 
+function createSessionDetail(id: string, workspaceId = "workspace-1") {
+  return {
+    id,
+    workspace_id: workspaceId,
+    user_id: "00000000-0000-4000-8000-000000000001",
+    title: id,
+    memory_mode: "workspace_plus_global" as const,
+    locale: "zh-CN" as const,
+    created_at: "2026-04-21T00:00:00Z",
+    last_active_at: "2026-04-21T00:00:00Z",
+    closed_at: null,
+  };
+}
+
+function createSessionMessage(sessionId: string, turnId: string, role: "user" | "assistant", content: string) {
+  return {
+    id: `${turnId}-${role}`,
+    session_id: sessionId,
+    turn_id: turnId,
+    role,
+    content,
+    tool_call_id: null,
+    token_in: null,
+    token_out: null,
+    created_at: "2026-04-21T00:00:00Z",
+  };
+}
+
 function createClientMock() {
   return {
     bootstrap: vi.fn(),
@@ -82,6 +110,7 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     mockUseAgentClient.mockReset();
     mockUsePathname.mockReset();
     window.localStorage.clear();
+    window.history.replaceState(null, "", "/");
     vi.clearAllMocks();
   });
 
@@ -104,17 +133,36 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     client.listWorkspaces.mockResolvedValue({
       items: []
     });
-    client.getSession.mockRejectedValue(
-      new MnaRequestError("session missing", 404, "session_not_found")
-    );
+    client.getSession
+      .mockRejectedValueOnce(new MnaRequestError("session missing", 404, "session_not_found"))
+      .mockResolvedValueOnce({
+        session: createSessionDetail("fresh-session"),
+        messages: [],
+        latest_event_id: null
+      });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent/stale-session");
 
     render(<HookProbe sessionId="stale-session" />);
 
     await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith("/agent/fresh-session");
+      expect(window.location.pathname).toBe("/agent/fresh-session");
     });
+    expect(replace).not.toHaveBeenCalled();
     expect(client.createSession).not.toHaveBeenCalled();
   });
 
@@ -137,9 +185,13 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     client.listWorkspaces.mockResolvedValue({
       items: []
     });
-    client.getSession.mockRejectedValue(
-      new MnaRequestError("workspace mismatch", 409, "workspace_mismatch")
-    );
+    client.getSession
+      .mockRejectedValueOnce(new MnaRequestError("workspace mismatch", 409, "workspace_mismatch"))
+      .mockResolvedValueOnce({
+        session: createSessionDetail("new-session"),
+        messages: [],
+        latest_event_id: null
+      });
     client.createSession.mockResolvedValue({
       session_id: "new-session",
       ws_url: "ws://127.0.0.1:4193/v1/agent/sessions/new-session/stream",
@@ -147,6 +199,20 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       workspace_id: "workspace-1",
       locale: "zh-CN"
     });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent/stale-session");
 
@@ -156,8 +222,9 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       expect(client.createSession).toHaveBeenCalledWith({
         locale: "zh-CN"
       });
-      expect(replace).toHaveBeenCalledWith("/agent/new-session");
+      expect(window.location.pathname).toBe("/agent/new-session");
     });
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("aligns the file tree to the active session workspace", async () => {
@@ -200,21 +267,17 @@ describe("useAgentWorkspace bootstrap recovery", () => {
         }
       ]
     });
-    client.getSession.mockResolvedValue({
-      session: {
-        id: "session-1",
-        workspace_id: "workspace-1",
-        user_id: "00000000-0000-4000-8000-000000000001",
-        title: null,
-        memory_mode: "workspace_plus_global",
-        locale: "zh-CN",
-        created_at: "2026-04-21T00:00:00Z",
-        last_active_at: "2026-04-21T00:00:00Z",
-        closed_at: null
-      },
-      messages: [],
-      latest_event_id: null
-    });
+    client.getSession
+      .mockResolvedValueOnce({
+        session: createSessionDetail("session-1", "workspace-1"),
+        messages: [],
+        latest_event_id: null
+      })
+      .mockResolvedValueOnce({
+        session: createSessionDetail("session-2", "workspace-1"),
+        messages: [],
+        latest_event_id: null
+      });
     client.connectSessionStream.mockReturnValue({
       send: vi.fn(),
       close: vi.fn()
@@ -259,6 +322,25 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     client.listWorkspaces.mockResolvedValue({
       items: []
     });
+    client.getSession.mockResolvedValue({
+      session: createSessionDetail("recent-session"),
+      messages: [],
+      latest_event_id: null
+    });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent");
     window.localStorage.setItem("axis.agent.lastSessionId", "recent-session");
@@ -266,8 +348,9 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     render(<HookProbe />);
 
     await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith("/agent/recent-session");
+      expect(window.location.pathname).toBe("/agent/recent-session");
     });
+    expect(replace).not.toHaveBeenCalled();
     expect(client.createSession).not.toHaveBeenCalled();
   });
 
@@ -313,6 +396,25 @@ describe("useAgentWorkspace bootstrap recovery", () => {
         is_current: false
       }
     });
+    client.getSession.mockResolvedValue({
+      session: createSessionDetail("session-2", "workspace-2"),
+      messages: [],
+      latest_event_id: null
+    });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-2",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent/session-1");
 
@@ -326,8 +428,90 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       await (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook.pickWorkspace();
     });
 
-    expect(push).toHaveBeenCalledWith("/agent/session-2");
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/agent/session-2");
+    });
+    expect(push).not.toHaveBeenCalled();
     expect(client.createSession).not.toHaveBeenCalled();
+  });
+
+  it("switches sessions in place and replaces the visible turns without routing remount", async () => {
+    const firstStream = { send: vi.fn(), close: vi.fn() };
+    const secondStream = { send: vi.fn(), close: vi.fn() };
+    const client = createClientMock();
+    client.bootstrap.mockResolvedValue({
+      status: "ok",
+      token: "token-1",
+      reason: null,
+      mnaBaseUrl: "http://127.0.0.1:4193",
+      baseUrl: "http://127.0.0.1:4193"
+    });
+    client.listSessions.mockResolvedValue({
+      items: [createSessionSummary("session-1", "workspace-1"), createSessionSummary("session-2", "workspace-1")],
+      next_cursor: null
+    });
+    client.listSkills.mockResolvedValue({ items: [] });
+    client.listWorkspaces.mockResolvedValue({
+      items: [
+        { workspace_id: "workspace-1", cwd: "C:/repo-1", label: "repo-1", is_current: true }
+      ]
+    });
+    client.getSession
+      .mockResolvedValueOnce({
+        session: createSessionDetail("session-1", "workspace-1"),
+        messages: [
+          createSessionMessage("session-1", "turn-1", "user", "first session question"),
+          createSessionMessage("session-1", "turn-1", "assistant", "first session answer")
+        ],
+        latest_event_id: 1
+      })
+      .mockResolvedValueOnce({
+        session: createSessionDetail("session-2", "workspace-1"),
+        messages: [
+          createSessionMessage("session-2", "turn-2", "user", "second session question"),
+          createSessionMessage("session-2", "turn-2", "assistant", "second session answer")
+        ],
+        latest_event_id: 2
+      });
+    client.connectSessionStream
+      .mockReturnValueOnce(firstStream)
+      .mockReturnValueOnce(secondStream);
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-1",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
+    mockUseAgentClient.mockReturnValue(client);
+    mockUsePathname.mockReturnValue("/agent/session-1");
+    window.history.replaceState(null, "", "/agent/session-1");
+
+    render(<HookProbe sessionId="session-1" />);
+
+    await waitFor(() => {
+      const hook = (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook;
+      expect(hook.state.sessionId).toBe("session-1");
+      expect(hook.state.turns[0]?.userInput).toBe("first session question");
+    });
+
+    await act(async () => {
+      await (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook.openSession("session-2");
+    });
+
+    const hook = (globalThis as unknown as { __lastWorkspaceHook: ReturnType<typeof useAgentWorkspace> }).__lastWorkspaceHook;
+    expect(hook.state.sessionId).toBe("session-2");
+    expect(hook.state.turns).toHaveLength(1);
+    expect(hook.state.turns[0]?.userInput).toBe("second session question");
+    expect(hook.state.turns[0]?.assistantOutput).toBe("second session answer");
+    expect(firstStream.close).toHaveBeenCalledTimes(1);
+    expect(secondStream.close).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/agent/session-2");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("creates a new session in the selected workspace when none exists yet", async () => {
@@ -386,6 +570,25 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       workspace_id: "workspace-2",
       locale: "zh-CN"
     });
+    client.getSession.mockResolvedValue({
+      session: createSessionDetail("session-2", "workspace-2"),
+      messages: [],
+      latest_event_id: null
+    });
+    client.connectSessionStream.mockReturnValue({
+      send: vi.fn(),
+      close: vi.fn()
+    });
+    client.getFileTree.mockResolvedValue({
+      path: ".",
+      workspace_id: "workspace-2",
+      entries: []
+    });
+    client.getMetrics.mockResolvedValue(null);
+    client.getDependencyStatus.mockResolvedValue(null);
+    client.getConfig.mockResolvedValue(null);
+    client.getRuntimeConfig.mockResolvedValue(null);
+    client.getMcpServers.mockResolvedValue({ servers: [], tools: [] });
     mockUseAgentClient.mockReturnValue(client);
     mockUsePathname.mockReturnValue("/agent/session-1");
 
@@ -403,7 +606,10 @@ describe("useAgentWorkspace bootstrap recovery", () => {
       workspace_id: "workspace-2",
       locale: "zh-CN"
     });
-    expect(push).toHaveBeenCalledWith("/agent/session-2");
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/agent/session-2");
+    });
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("refreshes the session list after manually creating a session", async () => {
@@ -488,7 +694,10 @@ describe("useAgentWorkspace bootstrap recovery", () => {
     });
     expect(client.listSessions).toHaveBeenCalledTimes(2);
     expect(hook.state.sessionList.map((session) => session.id)).toEqual(["session-1", "session-2"]);
-    expect(push).toHaveBeenCalledWith("/agent/session-2");
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/agent/session-2");
+    });
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("updates dependency status locally after checking memory llm", async () => {

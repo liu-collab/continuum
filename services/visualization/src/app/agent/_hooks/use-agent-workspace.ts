@@ -2,7 +2,6 @@
 
 import type { Route } from "next";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
 
 import { createTranslator } from "@/lib/i18n/messages";
 
@@ -30,9 +29,12 @@ const FILE_TREE_SELECTED_FILE_STORAGE_KEY = "axis.agent.fileTree.selectedFile";
 const FILE_TREE_WORKSPACE_STORAGE_KEY = "axis.agent.fileTree.workspace";
 const LAST_SESSION_ID_STORAGE_KEY = "axis.agent.lastSessionId";
 
+function readSessionIdFromPath(pathname: string) {
+  const [, route, sessionId] = pathname.split("/");
+  return route === "agent" && sessionId ? decodeURIComponent(sessionId) : null;
+}
+
 export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
-  const router = useRouter();
-  const pathname = usePathname();
   const client = useAgentClient();
   const [state, dispatch] = useReducer(reduceAgentEvent, initialAgentState);
   const [treePath, setTreePath] = useState(".");
@@ -54,8 +56,24 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
   const [promptInspectorOpen, setPromptInspectorOpen] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const [sessionCatalogLoaded, setSessionCatalogLoaded] = useState(false);
+  const [routeSessionId, setRouteSessionId] = useState<string | null>(options.sessionId ?? null);
   const streamRef = useRef<ReturnType<typeof client.connectSessionStream> | null>(null);
   const streamGenerationRef = useRef(0);
+
+  useEffect(() => {
+    setRouteSessionId(options.sessionId ?? null);
+  }, [options.sessionId]);
+
+  useEffect(() => {
+    function handlePopState() {
+      setRouteSessionId(readSessionIdFromPath(window.location.pathname));
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     const savedTreePath = window.localStorage.getItem(FILE_TREE_PATH_STORAGE_KEY);
@@ -86,6 +104,25 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return `/agent/${sessionId}` as Route;
   }
 
+  function syncAgentRoute(sessionId: string, mode: "push" | "replace" | "none" = "push") {
+    if (mode === "none") {
+      return;
+    }
+
+    const nextPath = toAgentRoute(sessionId);
+    setRouteSessionId(sessionId);
+    if (window.location.pathname === nextPath && !window.location.search) {
+      return;
+    }
+
+    if (mode === "replace") {
+      window.history.replaceState(null, "", nextPath);
+      return;
+    }
+
+    window.history.pushState(null, "", nextPath);
+  }
+
   function isRecoverableSessionError(error: unknown) {
     return (
       error instanceof MnaRequestError &&
@@ -98,14 +135,17 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       ? sessionItems.find((item) => item.id !== fallbackSessionId)?.id
       : sessionItems[0]?.id;
     if (existingSessionId) {
-      router.replace(toAgentRoute(existingSessionId));
+      await openSession(existingSessionId, { routeMode: "replace" });
       return;
     }
 
     const created = await client.createSession({
       locale: options.uiLocale
     });
-    router.replace(toAgentRoute(created.session_id));
+    await openSession(created.session_id, {
+      routeMode: "replace",
+      requestedWorkspaceId: created.workspace_id ?? undefined
+    });
   }
 
   useEffect(() => {
@@ -179,9 +219,13 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     let cancelled = false;
 
     const syncRouteSession = async () => {
-      if (options.sessionId) {
+      if (routeSessionId) {
+        if (state.sessionId === routeSessionId) {
+          return;
+        }
+
         try {
-          await openSession(options.sessionId);
+          await openSession(routeSessionId, { routeMode: "replace" });
         } catch (error) {
           if (cancelled) {
             return;
@@ -203,7 +247,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
               items: sessionItems
             });
           }
-          await restoreAvailableSessionOrCreate(sessionItems, options.sessionId);
+          await restoreAvailableSessionOrCreate(sessionItems, routeSessionId);
         }
         return;
       }
@@ -217,7 +261,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         (lastSessionId ? state.sessionList.find((item) => item.id === lastSessionId)?.id : undefined) ??
         state.sessionList[0]?.id;
       if (existingSessionId) {
-        router.replace(toAgentRoute(existingSessionId));
+        await openSession(existingSessionId, { routeMode: "replace" });
         return;
       }
 
@@ -228,7 +272,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
         return;
       }
 
-      router.replace(toAgentRoute(created.session_id));
+      await openSession(created.session_id, {
+        routeMode: "replace",
+        requestedWorkspaceId: created.workspace_id ?? undefined
+      });
     };
 
     void syncRouteSession().catch((error) => {
@@ -246,7 +293,15 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     return () => {
       cancelled = true;
     };
-  }, [client, options.sessionId, options.uiLocale, router, sessionCatalogLoaded, state.bootstrapStatus, state.sessionList]);
+  }, [
+    client,
+    options.uiLocale,
+    routeSessionId,
+    sessionCatalogLoaded,
+    state.bootstrapStatus,
+    state.sessionId,
+    state.sessionList
+  ]);
 
   useEffect(() => {
     if (state.bootstrapStatus === "ok" || state.bootstrapStatus === "loading") {
@@ -402,7 +457,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       type: "session_list_loaded",
       items: allSessions.items
     });
-    router.push(toAgentRoute(created.session_id));
+    await openSession(created.session_id, {
+      routeMode: "push",
+      requestedWorkspaceId: workspaceId
+    });
     return created.session_id;
   }
 
@@ -485,15 +543,21 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
     });
   }
 
-  async function openSession(sessionId: string) {
-    const targetPath = `/agent/${sessionId}`;
-    if (pathname !== targetPath) {
-      router.push(toAgentRoute(sessionId));
+  async function openSession(
+    sessionId: string,
+    options: {
+      routeMode?: "push" | "replace" | "none";
+      requestedWorkspaceId?: string | null;
+    } = {}
+  ) {
+    if (state.sessionId === sessionId) {
+      syncAgentRoute(sessionId, options.routeMode ?? "push");
       return;
     }
 
     const requestedWorkspaceId =
-      state.sessionList.find((item) => item.id === sessionId)?.workspace_id
+      options.requestedWorkspaceId
+      ?? state.sessionList.find((item) => item.id === sessionId)?.workspace_id
       ?? selectedWorkspaceId
       ?? state.session?.workspace_id
       ?? state.sessionList[0]?.workspace_id;
@@ -503,6 +567,7 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       session: detail.session,
       messages: detail.messages
     });
+    syncAgentRoute(sessionId, options.routeMode ?? "push");
 
     const nextWorkspaceId = detail.session.workspace_id;
     const storedWorkspaceId = window.localStorage.getItem(FILE_TREE_WORKSPACE_STORAGE_KEY);
@@ -549,7 +614,10 @@ export function useAgentWorkspace(options: UseAgentWorkspaceOptions) {
       type: "session_list_loaded",
       items: sessions.items
     });
-    router.push(toAgentRoute(created.session_id));
+    await openSession(created.session_id, {
+      routeMode: "push",
+      requestedWorkspaceId: created.workspace_id ?? selectedWorkspaceId ?? undefined
+    });
   }
 
   function sendInput(text: string) {
