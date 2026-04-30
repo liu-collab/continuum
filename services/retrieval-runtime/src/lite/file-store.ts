@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { LiteWriteQueue, type LiteWriteQueueStats } from "./write-queue.js";
 import type { MemoryType, RecordStatus, ScopeType } from "../shared/types.js";
 
 export interface LiteMemoryRecord {
@@ -61,6 +62,7 @@ export interface FileMemorySearchResult {
 export interface FileMemoryStoreOptions {
   memoryDir: string;
   recordsFileName?: string;
+  writeQueue?: LiteWriteQueue;
 }
 
 const DEFAULT_RECORDS_FILE_NAME = "records.jsonl";
@@ -73,12 +75,14 @@ export class FileMemoryStore {
   private readonly idsByMemoryType = new Map<MemoryType, Set<string>>();
   private readonly idsByScope = new Map<ScopeType, Set<string>>();
   private readonly idsByWorkspace = new Map<string, Set<string>>();
+  private readonly writeQueue: LiteWriteQueue;
 
   constructor(private readonly options: FileMemoryStoreOptions) {
     this.recordsPath = path.join(
       options.memoryDir,
       options.recordsFileName ?? DEFAULT_RECORDS_FILE_NAME,
     );
+    this.writeQueue = options.writeQueue ?? new LiteWriteQueue();
   }
 
   get path() {
@@ -133,17 +137,21 @@ export class FileMemoryStore {
   }
 
   async appendRecord(record: LiteMemoryRecord): Promise<void> {
-    await this.appendEntry(record);
-    this.applyRecord(record);
+    await this.writeQueue.enqueue(async () => {
+      await this.appendEntry(record);
+      this.applyRecord(record);
+    });
   }
 
   async deleteRecord(recordId: string, deletedAt: string): Promise<void> {
-    await this.appendEntry({
-      action: "delete",
-      record_id: recordId,
-      deleted_at: deletedAt,
+    await this.writeQueue.enqueue(async () => {
+      await this.appendEntry({
+        action: "delete",
+        record_id: recordId,
+        deleted_at: deletedAt,
+      });
+      this.removeRecord(recordId);
     });
-    this.removeRecord(recordId);
   }
 
   search(query: FileMemorySearchQuery = {}): FileMemorySearchResult {
@@ -187,6 +195,10 @@ export class FileMemoryStore {
 
   idsForWorkspace(workspaceId: string): string[] {
     return [...(this.idsByWorkspace.get(workspaceId) ?? [])].sort();
+  }
+
+  writeQueueStats(): LiteWriteQueueStats {
+    return this.writeQueue.stats();
   }
 
   private async appendEntry(entry: LiteMemoryJsonlEntry): Promise<void> {

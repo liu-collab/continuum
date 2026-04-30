@@ -98,6 +98,25 @@ describe("FileMemoryStore", () => {
     expect(content).toContain("\"action\":\"delete\"");
   });
 
+  it("serializes concurrent record writes through one write queue", async () => {
+    const store = new FileMemoryStore({ memoryDir: tempDir });
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) => store.appendRecord({
+        ...baseRecord,
+        id: `rec-write-${index}`,
+        summary: `并发写入 ${index}`,
+        updated_at: `2026-04-30T10:00:0${index}.000Z`,
+      })),
+    );
+
+    const content = await readFile(path.join(tempDir, "records.jsonl"), "utf8");
+    expect(content.trim().split(/\r?\n/).map((line) => JSON.parse(line).id)).toEqual(
+      Array.from({ length: 8 }, (_, index) => `rec-write-${index}`),
+    );
+    expect(store.writeQueueStats().pending).toBe(0);
+    expect(store.size()).toBe(8);
+  });
+
   it("searches by text, filters, and stable ranking", async () => {
     const store = new FileMemoryStore({ memoryDir: tempDir });
     await store.appendRecord({
