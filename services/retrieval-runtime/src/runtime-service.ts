@@ -22,6 +22,7 @@ import {
   pickRuntimeGovernanceConfig,
   type RuntimeGovernanceConfig,
 } from "./runtime-config.js";
+import { RecallAugmentationService } from "./query/recall-augmentation-service.js";
 import { nowIso } from "./shared/utils.js";
 import type {
   CandidateMemory,
@@ -33,7 +34,6 @@ import type {
   FinalizeTurnResponse,
   MaintenanceRunSummary,
   MemoryPacket,
-  MemoryRelationSnapshot,
   MemoryMode,
   ObserveRunsFilters,
   ProactiveRecommendation,
@@ -46,7 +46,7 @@ import type {
   WriteProjectionStatusSnapshot,
 } from "./shared/types.js";
 import type { EmbeddingCacheProvider, EmbeddingsClient } from "./query/embeddings-client.js";
-import { applyOpenConflictPenalty, compareRankedCandidates } from "./query/query-engine.js";
+import { compareRankedCandidates } from "./query/query-engine.js";
 import type { QueryEngine } from "./query/query-engine.js";
 import { RecallPreflight, type RecallPreflightSkip } from "./trigger/recall-preflight.js";
 import type { TriggerEngine } from "./trigger/trigger-engine.js";
@@ -60,8 +60,6 @@ const MEMORY_SEARCH_PROMPT_VERSION = "memory-recall-search-v1";
 const MEMORY_INTENT_PROMPT_VERSION = "memory-intent-plan-v1";
 const MEMORY_INJECTION_PROMPT_VERSION = "memory-recall-injection-v1";
 const MEMORY_EFFECTIVENESS_PROMPT_VERSION = "memory-recall-effectiveness-v1";
-const MEMORY_RELATION_PROMPT_VERSION = "memory-relation-plan-v1";
-const MEMORY_RECOMMENDATION_PROMPT_VERSION = "memory-recommendation-plan-v1";
 const MEMORY_PLAN_SCHEMA_VERSION = "memory-plan-schema-v1";
 const MEMORY_SEARCH_RULES_VERSION = "runtime-trigger-rules-v1";
 const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
@@ -210,15 +208,12 @@ export class RetrievalRuntimeService {
   private readonly recallPreflight?: RecallPreflight;
   private readonly dependencyHealthChecker: RuntimeDependencyHealthChecker;
   private readonly recentInjectionPolicy: RecentInjectionPolicy;
+  private readonly recallAugmentationService: RecallAugmentationService;
   private runtimeGovernanceConfig: RuntimeGovernanceConfig;
   private readonly sessionPrepareQueues = new Map<string, Promise<void>>();
   private readonly inflightPrepareContexts = new Map<string, Promise<PrepareContextResponse>>();
   private readonly recentInjectionContexts = new Map<string, {
     memories: RecallEffectivenessInputMemory[];
-    created_at: number;
-  }>();
-  private readonly relatedMemoryCache = new Map<string, {
-    relations: MemoryRelationSnapshot[];
     created_at: number;
   }>();
 
@@ -315,6 +310,15 @@ export class RetrievalRuntimeService {
         embeddingTimeoutMs: this.embeddingTimeoutMs,
         memoryOrchestrator: this.memoryOrchestrator,
       });
+      this.recallAugmentationService = new RecallAugmentationService({
+        dependencyGuard: this.dependencyGuard,
+        repository: this.repository,
+        logger: this.logger,
+        embeddingTimeoutMs: this.embeddingTimeoutMs,
+        memoryLlmTimeoutMs: this.memoryLlmTimeoutMs,
+        memoryOrchestrator: this.memoryOrchestrator,
+        storageClient: this.storageClient,
+      });
       return;
     }
 
@@ -363,6 +367,15 @@ export class RetrievalRuntimeService {
       logger: this.logger,
       embeddingTimeoutMs: this.embeddingTimeoutMs,
       memoryOrchestrator: this.memoryOrchestrator,
+    });
+    this.recallAugmentationService = new RecallAugmentationService({
+      dependencyGuard: this.dependencyGuard,
+      repository: this.repository,
+      logger: this.logger,
+      embeddingTimeoutMs: this.embeddingTimeoutMs,
+      memoryLlmTimeoutMs: this.memoryLlmTimeoutMs,
+      memoryOrchestrator: this.memoryOrchestrator,
+      storageClient: this.storageClient,
     });
   }
 
@@ -599,7 +612,10 @@ export class RetrievalRuntimeService {
 
     const recallStartedAt = Date.now();
     const queryResult = await this.queryEngine.query(normalizedContext, decision);
-    const conflictAwareCandidates = await this.annotateOpenConflicts(normalizedContext, queryResult.candidates);
+    const conflictAwareCandidates = await this.recallAugmentationService.annotateOpenConflicts(
+      normalizedContext,
+      queryResult.candidates,
+    );
     let selectedCandidates = conflictAwareCandidates;
     let plannedCandidates = conflictAwareCandidates;
     let finalTriggerReason = mergeTriggerReason(decision.trigger_reason, decision.intent_reason);
@@ -610,10 +626,10 @@ export class RetrievalRuntimeService {
     let recentlySoftMarkedCandidates: CandidateMemory[] = [];
     let replayEscapeReason: string | undefined;
     const proactiveRecommendations = normalizedContext.phase === "session_start"
-      ? await this.collectProactiveRecommendations(normalizedContext, traceId)
+      ? await this.recallAugmentationService.collectProactiveRecommendations(normalizedContext, traceId)
       : [];
 
-    const relationCandidates = await this.expandCandidatesWithRelations(
+    const relationCandidates = await this.recallAugmentationService.expandCandidatesWithRelations(
       normalizedContext,
       selectedCandidates,
       traceId,
@@ -1332,341 +1348,6 @@ export class RetrievalRuntimeService {
       budget_used: injectionBlock?.token_estimate ?? 0,
       memory_packet_ids: [input.packet.packet_id],
     };
-  }
-
-  private async collectProactiveRecommendations(
-    context: TriggerContext & { memory_mode: MemoryMode },
-    traceId: string,
-  ): Promise<ProactiveRecommendation[]> {
-    const recommender = this.memoryOrchestrator?.recommendation;
-    if (!recommender || !this.storageClient) {
-      return [];
-    }
-
-    const startedAt = Date.now();
-    const recordsResult = await this.dependencyGuard.run(
-      "storage_writeback",
-      this.embeddingTimeoutMs,
-      (signal) =>
-        this.storageClient!.listRecords(
-          {
-            workspace_id: context.workspace_id,
-            user_id: context.user_id,
-            status: "active",
-            page: 1,
-            page_size: 12,
-          },
-          signal,
-        ),
-    );
-
-    if (!recordsResult.ok || !recordsResult.value) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: context.phase,
-        plan_kind: "memory_recommendation_plan",
-        input_summary: summarizeText(`session=${context.session_id}`),
-        output_summary: summarizeText(`fallback=${recordsResult.error?.code ?? "storage_writeback_unavailable"}`),
-        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: true,
-        degradation_reason: recordsResult.error?.code ?? "storage_writeback_unavailable",
-        result_state: "fallback",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return [];
-    }
-
-    const availableMemories = recordsResult.value.items.slice(0, 12);
-    if (availableMemories.length === 0) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: context.phase,
-        plan_kind: "memory_recommendation_plan",
-        input_summary: summarizeText(`session=${context.session_id}`),
-        output_summary: summarizeText("recommendations=0"),
-        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: false,
-        result_state: "skipped",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return [];
-    }
-
-    const planResult = await this.dependencyGuard.run(
-      "memory_llm",
-      this.memoryLlmTimeoutMs,
-      () =>
-        recommender.recommend({
-          current_context: {
-            user_input: context.current_input,
-            session_context: {
-              session_id: context.session_id,
-              workspace_id: context.workspace_id,
-              user_id: context.user_id,
-              recent_context_summary: context.recent_context_summary,
-            },
-          },
-          available_memories: availableMemories,
-        }),
-    );
-
-    if (!planResult.ok || !planResult.value) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: context.phase,
-        plan_kind: "memory_recommendation_plan",
-        input_summary: summarizeText(`available=${availableMemories.length}`),
-        output_summary: summarizeText(`fallback=${planResult.error?.code ?? "memory_llm_unavailable"}`),
-        prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: true,
-        degradation_reason: planResult.error?.code ?? "memory_llm_unavailable",
-        result_state: "fallback",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return [];
-    }
-
-    const recommendations = planResult.value.recommendations
-      .filter((item) => item.relevance_score >= 0.7)
-      .map((item) => ({
-        record_id: item.record_id,
-        relevance_score: item.relevance_score,
-        trigger_reason: item.trigger_reason,
-        suggestion: item.suggestion,
-        auto_inject: item.auto_inject || item.relevance_score > 0.9,
-      })) satisfies ProactiveRecommendation[];
-
-    await this.repository.recordMemoryPlanRun({
-      trace_id: traceId,
-      phase: context.phase,
-      plan_kind: "memory_recommendation_plan",
-      input_summary: summarizeText(`available=${availableMemories.length}`),
-      output_summary: summarizeText(`recommendations=${recommendations.length}; auto_inject=${recommendations.filter((item) => item.auto_inject).length}`),
-      prompt_version: MEMORY_RECOMMENDATION_PROMPT_VERSION,
-      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-      degraded: false,
-      result_state: recommendations.length > 0 ? "planned" : "skipped",
-      duration_ms: Date.now() - startedAt,
-      created_at: nowIso(),
-    });
-
-    return recommendations;
-  }
-
-  private async expandCandidatesWithRelations(
-    context: TriggerContext & { memory_mode: MemoryMode },
-    candidates: CandidateMemory[],
-    traceId: string,
-  ): Promise<CandidateMemory[]> {
-    if (!this.storageClient || candidates.length === 0) {
-      return [];
-    }
-
-    const startedAt = Date.now();
-    const sourceIds = candidates.slice(0, 5).map((candidate) => candidate.id);
-    const relationItems: MemoryRelationSnapshot[] = [];
-
-    for (const recordId of sourceIds) {
-      const relationsResult = await this.dependencyGuard.run(
-        "storage_writeback",
-        this.embeddingTimeoutMs,
-        (signal) =>
-          this.storageClient!.listRelations(
-            {
-              workspace_id: context.workspace_id,
-              record_id: recordId,
-              limit: 20,
-            },
-            signal,
-          ),
-      );
-      if (!relationsResult.ok || !relationsResult.value) {
-        await this.repository.recordMemoryPlanRun({
-          trace_id: traceId,
-          phase: context.phase,
-          plan_kind: "memory_relation_plan",
-          input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
-          output_summary: summarizeText(`fallback=${relationsResult.error?.code ?? "storage_writeback_unavailable"}`),
-          prompt_version: MEMORY_RELATION_PROMPT_VERSION,
-          schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-          degraded: true,
-          degradation_reason: relationsResult.error?.code ?? "storage_writeback_unavailable",
-          result_state: "fallback",
-          duration_ms: Date.now() - startedAt,
-          created_at: nowIso(),
-        });
-        return [];
-      }
-      relationItems.push(...relationsResult.value);
-    }
-
-    const relationTargetIds = [...new Set(
-      relationItems
-        .filter((relation) => relation.strength >= 0.7)
-        .map((relation) => relation.source_record_id === relation.target_record_id ? null : relation.target_record_id)
-        .filter((id): id is string => typeof id === "string" && !sourceIds.includes(id))
-    )];
-
-    if (relationTargetIds.length === 0) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: context.phase,
-        plan_kind: "memory_relation_plan",
-        input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
-        output_summary: summarizeText("relations=0"),
-        prompt_version: MEMORY_RELATION_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: false,
-        result_state: "skipped",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return [];
-    }
-
-    const relatedRecordsResult = await this.dependencyGuard.run(
-      "storage_writeback",
-      this.embeddingTimeoutMs,
-      (signal) => this.storageClient!.getRecordsByIds(relationTargetIds, signal),
-    );
-
-    if (!relatedRecordsResult.ok || !relatedRecordsResult.value) {
-      await this.repository.recordMemoryPlanRun({
-        trace_id: traceId,
-        phase: context.phase,
-        plan_kind: "memory_relation_plan",
-        input_summary: summarizeText(`targets=${relationTargetIds.join(",")}`),
-        output_summary: summarizeText(`fallback=${relatedRecordsResult.error?.code ?? "storage_writeback_unavailable"}`),
-        prompt_version: MEMORY_RELATION_PROMPT_VERSION,
-        schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-        degraded: true,
-        degradation_reason: relatedRecordsResult.error?.code ?? "storage_writeback_unavailable",
-        result_state: "fallback",
-        duration_ms: Date.now() - startedAt,
-        created_at: nowIso(),
-      });
-      return [];
-    }
-
-    const relationByTarget = new Map<string, MemoryRelationSnapshot>();
-    for (const relation of relationItems) {
-      if (!relationByTarget.has(relation.target_record_id)) {
-        relationByTarget.set(relation.target_record_id, relation);
-      }
-    }
-
-    const relatedCandidates = relatedRecordsResult.value
-      .filter((record) => record.status === "active")
-      .map((record) => {
-        const relation = relationByTarget.get(record.id);
-        return {
-          id: record.id,
-          workspace_id: record.workspace_id,
-          user_id: record.user_id ?? context.user_id,
-          task_id: record.task_id ?? null,
-          session_id: record.session_id ?? null,
-          memory_type: record.memory_type,
-          scope: record.scope,
-          summary: record.summary,
-          details: {
-            ...(record.details ?? {}),
-            relation_type: relation?.relation_type,
-            relation_reason: relation?.reason,
-            relation_strength: relation?.strength,
-          },
-          importance: Math.max(record.importance, relation?.strength ? Math.round(relation.strength * 5) : record.importance),
-          confidence: record.confidence,
-          status: record.status,
-          updated_at: record.updated_at,
-          last_confirmed_at: null,
-          rerank_score: relation?.strength ?? 0.7,
-        } satisfies CandidateMemory;
-      });
-    const conflictAwareRelatedCandidates = await this.annotateOpenConflicts(context, relatedCandidates);
-
-    await this.repository.recordMemoryPlanRun({
-      trace_id: traceId,
-      phase: context.phase,
-      plan_kind: "memory_relation_plan",
-      input_summary: summarizeText(`seed=${sourceIds.join(",")}`),
-      output_summary: summarizeText(`relations=${relationItems.length}; expanded=${conflictAwareRelatedCandidates.length}`),
-      prompt_version: MEMORY_RELATION_PROMPT_VERSION,
-      schema_version: MEMORY_PLAN_SCHEMA_VERSION,
-      degraded: false,
-      result_state: conflictAwareRelatedCandidates.length > 0 ? "planned" : "skipped",
-      duration_ms: Date.now() - startedAt,
-      created_at: nowIso(),
-    });
-
-    return conflictAwareRelatedCandidates;
-  }
-
-  private async annotateOpenConflicts(
-    context: Pick<TriggerContext, "workspace_id">,
-    candidates: CandidateMemory[],
-  ): Promise<CandidateMemory[]> {
-    if (!this.storageClient || candidates.length === 0) {
-      return candidates;
-    }
-
-    const result = await this.dependencyGuard.run(
-      "storage_writeback",
-      this.embeddingTimeoutMs,
-      (signal) => this.storageClient!.listConflicts("open", signal),
-    );
-
-    if (!result.ok || !result.value) {
-      this.logger.warn(
-        {
-          workspace_id: context.workspace_id,
-          code: result.error?.code,
-          detail: result.error?.message,
-        },
-        "open conflict lookup degraded",
-      );
-      return candidates;
-    }
-
-    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
-    const conflictedIds = new Set<string>();
-    for (const conflict of result.value) {
-      if (conflict.workspace_id !== context.workspace_id) {
-        continue;
-      }
-      if (candidateIds.has(conflict.record_id)) {
-        conflictedIds.add(conflict.record_id);
-      }
-      if (candidateIds.has(conflict.conflict_with_record_id)) {
-        conflictedIds.add(conflict.conflict_with_record_id);
-      }
-    }
-
-    if (conflictedIds.size === 0) {
-      return candidates;
-    }
-
-    return candidates
-      .map((candidate) => {
-        if (!conflictedIds.has(candidate.id)) {
-          return candidate;
-        }
-
-        return {
-          ...candidate,
-          has_open_conflict: true,
-          rerank_score: applyOpenConflictPenalty(
-            { has_open_conflict: true },
-            candidate.rerank_score ?? 0,
-          ),
-        } satisfies CandidateMemory;
-      })
-      .sort(compareRankedCandidates);
   }
 
   private storeInjectionContext(
