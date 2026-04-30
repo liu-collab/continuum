@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 
 import { SelectField } from "@/components/select-field";
-import { StatusBadge } from "@/components/status-badge";
 
 import type { MnaAgentConfigResponse } from "../_lib/openapi-types";
 import {
@@ -19,19 +18,6 @@ import { useAgentI18n } from "@/lib/i18n/agent/provider";
 
 type RuntimeConfigCardProps = {
   config: MnaAgentConfigResponse | null;
-  dependencyStatus?: {
-    runtime: {
-      status?: string;
-      embeddings?: {
-        status?: string;
-        detail?: string;
-      };
-    };
-    provider: {
-      status: string;
-      detail?: string;
-    };
-  } | null;
   onSave(payload: {
     provider: {
       kind: ProviderKind;
@@ -47,17 +33,7 @@ type RuntimeConfigCardProps = {
   }): void;
 };
 
-function resolveStatusTone(status: string | undefined) {
-  if (status === "healthy" || status === "configured") {
-    return "success" as const;
-  }
-  if (status === "misconfigured" || status === "unavailable" || status === "not_configured") {
-    return "warning" as const;
-  }
-  return "neutral" as const;
-}
-
-export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeConfigCardProps) {
+export function RuntimeConfigCard({ config, onSave }: RuntimeConfigCardProps) {
   const { t } = useAgentI18n();
   const [providerKind, setProviderKind] = useState<EditableProviderKind>(
     "openai-compatible"
@@ -178,11 +154,6 @@ export function RuntimeConfigCard({ config, dependencyStatus, onSave }: RuntimeC
         <h2 className="headline-display mt-2 text-[21px] font-semibold leading-[1.19] text-text">{t("runtimeConfig.title")}</h2>
       </div>
 
-      <div className="mt-4 grid gap-3">
-        <StatusBlock label={t("runtimeConfig.providerStatus")} status={dependencyStatus?.provider.status ?? "unknown"} detail={dependencyStatus?.provider.detail} />
-        <StatusBlock label={t("runtimeConfig.embeddingStatus")} status={dependencyStatus?.runtime.embeddings?.status ?? "unknown"} detail={dependencyStatus?.runtime.embeddings?.detail} />
-      </div>
-
       <div className="mt-5 grid gap-4">
         <div className="grid gap-3">
           <div className="flex items-center gap-2">
@@ -271,17 +242,5 @@ function EmbeddingHint({ text }: { text: string }) {
         {text}
       </span>
     </span>
-  );
-}
-
-function StatusBlock({ label, status, detail }: { label: string; status: string; detail?: string }) {
-  return (
-    <div className="record-card">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[14px] leading-[1.43] text-muted">{label}</span>
-        <StatusBadge tone={resolveStatusTone(status)}>{status}</StatusBadge>
-      </div>
-      {detail ? <p className="mt-2 text-[14px] leading-[1.43] text-muted">{detail}</p> : null}
-    </div>
   );
 }

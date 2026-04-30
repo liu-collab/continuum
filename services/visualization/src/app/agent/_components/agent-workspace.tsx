@@ -203,7 +203,6 @@ export function AgentWorkspace({ sessionId }: AgentWorkspaceProps) {
         onClose={() => setSettingsOpen(false)}
         setupWizard={settingsMode === "setup" && workspace.agentConfig?.provider.kind === "not-configured"}
         config={workspace.agentConfig}
-        dependencyStatus={workspace.dependencyStatus}
         memoryMode={workspace.state.session?.memory_mode ?? "workspace_plus_global"}
         onMemoryModeChange={(value) => {
           void workspace.updateMemoryMode(value);

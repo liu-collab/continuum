@@ -77,7 +77,6 @@ describe("SettingsModal", () => {
               provider_api_key_env: "OPENAI_API_KEY",
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -142,7 +141,6 @@ describe("SettingsModal", () => {
               api_key: null,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -206,7 +204,6 @@ describe("SettingsModal", () => {
               api_key: null,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -267,7 +264,6 @@ describe("SettingsModal", () => {
               api_key: null,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -325,7 +321,6 @@ describe("SettingsModal", () => {
               api_key: null,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={vi.fn(async () => undefined)}
@@ -369,7 +364,6 @@ describe("SettingsModal", () => {
               provider_api_key_env: "DEEPSEEK_API_KEY",
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -431,7 +425,6 @@ describe("SettingsModal", () => {
               max_tokens: null,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -485,7 +478,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -519,7 +511,6 @@ describe("SettingsModal", () => {
               api_key: "",
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -543,7 +534,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={vi.fn(async () => undefined)}
@@ -588,7 +578,6 @@ describe("SettingsModal", () => {
               max_tokens: baseConfig.provider.max_tokens,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={vi.fn(async () => undefined)}
@@ -613,7 +602,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -664,7 +652,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -718,7 +705,6 @@ describe("SettingsModal", () => {
               max_tokens: baseConfig.provider.max_tokens,
             },
           }}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -752,7 +738,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}
@@ -781,7 +766,6 @@ describe("SettingsModal", () => {
           open
           onClose={vi.fn()}
           config={baseConfig}
-          dependencyStatus={null}
           memoryMode="workspace_plus_global"
           onMemoryModeChange={vi.fn()}
           onSaveRuntime={onSaveRuntime}

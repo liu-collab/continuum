@@ -4,7 +4,6 @@ import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 
-import { StatusBadge } from "@/components/status-badge";
 import { Modal } from "@/components/modal";
 import { SelectField } from "@/components/select-field";
 
@@ -26,23 +25,6 @@ type SettingsModalProps = {
   onClose(): void;
   setupWizard?: boolean;
   config: MnaAgentConfigResponse | null;
-  dependencyStatus?: {
-    runtime: {
-      status?: string;
-      embeddings?: {
-        status?: string;
-        detail?: string;
-      };
-      memory_llm?: {
-        status?: string;
-        detail?: string;
-      };
-    };
-    provider: {
-      status: string;
-      detail?: string;
-    };
-  } | null;
   memoryMode: AgentMemoryMode;
   onMemoryModeChange(value: AgentMemoryMode): void;
   onSaveRuntime(payload: {
@@ -103,13 +85,6 @@ type SettingsModalProps = {
     }>;
   }>;
 };
-
-function resolveStatusTone(status: string | undefined) {
-  if (status === "healthy" || status === "configured") return "success" as const;
-  if (status === "misconfigured" || status === "unavailable" || status === "not_configured")
-    return "warning" as const;
-  return "neutral" as const;
-}
 
 type MemoryModelMode = "same_as_primary" | "custom";
 type SetupWizardStep = 1 | 2 | 3;
@@ -280,7 +255,6 @@ export function SettingsModal({
   onClose,
   setupWizard = false,
   config,
-  dependencyStatus,
   memoryMode,
   onMemoryModeChange,
   onSaveRuntime,
@@ -996,46 +970,6 @@ export function SettingsModal({
             {feedbackMessage.text}
           </p>
         ) : null}
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerStatus")}</span>
-              <StatusBadge tone={resolveStatusTone(dependencyStatus?.provider.status)}>
-                {dependencyStatus?.provider.status ?? "unknown"}
-              </StatusBadge>
-            </div>
-            {dependencyStatus?.provider.detail ? (
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{dependencyStatus.provider.detail}</p>
-            ) : null}
-          </div>
-          <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.embeddingStatus")}</span>
-              <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.embeddings?.status)}>
-                {dependencyStatus?.runtime.embeddings?.status ?? "unknown"}
-              </StatusBadge>
-            </div>
-            {dependencyStatus?.runtime.embeddings?.detail ? (
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {dependencyStatus.runtime.embeddings.detail}
-              </p>
-            ) : null}
-          </div>
-          <div className="rounded-md border bg-surface-muted/40 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmStatus")}</span>
-              <StatusBadge tone={resolveStatusTone(dependencyStatus?.runtime.memory_llm?.status)}>
-                {dependencyStatus?.runtime.memory_llm?.status ?? "unknown"}
-              </StatusBadge>
-            </div>
-            {dependencyStatus?.runtime.memory_llm?.detail ? (
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {dependencyStatus.runtime.memory_llm.detail}
-              </p>
-            ) : null}
-          </div>
-        </div>
 
         <div className="grid gap-3 md:grid-cols-3">
           <label className="block">

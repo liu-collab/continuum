@@ -61,7 +61,6 @@ describe("RuntimeConfigCard", () => {
               api_key: "demo-key",
             },
           }}
-          dependencyStatus={null}
           onSave={onSave}
         />
       </AgentI18nProvider>,
@@ -92,7 +91,6 @@ describe("RuntimeConfigCard", () => {
               api_key: "demo-key",
             },
           }}
-          dependencyStatus={null}
           onSave={onSave}
         />
       </AgentI18nProvider>,
@@ -129,7 +127,6 @@ describe("RuntimeConfigCard", () => {
               api_key: "",
             },
           }}
-          dependencyStatus={null}
           onSave={onSave}
         />
       </AgentI18nProvider>,
@@ -153,19 +150,6 @@ describe("RuntimeConfigCard", () => {
       <AgentI18nProvider defaultLocale="zh-CN">
         <RuntimeConfigCard
           config={baseConfig}
-          dependencyStatus={{
-            runtime: {
-              status: "unavailable",
-              embeddings: {
-                status: "not_configured",
-                detail: "embedding config is not complete",
-              },
-            },
-            provider: {
-              status: "misconfigured",
-              detail: "provider openai-compatible 缺少 API key 配置",
-            },
-          }}
           onSave={onSave}
         />
       </AgentI18nProvider>,
@@ -202,8 +186,6 @@ describe("RuntimeConfigCard", () => {
         api_key: "embed-key",
       },
     });
-    expect(screen.getByText("misconfigured")).toBeInTheDocument();
-    expect(screen.getByText("not_configured")).toBeInTheDocument();
   });
 
   it("requires provider base_url for openai-compatible provider", async () => {
@@ -212,7 +194,7 @@ describe("RuntimeConfigCard", () => {
 
     render(
       <AgentI18nProvider defaultLocale="zh-CN">
-        <RuntimeConfigCard config={baseConfig} dependencyStatus={null} onSave={onSave} />
+        <RuntimeConfigCard config={baseConfig} onSave={onSave} />
       </AgentI18nProvider>,
     );
 
@@ -242,7 +224,6 @@ describe("RuntimeConfigCard", () => {
               base_url: "https://api.deepseek.com",
             },
           }}
-          dependencyStatus={null}
           onSave={onSave}
         />
       </AgentI18nProvider>,
@@ -266,7 +247,6 @@ describe("RuntimeConfigCard", () => {
               model: "gpt-4.1-mini",
             },
           }}
-          dependencyStatus={null}
           onSave={vi.fn()}
         />
       </AgentI18nProvider>,
@@ -289,7 +269,6 @@ describe("RuntimeConfigCard", () => {
               model: "fixture-model",
             },
           }}
-          dependencyStatus={null}
           onSave={vi.fn()}
         />
       </AgentI18nProvider>,
