@@ -22,6 +22,8 @@ const writeFileMock = vi.hoisted(() => vi.fn());
 const planVendorBuildMock = vi.hoisted(() => vi.fn());
 const planStackImageBuildMock = vi.hoisted(() => vi.fn());
 const writeBuildStateMock = vi.hoisted(() => vi.fn());
+const maybePromptLiteMigrationBeforeFullStartMock = vi.hoisted(() => vi.fn());
+const runLiteToFullMigrationMock = vi.hoisted(() => vi.fn());
 const tcpPortAvailableMock = vi.hoisted(() =>
   vi.fn((_host: string, port: number) => port !== 54329)
 );
@@ -121,6 +123,11 @@ vi.mock("../src/build-state-loader.js", () => ({
   })),
 }));
 
+vi.mock("../src/lite-migration.js", () => ({
+  maybePromptLiteMigrationBeforeFullStart: maybePromptLiteMigrationBeforeFullStartMock,
+  runLiteToFullMigration: runLiteToFullMigrationMock,
+}));
+
 import { resolveManagedPostgresPort, runStartCommand } from "../src/start-command.js";
 import { assertFixedServicePortsAvailable } from "../src/port-utils.js";
 
@@ -178,6 +185,11 @@ describe("runStartCommand", () => {
       fd: 1,
       close: vi.fn(async () => undefined),
     });
+    maybePromptLiteMigrationBeforeFullStartMock.mockResolvedValue(false);
+    runLiteToFullMigrationMock.mockResolvedValue({
+      submitted: 0,
+      skipped: [],
+    });
   });
 
   afterEach(() => {
@@ -204,10 +216,17 @@ describe("runStartCommand", () => {
     planVendorBuildMock.mockReset();
     planStackImageBuildMock.mockReset();
     writeBuildStateMock.mockReset();
+    maybePromptLiteMigrationBeforeFullStartMock.mockReset();
+    runLiteToFullMigrationMock.mockReset();
     tcpPortAvailableMock.mockReset();
     tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 54329);
     readManagedMnaProviderConfigMock.mockResolvedValue(null);
     migrateManagedConfigFilesMock.mockResolvedValue(undefined);
+    maybePromptLiteMigrationBeforeFullStartMock.mockResolvedValue(false);
+    runLiteToFullMigrationMock.mockResolvedValue({
+      submitted: 0,
+      skipped: [],
+    });
     delete process.env.AXIS_DB_PASSWORD;
     delete process.env.PLATFORM_USER_ID;
     delete process.env.STORAGE_PORT;
@@ -421,6 +440,83 @@ describe("runStartCommand", () => {
     expect(
       spawnCommands.some((command) => command.includes("docker build -t axis-stack:latest")),
     ).toBe(false);
+  });
+
+  it("continues full startup when accepted lite migration fails", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    mockSuccessfulSpawn();
+    pathExistsMock.mockResolvedValue(true);
+    readManagedEmbeddingConfigMock.mockResolvedValue(null);
+    writeManagedEmbeddingConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 2,
+      image: {
+        hash: "image-hash",
+      },
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    cpMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    rmMock.mockResolvedValue(undefined);
+    planVendorBuildMock.mockResolvedValue({
+      currentState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      nextState: {
+        version: 2,
+        cli: null,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+      changedEntries: [],
+      buildServices: [],
+      needsRefresh: false,
+    });
+    planStackImageBuildMock.mockResolvedValue({
+      needsBuild: false,
+      nextState: {
+        version: 2,
+        image: {
+          hash: "image-hash",
+        },
+        vendor: {
+          entries: {},
+          builds: {},
+        },
+      },
+    });
+    fetchJsonMock.mockResolvedValue({ ok: true, body: {} });
+    startManagedMnaMock.mockResolvedValue({
+      url: "http://127.0.0.1:4193",
+      tokenPath: "C:/tmp/.axis/managed/mna/token.txt",
+      artifactsPath: "C:/tmp/.axis/managed/mna/artifacts",
+      version: "0.1.0",
+    });
+    maybePromptLiteMigrationBeforeFullStartMock.mockResolvedValue(true);
+    runLiteToFullMigrationMock.mockRejectedValue(new Error("storage down"));
+
+    await runStartCommand({ full: true }, import.meta.url);
+
+    expect(runLiteToFullMigrationMock).toHaveBeenCalledWith({
+      storageUrl: "http://127.0.0.1:3001",
+    });
+    const output = stdoutSpy.mock.calls.map((call) => String(call[0])).join("");
+    expect(output).toContain("精简模式迁移失败");
+    expect(output).toContain("mode: managed");
   });
 
   it("prints clear progress steps while starting the managed stack", async () => {

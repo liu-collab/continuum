@@ -56,8 +56,8 @@ describe("lite migration", () => {
   });
 
   afterEach(async () => {
-    process.env.AXIS_HOME = originalAxisHome;
-    process.env.AXIS_LITE_MEMORY_DIR = originalLiteMemoryDir;
+    restoreEnv("AXIS_HOME", originalAxisHome);
+    restoreEnv("AXIS_LITE_MEMORY_DIR", originalLiteMemoryDir);
     vi.unstubAllGlobals();
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
@@ -192,3 +192,11 @@ describe("lite migration", () => {
     );
   });
 });
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
+}

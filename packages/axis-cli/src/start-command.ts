@@ -34,6 +34,10 @@ import {
   buildEmbeddingsEndpoint,
   resolveOptionalThirdPartyEmbeddingConfig,
 } from "./embedding-config.js";
+import {
+  maybePromptLiteMigrationBeforeFullStart,
+  runLiteToFullMigration,
+} from "./lite-migration.js";
 import { DEFAULT_MNA_PORT, startManagedMna } from "./mna-command.js";
 import {
   axisManagedConfigPath,
@@ -50,7 +54,7 @@ import {
   writeManagedEmbeddingConfig,
   writeManagedMemoryLlmConfig,
 } from "./managed-config.js";
-import { bilingualMessage, bilingualMessageLines } from "./messages.js";
+import { bilingualMessage, bilingualMessageLines, formatErrorMessage } from "./messages.js";
 import { loadBuildStateHelpers } from "./build-state-loader.js";
 import {
   buildDockerHostGatewayArgs,
@@ -256,6 +260,25 @@ function writeProgress(message: string, english: string) {
 
 function writeProgressDone(message: string, english: string) {
   process.stdout.write(`✓ ${bilingualMessage(message, english)}\n`);
+}
+
+async function migrateLiteDataAfterFullStart(storageUrl: string) {
+  try {
+    writeProgress(
+      "正在迁移精简模式记忆...",
+      "Migrating lite mode memories...",
+    );
+    const result = await runLiteToFullMigration({ storageUrl });
+    writeProgressDone(
+      `精简模式迁移完成：提交 ${result.submitted} 条，跳过 ${result.skipped.length} 条。`,
+      `Lite migration completed: submitted ${result.submitted}, skipped ${result.skipped.length}.`,
+    );
+  } catch (error) {
+    writeWarning(
+      `精简模式迁移失败：${formatErrorMessage(error)}。完整平台会继续启动，lite 数据已保留，可稍后运行 axis migrate --to full 重试。`,
+      `Lite migration failed: ${formatErrorMessage(error)}. Full mode will continue; lite data is kept and you can retry with axis migrate --to full later.`,
+    );
+  }
 }
 
 function writeStartSummary(summary: {
@@ -663,6 +686,14 @@ export async function runStartCommand(
     return;
   }
 
+  const migrateLiteAfterFullStart = options["migrate-lite"] === true
+    ? true
+    : options["skip-lite-migration-prompt"] === true || options["skip-lite-migration"] === true
+      ? false
+      : options.full === true
+        ? await maybePromptLiteMigrationBeforeFullStart()
+        : false;
+
   if (uiDev && uiDevBackendHealthy) {
     let mna = resolveUiDevMna(options, initialManagedState, accessibleHost);
     if (!hasExplicitMnaConnectionOptions(options)) {
@@ -708,6 +739,9 @@ export async function runStartCommand(
     writeDaemonNotice(daemon);
     if (!providerConfigured) {
       writeMissingPrimaryProviderWarning();
+    }
+    if (migrateLiteAfterFullStart) {
+      await migrateLiteDataAfterFullStart(storageUrl);
     }
     await maybeWriteUpdateNotice().catch(() => undefined);
 
@@ -888,6 +922,10 @@ export async function runStartCommand(
       });
     }
     writeProgressDone("服务已就绪。", "Services are ready.");
+
+    if (migrateLiteAfterFullStart) {
+      await migrateLiteDataAfterFullStart(storageUrl);
+    }
 
     const latestManagedState = await readManagedState();
     await writeManagedState({
