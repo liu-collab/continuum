@@ -12,6 +12,10 @@ import {
   pickStringArray
 } from "@/lib/records";
 import { createTranslator, DEFAULT_APP_LOCALE, type AppLocale } from "@/lib/i18n/messages";
+import {
+  fetchLiteRuntimeTraces,
+  shouldUseLiteRuntimeCatalog,
+} from "@/lib/server/lite-runtime-client";
 import { fetchJsonFromSource } from "@/lib/server/http-client";
 
 export type RuntimeMetricsSnapshot = {
@@ -677,6 +681,15 @@ export async function fetchRuntimeRuns(query: string, options: { locale?: AppLoc
   const { values } = getAppConfig();
   const locale = options.locale ?? DEFAULT_APP_LOCALE;
   const t = createTranslator(locale);
+
+  if (shouldUseLiteRuntimeCatalog()) {
+    const lite = await fetchLiteRuntimeTraces({ locale });
+    return {
+      status: lite.status,
+      data: normalizeLiteRuntimeTracesPayload(lite.payload, query, locale)
+    };
+  }
+
   const url = values.RUNTIME_API_BASE_URL
     ? `${values.RUNTIME_API_BASE_URL}/v1/runtime/observe/runs${query ? `?${query}` : ""}`
     : undefined;
@@ -729,5 +742,198 @@ export async function fetchRuntimeRuns(query: string, options: { locale?: AppLoc
   return {
     status: response.status,
     data: normalizeRuntimeRunsPayload(root, locale)
+  };
+}
+
+export function normalizeLiteRuntimeTracesPayload(
+  value: unknown,
+  query: string,
+  locale: AppLocale = DEFAULT_APP_LOCALE
+): RuntimeObserveRunsSnapshot {
+  const root = asRecord(value);
+  const params = new URLSearchParams(query);
+  const traceFilter = params.get("trace_id") || params.get("traceId") || "";
+  const turnFilter = params.get("turn_id") || params.get("turnId") || "";
+  const sessionFilter = params.get("session_id") || params.get("sessionId") || "";
+  const snapshots = pickArray(root ?? {}, "items")
+    .map((item) => asRecord(item))
+    .filter(isDefined)
+    .filter((snapshot) => {
+      const prepare = asRecord(snapshot.prepare);
+      const writebacks = pickArray(snapshot, "writebacks").map((item) => asRecord(item)).filter(isDefined);
+      const traceId =
+        pickString(prepare ?? {}, "trace_id", "traceId")
+        ?? pickString(writebacks[0] ?? {}, "trace_id", "traceId")
+        ?? "";
+      const turnId =
+        pickString(prepare ?? {}, "turn_id", "turnId")
+        ?? pickString(writebacks[0] ?? {}, "turn_id", "turnId")
+        ?? traceId;
+      const sessionId =
+        pickString(prepare ?? {}, "session_id", "sessionId")
+        ?? pickString(writebacks[0] ?? {}, "session_id", "sessionId")
+        ?? "";
+      return (!traceFilter || traceId === traceFilter)
+        && (!turnFilter || turnId === turnFilter || traceId === turnFilter)
+        && (!sessionFilter || sessionId === sessionFilter);
+    });
+
+  const turns: RuntimeTurnRecord[] = [];
+  const triggerRuns: RuntimeTriggerRecord[] = [];
+  const recallRuns: RuntimeRecallRecord[] = [];
+  const injectionRuns: RuntimeInjectionRecord[] = [];
+  const writeBackRuns: RuntimeWritebackRecord[] = [];
+  const dependencyByName = new Map<string, RuntimeDependencyRecord>();
+  const t = createTranslator(locale);
+
+  for (const snapshot of snapshots) {
+    const prepare = asRecord(snapshot.prepare);
+    const writebacks = pickArray(snapshot, "writebacks").map((item) => asRecord(item)).filter(isDefined);
+    if (prepare) {
+      const traceId = pickString(prepare, "trace_id", "traceId") ?? "unknown-trace";
+      const ruleTrigger = asRecord(prepare.rule_trigger) ?? {};
+      const selectedRecordIds = pickStringArray(prepare, "selected_record_ids", "selectedRecordIds");
+      const requestedScopes = toScopes(pickStringArray(ruleTrigger, "requested_scopes", "requestedScopes"));
+      const requestedTypes = toRequestedTypes(pickStringArray(ruleTrigger, "requested_memory_types", "requestedMemoryTypes"));
+      const createdAt = pickNullableString(prepare, "created_at", "createdAt");
+      const memoryMode = toMemoryMode(pickNullableString(prepare, "memory_mode", "memoryMode"));
+      const phase = pickNullableString(prepare, "phase");
+      const triggerHit = pickBoolean(ruleTrigger, "hit") ?? false;
+      const triggerType = pickNullableString(ruleTrigger, "trigger_type", "triggerType");
+      const triggerReason = pickNullableString(ruleTrigger, "trigger_reason", "triggerReason");
+      const functionCalls = pickArray(prepare, "function_calls", "functionCalls").map((item) => asRecord(item)).filter(isDefined);
+      const candidateCount = functionCalls.reduce((sum, call) => sum + (pickNumber(call, "result_count", "resultCount") ?? 0), 0);
+      const selectedCount = selectedRecordIds.length;
+
+      turns.push({
+        traceId,
+        turnId: pickNullableString(prepare, "turn_id", "turnId") ?? traceId,
+        workspaceId: pickNullableString(prepare, "workspace_id", "workspaceId"),
+        taskId: pickNullableString(prepare, "task_id", "taskId"),
+        sessionId: pickNullableString(prepare, "session_id", "sessionId"),
+        threadId: pickNullableString(prepare, "thread_id", "threadId"),
+        host: pickNullableString(prepare, "host"),
+        phase,
+        currentInput: pickNullableString(prepare, "current_input", "currentInput"),
+        assistantOutput: pickNullableString(writebacks.at(-1) ?? {}, "assistant_output", "assistantOutput"),
+        createdAt,
+      });
+      triggerRuns.push({
+        traceId,
+        phase,
+        triggerHit,
+        triggerType,
+        triggerReason,
+        memoryMode,
+        requestedTypes,
+        requestedScopes,
+        selectedScopes: requestedScopes,
+        scopeDecision: pickNullableString(ruleTrigger, "scope_reason", "scopeReason"),
+        scopeLimit: requestedScopes,
+        importanceThreshold: pickNumber(ruleTrigger, "importance_threshold", "importanceThreshold") ?? null,
+        cooldownApplied: pickBoolean(ruleTrigger, "cooldown_applied", "cooldownApplied") ?? false,
+        semanticScore: null,
+        durationMs: null,
+        createdAt,
+      });
+      recallRuns.push({
+        traceId,
+        phase,
+        triggerHit,
+        triggerType,
+        triggerReason,
+        memoryMode,
+        requestedTypes,
+        requestedScopes,
+        selectedScopes: requestedScopes,
+        scopeHitCounts: requestedScopes.map((scope) => ({ scope, count: scope === requestedScopes[0] ? selectedCount : 0 })),
+        selectedRecordIds,
+        queryScope: requestedScopes.length > 0 ? `scope=${requestedScopes.join(",")}` : null,
+        candidateCount,
+        selectedCount,
+        resultState: !triggerHit ? "not_triggered" : selectedCount > 0 ? "matched" : "empty",
+        emptyReason: selectedCount === 0 ? t("service.runs.emptyRecallReasonMissing") : null,
+        degraded: Boolean(asRecord(prepare.memory_model_status)?.degraded),
+        degradationReason: pickNullableString(asRecord(prepare.memory_model_status) ?? {}, "degradationReason", "degradation_reason"),
+        durationMs: null,
+        createdAt,
+      });
+      injectionRuns.push({
+        traceId,
+        phase,
+        injected: pickBoolean(prepare, "injected") ?? selectedCount > 0,
+        injectedCount: selectedCount,
+        memoryMode,
+        requestedScopes,
+        selectedScopes: requestedScopes,
+        keptRecordIds: selectedRecordIds,
+        injectionReason: triggerReason,
+        memorySummary: null,
+        tokenEstimate: null,
+        trimmedRecordIds: [],
+        trimReasons: [],
+        resultState: selectedCount > 0 ? "injected" : triggerHit ? "no_records" : "not_triggered",
+        durationMs: null,
+        createdAt,
+      });
+      const memoryModelStatus = asRecord(prepare.memory_model_status);
+      if (memoryModelStatus) {
+        dependencyByName.set("memory_llm", {
+          name: "memory_llm",
+          status: pickBoolean(memoryModelStatus, "degraded") ? "degraded" : pickString(memoryModelStatus, "status") ?? "unknown",
+          detail: pickString(memoryModelStatus, "degradationReason", "degradation_reason") ?? pickString(memoryModelStatus, "model") ?? "ok",
+          checkedAt: createdAt ?? new Date(0).toISOString(),
+        });
+      }
+    }
+
+    for (const writeback of writebacks) {
+      const traceId = pickString(writeback, "trace_id", "traceId") ?? "unknown-trace";
+      const createdAt = pickNullableString(writeback, "created_at", "createdAt");
+      if (!prepare) {
+        turns.push({
+          traceId,
+          turnId: pickNullableString(writeback, "turn_id", "turnId") ?? traceId,
+          workspaceId: pickNullableString(writeback, "workspace_id", "workspaceId"),
+          taskId: pickNullableString(writeback, "task_id", "taskId"),
+          sessionId: pickNullableString(writeback, "session_id", "sessionId"),
+          threadId: pickNullableString(writeback, "thread_id", "threadId"),
+          host: pickNullableString(writeback, "host"),
+          phase: "after_response",
+          currentInput: pickNullableString(writeback, "current_input", "currentInput"),
+          assistantOutput: pickNullableString(writeback, "assistant_output", "assistantOutput"),
+          createdAt,
+        });
+      }
+      const filteredReasons = pickStringArray(writeback, "filtered_reasons", "filteredReasons");
+      const acceptedCount = pickNumber(writeback, "accepted_count", "acceptedCount") ?? 0;
+      writeBackRuns.push({
+        traceId,
+        phase: "after_response",
+        memoryMode: toMemoryMode(pickNullableString(writeback, "memory_mode", "memoryMode")),
+        candidateCount: acceptedCount + filteredReasons.length,
+        submittedCount: acceptedCount,
+        submittedJobIds: pickStringArray(writeback, "accepted_record_ids", "acceptedRecordIds"),
+        candidateSummaries: [],
+        scopeDecisions: [],
+        filteredCount: filteredReasons.length,
+        filteredReasons,
+        resultState: acceptedCount > 0 ? "submitted" : "no_candidates",
+        degraded: pickBoolean(writeback, "degraded") ?? false,
+        degradationReason: pickNullableString(writeback, "degradation_reason", "degradationReason"),
+        durationMs: null,
+        createdAt,
+      });
+    }
+  }
+
+  return {
+    turns,
+    triggerRuns,
+    recallRuns,
+    injectionRuns,
+    memoryPlanRuns: [],
+    writeBackRuns,
+    dependencyStatus: [...dependencyByName.values()]
   };
 }

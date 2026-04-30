@@ -48,6 +48,33 @@ async function openAdvancedSettings(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("SettingsModal", () => {
+  it("shows memory model health in advanced runtime settings", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={baseConfig}
+          memoryModelHealth={{
+            status: "degraded",
+            detail: "memory_model_not_configured",
+          }}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={vi.fn(async () => undefined)}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await openAdvancedSettings(user);
+
+    expect(screen.getByTestId("memory-model-health-status")).toHaveTextContent(
+      "健康状态: degraded · memory_model_not_configured",
+    );
+  });
+
   it("uses a detected OpenAI API key env hint in the setup wizard", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);

@@ -44,7 +44,15 @@ export interface LiteMemoryFunctionCallTrace {
 export interface LitePrepareContextTrace {
   trace_id: string;
   host: string;
+  workspace_id: string;
+  user_id: string;
+  session_id: string;
+  task_id?: string;
+  thread_id?: string;
+  turn_id?: string;
   phase: RuntimePhase;
+  current_input: string;
+  memory_mode: MemoryMode;
   rule_trigger: LiteRuleTriggerDecision;
   memory_model_status: LiteMemoryModelStatus;
   function_calls: LiteMemoryFunctionCallTrace[];
@@ -111,7 +119,15 @@ export class MemoryOrchestrator {
     const trace: LitePrepareContextTrace = {
       trace_id: this.traceIdFactory(),
       host: input.host,
+      workspace_id: input.workspace_id,
+      user_id: input.user_id,
+      session_id: input.session_id,
+      ...(input.task_id ? { task_id: input.task_id } : {}),
+      ...(input.thread_id ? { thread_id: input.thread_id } : {}),
+      ...(input.turn_id ? { turn_id: input.turn_id } : {}),
       phase: input.phase,
+      current_input: input.current_input,
+      memory_mode: input.memory_mode ?? "workspace_plus_global",
       rule_trigger: decision,
       memory_model_status: memoryModelStatus,
       function_calls: functionCalls,

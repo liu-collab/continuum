@@ -22,6 +22,7 @@ const envSchema = z.object({
   STORAGE_API_BASE_URL: z.string().url().optional(),
   STORAGE_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   RUNTIME_API_BASE_URL: z.string().url().optional(),
+  LITE_RUNTIME_API_BASE_URL: z.string().url().optional(),
   RUNTIME_API_TIMEOUT_MS: z.coerce.number().int().positive().default(2000),
   PLATFORM_USER_ID: z
     .string({
@@ -56,6 +57,7 @@ type RawEnv = {
   STORAGE_API_BASE_URL?: string;
   STORAGE_API_TIMEOUT_MS?: string;
   RUNTIME_API_BASE_URL?: string;
+  LITE_RUNTIME_API_BASE_URL?: string;
   RUNTIME_API_TIMEOUT_MS?: string;
   PLATFORM_USER_ID?: string;
   MNA_TOKEN_PATH?: string;
@@ -90,6 +92,7 @@ function normalizeRawEnv(env: NodeJS.ProcessEnv): RawEnv {
     STORAGE_API_BASE_URL: env.STORAGE_API_BASE_URL || undefined,
     STORAGE_API_TIMEOUT_MS: env.STORAGE_API_TIMEOUT_MS,
     RUNTIME_API_BASE_URL: env.RUNTIME_API_BASE_URL || undefined,
+    LITE_RUNTIME_API_BASE_URL: env.LITE_RUNTIME_API_BASE_URL || undefined,
     RUNTIME_API_TIMEOUT_MS: env.RUNTIME_API_TIMEOUT_MS,
     PLATFORM_USER_ID: env.PLATFORM_USER_ID,
     MNA_TOKEN_PATH: env.MNA_TOKEN_PATH,

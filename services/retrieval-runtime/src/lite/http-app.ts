@@ -70,6 +70,19 @@ const afterResponseSchema = z.object({
   candidates: z.array(z.unknown()).optional(),
 });
 
+const listMemoryQuerySchema = z.object({
+  workspace_id: z.string().optional(),
+  user_id: z.string().optional(),
+  task_id: z.string().optional(),
+  session_id: z.string().optional(),
+  memory_type: z.enum(["fact", "preference", "task_state", "episodic"]).optional(),
+  scope: z.enum(["workspace", "user", "task", "session"]).optional(),
+  status: z.enum(["active", "pending_confirmation", "superseded", "archived", "deleted"]).optional(),
+  memory_view_mode: memoryModeSchema.optional(),
+  page: z.coerce.number().int().positive().optional(),
+  page_size: z.coerce.number().int().positive().max(100).optional(),
+});
+
 export interface LiteRuntimeHttpOptions {
   memoryDir: string;
   configSource?: LiteMemoryModelConfigSource;
@@ -127,6 +140,72 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
     };
   });
 
+  app.get("/v1/lite/memories", async (request, reply) => {
+    const parsed = listMemoryQuerySchema.safeParse(request.query);
+    if (!parsed.success) {
+      reply.status(400);
+      return {
+        error: {
+          code: "invalid_lite_memory_query",
+          message: "Invalid lite memory list query",
+          details: parsed.error.flatten(),
+        },
+      };
+    }
+
+    await store.load();
+    const page = parsed.data.page ?? 1;
+    const pageSize = parsed.data.page_size ?? 20;
+    const records = store.listRecords()
+      .filter((record) => !parsed.data.workspace_id || record.workspace_id === parsed.data.workspace_id)
+      .filter((record) => !parsed.data.user_id || record.scope !== "user" || record.user_id === parsed.data.user_id)
+      .filter((record) => !parsed.data.task_id || record.scope !== "task" || record.task_id === parsed.data.task_id)
+      .filter((record) => !parsed.data.session_id || record.scope !== "session" || record.session_id === parsed.data.session_id)
+      .filter((record) => !parsed.data.memory_type || record.memory_type === parsed.data.memory_type)
+      .filter((record) => !parsed.data.scope || record.scope === parsed.data.scope)
+      .filter((record) => parsed.data.memory_view_mode !== "workspace_only" || record.scope !== "user")
+      .filter((record) => !parsed.data.status || record.status === parsed.data.status);
+    const offset = (page - 1) * pageSize;
+
+    return {
+      items: records.slice(offset, offset + pageSize),
+      total: records.length,
+      page,
+      page_size: pageSize,
+      memory_model_status: memoryModel.status,
+      storage: {
+        path: store.path,
+        records: store.size(),
+      },
+    };
+  });
+
+  app.get("/v1/lite/memories/:record_id", async (request, reply) => {
+    const params = z.object({ record_id: z.string().min(1) }).safeParse(request.params);
+    if (!params.success) {
+      reply.status(400);
+      return {
+        error: {
+          code: "invalid_lite_record_id",
+          message: "Invalid lite record id",
+        },
+      };
+    }
+
+    await store.load();
+    const record = store.get(params.data.record_id);
+    if (!record) {
+      reply.status(404);
+      return {
+        error: {
+          code: "lite_record_not_found",
+          message: "Lite record not found",
+        },
+      };
+    }
+    return record;
+  });
+
   app.post("/v1/lite/prepare-context", async (request, reply) => {
     const parsed = prepareContextSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -161,6 +240,16 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
     const result = await writebackEngine.process(parsed.data);
     traces.appendWriteback({
       trace_id: result.trace_id,
+      host: parsed.data.host,
+      workspace_id: parsed.data.workspace_id,
+      user_id: parsed.data.user_id,
+      session_id: parsed.data.session_id,
+      ...(parsed.data.task_id ? { task_id: parsed.data.task_id } : {}),
+      ...(parsed.data.thread_id ? { thread_id: parsed.data.thread_id } : {}),
+      ...(parsed.data.turn_id ? { turn_id: parsed.data.turn_id } : {}),
+      current_input: parsed.data.current_input,
+      assistant_output: parsed.data.assistant_output,
+      memory_mode: parsed.data.memory_mode ?? "workspace_plus_global",
       accepted_record_ids: result.accepted_record_ids,
       accepted_count: result.accepted_count,
       filtered_reasons: result.filtered_reasons,
@@ -198,6 +287,12 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
     }
     return trace;
   });
+
+  app.get("/v1/lite/traces", async () => ({
+    items: traces.list(),
+    total: traces.size(),
+    memory_model_status: memoryModel.status,
+  }));
 
   return app;
 }

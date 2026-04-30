@@ -1,9 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryCatalogViewMock, fetchGovernanceExecutionsMock, fetchGovernanceExecutionDetailMock } = vi.hoisted(() => ({
+const {
+  queryCatalogViewMock,
+  fetchGovernanceExecutionsMock,
+  fetchGovernanceExecutionDetailMock,
+  shouldUseLiteRuntimeCatalogMock,
+  fetchLiteRuntimeMemoriesMock,
+  fetchLiteRuntimeMemoryByIdMock
+} = vi.hoisted(() => ({
   queryCatalogViewMock: vi.fn<() => Promise<any>>(),
   fetchGovernanceExecutionsMock: vi.fn<() => Promise<any>>(),
   fetchGovernanceExecutionDetailMock: vi.fn<() => Promise<any>>(),
+  shouldUseLiteRuntimeCatalogMock: vi.fn(() => false),
+  fetchLiteRuntimeMemoriesMock: vi.fn<() => Promise<any>>(),
+  fetchLiteRuntimeMemoryByIdMock: vi.fn<() => Promise<any>>(),
 }));
 
 queryCatalogViewMock.mockImplementation(async () => ({
@@ -127,6 +137,12 @@ vi.mock("@/lib/server/storage-governance-executions-client", () => ({
   fetchGovernanceExecutionDetail: fetchGovernanceExecutionDetailMock,
 }));
 
+vi.mock("@/lib/server/lite-runtime-client", () => ({
+  shouldUseLiteRuntimeCatalog: shouldUseLiteRuntimeCatalogMock,
+  fetchLiteRuntimeMemories: fetchLiteRuntimeMemoriesMock,
+  fetchLiteRuntimeMemoryById: fetchLiteRuntimeMemoryByIdMock,
+}));
+
 import {
   buildMemoryCatalogFilterChips,
   buildMemoryCatalogQuickViews,
@@ -139,6 +155,97 @@ import {
 import { MemoryCatalogResponse } from "@/lib/contracts";
 
 describe("memory catalog service", () => {
+  beforeEach(() => {
+    shouldUseLiteRuntimeCatalogMock.mockReturnValue(false);
+    fetchLiteRuntimeMemoriesMock.mockReset();
+    fetchLiteRuntimeMemoryByIdMock.mockReset();
+  });
+
+  it("uses lite runtime memory list when the full read model is not configured", async () => {
+    shouldUseLiteRuntimeCatalogMock.mockReturnValue(true);
+    fetchLiteRuntimeMemoriesMock
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "lite-rec-1",
+            workspace_id: "ws-1",
+            user_id: "user-1",
+            task_id: null,
+            session_id: null,
+            memory_type: "preference",
+            scope: "user",
+            status: "active",
+            summary: "用户偏好：默认中文回复",
+            details: { extraction_method: "rules" },
+            source: {
+              source_type: "lite_runtime",
+              source_ref: "lite-rec-1",
+              service_name: "lite-runtime",
+            },
+            importance: 5,
+            confidence: 0.9,
+            last_confirmed_at: null,
+            created_at: "2026-04-30T10:00:00.000Z",
+            updated_at: "2026-04-30T10:00:00.000Z",
+          },
+        ],
+        total: 1,
+        status: {
+          name: "lite_runtime",
+          label: "Lite runtime",
+          kind: "dependency",
+          status: "healthy",
+          checkedAt: "2026-04-30T10:00:00.000Z",
+          lastCheckedAt: "2026-04-30T10:00:00.000Z",
+          lastOkAt: "2026-04-30T10:00:00.000Z",
+          lastError: null,
+          responseTimeMs: 10,
+          detail: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+        total: 0,
+        status: {
+          name: "lite_runtime",
+          label: "Lite runtime",
+          kind: "dependency",
+          status: "healthy",
+          checkedAt: "2026-04-30T10:00:00.000Z",
+          lastCheckedAt: "2026-04-30T10:00:00.000Z",
+          lastOkAt: "2026-04-30T10:00:00.000Z",
+          lastError: null,
+          responseTimeMs: 10,
+          detail: null,
+        },
+      });
+
+    const response = await getMemoryCatalog({
+      workspaceId: "ws-1",
+      taskId: undefined,
+      sessionId: undefined,
+      sourceRef: undefined,
+      memoryViewMode: "workspace_plus_global",
+      memoryType: undefined,
+      scope: undefined,
+      status: undefined,
+      updatedFrom: undefined,
+      updatedTo: undefined,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(response.sourceStatus.name).toBe("lite_runtime");
+    expect(response.items[0]?.summary).toBe("用户偏好：默认中文回复");
+    expect(fetchLiteRuntimeMemoriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        memoryViewMode: "workspace_plus_global",
+      }),
+      expect.any(Object),
+    );
+  });
+
   it("explains degraded source state", () => {
     const response = {
       items: [],

@@ -119,6 +119,7 @@
     "embeddingApiKey": "EMBEDDING_API_KEY",
     "embeddingHint": "当前向量模型固定按 OpenAI-compatible /embeddings 调用。DashScope 请填 https://dashscope.aliyuncs.com/compatible-mode/v1；不要填 rerank 地址。",
     "memoryLlmTitle": "记忆模型",
+    "memoryLlmHealth": "健康状态",
     "memoryLlmMode": "记忆模型来源",
     "memoryLlmModeOptions": {
       "same_as_primary": "与主模型一致",

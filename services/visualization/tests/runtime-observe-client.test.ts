@@ -1,8 +1,91 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeRuntimeRunsPayload } from "@/lib/server/runtime-observe-client";
+import { normalizeLiteRuntimeTracesPayload, normalizeRuntimeRunsPayload } from "@/lib/server/runtime-observe-client";
 
 describe("runtime observe contract parsing", () => {
+  it("maps lite runtime trace snapshots into the runs view model", () => {
+    const snapshot = normalizeLiteRuntimeTracesPayload({
+      items: [
+        {
+          prepare: {
+            trace_id: "trace-lite",
+            host: "codex_app_server",
+            workspace_id: "ws-1",
+            user_id: "user-1",
+            session_id: "session-1",
+            phase: "before_response",
+            current_input: "上次约定是什么",
+            memory_mode: "workspace_plus_global",
+            rule_trigger: {
+              hit: true,
+              trigger_type: "history_reference",
+              trigger_reason: "history cue",
+              requested_memory_types: ["preference"],
+              requested_scopes: ["user"],
+              importance_threshold: 3,
+              cooldown_applied: false,
+            },
+            memory_model_status: {
+              configured: false,
+              status: "not_configured",
+              degraded: true,
+              degradationReason: "memory_model_not_configured",
+            },
+            function_calls: [
+              {
+                name: "memory_search",
+                result_count: 3,
+                returned_count: 1,
+              },
+            ],
+            selected_record_ids: ["lite-rec-1"],
+            injected: true,
+            created_at: "2026-04-30T10:00:00.000Z",
+          },
+          writebacks: [
+            {
+              trace_id: "trace-lite",
+              accepted_count: 1,
+              accepted_record_ids: ["lite-rec-2"],
+              filtered_reasons: [],
+              memory_mode: "workspace_plus_global",
+              created_at: "2026-04-30T10:00:02.000Z",
+            },
+          ],
+        },
+      ],
+    }, "trace_id=trace-lite");
+
+    expect(snapshot.turns[0]).toMatchObject({
+      traceId: "trace-lite",
+      currentInput: "上次约定是什么",
+    });
+    expect(snapshot.triggerRuns[0]).toMatchObject({
+      triggerHit: true,
+      requestedTypes: ["preference"],
+      requestedScopes: ["user"],
+    });
+    expect(snapshot.recallRuns[0]).toMatchObject({
+      selectedRecordIds: ["lite-rec-1"],
+      candidateCount: 3,
+      selectedCount: 1,
+      degraded: true,
+      degradationReason: "memory_model_not_configured",
+    });
+    expect(snapshot.injectionRuns[0]).toMatchObject({
+      injected: true,
+      keptRecordIds: ["lite-rec-1"],
+    });
+    expect(snapshot.writeBackRuns[0]).toMatchObject({
+      submittedCount: 1,
+      submittedJobIds: ["lite-rec-2"],
+    });
+    expect(snapshot.dependencyStatus[0]).toMatchObject({
+      name: "memory_llm",
+      status: "degraded",
+    });
+  });
+
   it("parses the official runtime observe runs shape", () => {
     const snapshot = normalizeRuntimeRunsPayload({
       data: {
@@ -360,4 +443,3 @@ describe("runtime observe contract parsing", () => {
     ]);
   });
 });
-

@@ -419,6 +419,7 @@ async function startManagedVisualizationDevServer(options: {
     NODE_ENV: "development",
     STORAGE_API_BASE_URL: options.storageUrl,
     RUNTIME_API_BASE_URL: options.runtimeUrl,
+    LITE_RUNTIME_API_BASE_URL: options.runtimeUrl,
     STORAGE_PORT: String(options.storagePort),
     RUNTIME_PORT: String(options.runtimePort),
     PLATFORM_USER_ID: options.platformUserId,

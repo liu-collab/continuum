@@ -8,6 +8,7 @@ import {
   MemoryCatalogItem,
   MemoryCatalogResponse,
 } from "@/lib/contracts";
+import { getAppConfig } from "@/lib/env";
 import {
   memoryStatusExplanation,
   memoryStatusLabel,
@@ -23,6 +24,12 @@ import {
   mapSource,
   queryCatalogView
 } from "@/lib/server/storage-read-model-client";
+import {
+  fetchLiteRuntimeMemories,
+  fetchLiteRuntimeMemoryById,
+  shouldUseLiteRuntimeCatalog,
+  type LiteRuntimeRecord,
+} from "@/lib/server/lite-runtime-client";
 import {
   fetchGovernanceExecutionDetail,
   fetchGovernanceExecutions,
@@ -41,7 +48,7 @@ export {
 } from "@/features/memory-catalog/view-model";
 
 function toCatalogItem(
-  row: Awaited<ReturnType<typeof queryCatalogView>>["rows"][number],
+  row: Awaited<ReturnType<typeof queryCatalogView>>["rows"][number] | LiteRuntimeRecord,
   filters: MemoryCatalogFilters,
   locale: AppLocale
 ): MemoryCatalogItem {
@@ -87,6 +94,54 @@ function toCatalogItem(
 export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<MemoryCatalogResponse> {
   const locale = await getRequestLocale();
   const t = createTranslator(locale);
+  if (shouldUseLiteRuntimeCatalog()) {
+    const { values } = getAppConfig();
+    const result = await fetchLiteRuntimeMemories({
+      workspaceId: filters.workspaceId,
+      userId: values.PLATFORM_USER_ID,
+      taskId: filters.taskId,
+      sessionId: filters.sessionId,
+      memoryType: filters.memoryType,
+      scope: filters.scope,
+      status: filters.status,
+      memoryViewMode: filters.memoryViewMode,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    }, { locale });
+    const pendingResult = filters.status === "pending_confirmation"
+      ? result
+      : await fetchLiteRuntimeMemories({
+          workspaceId: filters.workspaceId,
+          userId: values.PLATFORM_USER_ID,
+          taskId: filters.taskId,
+          sessionId: filters.sessionId,
+          memoryType: filters.memoryType,
+          scope: filters.scope,
+          status: "pending_confirmation",
+          memoryViewMode: filters.memoryViewMode,
+          page: 1,
+          pageSize: 1,
+        }, { locale });
+
+    return {
+      items: result.rows.map((row) => toCatalogItem(row, filters, locale)),
+      total: result.total,
+      page: filters.page,
+      pageSize: filters.pageSize,
+      appliedFilters: filters,
+      viewSummary:
+        pendingResult.total > 0
+          ? t("service.memory.pendingSummary", {
+              summary: buildViewSummary(filters, locale),
+              count: pendingResult.total
+            })
+          : buildViewSummary(filters, locale),
+      viewWarnings: [],
+      pendingConfirmationCount: pendingResult.total,
+      sourceStatus: result.status
+    };
+  }
+
   const [result, pendingResult] = await Promise.all([
     queryCatalogView(filters, { locale }),
     queryCatalogView({
@@ -119,7 +174,9 @@ export async function getMemoryCatalog(filters: MemoryCatalogFilters): Promise<M
 export async function getMemoryDetail(id: string): Promise<MemoryCatalogDetail | null> {
   const locale = await getRequestLocale();
   const t = createTranslator(locale);
-  const record = await fetchMemoryById(id);
+  const record = shouldUseLiteRuntimeCatalog()
+    ? (await fetchLiteRuntimeMemoryById(id, { locale })).row
+    : await fetchMemoryById(id);
 
   if (!record) {
     return null;

@@ -98,6 +98,7 @@ export async function runUiCommand(
       NODE_ENV: "production",
       STORAGE_API_BASE_URL: storageUrl,
       RUNTIME_API_BASE_URL: runtimeUrl,
+      LITE_RUNTIME_API_BASE_URL: runtimeUrl,
       PLATFORM_USER_ID: platformUserId,
       STORAGE_READ_MODEL_DSN: readModelDsn,
       NEXT_PUBLIC_MNA_BASE_URL: mnaBaseUrl,

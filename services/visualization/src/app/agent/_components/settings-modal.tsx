@@ -25,6 +25,10 @@ type SettingsModalProps = {
   onClose(): void;
   setupWizard?: boolean;
   config: MnaAgentConfigResponse | null;
+  memoryModelHealth?: {
+    status?: string;
+    detail?: string;
+  } | null;
   memoryMode: AgentMemoryMode;
   onMemoryModeChange(value: AgentMemoryMode): void;
   onSaveRuntime(payload: {
@@ -255,6 +259,7 @@ export function SettingsModal({
   onClose,
   setupWizard = false,
   config,
+  memoryModelHealth,
   memoryMode,
   onMemoryModeChange,
   onSaveRuntime,
@@ -1174,6 +1179,15 @@ export function SettingsModal({
 
               <div className="space-y-3 rounded-lg border bg-surface-muted/20 p-4" data-testid="memory-model-config">
                 <div className="text-sm font-semibold text-foreground">{t("runtimeConfig.memoryLlmTitle")}</div>
+                {memoryModelHealth ? (
+                  <div
+                    className={`notice ${memoryModelHealth.status === "healthy" ? "notice-info" : "notice-warning"}`}
+                    data-testid="memory-model-health-status"
+                  >
+                    {t("runtimeConfig.memoryLlmHealth")}: {memoryModelHealth.status ?? "unknown"}
+                    {memoryModelHealth.detail ? ` · ${memoryModelHealth.detail}` : ""}
+                  </div>
+                ) : null}
                 <label className="block">
                   <span className="text-xs text-muted-foreground">{t("runtimeConfig.memoryLlmMode")}</span>
                   <SelectField

@@ -2,6 +2,16 @@ import type { LitePrepareContextTrace } from "./memory-orchestrator.js";
 
 export interface LiteWritebackTrace {
   trace_id: string;
+  host?: string;
+  workspace_id?: string;
+  user_id?: string;
+  session_id?: string;
+  task_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  current_input?: string;
+  assistant_output?: string;
+  memory_mode?: "workspace_only" | "workspace_plus_global";
   accepted_record_ids: string[];
   accepted_count: number;
   filtered_reasons: string[];
@@ -49,6 +59,14 @@ export class LiteTraceStore {
 
   get(traceId: string): LiteTraceSnapshot | undefined {
     return this.traces.get(traceId);
+  }
+
+  list(): LiteTraceSnapshot[] {
+    return [...this.traces.values()].sort((left, right) => {
+      const leftCreatedAt = left.prepare?.created_at ?? left.writebacks.at(-1)?.created_at ?? "";
+      const rightCreatedAt = right.prepare?.created_at ?? right.writebacks.at(-1)?.created_at ?? "";
+      return rightCreatedAt.localeCompare(leftCreatedAt);
+    });
   }
 
   size(): number {
