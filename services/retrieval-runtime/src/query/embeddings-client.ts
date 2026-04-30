@@ -8,6 +8,8 @@ import { SmallCache } from "../shared/small-cache.js";
 import type { EmbeddingCacheStats } from "../shared/types.js";
 import { normalizeText } from "../shared/utils.js";
 
+const STORAGE_EMBEDDING_DIMENSIONS = 1536;
+
 export interface EmbeddingsClient {
   embedText(text: string, signal?: AbortSignal): Promise<number[]>;
 }
@@ -39,6 +41,7 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
       body: JSON.stringify({
         model: activeConfig.model,
         input: text,
+        dimensions: STORAGE_EMBEDDING_DIMENSIONS,
       }),
       signal,
       timeoutMs: this.config.EMBEDDING_TIMEOUT_MS,
@@ -54,6 +57,10 @@ export class HttpEmbeddingsClient implements EmbeddingsClient {
 
     if (!embedding || !Array.isArray(embedding)) {
       throw new Error("embeddings response did not include an embedding vector");
+    }
+
+    if (embedding.length !== STORAGE_EMBEDDING_DIMENSIONS) {
+      throw new Error(`embeddings response returned ${embedding.length} dimensions, expected ${STORAGE_EMBEDDING_DIMENSIONS}`);
     }
 
     return embedding;

@@ -16,6 +16,7 @@ const cacheConfig = {
   EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
   EMBEDDING_CACHE_MAX_ENTRIES: 1000,
 };
+const storageEmbedding = Array.from({ length: 1536 }, (_, index) => index / 1536);
 
 const tempDirs: string[] = [];
 
@@ -71,13 +72,15 @@ describe("retrieval-runtime embeddings client", () => {
 
   it("keeps third-party base path when building embeddings request url", async () => {
     let calledUrl = "";
+    let calledBody: Record<string, unknown> | null = null;
 
-    globalThis.fetch = (async (input) => {
+    globalThis.fetch = (async (input, init) => {
       calledUrl = String(input);
+      calledBody = JSON.parse(String(init?.body));
       return {
         ok: true,
         json: async () => ({
-          data: [{ embedding: [0.4, 0.5, 0.6] }],
+          data: [{ embedding: storageEmbedding }],
         }),
       } as Response;
     }) as typeof fetch;
@@ -167,7 +170,105 @@ describe("retrieval-runtime embeddings client", () => {
     const embedding = await client.embedText("hello");
 
     expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
-    expect(embedding).toEqual([0.4, 0.5, 0.6]);
+    expect(calledBody).toEqual({
+      model: "text-embedding-3-small",
+      input: "hello",
+      dimensions: 1536,
+    });
+    expect(embedding).toEqual(storageEmbedding);
+  });
+
+  it("rejects embedding responses that do not match storage dimensions", async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: Array.from({ length: 4096 }, () => 0.1) }],
+      }),
+    }) as Response) as typeof fetch;
+
+    const client = new HttpEmbeddingsClient({
+      NODE_ENV: "test",
+      HOST: "127.0.0.1",
+      PORT: 3002,
+      LOG_LEVEL: "info",
+      LOG_SAMPLE_RATE: 1,
+      DATABASE_URL: "postgres://postgres:postgres@localhost:5432/agent_memory",
+      READ_MODEL_SCHEMA: "storage_shared_v1",
+      READ_MODEL_TABLE: "memory_read_model_v1",
+      RUNTIME_SCHEMA: "runtime_private",
+      STORAGE_WRITEBACK_URL: "http://localhost:3001",
+      EMBEDDING_BASE_URL: "https://api.siliconflow.cn/v1",
+      EMBEDDING_MODEL: "Qwen/Qwen3-VL-Embedding-8B",
+      EMBEDDING_API_KEY: "test-key",
+      ...missingManagedConfigPaths(),
+      EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
+      EMBEDDING_CACHE_MAX_ENTRIES: 1000,
+      MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
+      MEMORY_LLM_PROTOCOL: "openai-compatible",
+      MEMORY_LLM_TIMEOUT_MS: 15000,
+      MEMORY_LLM_FALLBACK_ENABLED: true,
+      MEMORY_LLM_DEGRADED_THRESHOLD: 0.5,
+      MEMORY_LLM_RECOVERY_INTERVAL_MS: 5 * 60 * 1000,
+      RECALL_LLM_JUDGE_ENABLED: true,
+      RECALL_LLM_JUDGE_MAX_TOKENS: 400,
+      RECALL_LLM_CANDIDATE_LIMIT: 12,
+      WRITEBACK_MAX_CANDIDATES: 3,
+      WRITEBACK_OUTBOX_FLUSH_INTERVAL_MS: 5000,
+      WRITEBACK_OUTBOX_BATCH_SIZE: 50,
+      WRITEBACK_OUTBOX_MAX_RETRIES: 5,
+      MEMORY_LLM_REFINE_MAX_TOKENS: 800,
+      WRITEBACK_REFINE_ENABLED: true,
+      WRITEBACK_MAINTENANCE_ENABLED: false,
+      WRITEBACK_MAINTENANCE_INTERVAL_MS: 900_000,
+      WRITEBACK_MAINTENANCE_WORKSPACE_INTERVAL_MS: 3_600_000,
+      WRITEBACK_MAINTENANCE_WORKSPACE_BATCH: 3,
+      WRITEBACK_MAINTENANCE_SEED_LIMIT: 20,
+      WRITEBACK_MAINTENANCE_RELATED_LIMIT: 40,
+      WRITEBACK_MAINTENANCE_SIMILARITY_THRESHOLD: 0.35,
+      WRITEBACK_MAINTENANCE_SEED_LOOKBACK_MS: 86_400_000,
+      WRITEBACK_MAINTENANCE_TIMEOUT_MS: 10_000,
+      WRITEBACK_MAINTENANCE_LLM_MAX_TOKENS: 1500,
+      WRITEBACK_MAINTENANCE_MAX_ACTIONS: 10,
+      WRITEBACK_MAINTENANCE_MIN_IMPORTANCE: 2,
+      WRITEBACK_MAINTENANCE_ACTOR_ID: "retrieval-runtime-maintenance",
+      WRITEBACK_SESSION_EPISODIC_TTL_MS: 7 * 24 * 60 * 60 * 1000,
+      WRITEBACK_GOVERNANCE_VERIFY_ENABLED: true,
+      WRITEBACK_GOVERNANCE_VERIFY_MAX_TOKENS: 1000,
+      WRITEBACK_GOVERNANCE_ARCHIVE_MIN_CONFIDENCE: 0.85,
+      WRITEBACK_GOVERNANCE_DELETE_MIN_CONFIDENCE: 0.92,
+      WRITEBACK_GOVERNANCE_SHADOW_MODE: false,
+      FINALIZE_IDEMPOTENCY_TTL_MS: 5 * 60 * 1000,
+      FINALIZE_IDEMPOTENCY_MAX_ENTRIES: 500,
+      WRITEBACK_INPUT_OVERLAP_THRESHOLD: 0.2,
+      WRITEBACK_CROSS_REFERENCE_CONFIRMATION_THRESHOLD: 0.85,
+      WRITEBACK_CROSS_REFERENCE_PARTIAL_MATCH_THRESHOLD: 0.7,
+      QUERY_TIMEOUT_MS: 50,
+      STORAGE_TIMEOUT_MS: 50,
+      EMBEDDING_TIMEOUT_MS: 50,
+      QUERY_CANDIDATE_LIMIT: 30,
+      PACKET_RECORD_LIMIT: 10,
+      INJECTION_RECORD_LIMIT: 5,
+      INJECTION_TOKEN_BUDGET: 1500,
+      INJECTION_DEDUP_ENABLED: true,
+      INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+      INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
+      INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
+      INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
+      INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+      INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
+      INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
+      INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
+      INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
+      INJECTION_SOFT_WINDOW_MS_EPISODIC: 15 * 60 * 1000,
+      INJECTION_RECENT_STATE_TTL_MS: 60 * 60 * 1000,
+      INJECTION_RECENT_STATE_MAX_SESSIONS: 500,
+      SEMANTIC_TRIGGER_THRESHOLD: 0.72,
+      IMPORTANCE_THRESHOLD_SESSION_START: 4,
+      IMPORTANCE_THRESHOLD_DEFAULT: 3,
+      IMPORTANCE_THRESHOLD_SEMANTIC: 4,
+    });
+
+    await expect(client.embedText("hello")).rejects.toThrow("returned 4096 dimensions, expected 1536");
   });
 
   it("does not require embedding config during startup config loading", () => {
@@ -294,7 +395,7 @@ describe("retrieval-runtime embeddings client", () => {
       return {
         ok: true,
         json: async () => ({
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          data: [{ embedding: storageEmbedding }],
         }),
       } as Response;
     }) as typeof fetch;
@@ -382,7 +483,7 @@ describe("retrieval-runtime embeddings client", () => {
       });
 
       expect(client.isConfigured()).toBe(true);
-      await expect(client.embedText("hello")).resolves.toEqual([0.1, 0.2, 0.3]);
+      await expect(client.embedText("hello")).resolves.toEqual(storageEmbedding);
       expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -468,7 +569,7 @@ describe("retrieval-runtime embeddings client", () => {
       return {
         ok: true,
         json: async () => ({
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          data: [{ embedding: storageEmbedding }],
         }),
       } as Response;
     }) as typeof fetch;
@@ -481,7 +582,7 @@ describe("retrieval-runtime embeddings client", () => {
         AXIS_MANAGED_CONFIG_PATH: configPath,
         AXIS_MANAGED_SECRETS_PATH: secretsPath,
       }));
-      await expect(client.embedText("hello")).resolves.toEqual([0.1, 0.2, 0.3]);
+      await expect(client.embedText("hello")).resolves.toEqual(storageEmbedding);
       expect(calledUrl).toBe("https://api.openai.com/v1/embeddings");
       expect(
         resolveRuntimeWritebackLlmConfig({
