@@ -1,55 +1,39 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  mapRuntimeCandidateType,
-  runtimeCompatibleWriteBackCandidateSchema,
+  memoryTypeSchema,
+  writeBackCandidateSchema,
 } from "../src/contracts.js";
-import { AppError } from "../src/errors.js";
+import { buildCandidate } from "./memory-repositories.js";
 
 describe("storage contracts", () => {
-  it("maps runtime candidate types explicitly", () => {
-    expect(mapRuntimeCandidateType("fact_preference")).toBe("fact_preference");
-    expect(mapRuntimeCandidateType("task_state")).toBe("task_state");
-    expect(mapRuntimeCandidateType("episodic")).toBe("episodic");
-    expect(mapRuntimeCandidateType("commitment")).toBe("episodic");
-    expect(mapRuntimeCandidateType("preference")).toBe("fact_preference");
-    expect(mapRuntimeCandidateType("important_event")).toBe("episodic");
-  });
+  it("accepts split memory types", () => {
+    expect(memoryTypeSchema.options).toEqual([
+      "fact",
+      "preference",
+      "task_state",
+      "episodic",
+    ]);
 
-  it("rejects unknown runtime candidate types explicitly", () => {
-    expect(() => mapRuntimeCandidateType("future_type")).toThrow(AppError);
-
-    try {
-      mapRuntimeCandidateType("future_type");
-    } catch (error) {
-      expect(error).toMatchObject({
-        code: "unknown_candidate_type",
-        status_code: 400,
-        details: {
-          runtimeType: "future_type",
-        },
-      });
-    }
-  });
-
-  it("keeps the compatibility schema aligned with the runtime mapping", () => {
-    const parsed = runtimeCompatibleWriteBackCandidateSchema.parse({
-      candidate_type: "preference",
-      scope: "user",
-      summary: "User prefers concise answers",
+    expect(writeBackCandidateSchema.parse(buildCandidate()).candidate_type).toBe("preference");
+    expect(writeBackCandidateSchema.parse(buildCandidate({
+      candidate_type: "fact",
+      scope: "workspace",
+      user_id: null,
+      summary: "This project uses PostgreSQL 16",
       details: {
-        subject: "user",
+        subject: "project",
+        predicate: "uses PostgreSQL 16",
       },
-      importance: 4,
-      confidence: 0.9,
-      write_reason: "user stated a stable preference",
-      source: {
-        host: "codex_app_server",
-        session_id: "33333333-3333-4333-8333-333333333333",
-      },
-      dedupe_key: "preference:concise",
+    })).candidate_type).toBe("fact");
+  });
+
+  it("rejects the removed combined fact_preference type", () => {
+    const parsed = writeBackCandidateSchema.safeParse({
+      ...buildCandidate(),
+      candidate_type: "fact_preference",
     });
 
-    expect(mapRuntimeCandidateType(parsed.candidate_type)).toBe("fact_preference");
+    expect(parsed.success).toBe(false);
   });
 });

@@ -62,7 +62,7 @@ const SUPPRESS_RECALL_PATTERNS = [
   /start.*(?:fresh|over|from scratch)/i,
   /forget.*(?:everything|all|it)/i,
 ];
-const ALL_MEMORY_TYPES: MemoryType[] = ["fact_preference", "task_state", "episodic"];
+const ALL_MEMORY_TYPES: MemoryType[] = ["fact", "preference", "task_state", "episodic"];
 const AVAILABILITY_CACHE_TTL_MS = 30_000;
 const AVAILABILITY_CACHE_MAX_ENTRIES = 500;
 

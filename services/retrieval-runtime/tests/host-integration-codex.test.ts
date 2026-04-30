@@ -99,10 +99,12 @@ const config: AppConfig = {
   INJECTION_RECORD_LIMIT: 4,
   INJECTION_TOKEN_BUDGET: 512,
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -129,7 +131,7 @@ const sampleRecords: CandidateMemory[] = [
     user_id: ids.user,
     session_id: null,
     task_id: null,
-    memory_type: "fact_preference",
+    memory_type: "fact",
     scope: "workspace",
     summary: "工作区约束：默认中文输出，修改前先对齐现有实现。",
     details: null,
@@ -147,7 +149,7 @@ const sampleRecords: CandidateMemory[] = [
     user_id: ids.user,
     session_id: null,
     task_id: null,
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     summary: "用户偏好：回答简短直接，默认使用中文。",
     details: null,
@@ -354,7 +356,7 @@ describe("Codex host integration", () => {
       expect(body.additional_context).toContain(
         "会话启动阶段需要恢复基础上下文。",
       );
-      expect(body.additional_context).toContain("偏好与约束");
+      expect(body.additional_context).toContain("事实与约束");
       expect(body.injection_block).not.toBeNull();
       expect(body.dependency_status.read_model.status).toBe("healthy");
       expect(body.dependency_status.embeddings.status).toBe("healthy");
@@ -492,7 +494,7 @@ describe("Codex host integration", () => {
       expect(body.memory_packet.records).toHaveLength(4);
       expect(body.memory_packet.injection_hint).toContain("优先");
       expect(body.injection_block).not.toBeNull();
-      expect(body.injection_block.memory_summary).toContain("偏好与约束");
+      expect(body.injection_block.memory_summary).toContain("事实与约束");
       expect(body.injection_block.memory_summary).toContain("当前任务");
       expect(
         body.injection_block.memory_records.some((r: { summary: string }) =>

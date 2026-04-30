@@ -35,7 +35,7 @@ export interface WritebackEngineResult {
 }
 
 interface CandidateDraft {
-  candidate_type: "fact_preference" | "task_state" | "episodic";
+  candidate_type: MemoryType;
   scope: ScopeType;
   summary: string;
   details: Record<string, unknown>;
@@ -150,6 +150,16 @@ function extractPreferenceDetails(text: string): Record<string, unknown> {
     preference_value: canonical.preference_value,
     preference_polarity: canonical.preference_polarity,
     stability: "long_term",
+  };
+}
+
+function extractFactDetails(text: string, evidenceText: string): Record<string, unknown> {
+  const normalized = normalizeText(text);
+  return {
+    subject: hasWorkspaceContext(normalized) ? "workspace" : "fact",
+    predicate: normalized,
+    evidence: normalizeText(evidenceText),
+    extraction_method: "rules",
   };
 }
 
@@ -407,6 +417,10 @@ function hasMeaningfulTokenOverlap(summary: string, sourceText: string): boolean
 
 function hasWorkspaceContext(text: string): boolean {
   return /这个项目|这个仓库|当前项目|当前仓库|项目里|仓库里|this project|this repo|workspace|repository|repo/i.test(text);
+}
+
+function hasExplicitWorkspaceRuleContext(text: string): boolean {
+  return /这个项目|这个仓库|当前项目|当前仓库|项目里|仓库里|this project|this repo|this repository|current project|current repo|current repository|workspace rule|repo rule|repository rule|project rule|workspace convention|repo convention|repository convention|project convention/i.test(text);
 }
 
 function withOriginTrace(
@@ -670,18 +684,25 @@ export class WritebackEngine {
     const stablePreferenceSummary = extractStablePreferenceFromUserInput(normalizedUser);
     if (stablePreferenceSummary) {
       preferenceFromUserInput = true;
+      const isWorkspaceFact =
+        hasExplicitWorkspaceRuleContext(stablePreferenceSummary) ||
+        hasExplicitWorkspaceRuleContext(normalizedUser);
       rawCandidates.push(withOriginTrace({
-        candidate_type: "fact_preference",
-        scope: "user",
+        candidate_type: isWorkspaceFact ? "fact" : "preference",
+        scope: isWorkspaceFact ? "workspace" : "user",
         summary: stablePreferenceSummary,
-        details: {
-          user_prompt: normalizedUser,
-          extraction_method: "rules",
-          ...extractPreferenceDetails(stablePreferenceSummary),
-        },
+        details: isWorkspaceFact
+          ? extractFactDetails(stablePreferenceSummary, normalizedUser)
+          : {
+              user_prompt: normalizedUser,
+              extraction_method: "rules",
+              ...extractPreferenceDetails(stablePreferenceSummary),
+            },
         importance: 4,
         confidence: 0.9,
-        write_reason: "user stated a stable preference explicitly",
+        write_reason: isWorkspaceFact
+          ? "user stated a stable workspace fact explicitly"
+          : "user stated a stable preference explicitly",
         source_type: "host_user_input",
         source_ref: input.turn_id ?? input.session_id,
         confirmed_by_user: true,
@@ -694,7 +715,7 @@ export class WritebackEngine {
     const confirmedPreferenceSummary = extractConfirmedPreferenceFromAssistantOutput(normalizedAssistant);
     if (confirmedPreferenceSummary && !preferenceFromUserInput) {
       rawCandidates.push(withOriginTrace({
-        candidate_type: "fact_preference",
+        candidate_type: "preference",
         scope: "user",
         summary: confirmedPreferenceSummary,
         details: {
@@ -704,7 +725,7 @@ export class WritebackEngine {
         },
         importance: 4,
         confidence: 0.8,
-        write_reason: "assistant produced a confirmed durable fact",
+        write_reason: "assistant confirmed a stable user preference",
         source_type: "assistant_final",
         source_ref: input.turn_id ?? input.session_id,
         confirmed_by_user: true,
@@ -740,7 +761,7 @@ export class WritebackEngine {
         summary: normalizedAssistant.slice(0, 180),
         details: {
           assistant_output: normalizedAssistant,
-          runtime_candidate_type: "commitment",
+          event_kind: "commitment",
           extraction_method: "rules",
         },
         importance: 3,
@@ -761,7 +782,7 @@ export class WritebackEngine {
         summary: normalizedTools.slice(0, 180),
         details: {
           tool_results_summary: normalizedTools,
-          runtime_candidate_type: "important_event",
+          event_kind: "important_event",
           extraction_method: "rules",
         },
         importance: 3,
@@ -875,7 +896,7 @@ export class WritebackEngine {
       write_reason: candidate.write_reason,
       source_type: "memory_llm",
       source_ref: input.turn_id ?? input.session_id,
-      confirmed_by_user: candidate.candidate_type === "fact_preference" && scope === "user" ? true : undefined,
+      confirmed_by_user: candidate.candidate_type === "preference" && scope === "user" ? true : undefined,
       extraction_method: "llm",
     }, input, candidate.summary);
   }
@@ -886,12 +907,43 @@ export class WritebackEngine {
         .filter(Boolean)
         .join(" "),
     ).toLowerCase();
-    const preferenceText = normalizeText([draft.summary, draft.write_reason].filter(Boolean).join(" ")).toLowerCase();
     const workspaceHints = ["仓库", "项目", "repo", "repository", "workspace", "目录", "convention", "constraint", "约束", "规则"];
     const userHints = ["偏好", "习惯", "风格", "prefer", "usually", "always", "默认"];
     const sessionHints = ["这轮", "本轮", "当前会话", "just now", "this turn", "temporary"];
     const taskHints = ["任务", "todo", "next step", "plan", "任务状态", "progress"];
     const workspaceSignal = hasWorkspaceContext(text) || workspaceHints.some((hint) => text.includes(hint));
+    const scores: Record<ScopeType, number> = {
+      workspace: 0,
+      user: 0,
+      task: 0,
+      session: 0,
+    };
+    const addScore = (scope: ScopeType, points: number) => {
+      if (scope === "task" && !input.task_id) {
+        scores.workspace += points;
+        return;
+      }
+      if (scope === "session") {
+        scores.session += points;
+        return;
+      }
+      scores[scope] += points;
+    };
+    const pickScope = (): ScopeType => {
+      const order: ScopeType[] = ["task", "session", "user", "workspace"];
+      const ranked = order
+        .filter((scope) => scope !== "task" || Boolean(input.task_id))
+        .sort((left, right) => {
+          const diff = scores[right] - scores[left];
+          if (diff !== 0) {
+            return diff;
+          }
+          if (left === draft.scope) return -1;
+          if (right === draft.scope) return 1;
+          return order.indexOf(left) - order.indexOf(right);
+        });
+      return ranked[0] ?? "workspace";
+    };
 
     if (draft.candidate_type === "task_state") {
       return {
@@ -903,84 +955,24 @@ export class WritebackEngine {
       };
     }
 
-    if (draft.scope === "user" && workspaceSignal) {
-      return {
-        ...draft,
-        scope: "workspace",
-        scope_reason: "project or repository context overrides a generic user preference signal",
-      };
-    }
+    if (workspaceSignal) addScore("workspace", 3);
+    if (userHints.some((hint) => text.includes(hint))) addScore("user", 3);
+    if (sessionHints.some((hint) => text.includes(hint))) addScore("session", 3);
+    if (taskHints.some((hint) => text.includes(hint))) addScore("task", 3);
+    if (draft.candidate_type === "preference") addScore("user", 2);
+    if (draft.candidate_type === "fact" && workspaceSignal) addScore("workspace", 2);
+    if (draft.candidate_type === "episodic" && sessionHints.some((hint) => text.includes(hint))) addScore("session", 2);
+    if (draft.scope === "user") addScore("user", 2);
+    if (draft.scope === "workspace") addScore("workspace", 2);
+    if (draft.scope === "session") addScore("session", 2);
+    if (draft.scope === "task") addScore("task", 2);
 
-    if (draft.scope === "user") {
-      return {
-        ...draft,
-        scope: "user",
-        scope_reason: "upstream explicitly marked this candidate as user scope",
-      };
-    }
-
-    if (draft.scope === "session") {
-      return {
-        ...draft,
-        scope: "session",
-        scope_reason: "upstream explicitly marked this candidate as session scope",
-      };
-    }
-
-    if (draft.scope === "task" && input.task_id) {
-      return {
-        ...draft,
-        scope: "task",
-        scope_reason: "upstream explicitly marked this candidate as task scope",
-      };
-    }
-
-    if (draft.scope === "workspace") {
-      return {
-        ...draft,
-        scope: "workspace",
-        scope_reason: "upstream explicitly marked this candidate as workspace scope",
-      };
-    }
-
-    if (draft.candidate_type === "fact_preference" && userHints.some((hint) => preferenceText.includes(hint))) {
-      return {
-        ...draft,
-        scope: "user",
-        scope_reason: "stable preference or working habit is classified as global user memory",
-      };
-    }
-
-    if (workspaceSignal) {
-      return {
-        ...draft,
-        scope: "workspace",
-        scope_reason: "repository or project-specific constraint is classified as workspace memory",
-      };
-    }
-
-    if (draft.candidate_type === "episodic" && sessionHints.some((hint) => text.includes(hint))) {
-      return {
-        ...draft,
-        scope: "session",
-        scope_reason: "temporary session context stays in session scope",
-      };
-    }
-
-    if (taskHints.some((hint) => text.includes(hint))) {
-      return {
-        ...draft,
-        scope: input.task_id ? "task" : "workspace",
-        scope_reason: input.task_id
-          ? "task progress or next-step content is classified as task memory"
-          : "task-like content without task_id falls back to workspace memory",
-      };
-    }
+    const scope = pickScope();
 
     return {
       ...draft,
-      scope: draft.scope,
-      scope_reason: "runtime keeps the suggested scope when no stronger local hint is available",
+      scope,
+      scope_reason: `scope selected by weighted local signals: workspace=${scores.workspace}, user=${scores.user}, task=${scores.task}, session=${scores.session}`,
     };
   }
 

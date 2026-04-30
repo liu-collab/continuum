@@ -285,7 +285,8 @@ export class TriggerEngine {
       preservePreferenceRecall
         ? [
             ...new Set([
-              "fact_preference" as const,
+              "preference" as const,
+              "fact" as const,
               "task_state" as const,
               ...requestedMemoryTypes,
               ...(intentDecision?.requestedMemoryTypes ?? []),
@@ -676,7 +677,7 @@ export class TriggerEngine {
             task_id: context.task_id,
             memory_mode: memoryMode,
             scope_filter: requestedScopes,
-            memory_type_filter: context.preflight_memory_types ?? ["fact_preference", "task_state", "episodic"],
+            memory_type_filter: context.preflight_memory_types ?? ["fact", "preference", "task_state", "episodic"],
             status_filter: ["active"],
             importance_threshold: this.config.IMPORTANCE_THRESHOLD_SEMANTIC,
             semantic_query_text: queryText,

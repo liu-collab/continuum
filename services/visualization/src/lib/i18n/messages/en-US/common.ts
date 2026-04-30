@@ -158,6 +158,7 @@ const enCommon = {
         label: "Quick filters",
         active: "All active",
         pending: "Pending ({count})",
+        fact: "Facts",
         preference: "Preferences",
         taskState: "Task state",
         episodic: "Event memories"
@@ -399,7 +400,8 @@ const enCommon = {
         unavailable: "Unavailable"
       },
       memoryType: {
-        fact_preference: "Facts and preferences",
+        fact: "Facts",
+        preference: "Preferences",
         task_state: "Task state",
         episodic: "Episodic memory"
       },

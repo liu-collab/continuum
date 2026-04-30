@@ -30,7 +30,7 @@ function createMemoryDetail() {
     workspaceId: "workspace-1",
     taskId: null,
     sessionId: null,
-    memoryType: "fact_preference",
+    memoryType: "preference",
     memoryTypeLabel: "事实偏好",
     scope: "workspace",
     scopeLabel: "工作区",

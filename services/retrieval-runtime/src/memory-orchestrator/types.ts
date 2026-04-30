@@ -92,7 +92,7 @@ export interface IntentAnalyzer {
 }
 
 export interface WritebackExtractionCandidate {
-  candidate_type: "fact_preference" | "task_state" | "episodic";
+  candidate_type: MemoryType;
   scope: ScopeType;
   summary: string;
   importance: number;

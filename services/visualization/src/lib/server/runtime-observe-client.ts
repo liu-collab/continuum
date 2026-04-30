@@ -59,7 +59,7 @@ export type RuntimeTriggerRecord = {
   triggerType: string | null;
   triggerReason: string | null;
   memoryMode: "workspace_only" | "workspace_plus_global" | null;
-  requestedTypes: Array<"fact_preference" | "task_state" | "episodic">;
+  requestedTypes: Array<"fact" | "preference" | "task_state" | "episodic">;
   requestedScopes: Array<"session" | "task" | "user" | "workspace">;
   selectedScopes: Array<"session" | "task" | "user" | "workspace">;
   scopeDecision: string | null;
@@ -78,7 +78,7 @@ export type RuntimeRecallRecord = {
   triggerType: string | null;
   triggerReason: string | null;
   memoryMode: "workspace_only" | "workspace_plus_global" | null;
-  requestedTypes: Array<"fact_preference" | "task_state" | "episodic">;
+  requestedTypes: Array<"fact" | "preference" | "task_state" | "episodic">;
   requestedScopes: Array<"session" | "task" | "user" | "workspace">;
   selectedScopes: Array<"session" | "task" | "user" | "workspace">;
   scopeHitCounts: Array<{
@@ -236,8 +236,8 @@ export function normalizeRuntimeRunsPayload(
 
 function toRequestedTypes(values: string[]) {
   return values.filter(
-    (item): item is "fact_preference" | "task_state" | "episodic" =>
-      ["fact_preference", "task_state", "episodic"].includes(item)
+    (item): item is "fact" | "preference" | "task_state" | "episodic" =>
+      ["fact", "preference", "task_state", "episodic"].includes(item)
   );
 }
 

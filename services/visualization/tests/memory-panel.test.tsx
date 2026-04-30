@@ -52,7 +52,7 @@ describe("MemoryPanel", () => {
               memory_records: [
                 {
                   id: "memory-workspace",
-                  memory_type: "fact_preference",
+                  memory_type: "preference",
                   scope: "workspace",
                   summary: "当前项目默认使用中文短句说明。",
                   importance: 5,
@@ -136,7 +136,7 @@ describe("MemoryPanel", () => {
               memory_records: [
                 {
                   id: "memory-long",
-                  memory_type: "fact_preference",
+                  memory_type: "preference",
                   scope: "workspace",
                   summary: longRecord,
                   importance: 5,

@@ -509,7 +509,7 @@ describe("AgentRunner", () => {
           task_id: null,
           session_id: "session-001",
           scope: "workspace",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           summary: "用户偏好默认中文输出。",
           details: {},
           importance: 7,
@@ -1255,7 +1255,7 @@ describe("AgentRunner", () => {
         memory_records: [
           {
             id: "pref-1",
-            memory_type: "fact_preference",
+            memory_type: "preference",
             scope: "workspace",
             summary: "默认用中文回答",
             importance: 0.95,
@@ -1426,7 +1426,7 @@ describe("AgentRunner", () => {
         memory_records: [
           {
             id: "resident-pref",
-            memory_type: "fact_preference",
+            memory_type: "preference",
             scope: "user",
             summary: "默认用中文回答",
             importance: 5,
@@ -1530,7 +1530,7 @@ describe("AgentRunner", () => {
           memory_records: [
             {
               id: "resident-pref-1",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "默认用中文回答",
               importance: 5,
@@ -1563,7 +1563,7 @@ describe("AgentRunner", () => {
           memory_records: [
             {
               id: "resident-pref-2",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "默认用英文回答",
               importance: 5,
@@ -1595,7 +1595,7 @@ describe("AgentRunner", () => {
           user_id: "550e8400-e29b-41d4-a716-446655440001",
           task_id: null,
           session_id: "550e8400-e29b-41d4-a716-446655440002",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用英文回答",
           details: {},
@@ -1830,7 +1830,7 @@ describe("AgentRunner", () => {
           user_id: "550e8400-e29b-41d4-a716-446655440001",
           task_id: null,
           session_id: "550e8400-e29b-41d4-a716-446655440002",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认改成 tab 缩进",
           details: {},
@@ -1929,7 +1929,7 @@ describe("AgentRunner", () => {
           memory_records: [
             {
               id: "resident-pref-1",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "默认用中文回答",
               importance: 5,
@@ -1960,7 +1960,7 @@ describe("AgentRunner", () => {
           user_id: "550e8400-e29b-41d4-a716-446655440001",
           task_id: null,
           session_id: "550e8400-e29b-41d4-a716-446655440002",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用英文回答",
           details: {},
@@ -2063,7 +2063,7 @@ describe("AgentRunner", () => {
           user_id: "550e8400-e29b-41d4-a716-446655440001",
           task_id: null,
           session_id: "550e8400-e29b-41d4-a716-446655440002",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用英文回答",
           details: {},
@@ -2152,7 +2152,7 @@ describe("AgentRunner", () => {
           memory_records: [
             {
               id: "resident-pref-1",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "默认用中文回答",
               importance: 5,
@@ -2185,7 +2185,7 @@ describe("AgentRunner", () => {
           memory_records: [
             {
               id: "resident-pref-2",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "默认用英文回答",
               importance: 5,
@@ -2216,7 +2216,7 @@ describe("AgentRunner", () => {
           user_id: "550e8400-e29b-41d4-a716-446655440001",
           task_id: null,
           session_id: "550e8400-e29b-41d4-a716-446655440002",
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用英文回答",
           details: {},

@@ -294,7 +294,8 @@
       "user": "用户"
     },
     "types": {
-      "fact_preference": "偏好",
+      "fact": "事实",
+      "preference": "偏好",
       "task_state": "任务状态",
       "episodic": "片段"
     }

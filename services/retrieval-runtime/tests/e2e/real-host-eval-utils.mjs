@@ -22,7 +22,7 @@ import { URL } from "node:url";
 export const TEST_MEMORY_SEEDS = [
   {
     id: "e2e-mem-001",
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     summary:
       "用户偏好使用 TypeScript 而非 JavaScript，要求所有代码示例都带类型注释",
@@ -42,7 +42,7 @@ export const TEST_MEMORY_SEEDS = [
   },
   {
     id: "e2e-mem-003",
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     summary: "用户喜欢简洁的代码风格，反对过度注释，倾向于自说明变量名",
     importance: 0.8,

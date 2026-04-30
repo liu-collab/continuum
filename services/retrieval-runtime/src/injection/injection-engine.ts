@@ -3,13 +3,15 @@ import type { InjectionBlock, InjectionRecord, MemoryPacket } from "../shared/ty
 import { estimateTokens } from "../shared/utils.js";
 
 const TYPE_PRIORITY = new Map([
-  ["fact_preference", 0],
-  ["task_state", 1],
-  ["episodic", 2],
+  ["fact", 0],
+  ["preference", 1],
+  ["task_state", 2],
+  ["episodic", 3],
 ] as const);
 
 const TYPE_ORDER: Array<MemoryPacket["records"][number]["memory_type"]> = [
-  "fact_preference",
+  "fact",
+  "preference",
   "task_state",
   "episodic",
 ];
@@ -44,7 +46,7 @@ function recordToInjectionRecord(record: MemoryPacket["records"][number]): Injec
 }
 
 function isBlockedByOpenConflict(record: MemoryPacket["records"][number]) {
-  return record.memory_type === "fact_preference" && record.has_open_conflict === true;
+  return record.memory_type === "preference" && record.has_open_conflict === true;
 }
 
 export class InjectionEngine {
@@ -106,7 +108,7 @@ export class InjectionEngine {
         );
       }
 
-      for (const type of ["fact_preference", "task_state"] as const) {
+      for (const type of ["fact", "preference", "task_state"] as const) {
         const first = grouped.get(type)?.[0];
         if (!first) {
           continue;

@@ -40,7 +40,7 @@ const localWriteBackBatchRequestSchema = z.object({
           user_id: z.string().uuid().nullable().optional(),
           task_id: z.string().uuid().nullable().optional(),
           session_id: z.string().uuid().nullable().optional(),
-          candidate_type: z.enum(["fact_preference", "task_state", "episodic"]),
+          candidate_type: z.enum(["preference", "task_state", "episodic"]),
           scope: z.enum(["session", "task", "user", "workspace"]),
           summary: z.string().trim().min(3).max(500),
           details: z.record(z.string(), z.unknown()),
@@ -149,10 +149,12 @@ const config: AppConfig = {
   INJECTION_RECORD_LIMIT: 3,
   INJECTION_TOKEN_BUDGET: 120,
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -312,7 +314,7 @@ class CountingLlmExtractor {
     return {
       candidates: [
         {
-          candidate_type: "fact_preference" as const,
+          candidate_type: "preference" as const,
           scope: "user" as const,
           summary: "默认中文输出",
           importance: 5,
@@ -334,7 +336,7 @@ class CountingLlmExtractor {
           importance: 5,
           confidence: 0.93,
           scope: "user" as const,
-          candidate_type: "fact_preference" as const,
+          candidate_type: "preference" as const,
           reason: "stable preference",
         },
       ],
@@ -349,7 +351,7 @@ const candidateRecords: CandidateMemory[] = [
     user_id: ids.user,
     session_id: ids.session,
     task_id: ids.task,
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     summary: "用户偏好：输出保持中文。",
     importance: 5,
@@ -427,7 +429,7 @@ describe("retrieval-runtime remediation", () => {
       trigger_type: "history_reference",
       trigger_reason:
         "current input explicitly references prior context or preferences",
-      requested_memory_types: ["fact_preference"],
+      requested_memory_types: ["preference"],
       memory_mode: "workspace_plus_global",
       requested_scopes: ["workspace", "task", "user"],
       scope_reason:
@@ -532,7 +534,7 @@ describe("retrieval-runtime remediation", () => {
         trigger_type: "history_reference",
         trigger_reason:
           "current input explicitly references prior context or preferences",
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "task", "user"],
         scope_reason:
@@ -564,7 +566,7 @@ describe("retrieval-runtime remediation", () => {
       phase: "before_response",
       memory_mode: "workspace_plus_global",
       scope_filter: ["workspace", "user", "task", "session"],
-      memory_type_filter: ["fact_preference"],
+      memory_type_filter: ["preference"],
       status_filter: ["active"],
       importance_threshold: 3,
       semantic_query_text: "之前那个偏好",
@@ -602,7 +604,7 @@ describe("retrieval-runtime remediation", () => {
       trigger_type: "history_reference",
       trigger_reason:
         "current input explicitly references prior context or preferences",
-      requested_memory_types: ["fact_preference"],
+      requested_memory_types: ["preference"],
       memory_mode: "workspace_plus_global",
       requested_scopes: ["workspace", "user"],
       scope_reason:
@@ -626,7 +628,7 @@ describe("retrieval-runtime remediation", () => {
       scope_reason:
         "session_start restores workspace memory plus global user memory",
       query_scope: "scope=user",
-      requested_memory_types: ["fact_preference"],
+      requested_memory_types: ["preference"],
       candidate_count: 0,
       selected_count: 0,
       result_state: "empty",
@@ -736,7 +738,7 @@ describe("retrieval-runtime remediation", () => {
     expect(parsed.success).toBe(true);
     expect(
       extracted.candidates.every((candidate) =>
-        ["fact_preference", "task_state", "episodic"].includes(
+        ["preference", "task_state", "episodic"].includes(
           candidate.candidate_type,
         ),
       ),
@@ -819,7 +821,7 @@ describe("retrieval-runtime remediation", () => {
         hit: true,
         trigger_type: "history_reference",
         trigger_reason: "当前输入明确引用了历史上下文或既有偏好。",
-        requested_memory_types: ["fact_preference", "task_state"],
+        requested_memory_types: ["preference", "task_state"],
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "task", "session", "user"],
         scope_reason: "回应前可综合使用工作区、任务、会话和全局用户记忆。",
@@ -849,7 +851,7 @@ describe("retrieval-runtime remediation", () => {
         hit: true,
         trigger_type: "history_reference",
         trigger_reason: "当前输入明确引用了历史上下文或既有偏好。",
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         memory_mode: "workspace_plus_global",
         requested_scopes: ["user"],
         scope_reason: "回应前可综合使用工作区、任务、会话和全局用户记忆。",
@@ -1162,7 +1164,7 @@ describe("retrieval-runtime remediation", () => {
       injection_hint: "测试提示",
       ttl_ms: 1000,
       priority_breakdown: {
-        fact_preference: 2,
+        preference: 2,
         task_state: 0,
         episodic: 0,
       },
@@ -1188,7 +1190,7 @@ describe("retrieval-runtime remediation", () => {
     expect(block?.memory_records[0]?.id).toBe("high-rerank");
   });
 
-  it("reserves space for task_state before filling remaining slots with fact_preference", () => {
+  it("reserves space for task_state before filling remaining slots with preference", () => {
     const engine = new InjectionEngine({
       ...config,
       INJECTION_RECORD_LIMIT: 2,
@@ -1207,7 +1209,7 @@ describe("retrieval-runtime remediation", () => {
       injection_hint: "测试提示",
       ttl_ms: 1000,
       priority_breakdown: {
-        fact_preference: 3,
+        preference: 3,
         task_state: 1,
         episodic: 0,
       },
@@ -1215,7 +1217,7 @@ describe("retrieval-runtime remediation", () => {
         {
           ...baseCandidateRecord,
           id: "pref-1",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "偏好一",
           rerank_score: 0.98,
@@ -1223,7 +1225,7 @@ describe("retrieval-runtime remediation", () => {
         {
           ...baseCandidateRecord,
           id: "pref-2",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "偏好二",
           rerank_score: 0.97,
@@ -1231,7 +1233,7 @@ describe("retrieval-runtime remediation", () => {
         {
           ...baseCandidateRecord,
           id: "pref-3",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "偏好三",
           rerank_score: 0.96,
@@ -1547,7 +1549,7 @@ describe("retrieval-runtime remediation", () => {
               text: JSON.stringify({
                 candidates: [
                   {
-                    candidate_type: "fact_preference",
+                    candidate_type: "preference",
                     scope: "user",
                     summary: "默认中文输出",
                     importance: 5,
@@ -1634,7 +1636,7 @@ describe("retrieval-runtime remediation", () => {
           task_id: ids.task,
           memory_mode: "workspace_plus_global",
           scope_filter: ["user"],
-          memory_type_filter: ["fact_preference"],
+          memory_type_filter: ["preference"],
           status_filter: ["active"],
           importance_threshold: 3,
           semantic_query_text: "之前那个偏好",
@@ -1685,7 +1687,7 @@ describe("retrieval-runtime remediation", () => {
       injection_hint: "测试提示",
       ttl_ms: 1000,
       priority_breakdown: {
-        fact_preference: 2,
+        preference: 2,
         task_state: 1,
         episodic: 0,
       },
@@ -1693,7 +1695,7 @@ describe("retrieval-runtime remediation", () => {
         {
           ...baseCandidateRecord,
           id: "pref-conflict",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           summary: "偏好：用 tab 缩进",
           has_open_conflict: true,
           rerank_score: 0.95,

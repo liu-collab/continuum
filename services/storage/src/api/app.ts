@@ -14,8 +14,6 @@ import {
   recordQuerySchema,
   resolveConflictSchema,
   restoreVersionSchema,
-  runtimeCompatibleWriteBackBatchRequestSchema,
-  runtimeWriteBackBatchRequestSchema,
   writeBackBatchRequestSchema,
   writeBackCandidateSchema,
 } from "../contracts.js";
@@ -63,38 +61,6 @@ export function createApp(service: StorageService): FastifyInstance {
   app.get("/health", async () => ok(await service.getHealth()));
 
   app.post("/v1/storage/write-back-candidates", async (request, reply) => {
-    const runtimeBatch = runtimeWriteBackBatchRequestSchema.safeParse(request.body);
-
-    if (runtimeBatch.success) {
-      const submittedJobs = await service.submitRuntimeWriteBackBatch(runtimeBatch.data);
-      reply.status(202).send({
-        jobs: submittedJobs.map((job) => ({
-          job_id: job.job_id,
-          status: job.status,
-        })),
-        submitted_jobs: submittedJobs,
-      });
-      return;
-    }
-
-    const runtimeCompatibleBatch = runtimeCompatibleWriteBackBatchRequestSchema.safeParse(
-      request.body,
-    );
-
-    if (runtimeCompatibleBatch.success) {
-      const submittedJobs = await service.submitRuntimeCompatibleWriteBackBatch(
-        runtimeCompatibleBatch.data,
-      );
-      reply.status(202).send({
-        jobs: submittedJobs.map((job) => ({
-          job_id: job.job_id,
-          status: job.status,
-        })),
-        submitted_jobs: submittedJobs,
-      });
-      return;
-    }
-
     const batch = writeBackBatchRequestSchema.safeParse(request.body);
 
     if (batch.success) {

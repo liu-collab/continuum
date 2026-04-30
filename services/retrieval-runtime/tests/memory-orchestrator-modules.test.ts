@@ -31,7 +31,7 @@ const sampleRecord: MemoryRecordSnapshot = {
   user_id: "user-1",
   task_id: "task-1",
   session_id: "session-1",
-  memory_type: "fact_preference",
+  memory_type: "preference",
   scope: "user",
   status: "active",
   summary: "默认用中文回答",
@@ -48,7 +48,7 @@ const sampleCandidate: WriteBackCandidate = {
   user_id: "user-1",
   task_id: null,
   session_id: null,
-  candidate_type: "fact_preference",
+  candidate_type: "preference",
   scope: "user",
   summary: "默认用中文回答",
   details: {},
@@ -80,7 +80,7 @@ describe("memory orchestrator extra modules", () => {
               message: {
                 content: JSON.stringify({
                   needs_memory: true,
-                  memory_types: ["fact_preference", "task_state"],
+                  memory_types: ["preference", "task_state"],
                   urgency: "immediate",
                   confidence: 0.91,
                   reason: "用户在继续之前的任务",

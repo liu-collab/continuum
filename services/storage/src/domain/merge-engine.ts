@@ -1,9 +1,9 @@
 import type { MemoryRecord, NormalizedMemory } from "../contracts.js";
 import {
-  canonicalizeFactPreference,
-  isConflictingFactPreference,
-  isSameFactPreference,
-} from "./fact-preference.js";
+  canonicalizePreference,
+  isConflictingPreference,
+  isSamePreference,
+} from "./preference.js";
 
 export type MergeDecisionType =
   | "insert_new"
@@ -68,11 +68,35 @@ export function decideMerge(
     };
   }
 
+  if (normalized.memory_type === "preference") {
+    if (isSamePreferenceRecord(existing, normalized)) {
+      return {
+        decision: "ignore_duplicate",
+        existing_record: existing,
+        reason: "same preference already active",
+      };
+    }
+
+    if (isOppositePreference(existing, normalized)) {
+      return {
+        decision: "open_conflict",
+        existing_record: existing,
+        reason: "new preference conflicts with existing record",
+      };
+    }
+
+    return {
+      decision: "update_existing",
+      existing_record: existing,
+      reason: "preference is stronger and should update existing record",
+    };
+  }
+
   if (isSameFact(existing, normalized)) {
     return {
       decision: "ignore_duplicate",
       existing_record: existing,
-      reason: "same fact or preference already active",
+      reason: "same fact already active",
     };
   }
 
@@ -80,14 +104,14 @@ export function decideMerge(
     return {
       decision: "open_conflict",
       existing_record: existing,
-      reason: "new fact or preference conflicts with existing record",
+      reason: "new fact conflicts with existing record",
     };
   }
 
   return {
     decision: "update_existing",
     existing_record: existing,
-    reason: "fact or preference is stronger and should update existing record",
+    reason: "fact is stronger and should update existing record",
   };
 }
 
@@ -97,28 +121,58 @@ function isSameState(existing: MemoryRecord, normalized: NormalizedMemory): bool
   return existingState === nextState;
 }
 
-function isOppositeFact(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
-  const existingPreference = canonicalizeFactPreference({
+function isOppositePreference(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
+  const existingPreference = canonicalizePreference({
     summary: existing.summary,
     details: existing.details_json,
   });
-  const nextPreference = canonicalizeFactPreference({
+  const nextPreference = canonicalizePreference({
     summary: normalized.summary,
     details: normalized.details,
   });
 
-  return isConflictingFactPreference(existingPreference, nextPreference);
+  return isConflictingPreference(existingPreference, nextPreference);
+}
+
+function isSamePreferenceRecord(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
+  const existingPreference = canonicalizePreference({
+    summary: existing.summary,
+    details: existing.details_json,
+  });
+  const nextPreference = canonicalizePreference({
+    summary: normalized.summary,
+    details: normalized.details,
+  });
+
+  return isSamePreference(existingPreference, nextPreference);
+}
+
+function isOppositeFact(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
+  const existingPredicate = String(existing.details_json.predicate ?? existing.summary);
+  const nextPredicate = String(normalized.details.predicate ?? normalized.summary);
+  return normalizeFactPredicate(existingPredicate) === normalizeFactPredicate(nextPredicate) &&
+    inferFactPolarity(existingPredicate) !== inferFactPolarity(nextPredicate);
 }
 
 function isSameFact(existing: MemoryRecord, normalized: NormalizedMemory): boolean {
-  const existingPreference = canonicalizeFactPreference({
-    summary: existing.summary,
-    details: existing.details_json,
-  });
-  const nextPreference = canonicalizeFactPreference({
-    summary: normalized.summary,
-    details: normalized.details,
-  });
+  const existingPredicate = String(existing.details_json.predicate ?? existing.summary);
+  const nextPredicate = String(normalized.details.predicate ?? normalized.summary);
+  return existingPredicate === nextPredicate;
+}
 
-  return isSameFactPreference(existingPreference, nextPreference);
+function normalizeFactPredicate(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/\b(do not|don't|not|false|disabled|disable|no)\b/g, "")
+    .replace(/不|未|没有|禁用|关闭/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferFactPolarity(input: string): "positive" | "negative" {
+  const normalized = input.toLowerCase();
+  return /\b(do not|don't|not|false|disabled|disable|no)\b/.test(normalized) ||
+    /不|未|没有|禁用|关闭/.test(input)
+    ? "negative"
+    : "positive";
 }

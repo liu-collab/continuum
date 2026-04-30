@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const memoryScopeSchema = z.enum(["workspace", "user", "task", "session"]);
-export const memoryTypeSchema = z.enum(["fact_preference", "task_state", "episodic"]);
+export const memoryTypeSchema = z.enum(["fact", "preference", "task_state", "episodic"]);
 export const memoryImportanceSchema = z.number().int().min(1).max(5);
 export const memoryCandidateLimitSchema = z.number().int().min(1).max(50);
 export const memoryConfidenceSchema = z.number().min(0).max(1);

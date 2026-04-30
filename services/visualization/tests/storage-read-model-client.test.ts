@@ -73,7 +73,7 @@ describe("storage read model catalog view", () => {
       user_id: "user-1",
       task_id: null,
       session_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       status: "active",
       summary: "global memory",

@@ -107,12 +107,12 @@ export function tierMemoryInjection(
 }
 
 function isHighPriority(record: TieredInjectionRecord, config: MemoryTieringConfig) {
-  return record.memory_type === "fact_preference"
+  return (record.memory_type === "fact" || record.memory_type === "preference")
     && (record.importance >= config.highImportanceThreshold || record.confidence >= config.highConfidenceThreshold);
 }
 
 function isMediumPriority(record: TieredInjectionRecord) {
-  return record.memory_type === "task_state" || record.memory_type === "fact_preference" || record.memory_type === "episodic";
+  return ["fact", "preference", "task_state", "episodic"].includes(record.memory_type);
 }
 
 function compareRecords(left: TieredInjectionRecord, right: TieredInjectionRecord) {
@@ -130,12 +130,14 @@ function compareRecords(left: TieredInjectionRecord, right: TieredInjectionRecor
 
 function priorityForType(memoryType: string) {
   switch (memoryType) {
-    case "fact_preference":
+    case "fact":
       return 0;
-    case "task_state":
+    case "preference":
       return 1;
-    case "episodic":
+    case "task_state":
       return 2;
+    case "episodic":
+      return 3;
     default:
       return 99;
   }

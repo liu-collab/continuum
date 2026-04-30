@@ -46,7 +46,7 @@ Your task is to judge whether the current input depends on prior context or dura
 Rules:
 - Focus on whether the user is continuing earlier work, relying on preferences, or asking for continuity.
 - Treat assistant identity, assistant name, and addressing questions as potentially dependent on durable user preferences.
-- memory_types must only use: fact_preference | task_state | episodic.
+- memory_types must only use: fact | preference | task_state | episodic.
 - suggested_scopes must only use: workspace | user | task | session.
 - If uncertain, prefer a conservative answer that keeps memory available.
 - Keep reason short and concrete in Chinese.
@@ -85,7 +85,7 @@ export const MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT = `
 You extract durable memory candidates from one agent turn.
 Return strict JSON only with shape: {"candidates":[...]}.
 Each candidate must include:
-- candidate_type: "fact_preference" | "task_state" | "episodic"
+- candidate_type: "fact" | "preference" | "task_state" | "episodic"
 - scope: "workspace" | "user" | "task" | "session"
 - summary: concise reusable sentence in Chinese or source language
 - importance: integer 1-5
@@ -96,8 +96,8 @@ Rules:
 - Extract only durable, high-value items.
 - Ignore raw transcript fragments, temporary chatter, and speculative content.
 - Use "task_state" only when the turn contains a concrete task progress or next-step update.
-- Use "fact_preference" for stable preferences or confirmed durable facts.
-- Use "fact_preference" for durable naming, addressing, language, style, and interaction preferences.
+- Use "fact" for confirmed durable facts, repository rules, project constraints, toolchain choices, or workspace background.
+- Use "preference" for subjective user preferences, durable naming, addressing, language, style, and interaction preferences.
 - Use "episodic" for concrete commitments or externally observable events that may matter later.
 - Use "workspace" for repository rules, project constraints, directory conventions, or workspace background.
 - Return at most 5 candidates.
@@ -114,8 +114,9 @@ DO NOT extract:
 - Temporary debugging notes, investigation chatter, or restatements of the user's question.
 
 Examples of good extractions:
-- User: "我习惯用 4 空格缩进" -> fact_preference, scope=user, summary="偏好 4 空格缩进"
-- User: "你以后就叫贾维斯" -> fact_preference, scope=user, summary="用户希望助手以后叫贾维斯"
+- User: "我习惯用 4 空格缩进" -> preference, scope=user, summary="偏好 4 空格缩进"
+- User: "你以后就叫贾维斯" -> preference, scope=user, summary="用户希望助手以后叫贾维斯"
+- User: "这个项目用 PostgreSQL 16" -> fact, scope=workspace, summary="项目使用 PostgreSQL 16"
 - Assistant: "数据库迁移已完成，下一步验证回滚" -> task_state, scope=task
 
 Examples of bad extractions:
@@ -212,7 +213,7 @@ Each action MUST match one of:
 - {"type":"merge","target_record_ids":[ids...],"merged_summary":"...","merged_importance":N,"reason":"..."}
 - {"type":"archive","record_id":"...","reason":"..."}
 - {"type":"downgrade","record_id":"...","new_importance":N,"reason":"..."}
-- {"type":"summarize","source_record_ids":[ids...],"new_summary":"...","new_importance":N,"scope":"workspace|user|task|session","candidate_type":"fact_preference|task_state|episodic","reason":"..."}
+- {"type":"summarize","source_record_ids":[ids...],"new_summary":"...","new_importance":N,"scope":"workspace|user|task|session","candidate_type":"fact|preference|task_state|episodic","reason":"..."}
 - {"type":"delete","record_id":"...","reason":"...","delete_reason":"..."}
 - {"type":"resolve_conflict","conflict_id":"...","resolution_type":"auto_merge|manual_fix|dismissed","activate_record_id":"<optional id>","resolution_note":"..."}
 

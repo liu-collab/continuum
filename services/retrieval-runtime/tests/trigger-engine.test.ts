@@ -82,10 +82,12 @@ const config: AppConfig = {
   INJECTION_RECORD_LIMIT: 2,
   INJECTION_TOKEN_BUDGET: 256,
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -128,7 +130,7 @@ class CapturingReadModelRepository implements ReadModelRepository {
   async estimateAvailability(_query: ReadModelAvailabilityQuery) {
     return {
       total_count: 6,
-      type_distribution: { fact_preference: 6 },
+      type_distribution: { preference: 6 },
     };
   }
 
@@ -152,7 +154,7 @@ class CapturingReadModelRepository implements ReadModelRepository {
       user_id: ids.user,
       session_id: null,
       task_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       summary: "用户的长期偏好和任务约定",
       details: null,
@@ -319,7 +321,7 @@ describe("semantic trigger fallback", () => {
       should_search: true,
       reason: "planner eventually found memory need",
       requested_scopes: ["user"],
-      requested_memory_types: ["fact_preference"],
+      requested_memory_types: ["preference"],
       candidate_limit: 6,
     });
     const triggerEngine = new TriggerEngine(

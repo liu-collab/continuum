@@ -9,7 +9,7 @@ export const runtimePhaseSchema = z.enum([
   "before_response",
   "after_response",
 ]);
-export const memoryTypeSchema = z.enum(["fact_preference", "task_state", "episodic"]);
+export const memoryTypeSchema = z.enum(["fact", "preference", "task_state", "episodic"]);
 export const scopeTypeSchema = z.enum(["workspace", "user", "task", "session"]);
 export const recordStatusSchema = z.enum(["active", "pending_confirmation", "superseded", "archived", "deleted"]);
 export const dependencyStateSchema = z.enum(["healthy", "degraded", "unavailable", "unknown"]);

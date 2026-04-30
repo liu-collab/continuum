@@ -6,7 +6,7 @@ import { textToLines } from "../shared/utils.js";
 
 function summarizeRecords(records: CandidateMemory[]): string {
   const visibleRecords = records.filter(
-    (record) => !(record.memory_type === "fact_preference" && record.has_open_conflict),
+    (record) => !(record.memory_type === "preference" && record.has_open_conflict),
   );
 
   if (visibleRecords.length === 0) {
@@ -20,7 +20,7 @@ function summarizeRecords(records: CandidateMemory[]): string {
     groups.set(record.memory_type, current);
   }
 
-  const orderedTypes: MemoryType[] = ["fact_preference", "task_state", "episodic"];
+  const orderedTypes: MemoryType[] = ["fact", "preference", "task_state", "episodic"];
   return orderedTypes
     .filter((type) => (groups.get(type)?.length ?? 0) > 0)
     .map((type) => {
@@ -45,7 +45,8 @@ export function buildMemoryPacket(
 ): MemoryPacket {
   const selectedScopes = [...new Set(candidates.map((candidate) => candidate.scope))] as ScopeType[];
   const priority_breakdown: Record<MemoryType, number> = {
-    fact_preference: candidates.filter((candidate) => candidate.memory_type === "fact_preference").length,
+    fact: candidates.filter((candidate) => candidate.memory_type === "fact").length,
+    preference: candidates.filter((candidate) => candidate.memory_type === "preference").length,
     task_state: candidates.filter((candidate) => candidate.memory_type === "task_state").length,
     episodic: candidates.filter((candidate) => candidate.memory_type === "episodic").length,
   };

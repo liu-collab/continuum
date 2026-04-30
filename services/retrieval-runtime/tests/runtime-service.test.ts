@@ -122,10 +122,12 @@ const baseConfig: AppConfig = {
   INJECTION_RECORD_LIMIT: 2,
   INJECTION_TOKEN_BUDGET: 256,
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -152,7 +154,7 @@ const sampleRecords: CandidateMemory[] = [
     user_id: ids.user,
     session_id: null,
     task_id: null,
-    memory_type: "fact_preference",
+    memory_type: "fact",
     scope: "workspace",
     summary: "工作区约束：这个仓库默认保持中文注释和简洁输出。",
     details: null,
@@ -170,7 +172,7 @@ const sampleRecords: CandidateMemory[] = [
     user_id: ids.user,
     session_id: ids.session,
     task_id: null,
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     summary: "用户偏好：默认用中文，回答尽量简短直接。",
     details: null,
@@ -580,7 +582,7 @@ class StubIntentAnalyzer implements IntentAnalyzer {
   constructor(
     private readonly output: {
       needs_memory: boolean;
-      memory_types: Array<"fact_preference" | "task_state" | "episodic">;
+      memory_types: Array<"preference" | "task_state" | "episodic">;
       urgency: "immediate" | "deferred" | "optional";
       confidence: number;
       reason: string;
@@ -685,7 +687,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "should not be called",
       requested_scopes: ["workspace", "user"],
-      requested_memory_types: ["fact_preference", "task_state"],
+      requested_memory_types: ["preference", "task_state"],
       importance_threshold: 4,
       query_hint: "unused",
       candidate_limit: 4,
@@ -919,7 +921,7 @@ describe("retrieval-runtime service", () => {
     expect(response.memory_packet?.records.length).toBeGreaterThan(0);
     expect(response.injection_block?.memory_mode).toBe("workspace_plus_global");
     expect(response.injection_block?.requested_scopes).toContain("workspace");
-    expect(response.injection_block?.memory_summary).toContain("偏好与约束");
+    expect(response.injection_block?.memory_summary).toContain("事实与约束");
     expect(response.memory_packet?.injection_hint).toContain("优先");
   });
 
@@ -951,7 +953,7 @@ describe("retrieval-runtime service", () => {
           user_id: ids.user,
           session_id: null,
           task_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "用户偏好：使用 TypeScript。",
           details: null,
@@ -988,7 +990,7 @@ describe("retrieval-runtime service", () => {
         should_search: true,
         reason: "用户在隐式引用之前确认过的做法，需要先查记忆。",
         requested_scopes: ["workspace", "task", "session", "user"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["preference", "task_state", "episodic"],
         importance_threshold: 3,
         query_hint: "继续沿用用户已经确认过的输出偏好和当前任务状态",
         candidate_limit: 6,
@@ -998,7 +1000,7 @@ describe("retrieval-runtime service", () => {
         selected_record_ids: ["mem-preference", "mem-task"],
         memory_summary: "偏好与任务状态：默认中文回答，并继续当前 retrieval-runtime 接口测试任务。",
         requested_scopes: ["workspace", "task", "session", "user"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["preference", "task_state", "episodic"],
         importance_threshold: 3,
       }),
     });
@@ -1027,7 +1029,7 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: null,
       task_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       summary: `用户纠正后的长期偏好：旧偏好 ${index}`,
       details: null,
@@ -1046,7 +1048,7 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: null,
       task_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       summary: "用户希望助手以后叫贾维斯",
       details: null,
@@ -1063,7 +1065,7 @@ describe("retrieval-runtime service", () => {
       embeddingsClient: new StubEmbeddingsClient([0, 1, 0]),
       intentAnalyzer: new StubIntentAnalyzer({
         needs_memory: false,
-        memory_types: ["fact_preference", "task_state", "episodic"],
+        memory_types: ["preference", "task_state", "episodic"],
         urgency: "optional",
         confidence: 0.98,
         reason: "用户在询问当前助手身份，不依赖先前上下文或长期记忆。",
@@ -1100,7 +1102,7 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: null,
       task_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       summary: `用户纠正后的长期偏好：旧偏好 ${index}`,
       details: null,
@@ -1119,7 +1121,7 @@ describe("retrieval-runtime service", () => {
       user_id: ids.user,
       session_id: null,
       task_id: null,
-      memory_type: "fact_preference",
+      memory_type: "preference",
       scope: "user",
       summary: "用户希望助手以后叫基维斯",
       details: null,
@@ -1136,7 +1138,7 @@ describe("retrieval-runtime service", () => {
       embeddingsClient: new StubEmbeddingsClient([0, 1, 0]),
       intentAnalyzer: new StubIntentAnalyzer({
         needs_memory: false,
-        memory_types: ["fact_preference", "task_state", "episodic"],
+        memory_types: ["preference", "task_state", "episodic"],
         urgency: "optional",
         confidence: 0.98,
         reason: "用户在询问当前助手身份。",
@@ -1173,7 +1175,7 @@ describe("retrieval-runtime service", () => {
           should_search: true,
           reason: "需要查找用户偏好。",
           requested_scopes: ["user"],
-          requested_memory_types: ["fact_preference"],
+          requested_memory_types: ["preference"],
           importance_threshold: 3,
           candidate_limit: 6,
         };
@@ -1186,7 +1188,7 @@ describe("retrieval-runtime service", () => {
           selected_record_ids: ["mem-preference"],
           memory_summary: "用户偏好：默认用中文，回答尽量简短直接。",
           requested_scopes: ["user"],
-          requested_memory_types: ["fact_preference"],
+          requested_memory_types: ["preference"],
           importance_threshold: 3,
         };
       },
@@ -1222,7 +1224,7 @@ describe("retrieval-runtime service", () => {
     const { service, repository } = createRuntime({
       intentAnalyzer: new StubIntentAnalyzer({
         needs_memory: true,
-        memory_types: ["fact_preference", "task_state"],
+        memory_types: ["preference", "task_state"],
         urgency: "immediate",
         confidence: 0.92,
         reason: "用户在继续之前的任务，需要恢复偏好和任务状态。",
@@ -1232,7 +1234,7 @@ describe("retrieval-runtime service", () => {
         should_search: true,
         reason: "继续任务前先恢复记忆。",
         requested_scopes: ["user", "task"],
-        requested_memory_types: ["fact_preference", "task_state"],
+        requested_memory_types: ["preference", "task_state"],
         importance_threshold: 3,
         query_hint: "继续之前的任务与偏好",
         candidate_limit: 6,
@@ -1265,7 +1267,7 @@ describe("retrieval-runtime service", () => {
   it("uses one unified recall planner call for intent and search planning", async () => {
     const intentAnalyzer = new StubIntentAnalyzer({
       needs_memory: true,
-      memory_types: ["fact_preference"],
+      memory_types: ["preference"],
       urgency: "immediate",
       confidence: 0.92,
       reason: "旧意图分析器不应被调用。",
@@ -1278,7 +1280,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "继续任务前先恢复记忆。",
       requested_scopes: ["user", "task"],
-      requested_memory_types: ["fact_preference", "task_state"],
+      requested_memory_types: ["preference", "task_state"],
       importance_threshold: 3,
       query_hint: "继续之前的任务与偏好",
       candidate_limit: 6,
@@ -1326,7 +1328,7 @@ describe("retrieval-runtime service", () => {
           user_id: ids.user,
           task_id: ids.task,
           session_id: ids.session,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           status: "active",
           summary: "默认用中文输出",
@@ -1456,7 +1458,7 @@ describe("retrieval-runtime service", () => {
         should_search: true,
         reason: "继续当前任务，需要先查相关记忆。",
         requested_scopes: ["task", "user", "workspace"],
-        requested_memory_types: ["task_state", "fact_preference", "episodic"],
+        requested_memory_types: ["task_state", "preference", "episodic"],
         importance_threshold: 3,
         query_hint: "继续当前任务",
         candidate_limit: 6,
@@ -1629,7 +1631,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续之前的任务",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续之前的任务状态",
       candidate_limit: 6,
@@ -1642,9 +1644,11 @@ describe("retrieval-runtime service", () => {
     const { service, repository } = createRuntime({
       llmRecallPlanner: planner,
       config: {
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
         INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
         INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
       },
     });
@@ -1687,7 +1691,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续之前的任务",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续之前的任务状态",
       candidate_limit: 6,
@@ -1700,9 +1704,11 @@ describe("retrieval-runtime service", () => {
     const { service } = createRuntime({
       llmRecallPlanner: planner,
       config: {
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
         INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 1,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
         INJECTION_HARD_WINDOW_MS_TASK_STATE: 0,
       },
     });
@@ -1750,7 +1756,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续之前的任务",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续之前的任务状态",
       candidate_limit: 6,
@@ -1802,7 +1808,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续之前的任务",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续之前的任务状态",
       candidate_limit: 6,
@@ -1815,9 +1821,11 @@ describe("retrieval-runtime service", () => {
     const { service, repository } = createRuntime({
       llmRecallPlanner: planner,
       config: {
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 99,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 99,
         INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 99,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
         INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
       },
     });
@@ -1854,7 +1862,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要恢复之前讨论过的上下文",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "restore earlier discussion",
       candidate_limit: 6,
@@ -1906,7 +1914,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要切换后恢复任务上下文",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "切换任务后恢复上下文",
       candidate_limit: 6,
@@ -1967,7 +1975,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续之前的任务",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续之前的任务状态",
       candidate_limit: 6,
@@ -1985,9 +1993,11 @@ describe("retrieval-runtime service", () => {
     const createService = () => {
       const config = {
         ...baseConfig,
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
         INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
         INJECTION_HARD_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
       };
       const dependencyGuard = new DependencyGuard(repository, logger);
@@ -2068,7 +2078,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续恢复偏好",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "恢复最新偏好",
       candidate_limit: 6,
@@ -2088,8 +2098,10 @@ describe("retrieval-runtime service", () => {
       llmRecallPlanner: planner,
       readModelRepository,
       config: {
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 99,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
       },
     });
 
@@ -2332,7 +2344,7 @@ describe("retrieval-runtime service", () => {
         should_search: false,
         reason: "health check",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         importance_threshold: 3,
       }, {
         should_inject: false,
@@ -2340,7 +2352,7 @@ describe("retrieval-runtime service", () => {
         selected_record_ids: [],
         memory_summary: "",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         importance_threshold: 3,
       }),
     });
@@ -2455,12 +2467,12 @@ describe("retrieval-runtime service", () => {
     expect(response.submitted_jobs.every((job) => job.status === "accepted_async")).toBe(true);
     expect(
       response.write_back_candidates.every((candidate) =>
-        ["fact_preference", "task_state", "episodic"].includes(candidate.candidate_type),
+        ["preference", "task_state", "episodic"].includes(candidate.candidate_type),
       ),
     ).toBe(true);
     expect(response.write_back_candidates.every((candidate) => candidate.source.service_name === "retrieval-runtime")).toBe(true);
     expect(
-      response.write_back_candidates.filter((candidate) => candidate.candidate_type === "fact_preference").map((candidate) => candidate.scope),
+      response.write_back_candidates.filter((candidate) => candidate.candidate_type === "preference").map((candidate) => candidate.scope),
     ).toEqual(["user"]);
     expect(response.memory_mode).toBe("workspace_plus_global");
   });
@@ -2482,7 +2494,7 @@ describe("retrieval-runtime service", () => {
     expect(
       response.write_back_candidates.some(
         (candidate) =>
-          candidate.candidate_type === "fact_preference"
+          candidate.candidate_type === "preference"
           && candidate.scope === "user"
           && candidate.summary.includes("以后默认用中文回答"),
       ),
@@ -2507,7 +2519,7 @@ describe("retrieval-runtime service", () => {
     expect(
       response.write_back_candidates.some(
         (candidate) =>
-          candidate.candidate_type === "fact_preference"
+          candidate.candidate_type === "preference"
           && candidate.scope === "user"
           && candidate.summary.includes("默认用中文回答"),
       ),
@@ -2519,7 +2531,7 @@ describe("retrieval-runtime service", () => {
     const llmExtractor = new SpyLlmExtractor({
       candidates: [
         {
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用中文输出",
           importance: 5,
@@ -2554,7 +2566,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "用户希望助手以后叫自己贾维斯",
             importance: 5,
@@ -2605,7 +2617,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认用中文输出",
             importance: 5,
@@ -2643,7 +2655,7 @@ describe("retrieval-runtime service", () => {
       assistant_output: "收到，我会统一改成中文输出。",
     });
 
-    expect(response.filtered_reasons).toContain("quality_blocked:fact_preference");
+    expect(response.filtered_reasons).toContain("quality_blocked:preference");
   });
 
   it("blocks llm-only new candidates when quality assessor is unavailable", async () => {
@@ -2651,7 +2663,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认用中文输出",
             importance: 5,
@@ -2673,7 +2685,7 @@ describe("retrieval-runtime service", () => {
     });
 
     expect(response.write_back_candidates).toHaveLength(0);
-    expect(response.filtered_reasons).toContain("quality_assessor_fallback_blocked:fact_preference");
+    expect(response.filtered_reasons).toContain("quality_assessor_fallback_blocked:preference");
   });
 
   it("keeps rule candidates when quality assessor is unavailable", async () => {
@@ -2693,7 +2705,7 @@ describe("retrieval-runtime service", () => {
 
     expect(response.write_back_candidates.length).toBeGreaterThan(0);
     expect(response.write_back_candidates.some((candidate) => candidate.source.source_type !== "memory_llm")).toBe(true);
-    expect(response.filtered_reasons).not.toContain("quality_assessor_fallback_blocked:fact_preference");
+    expect(response.filtered_reasons).not.toContain("quality_assessor_fallback_blocked:preference");
   });
 
   it("keeps writeback candidates compatible when quality assessor suggests manual review", async () => {
@@ -2701,7 +2713,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认用中文输出",
             importance: 5,
@@ -2748,7 +2760,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认用中文输出",
             importance: 5,
@@ -2801,7 +2813,7 @@ describe("retrieval-runtime service", () => {
         should_search: true,
         reason: "需要继续之前的任务",
         requested_scopes: ["workspace", "task", "session", "user"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["preference", "task_state", "episodic"],
         importance_threshold: 3,
         query_hint: "继续之前的任务状态",
         candidate_limit: 6,
@@ -2857,7 +2869,7 @@ describe("retrieval-runtime service", () => {
       assistant_output: "已确认: 后续都用中文。",
     });
 
-    const factPreferences = response.write_back_candidates.filter((candidate) => candidate.candidate_type === "fact_preference");
+    const factPreferences = response.write_back_candidates.filter((candidate) => candidate.candidate_type === "preference");
     expect(factPreferences).toHaveLength(1);
     expect(factPreferences[0]?.scope).toBe("user");
   });
@@ -2875,7 +2887,7 @@ describe("retrieval-runtime service", () => {
     });
 
     const factPreference = response.write_back_candidates.find(
-      (candidate) => candidate.candidate_type === "fact_preference",
+      (candidate) => candidate.candidate_type === "preference",
     );
 
     expect(factPreference?.details).toMatchObject({
@@ -2901,7 +2913,7 @@ describe("retrieval-runtime service", () => {
     });
 
     const factPreference = response.write_back_candidates.find(
-      (candidate) => candidate.candidate_type === "fact_preference",
+      (candidate) => candidate.candidate_type === "preference",
     );
 
     expect(factPreference?.details.origin_trace).toMatchObject({
@@ -2918,7 +2930,7 @@ describe("retrieval-runtime service", () => {
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认使用中文输出",
             importance: 5,
@@ -3053,7 +3065,7 @@ describe("retrieval-runtime service", () => {
           user_id: ids.user,
           session_id: null,
           task_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "workspace",
           summary: "另一个工作区约束：不要带进当前仓库。",
           details: null,
@@ -3071,7 +3083,7 @@ describe("retrieval-runtime service", () => {
           user_id: ids.user,
           session_id: null,
           task_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "全局偏好：始终用中文回答。",
           details: null,
@@ -3177,7 +3189,7 @@ describe("retrieval-runtime service", () => {
             user_id: ids.user,
             task_id: null,
             session_id: null,
-            memory_type: "fact_preference",
+            memory_type: "preference",
             scope: "user",
             status: "active",
             summary: "用户偏好：用 4 空格缩进。",
@@ -3420,7 +3432,7 @@ describe("retrieval-runtime service", () => {
       should_search: true,
       reason: "需要继续恢复记忆",
       requested_scopes: ["workspace", "task", "session", "user"],
-      requested_memory_types: ["fact_preference", "task_state", "episodic"],
+      requested_memory_types: ["preference", "task_state", "episodic"],
       importance_threshold: 3,
       query_hint: "继续当前记忆上下文",
       candidate_limit: 6,
@@ -3433,9 +3445,11 @@ describe("retrieval-runtime service", () => {
     const { service, repository } = createRuntime({
       llmRecallPlanner: planner,
       config: {
-        INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 99,
+        INJECTION_HARD_WINDOW_TURNS_FACT: 99,
+        INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 99,
         INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 0,
-        INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_FACT: 60 * 60 * 1000,
+        INJECTION_HARD_WINDOW_MS_PREFERENCE: 60 * 60 * 1000,
         INJECTION_HARD_WINDOW_MS_TASK_STATE: 0,
         INJECTION_SOFT_WINDOW_MS_TASK_STATE: 60 * 60 * 1000,
       },
@@ -3574,7 +3588,7 @@ describe("retrieval-runtime service", () => {
     const llmExtractor = new SpyLlmExtractor({
       candidates: [
         {
-          candidate_type: "fact_preference",
+          candidate_type: "preference",
           scope: "user",
           summary: "默认用中文输出",
           importance: 5,
@@ -3672,12 +3686,12 @@ describe("retrieval-runtime service", () => {
     expect(llmExtractor.refineCallCount).toBe(0);
   });
 
-  it("keeps upstream scope suggestions for llm candidates and leaves final arbitration to storage", async () => {
+  it("uses weighted local signals when classifying llm candidate scopes", async () => {
     const { service } = createRuntime({
       llmExtractor: new StubLlmExtractor({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "workspace",
             summary: "默认使用中文输出",
             importance: 5,
@@ -3685,7 +3699,7 @@ describe("retrieval-runtime service", () => {
             write_reason: "stable user preference",
           },
           {
-            candidate_type: "fact_preference",
+            candidate_type: "fact",
             scope: "workspace",
             summary: "仓库规则：提交前必须跑接口测试",
             importance: 5,
@@ -3708,7 +3722,8 @@ describe("retrieval-runtime service", () => {
     const llmCandidates = response.write_back_candidates.filter(
       (candidate) => candidate.source.extraction_method === "llm",
     );
-    expect(llmCandidates.map((candidate) => candidate.scope)).toEqual(["workspace", "workspace"]);
+    expect(llmCandidates.map((candidate) => candidate.scope)).toEqual(["user", "workspace"]);
+    expect(llmCandidates.map((candidate) => candidate.candidate_type)).toEqual(["preference", "fact"]);
   });
 
   it("serves public HTTP endpoints with stable response shapes", async () => {
@@ -3906,7 +3921,7 @@ describe("retrieval-runtime service", () => {
 
     expect(response.injection_block).not.toBeNull();
     expect(response.additional_context).toContain("恢复");
-    expect(response.injection_block?.memory_summary).toContain("偏好与约束");
+    expect(response.injection_block?.memory_summary).toContain("事实与约束");
   });
 
   it("surfaces maintenance conflict responses through the HTTP layer", async () => {

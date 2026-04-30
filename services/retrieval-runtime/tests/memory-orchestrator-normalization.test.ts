@@ -203,7 +203,7 @@ describe("memory orchestrator response normalization", () => {
           user_id: "user-1",
           task_id: null,
           session_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           status: "active",
           summary: "默认中文回答",

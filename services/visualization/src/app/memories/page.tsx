@@ -67,7 +67,8 @@ export default async function MemoriesPage({
                     { label: t("enums.memoryViewMode.workspace_only"), value: "workspace_only" }
                   ]} />
                   <FormField label={t("memories.fields.type")} name="memory_type" defaultValue={filters.memoryType} options={[
-                    { label: t("enums.memoryType.fact_preference"), value: "fact_preference" },
+                    { label: t("enums.memoryType.fact"), value: "fact" },
+                    { label: t("enums.memoryType.preference"), value: "preference" },
                     { label: t("enums.memoryType.task_state"), value: "task_state" },
                     { label: t("enums.memoryType.episodic"), value: "episodic" }
                   ]} />

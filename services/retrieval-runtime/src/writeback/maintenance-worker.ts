@@ -566,7 +566,7 @@ export class WritebackMaintenanceWorker {
 
     if (evolutionPlan.extracted_knowledge && this.writebackEngine) {
       const knowledge = evolutionPlan.extracted_knowledge;
-      const candidate_type = knowledge.suggested_scope === "user" ? "fact_preference" : "episodic";
+      const candidate_type = knowledge.suggested_scope === "user" ? "preference" : "fact";
       await this.writebackEngine.assessAndSubmitCandidates(
         [
           {

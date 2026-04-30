@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const MemoryTypeSchema = z.enum(["fact_preference", "task_state", "episodic"]);
+export const MemoryTypeSchema = z.enum(["fact", "preference", "task_state", "episodic"]);
 export type MemoryType = z.infer<typeof MemoryTypeSchema>;
 
 export const ScopeSchema = z.enum(["session", "task", "user", "workspace"]);

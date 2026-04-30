@@ -43,7 +43,7 @@ describe("memory orchestrator factory", () => {
         return {
           candidates: [
             {
-              candidate_type: "fact_preference",
+              candidate_type: "preference",
               scope: "user",
               summary: "默认中文",
               importance: 5,
@@ -63,7 +63,7 @@ describe("memory orchestrator factory", () => {
               importance: 5,
               confidence: 0.9,
               scope: "user",
-              candidate_type: "fact_preference",
+              candidate_type: "preference",
               reason: "stable preference",
             },
           ],
@@ -122,7 +122,7 @@ describe("memory orchestrator factory", () => {
         },
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
       }) ?? Promise.reject(new Error("missing search planner")),
     ).resolves.toEqual({ should_search: true, reason: "search" });
 
@@ -138,7 +138,7 @@ describe("memory orchestrator factory", () => {
         },
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         candidates: [],
       }) ?? Promise.reject(new Error("missing injection planner")),
     ).resolves.toMatchObject({ should_inject: true, reason: "inject" });
@@ -164,7 +164,7 @@ describe("memory orchestrator factory", () => {
       memoryWritebackExtractionSchema.parse({
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "默认中文",
             importance: 5,

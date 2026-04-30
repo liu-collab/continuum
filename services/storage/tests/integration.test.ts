@@ -70,7 +70,7 @@ describe.skipIf(!testDatabaseUrl)("storage postgres integration", () => {
     expect(readModelRows.rows[0]?.created_at).toBeTruthy();
   });
 
-  it("maps runtime batch contract to storage candidate shape", async () => {
+  it("processes episodic task memories without runtime type mapping", async () => {
     const context = await createPostgresTestContext("storage_runtime_batch");
     cleanups.push(() => context.cleanup());
 
@@ -82,35 +82,32 @@ describe.skipIf(!testDatabaseUrl)("storage postgres integration", () => {
       database: context.database,
     });
 
-    const submitted = await service.submitRuntimeCompatibleWriteBackBatch({
+    const submitted = await service.submitWriteBackCandidate({
+      candidate_type: "episodic",
+      scope: "task",
       workspace_id: "11111111-1111-4111-8111-111111111111",
       user_id: "22222222-2222-4222-8222-222222222222",
       session_id: "33333333-3333-4333-8333-333333333333",
       task_id: "44444444-4444-4444-8444-444444444444",
-      source_service: "retrieval-runtime",
-      candidates: [
-        {
-          candidate_type: "commitment",
-          scope: "task",
-          summary: "Will finish the migration cleanup today",
-          details: {
-            promise: "finish the migration cleanup today",
-          },
-          importance: 4,
-          confidence: 0.9,
-          write_reason: "user made an explicit commitment",
-          source: {
-            host: "codex_app_server",
-            session_id: "33333333-3333-4333-8333-333333333333",
-            turn_id: "turn-9",
-            task_id: "44444444-4444-4444-8444-444444444444",
-          },
-          dedupe_key: "commitment:finish-migration-cleanup",
-        },
-      ],
+      summary: "Will finish the migration cleanup today",
+      details: {
+        event_kind: "task_commitment",
+        promise: "finish the migration cleanup today",
+      },
+      importance: 4,
+      confidence: 0.9,
+      write_reason: "user made an explicit commitment",
+      source: {
+        source_type: "codex_app_server",
+        source_ref: "turn-9",
+        service_name: "retrieval-runtime",
+        origin_workspace_id: "11111111-1111-4111-8111-111111111111",
+        confirmed_by_user: true,
+      },
+      idempotency_key: "episodic-task-finish-migration-cleanup",
     });
 
-    expect(submitted).toHaveLength(1);
+    expect(submitted.job_status).toBe("queued");
 
     await service.processWriteJobs();
 
@@ -129,10 +126,7 @@ describe.skipIf(!testDatabaseUrl)("storage postgres integration", () => {
     expect(records.items[0]?.memory_type).toBe("episodic");
     expect(records.items[0]?.task_id).toBe("44444444-4444-4444-8444-444444444444");
     expect(records.items[0]?.source_type).toBe("codex_app_server");
-    expect(records.items[0]?.details_json.runtime_candidate_type).toBe("commitment");
-    expect((records.items[0]?.details_json.runtime_source as { host?: string })?.host).toBe(
-      "codex_app_server",
-    );
+    expect(records.items[0]?.details_json.event_kind).toBe("task_commitment");
   });
 
   it("writes summary embedding when embedding client is configured", async () => {
@@ -201,7 +195,7 @@ describe.skipIf(!testDatabaseUrl)("storage postgres integration", () => {
         source_service: "retrieval-runtime",
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             summary: "User prefers concise answers",
             details: {
@@ -216,7 +210,7 @@ describe.skipIf(!testDatabaseUrl)("storage postgres integration", () => {
               session_id: "33333333-3333-4333-8333-333333333333",
               turn_id: "turn-1",
             },
-            dedupe_key: "fact_preference:user:user prefers concise answers",
+            dedupe_key: "preference:user:user prefers concise answers",
           },
         ],
       },

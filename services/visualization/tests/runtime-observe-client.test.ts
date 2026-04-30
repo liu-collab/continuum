@@ -26,7 +26,7 @@ describe("runtime observe contract parsing", () => {
             trigger_hit: true,
             trigger_type: "history_reference",
             trigger_reason: "current input explicitly references prior context or preferences",
-            requested_memory_types: ["fact_preference"],
+            requested_memory_types: ["preference"],
             scope_limit: ["user"],
             importance_threshold: 3,
             cooldown_applied: false,
@@ -46,7 +46,7 @@ describe("runtime observe contract parsing", () => {
               user: 1
             },
             query_scope: "scope=user",
-            requested_memory_types: ["fact_preference"],
+            requested_memory_types: ["preference"],
             candidate_count: 2,
             selected_count: 1,
             result_state: "matched",
@@ -109,7 +109,7 @@ describe("runtime observe contract parsing", () => {
     });
 
     expect(snapshot.turns[0]?.turnId).toBe("turn-1");
-    expect(snapshot.triggerRuns[0]?.requestedTypes).toEqual(["fact_preference"]);
+    expect(snapshot.triggerRuns[0]?.requestedTypes).toEqual(["preference"]);
     expect(snapshot.recallRuns[0]?.selectedCount).toBe(1);
     expect(snapshot.recallRuns[0]?.selectedScopes).toEqual(["user"]);
     expect(snapshot.recallRuns[0]?.scopeHitCounts).toEqual([{ scope: "user", count: 1 }]);
@@ -144,7 +144,7 @@ describe("runtime observe contract parsing", () => {
           trigger_hit: true,
           trigger_type: "phase",
           trigger_reason: "before_response is mandatory",
-          requested_memory_types: ["fact_preference"],
+          requested_memory_types: ["preference"],
           scope_limit: ["user"],
           importance_threshold: 3,
           cooldown_applied: false,
@@ -165,7 +165,7 @@ describe("runtime observe contract parsing", () => {
           matched_scopes: ["user", "workspace"],
           scope_hit_counts: { user: 1, workspace: 1 },
           query_scope: "user",
-          requested_memory_types: ["fact_preference"],
+          requested_memory_types: ["preference"],
           candidate_count: 5,
           selected_count: 2,
           result_state: "matched",
@@ -262,7 +262,7 @@ describe("runtime observe contract parsing", () => {
       triggerHit: true,
       triggerType: "phase",
       triggerReason: "before_response is mandatory",
-      requestedTypes: ["fact_preference"],
+      requestedTypes: ["preference"],
       scopeLimit: ["user"],
       importanceThreshold: 3
     });

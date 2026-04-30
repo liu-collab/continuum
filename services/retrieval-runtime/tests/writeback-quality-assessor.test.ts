@@ -87,10 +87,12 @@ const config: AppConfig = {
   INJECTION_RECORD_LIMIT: 2,
   INJECTION_TOKEN_BUDGET: 256,
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -186,7 +188,7 @@ class StubWritebackPlanner implements WritebackPlanner {
     return {
       candidates: [
         {
-          candidate_type: "fact_preference" as const,
+          candidate_type: "preference" as const,
           scope: "user" as const,
           summary: this.summary,
           importance: 4,
@@ -235,7 +237,7 @@ describe("writeback quality assessor integration", () => {
     });
 
     expect(result.candidates).toHaveLength(0);
-    expect(result.filtered_reasons).toContain("quality_blocked:fact_preference");
+    expect(result.filtered_reasons).toContain("quality_blocked:preference");
   });
 
   it("marks candidates as pending confirmation when quality assessor requests review", async () => {
@@ -286,7 +288,7 @@ describe("writeback quality assessor integration", () => {
     expect(result.candidates).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          candidate_type: "fact_preference",
+          candidate_type: "fact",
           scope: "workspace",
           summary: expect.stringContaining("这个项目默认用 4 空格缩进"),
         }),
@@ -318,7 +320,7 @@ describe("writeback quality assessor integration", () => {
 
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]?.summary).toBe("默认中文输出");
-    expect(result.filtered_reasons).toContain("low_input_overlap:fact_preference");
+    expect(result.filtered_reasons).toContain("low_input_overlap:preference");
   });
 
   it("merges independently confirmed rule and llm candidates without calling refine", async () => {
@@ -349,7 +351,7 @@ describe("writeback quality assessor integration", () => {
     expect(planner.refineCallCount).toBe(0);
     expect(planner.lastRuleHints).toEqual([
       expect.objectContaining({
-        candidate_type: "fact_preference",
+        candidate_type: "preference",
         summary: "默认中文输出",
       }),
     ]);

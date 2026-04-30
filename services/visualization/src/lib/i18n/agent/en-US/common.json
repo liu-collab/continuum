@@ -294,7 +294,8 @@
       "user": "User"
     },
     "types": {
-      "fact_preference": "Preference",
+      "fact": "Fact",
+      "preference": "Preference",
       "task_state": "Task state",
       "episodic": "Episode"
     }

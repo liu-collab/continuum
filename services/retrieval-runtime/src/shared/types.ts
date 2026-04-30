@@ -8,7 +8,7 @@ export type RuntimePhase =
   | "before_response"
   | "after_response";
 
-export type MemoryType = "fact_preference" | "task_state" | "episodic";
+export type MemoryType = "fact" | "preference" | "task_state" | "episodic";
 export type MemoryMode = "workspace_only" | "workspace_plus_global";
 export type ScopeType = "workspace" | "user" | "task" | "session";
 export type RecordStatus = "active" | "pending_confirmation" | "superseded" | "archived" | "deleted";

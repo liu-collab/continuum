@@ -289,7 +289,7 @@ class StorageReadModelRepository {
     session_id: string;
     task_id?: string;
     scope_filter: Array<"workspace" | "user" | "task" | "session">;
-    memory_type_filter: Array<"fact_preference" | "task_state" | "episodic">;
+    memory_type_filter: Array<"fact" | "preference" | "task_state" | "episodic">;
     status_filter: Array<"active" | "pending_confirmation" | "superseded" | "archived" | "deleted">;
     importance_threshold: number;
     candidate_limit: number;
@@ -326,7 +326,7 @@ class StorageReadModelRepository {
         user_id: String(record.user_id),
         session_id: record.session_id ? String(record.session_id) : null,
         task_id: record.task_id ? String(record.task_id) : null,
-        memory_type: String(record.memory_type) as "fact_preference" | "task_state" | "episodic",
+        memory_type: String(record.memory_type) as "fact" | "preference" | "task_state" | "episodic",
         scope: String(record.scope) as "workspace" | "user" | "task" | "session",
         summary: String(record.summary),
         details: (record.details_json as Record<string, unknown> | null) ?? null,

@@ -17,14 +17,14 @@ export interface PhaseMemoryPlan {
 export function requestedTypesByPhase(phase: TriggerContext["phase"]): MemoryType[] {
   switch (phase) {
     case "session_start":
-      return ["fact_preference", "task_state"];
+      return ["fact", "preference", "task_state"];
     case "task_start":
     case "task_switch":
-      return ["task_state", "episodic", "fact_preference"];
+      return ["task_state", "episodic", "fact", "preference"];
     case "before_plan":
-      return ["fact_preference", "task_state"];
+      return ["fact", "preference", "task_state"];
     case "before_response":
-      return ["fact_preference", "task_state", "episodic"];
+      return ["fact", "preference", "task_state", "episodic"];
     case "after_response":
       return [];
   }

@@ -36,7 +36,7 @@ function deriveConflictType(
     return "scope_conflict";
   }
 
-  if (normalized.memory_type === "fact_preference") {
+  if (normalized.memory_type === "preference") {
     return "preference_conflict";
   }
 

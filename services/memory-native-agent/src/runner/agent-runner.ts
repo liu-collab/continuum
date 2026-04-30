@@ -677,7 +677,11 @@ export class AgentRunner {
             return Boolean(
               job.job_id &&
               candidate &&
-              (candidate.candidate_type === "fact_preference" || candidate.candidate_type === "task_state"),
+              (
+                candidate.candidate_type === "fact" ||
+                candidate.candidate_type === "preference" ||
+                candidate.candidate_type === "task_state"
+              ),
             );
           })
           .map((job) => job.job_id!)
@@ -1404,7 +1408,7 @@ function toInjectionBlock(
 
 function toResidentInjectionBlock(block: InjectionBlock): InjectionBlock {
   const residentRecords = block.memory_records.filter((record) => {
-    return record.memory_type === "fact_preference" || record.memory_type === "task_state";
+    return record.memory_type === "fact" || record.memory_type === "preference" || record.memory_type === "task_state";
   });
 
   return {

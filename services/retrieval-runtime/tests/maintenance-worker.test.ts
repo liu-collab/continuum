@@ -60,7 +60,7 @@ function makeRecord(id: string, summary: string, importance = 4): MemoryRecordSn
     user_id: null,
     task_id: null,
     session_id: null,
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "workspace",
     status: "active",
     summary,
@@ -318,7 +318,7 @@ class StubEvolutionPlanner implements EvolutionPlanner {
       evolution_type: "knowledge_extraction" as const,
       source_records: input.source_records.map((record) => record.id),
       extracted_knowledge: {
-        pattern: "用户长期偏好：默认中文输出",
+        pattern: "工作区默认使用中文输出",
         confidence: this.confidence,
         evidence_count: input.source_records.length,
         suggested_scope: "workspace" as const,
@@ -734,7 +734,7 @@ describe("WritebackMaintenanceWorker", () => {
 
     expect(storage.writebackCandidates).toHaveLength(1);
     const candidates = storage.writebackCandidates[0] as Array<{ summary: string }>;
-    expect(candidates[0]?.summary).toBe("用户长期偏好：默认中文输出");
+    expect(candidates[0]?.summary).toBe("工作区默认使用中文输出");
   });
 
   it("filters low quality evolved knowledge before storage submission", async () => {
@@ -761,7 +761,7 @@ describe("WritebackMaintenanceWorker", () => {
 
     await worker.runOnce({ workspaceId, forced: true });
 
-    expect(writebackEngine.filteredReasons).toEqual(["quality_blocked:episodic"]);
+    expect(writebackEngine.filteredReasons).toEqual(["quality_blocked:fact"]);
     expect(storage.writebackCandidates).toHaveLength(0);
   });
 

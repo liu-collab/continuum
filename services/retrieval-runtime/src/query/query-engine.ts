@@ -33,7 +33,8 @@ export interface QueryEngineResult {
 }
 
 const RECENCY_HALF_LIFE_DAYS: Record<CandidateMemory["memory_type"], number> = {
-  fact_preference: 180,
+  fact: 120,
+  preference: 180,
   task_state: 30,
   episodic: 14,
 };

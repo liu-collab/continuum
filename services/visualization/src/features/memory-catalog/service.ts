@@ -246,9 +246,13 @@ export function buildMemoryCatalogFilterChips(
     }), {
       status: "pending_confirmation"
     }),
+    createFilterChip(filters, "fact", t("memories.quickFilters.fact"), {
+      status: "active",
+      memoryType: "fact"
+    }),
     createFilterChip(filters, "preference", t("memories.quickFilters.preference"), {
       status: "active",
-      memoryType: "fact_preference"
+      memoryType: "preference"
     }),
     createFilterChip(filters, "task-state", t("memories.quickFilters.taskState"), {
       status: "active",

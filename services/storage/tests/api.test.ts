@@ -138,7 +138,7 @@ describe("storage api", () => {
       payload: {
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             workspace_id: "11111111-1111-4111-8111-111111111111",
             user_id: "22222222-2222-4222-8222-222222222222",
@@ -281,7 +281,7 @@ describe("storage api", () => {
     expect(response.json().submitted_jobs[0].status).toBe("accepted_async");
   });
 
-  it("accepts runtime compatible batch contract and keeps compatibility mapping", async () => {
+  it("rejects the removed runtime-compatible batch contract", async () => {
     const service = createStorageService({
       repositories: createMemoryRepositories(),
       logger: createLogger("silent"),
@@ -336,11 +336,9 @@ describe("storage api", () => {
       },
     });
 
-    expect(response.statusCode).toBe(202);
-    expect(response.json().jobs).toHaveLength(1);
-    expect(response.json().submitted_jobs).toHaveLength(1);
-    const jobs = await service.listWriteJobs();
-    expect(jobs[0]?.candidate_json.candidate_type).toBe("fact_preference");
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("validation_failed");
+    expect(await service.listWriteJobs()).toHaveLength(0);
   });
 
   it("returns write projection status for succeeded write jobs with refresh progress", async () => {
@@ -609,7 +607,7 @@ describe("storage api", () => {
       payload: {
         candidates: [
           {
-            candidate_type: "fact_preference",
+            candidate_type: "preference",
             scope: "user",
             workspace_id: "11111111-1111-4111-8111-111111111111",
             user_id: "22222222-2222-4222-8222-222222222222",
@@ -763,7 +761,7 @@ describe("storage api", () => {
           user_id: null,
           task_id: null,
           session_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "workspace",
           status: "active",
           summary: "Old project preference",
@@ -787,7 +785,7 @@ describe("storage api", () => {
           user_id: null,
           task_id: null,
           session_id: null,
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "workspace",
           status: "active",
           summary: "New project preference",

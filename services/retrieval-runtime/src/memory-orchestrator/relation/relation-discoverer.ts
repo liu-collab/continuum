@@ -21,7 +21,7 @@ export class HttpMemoryRelationDiscoverer implements RelationDiscoverer {
       {
         source_record: {
           id: "source",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "默认中文输出",
           importance: 5,

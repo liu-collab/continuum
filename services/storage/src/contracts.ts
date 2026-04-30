@@ -1,21 +1,11 @@
 import { z } from "zod";
 
-import { AppError } from "./errors.js";
-
 export const memoryTypeSchema = z.enum([
-  "fact_preference",
+  "fact",
+  "preference",
   "task_state",
   "episodic",
 ]);
-
-const runtimeCandidateTypeValues = [
-  "fact_preference",
-  "task_state",
-  "episodic",
-  "commitment",
-  "preference",
-  "important_event",
-] as const;
 
 export const scopeSchema = z.enum(["session", "task", "user", "workspace"]);
 
@@ -285,37 +275,6 @@ export const writeBackBatchRequestSchema = z.object({
   candidates: z.array(writeBackCandidateSchema).min(1).max(50),
 });
 
-export const runtimeWriteBackCandidateSchema = writeBackCandidateSchema;
-
-export const runtimeWriteBackBatchRequestSchema = writeBackBatchRequestSchema;
-
-export const runtimeCompatibleWriteBackCandidateSchema = z.object({
-  candidate_type: z.enum(runtimeCandidateTypeValues),
-  scope: z.enum(["session", "task", "user"]),
-  summary: z.string().trim().min(3).max(500),
-  details: structuredDetailsSchema,
-  importance: z.number().int().min(1).max(5),
-  confidence: z.number().min(0).max(1),
-  write_reason: z.string().trim().min(3).max(240),
-  source: z.object({
-    host: z.string().trim().min(1),
-    session_id: z.uuid(),
-    thread_id: z.string().trim().min(1).optional(),
-    turn_id: z.string().trim().min(1).optional(),
-    task_id: z.uuid().optional(),
-  }),
-  dedupe_key: z.string().trim().min(3).max(256),
-});
-
-export const runtimeCompatibleWriteBackBatchRequestSchema = z.object({
-  workspace_id: z.uuid(),
-  user_id: z.uuid(),
-  session_id: z.uuid(),
-  task_id: z.uuid().optional(),
-  source_service: z.string().trim().min(1).default("retrieval-runtime"),
-  candidates: z.array(runtimeCompatibleWriteBackCandidateSchema).min(1).max(50),
-});
-
 export const recordQuerySchema = z.object({
   workspace_id: z.uuid(),
   user_id: z.uuid().optional(),
@@ -377,7 +336,6 @@ export const resolveConflictSchema = z.object({
 });
 
 export type MemoryType = z.infer<typeof memoryTypeSchema>;
-export type RuntimeCandidateType = (typeof runtimeCandidateTypeValues)[number];
 export type Scope = z.infer<typeof scopeSchema>;
 export type MemoryStatus = z.infer<typeof memoryStatusSchema>;
 export type WriteJobStatus = z.infer<typeof writeJobStatusSchema>;
@@ -390,14 +348,6 @@ export type GovernanceProposalType = z.infer<typeof governanceProposalTypeSchema
 export type WriteBackCandidate = z.infer<typeof writeBackCandidateSchema>;
 export type WriteJobEnvelope = z.infer<typeof writeJobEnvelopeSchema>;
 export type WriteBackBatchRequest = z.infer<typeof writeBackBatchRequestSchema>;
-export type RuntimeWriteBackCandidate = z.infer<typeof runtimeWriteBackCandidateSchema>;
-export type RuntimeWriteBackBatchRequest = z.infer<typeof runtimeWriteBackBatchRequestSchema>;
-export type RuntimeCompatibleWriteBackCandidate = z.infer<
-  typeof runtimeCompatibleWriteBackCandidateSchema
->;
-export type RuntimeCompatibleWriteBackBatchRequest = z.infer<
-  typeof runtimeCompatibleWriteBackBatchRequestSchema
->;
 export type RecordQuery = z.infer<typeof recordQuerySchema>;
 export type RecordPatchInput = z.infer<typeof recordPatchSchema>;
 export type ArchiveRecordInput = z.infer<typeof archiveRecordSchema>;
@@ -408,26 +358,6 @@ export type RestoreVersionInput = z.infer<typeof restoreVersionSchema>;
 export type ResolveConflictInput = z.infer<typeof resolveConflictSchema>;
 export type GovernanceExecutionItem = z.infer<typeof governanceExecutionItemSchema>;
 export type GovernanceExecutionBatchRequest = z.infer<typeof governanceExecutionBatchRequestSchema>;
-
-export const RUNTIME_TO_STORAGE_TYPE_MAP = {
-  fact_preference: "fact_preference",
-  task_state: "task_state",
-  episodic: "episodic",
-  commitment: "episodic",
-  preference: "fact_preference",
-  important_event: "episodic",
-} satisfies Record<RuntimeCandidateType, MemoryType>;
-
-export function mapRuntimeCandidateType(runtimeType: string): MemoryType {
-  const mapped = RUNTIME_TO_STORAGE_TYPE_MAP[runtimeType as RuntimeCandidateType];
-  if (!mapped) {
-    throw new AppError("unknown_candidate_type", "unknown runtime candidate type", 400, {
-      runtimeType,
-    });
-  }
-
-  return mapped;
-}
 
 export interface NormalizedMemory extends WriteBackCandidate {
   user_id: string | null;

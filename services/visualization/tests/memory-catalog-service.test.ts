@@ -31,7 +31,7 @@ vi.mock("@/lib/server/storage-read-model-client", () => ({
     workspace_id: "ws-1",
     task_id: "task-1",
     session_id: "session-1",
-    memory_type: "fact_preference",
+    memory_type: "preference",
     scope: "user",
     status: "active",
     summary: "User prefers concise answers",
@@ -276,13 +276,15 @@ describe("memory catalog service", () => {
     expect(chips.map((chip) => chip.label)).toEqual([
       "全部活跃",
       "待确认 (3)",
+      "事实",
       "偏好",
       "任务状态",
       "事件记忆"
     ]);
     expect(chips.find((chip) => chip.key === "pending")?.active).toBe(true);
     expect(chips.find((chip) => chip.key === "active")?.href).toContain("status=active");
-    expect(chips.find((chip) => chip.key === "preference")?.href).toContain("memory_type=fact_preference");
+    expect(chips.find((chip) => chip.key === "fact")?.href).toContain("memory_type=fact");
+    expect(chips.find((chip) => chip.key === "preference")?.href).toContain("memory_type=preference");
     expect(chips.find((chip) => chip.key === "preference")?.href).toContain("page=1");
   });
 

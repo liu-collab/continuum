@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 
 import type { NormalizedMemory, WriteBackCandidate } from "../contracts.js";
 import {
-  buildFactPreferenceDedupeKey,
-  canonicalizeFactPreference,
-} from "./fact-preference.js";
+  buildPreferenceDedupeKey,
+  canonicalizePreference,
+} from "./preference.js";
 import { computeDefaultConfidence, computeDefaultImportance } from "./scoring.js";
 
 export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMemory {
@@ -12,8 +12,8 @@ export function normalizeCandidate(candidate: WriteBackCandidate): NormalizedMem
   const normalizedSummary = normalizeText(candidate.summary);
   const normalizedDetails = normalizeDetails(candidate.details);
   const enrichedDetails =
-    candidate.candidate_type === "fact_preference"
-      ? enrichFactPreferenceDetails(normalizedSummary, normalizedDetails)
+    candidate.candidate_type === "preference"
+      ? enrichPreferenceDetails(normalizedSummary, normalizedDetails)
       : normalizedDetails;
   const normalizedScope = classifyCandidateScope(candidate, enrichedDetails);
   const dedupeKey = buildDedupeKey(candidate, enrichedDetails, normalizedScope);
@@ -77,12 +77,20 @@ function buildDedupeKey(
     return `episodic:${scope}:${normalizeText(eventKind)}:${normalizeText(timeBucket)}:${createContentHash(details).slice(0, 12)}`;
   }
 
-  return buildFactPreferenceDedupeKey(
+  if (candidate.candidate_type === "preference") {
+    return buildPreferenceDedupeKey(
+      scope,
+      canonicalizePreference({
+        summary: candidate.summary,
+        details,
+      }),
+    );
+  }
+
+  return buildFactDedupeKey(
     scope,
-    canonicalizeFactPreference({
-      summary: candidate.summary,
-      details,
-    }),
+    details,
+    candidate.summary,
   );
 }
 
@@ -102,11 +110,11 @@ function normalizeText(input: string): string {
   return input.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function enrichFactPreferenceDetails(
+function enrichPreferenceDetails(
   summary: string,
   details: Record<string, unknown>,
 ): Record<string, unknown> {
-  const canonical = canonicalizeFactPreference({
+  const canonical = canonicalizePreference({
     summary,
     details,
   });
@@ -119,6 +127,27 @@ function enrichFactPreferenceDetails(
     preference_value: canonical.value,
     preference_polarity: canonical.polarity,
   };
+}
+
+function buildFactDedupeKey(
+  scope: WriteBackCandidate["scope"],
+  details: Record<string, unknown>,
+  summary: string,
+): string {
+  const subject = normalizeText(
+    stringOrFallback(details.subject, stringOrFallback(details.entity, "fact")),
+  );
+  const predicate = normalizeText(
+    stringOrFallback(
+      details.predicate_canonical,
+      stringOrFallback(
+        details.predicate,
+        stringOrFallback(details.fact_key, summary),
+      ),
+    ),
+  );
+
+  return `fact:${scope}:${subject}:${predicate}`;
 }
 
 function stringOrFallback(value: unknown, fallback: string): string {
@@ -158,83 +187,111 @@ export function classifyCandidateScope(
       stringOrFallback(details.rule_value, ""),
       stringOrFallback(details.repo_path, ""),
       stringOrFallback(details.topic, ""),
+      stringOrFallback(details.stability, ""),
     ]
       .filter(Boolean)
       .join(" "),
   );
+  const workspaceHints = [
+    "repo",
+    "repository",
+    "project",
+    "workspace",
+    "仓库",
+    "项目",
+    "工作区",
+    "目录",
+    "toolchain",
+    "directory",
+    "constraint",
+    "约束",
+    "规则",
+    "rule",
+  ];
+  const userHints = [
+    "prefer",
+    "preference",
+    "style",
+    "habit",
+    "long term",
+    "response",
+    "user",
+    "偏好",
+    "习惯",
+    "风格",
+    "长期",
+    "用户",
+    "默认",
+  ];
+  const sessionHints = ["temporary", "session", "current turn", "expires", "临时", "本轮", "当前会话"];
+  const taskHints = ["task", "todo", "next step", "plan", "progress", "任务", "任务状态", "下一步", "进度"];
+  const scores: Record<WriteBackCandidate["scope"], number> = {
+    workspace: 0,
+    user: 0,
+    task: 0,
+    session: 0,
+  };
+  const addScore = (scope: WriteBackCandidate["scope"], points: number) => {
+    if (scope === "task" && !candidate.task_id) {
+      scores.workspace += points;
+      return;
+    }
 
-  if (candidate.candidate_type === "task_state" || explicitTaskSignals) {
-    return candidate.task_id ? "task" : "workspace";
+    if (scope === "session" && !candidate.session_id) {
+      scores.workspace += points;
+      return;
+    }
+
+    scores[scope] += points;
+  };
+
+  if (candidate.candidate_type === "task_state") addScore("task", 8);
+  if (explicitTaskSignals) addScore("task", 5);
+  if (explicitWorkspaceSignals) addScore("workspace", 6);
+  if (explicitSessionSignals) addScore("session", 5);
+  if (candidate.candidate_type === "preference") addScore("user", 2);
+  if (longTermSignals && candidate.candidate_type === "preference") addScore("user", 1);
+  if (containsAny(signalText, workspaceHints)) addScore("workspace", 3);
+  if (containsAny(signalText, userHints)) addScore("user", 3);
+  if (containsAny(signalText, sessionHints)) addScore("session", 3);
+  if (containsAny(signalText, taskHints)) addScore("task", 3);
+
+  if (candidate.scope === "task" && candidate.task_id) addScore("task", 2);
+  if (candidate.scope === "session" && candidate.session_id) addScore("session", 2);
+  if (candidate.scope === "user") addScore("user", 2);
+  if (candidate.scope === "workspace") addScore("workspace", 2);
+
+  return pickHighestScope(scores, candidate);
+}
+
+function pickHighestScope(
+  scores: Record<WriteBackCandidate["scope"], number>,
+  candidate: WriteBackCandidate,
+): WriteBackCandidate["scope"] {
+  const validScopes: WriteBackCandidate["scope"][] = ["task", "session", "user", "workspace"];
+  const ranked = validScopes
+    .filter((scope) => scope !== "task" || Boolean(candidate.task_id))
+    .filter((scope) => scope !== "session" || Boolean(candidate.session_id))
+    .sort((left, right) => {
+      const diff = scores[right] - scores[left];
+      if (diff !== 0) {
+        return diff;
+      }
+
+      if (left === candidate.scope) return -1;
+      if (right === candidate.scope) return 1;
+      return validScopes.indexOf(left) - validScopes.indexOf(right);
+    });
+
+  const winner = ranked[0];
+  if (winner && scores[winner] > 0) {
+    return winner;
   }
 
-  if (
-    explicitWorkspaceSignals ||
-    containsAny(signalText, [
-      "repo",
-      "repository",
-      "project",
-      "workspace",
-      "仓库",
-      "项目",
-      "工作区",
-      "目录",
-      "toolchain",
-      "directory",
-      "constraint",
-      "约束",
-      "规则",
-      "rule",
-    ])
-  ) {
-    return "workspace";
-  }
-
-  if (
-    explicitSessionSignals ||
-    containsAny(signalText, ["temporary", "session", "current turn", "expires", "临时", "本轮", "当前会话"])
-  ) {
-    return candidate.session_id ? "session" : "workspace";
-  }
-
-  if (
-    longTermSignals &&
-    containsAny(signalText, [
-      "prefer",
-      "preference",
-      "style",
-      "habit",
-      "long term",
-      "constraint",
-      "response",
-      "user",
-      "偏好",
-      "习惯",
-      "风格",
-      "长期",
-      "用户",
-      "默认",
-    ])
-  ) {
-    return "user";
-  }
-
-  if (candidate.scope === "task" && candidate.task_id) {
-    return "task";
-  }
-
-  if (candidate.scope === "session" && candidate.session_id) {
-    return "session";
-  }
-
-  if (candidate.scope === "workspace") {
-    return "workspace";
-  }
-
-  if (candidate.scope === "user" && containsAny(signalText, ["repo", "project", "workspace"])) {
-    return "workspace";
-  }
-
-  return candidate.scope === "user" ? "user" : "workspace";
+  if (candidate.scope === "task" && candidate.task_id) return "task";
+  if (candidate.scope === "session" && candidate.session_id) return "session";
+  if (candidate.scope === "user") return "user";
+  return "workspace";
 }
 
 function containsAny(input: string, patterns: string[]) {

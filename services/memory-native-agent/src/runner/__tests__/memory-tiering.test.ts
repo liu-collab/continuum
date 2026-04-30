@@ -11,7 +11,7 @@ describe("tierMemoryInjection", () => {
       memory_records: [
         {
           id: "pref-1",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "默认用中文回答",
           importance: 0.92,
@@ -51,7 +51,7 @@ describe("tierMemoryInjection", () => {
       memory_records: [
         {
           id: "pref-low",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "默认用中文回答",
           importance: 0.7,
@@ -59,7 +59,7 @@ describe("tierMemoryInjection", () => {
         },
         {
           id: "pref-high",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "默认用中文回答",
           importance: 0.95,
@@ -83,7 +83,7 @@ describe("tierMemoryInjection", () => {
       memory_records: [
         {
           id: "pref-1",
-          memory_type: "fact_preference",
+          memory_type: "preference",
           scope: "user",
           summary: "默认用中文回答",
           importance: 0.95,

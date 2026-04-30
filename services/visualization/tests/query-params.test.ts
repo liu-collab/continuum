@@ -11,7 +11,7 @@ describe("query param parsing", () => {
     const filters = parseMemoryCatalogFilters(
       new URLSearchParams({
         workspace_id: "ws-1",
-        memory_type: "fact_preference"
+        memory_type: "preference"
       })
     );
 
@@ -20,7 +20,7 @@ describe("query param parsing", () => {
       userId: undefined,
       taskId: undefined,
       memoryViewMode: "workspace_plus_global",
-      memoryType: "fact_preference",
+      memoryType: "preference",
       scope: undefined,
       status: undefined,
       updatedFrom: undefined,

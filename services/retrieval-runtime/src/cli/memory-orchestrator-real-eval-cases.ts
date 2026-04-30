@@ -74,7 +74,7 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
       metric: "intent_accuracy",
       module: "intent-analyzer",
       promptName: "MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT",
-      expected: "应判断需要记忆，并识别 task_state 或 fact_preference",
+      expected: "应判断需要记忆，并识别 task_state 或 preference",
       systemPrompt: MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT,
       payload: {
         current_input: "继续昨天那个 memory orchestrator 验收，把测试样本文档补完整，格式还是按之前那版。",
@@ -87,7 +87,7 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
       check: (output) => {
         const t = output as z.infer<typeof memoryIntentAnalyzerSchema>;
         const hitScope = (t.suggested_scopes ?? []).some((s) => s === "task" || s === "user");
-        const hitType = t.memory_types.includes("task_state") || t.memory_types.includes("fact_preference");
+        const hitType = t.memory_types.includes("task_state") || t.memory_types.includes("preference");
         let score = 0;
         if (t.needs_memory) score += 0.4;
         if (hitScope) score += 0.3;
@@ -187,7 +187,7 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
       metric: "intent_accuracy",
       module: "intent-analyzer",
       promptName: "MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT",
-      expected: "用户引用偏好设置，应识别 fact_preference",
+      expected: "用户引用偏好设置，应识别 preference",
       systemPrompt: MEMORY_INTENT_ANALYZER_SYSTEM_PROMPT,
       payload: {
         current_input: "按我习惯的格式写，不要太长。",
@@ -199,7 +199,7 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
         const t = output as z.infer<typeof memoryIntentAnalyzerSchema>;
         let score = 0;
         if (t.needs_memory) score += 0.5;
-        if (t.memory_types.includes("fact_preference")) score += 0.3;
+        if (t.memory_types.includes("preference")) score += 0.3;
         if ((t.suggested_scopes ?? []).includes("user")) score += 0.2;
         return { score, actual: JSON.stringify({ needs_memory: t.needs_memory, memory_types: t.memory_types, suggested_scopes: t.suggested_scopes }) };
       },
@@ -242,7 +242,7 @@ function buildIntentCases(): Array<EvalCase<unknown>> {
         let score = 0;
         if (t.needs_memory) score += 0.5;
         if ((t.suggested_scopes ?? []).includes("workspace")) score += 0.3;
-        if (t.memory_types.includes("fact_preference") || t.memory_types.includes("episodic")) score += 0.2;
+        if (t.memory_types.includes("fact") || t.memory_types.includes("episodic")) score += 0.2;
         return { score, actual: JSON.stringify({ needs_memory: t.needs_memory, suggested_scopes: t.suggested_scopes }) };
       },
     },
@@ -333,7 +333,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user", "task", "session"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["preference", "task_state", "episodic"],
         semantic_score: 0.61,
         semantic_threshold: 0.72,
         task_id_present: true,
@@ -364,7 +364,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["fact"],
         semantic_score: 0.15,
         semantic_threshold: 0.72,
         task_id_present: false,
@@ -389,7 +389,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["user"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         semantic_score: 0.55,
         semantic_threshold: 0.72,
         task_id_present: false,
@@ -446,7 +446,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         semantic_score: 0.1,
         semantic_threshold: 0.72,
         task_id_present: false,
@@ -471,7 +471,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["user", "workspace"],
-        requested_memory_types: ["fact_preference", "episodic"],
+        requested_memory_types: ["fact", "episodic"],
         semantic_score: 0.70,
         semantic_threshold: 0.72,
         task_id_present: false,
@@ -499,7 +499,7 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user", "task"],
-        requested_memory_types: ["task_state", "fact_preference"],
+        requested_memory_types: ["task_state", "preference"],
         semantic_score: 0.58,
         semantic_threshold: 0.72,
         task_id_present: true,
@@ -554,13 +554,13 @@ function buildSearchCases(): Array<EvalCase<unknown>> {
 
 function buildInjectionCases(): Array<EvalCase<unknown>> {
   const highRelevantCandidates = [
-    candidate("mem-style-1", "user", "fact_preference", "用户偏好：默认中文，先给一句结论，再补最多 3 个短点。", 5, 0.96, 0.91, 0.88, "2026-04-22T10:00:00.000Z"),
+    candidate("mem-style-1", "user", "preference", "用户偏好：默认中文，先给一句结论，再补最多 3 个短点。", 5, 0.96, 0.91, 0.88, "2026-04-22T10:00:00.000Z"),
     candidate("mem-task-1", "task", "task_state", "当前任务：正在补 memory orchestrator 测试样本文档的实际指标。", 4, 0.93, 0.89, 0.86, "2026-04-22T10:05:00.000Z"),
     candidate("mem-noise-1", "workspace", "episodic", "上周修过一个和代理无关的 CSS 样式问题。", 2, 0.51, 0.22, 0.19, "2026-04-10T09:00:00.000Z"),
   ];
 
   const lowRelevantCandidates = [
-    candidate("mem-style-2", "user", "fact_preference", "用户偏好：默认中文，先给一句结论，再补 3 个短点。", 5, 0.95, 0.31, 0.28, "2026-04-22T10:00:00.000Z"),
+    candidate("mem-style-2", "user", "preference", "用户偏好：默认中文，先给一句结论，再补 3 个短点。", 5, 0.95, 0.31, 0.28, "2026-04-22T10:00:00.000Z"),
     candidate("mem-task-old-2", "task", "task_state", "当前任务：补 memory orchestrator 测试样本文档。", 4, 0.92, 0.18, 0.16, "2026-04-22T10:05:00.000Z"),
   ];
 
@@ -578,7 +578,7 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user", "task"],
-        requested_memory_types: ["fact_preference", "task_state"],
+        requested_memory_types: ["preference", "task_state"],
         search_reason: "用户显式要求延续之前风格和任务状态",
         candidates: highRelevantCandidates,
         semantic_score: 0.61,
@@ -611,7 +611,7 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user", "task"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["preference", "task_state", "episodic"],
         search_reason: "语义检索有弱命中。",
         candidates: lowRelevantCandidates,
         semantic_score: 0.41,
@@ -638,11 +638,11 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["user"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         search_reason: "用户引用偏好设置",
         candidates: [
-          candidate("mem-indent", "user", "fact_preference", "用户偏好：使用 4 空格缩进。", 5, 0.88, 0.73, 0.71, "2026-04-20T08:00:00.000Z"),
-          candidate("mem-old-style", "user", "fact_preference", "用户偏好：变量名用 camelCase。", 3, 0.72, 0.42, 0.38, "2026-04-15T08:00:00.000Z"),
+          candidate("mem-indent", "user", "preference", "用户偏好：使用 4 空格缩进。", 5, 0.88, 0.73, 0.71, "2026-04-20T08:00:00.000Z"),
+          candidate("mem-old-style", "user", "preference", "用户偏好：变量名用 camelCase。", 3, 0.72, 0.42, 0.38, "2026-04-15T08:00:00.000Z"),
         ],
         semantic_score: 0.71,
         semantic_threshold: 0.72,
@@ -673,11 +673,11 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["user"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         search_reason: "用户引用编辑器偏好",
         candidates: [
-          candidate("mem-old-tab", "user", "fact_preference", "用户偏好：使用 tab 缩进。", 4, 0.78, 0.80, 0.77, "2026-03-01T08:00:00.000Z"),
-          candidate("mem-new-space", "user", "fact_preference", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.95, 0.85, 0.82, "2026-04-20T08:00:00.000Z"),
+          candidate("mem-old-tab", "user", "preference", "用户偏好：使用 tab 缩进。", 4, 0.78, 0.80, 0.77, "2026-03-01T08:00:00.000Z"),
+          candidate("mem-new-space", "user", "preference", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.95, 0.85, 0.82, "2026-04-20T08:00:00.000Z"),
         ],
         semantic_score: 0.80,
         semantic_threshold: 0.72,
@@ -708,7 +708,7 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference", "episodic"],
+        requested_memory_types: ["preference", "episodic"],
         search_reason: "弱语义命中",
         candidates: [
           candidate("mem-css-fix", "workspace", "episodic", "上周修过一个 CSS 对齐问题。", 2, 0.45, 0.12, 0.10, "2026-04-05T08:00:00.000Z"),
@@ -774,11 +774,11 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["task", "workspace", "user"],
-        requested_memory_types: ["task_state", "fact_preference"],
+        requested_memory_types: ["task_state", "preference"],
         search_reason: "延续前端任务",
         candidates: [
           candidate("mem-form", "task", "task_state", "当前任务：实现登录页表单验证，已完成邮箱字段。", 4, 0.92, 0.88, 0.86, "2026-04-22T08:00:00.000Z"),
-          candidate("mem-color", "user", "fact_preference", "用户偏好：主色调用蓝色。", 3, 0.80, 0.45, 0.40, "2026-04-18T08:00:00.000Z"),
+          candidate("mem-color", "user", "preference", "用户偏好：主色调用蓝色。", 3, 0.80, 0.45, 0.40, "2026-04-18T08:00:00.000Z"),
           candidate("mem-db", "workspace", "episodic", "上周优化过数据库索引。", 2, 0.55, 0.15, 0.12, "2026-04-14T08:00:00.000Z"),
         ],
         semantic_score: 0.75,
@@ -810,7 +810,7 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace"],
-        requested_memory_types: ["fact_preference"],
+        requested_memory_types: ["preference"],
         search_reason: "检索无结果",
         candidates: [],
         semantic_score: 0.30,
@@ -837,11 +837,11 @@ function buildInjectionCases(): Array<EvalCase<unknown>> {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "user"],
-        requested_memory_types: ["fact_preference", "episodic"],
+        requested_memory_types: ["preference", "episodic"],
         search_reason: "语义命中",
         candidates: [
-          candidate("mem-react-style", "user", "fact_preference", "用户偏好：前端使用 TailwindCSS，不写内联样式。", 5, 0.96, 0.88, 0.85, "2026-04-22T09:00:00.000Z"),
-          candidate("mem-color", "user", "fact_preference", "用户偏好：设计稿用紫色系。", 4, 0.92, 0.82, 0.79, "2026-04-20T08:00:00.000Z"),
+          candidate("mem-react-style", "user", "preference", "用户偏好：前端使用 TailwindCSS，不写内联样式。", 5, 0.96, 0.88, 0.85, "2026-04-22T09:00:00.000Z"),
+          candidate("mem-color", "user", "preference", "用户偏好：设计稿用紫色系。", 4, 0.92, 0.82, 0.79, "2026-04-20T08:00:00.000Z"),
         ],
         semantic_score: 0.35,
         semantic_threshold: 0.72,
@@ -871,7 +871,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       metric: "writeback_extraction_accuracy",
       module: "writeback-extractor",
       promptName: "MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT",
-      expected: "应提取用户偏好为 fact_preference",
+      expected: "应提取用户偏好为 preference",
       systemPrompt: MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
       payload: {
         current_input: "以后我的代码都用 4 空格缩进，不要 tab。",
@@ -883,7 +883,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       maxTokens: 600,
       check: (output) => {
         const t = output as z.infer<typeof memoryWritebackExtractionSchema>;
-        const pref = t.candidates.find((c) => c.candidate_type === "fact_preference");
+        const pref = t.candidates.find((c) => c.candidate_type === "preference");
         let score = 0;
         if (pref) score += 0.5;
         if (pref && pref.scope === "user") score += 0.25;
@@ -961,7 +961,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       metric: "writeback_extraction_accuracy",
       module: "writeback-extractor",
       promptName: "MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT",
-      expected: "项目约定应提取为 workspace scope 的 fact_preference",
+        expected: "项目约定应提取为 workspace scope 的 fact",
       systemPrompt: MEMORY_WRITEBACK_EXTRACTION_SYSTEM_PROMPT,
       payload: {
         current_input: "这个项目所有 API 都要加 /api/v2 前缀。",
@@ -973,7 +973,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       maxTokens: 600,
       check: (output) => {
         const t = output as z.infer<typeof memoryWritebackExtractionSchema>;
-        const ws = t.candidates.find((c) => c.scope === "workspace" && c.candidate_type === "fact_preference");
+        const ws = t.candidates.find((c) => c.scope === "workspace" && c.candidate_type === "fact");
         let score = 0;
         if (ws) score += 0.6;
         if (ws && ws.importance >= 4) score += 0.2;
@@ -998,7 +998,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       maxTokens: 600,
       check: (output) => {
         const t = output as z.infer<typeof memoryWritebackExtractionSchema>;
-        const ep = t.candidates.find((c) => c.candidate_type === "episodic" || c.candidate_type === "fact_preference");
+        const ep = t.candidates.find((c) => c.candidate_type === "episodic" || c.candidate_type === "fact");
         let score = 0;
         if (ep) score += 0.5;
         if (ep && (ep.summary.includes("PostgreSQL 16") || ep.summary.includes("PG16") || ep.summary.includes("PG 16"))) score += 0.3;
@@ -1046,7 +1046,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
         let score = 0;
         if (t.candidates.length >= 2) score += 0.5;
         if (t.candidates.length >= 3) score += 0.3;
-        if (t.candidates.every((c) => c.candidate_type === "fact_preference")) score += 0.2;
+        if (t.candidates.every((c) => c.candidate_type === "preference")) score += 0.2;
         return { score, actual: JSON.stringify({ count: t.candidates.length, types: t.candidates.map((c) => c.candidate_type) }) };
       },
     },
@@ -1067,7 +1067,7 @@ function buildWritebackExtractionCases(): Array<EvalCase<unknown>> {
       maxTokens: 600,
       check: (output) => {
         const t = output as z.infer<typeof memoryWritebackExtractionSchema>;
-        const ws = t.candidates.find((c) => c.candidate_type === "fact_preference" && c.scope === "user");
+        const ws = t.candidates.find((c) => c.candidate_type === "preference" && c.scope === "user");
         let score = 0;
         if (ws) score += 0.4;
         if (ws && ws.summary.includes("空格") && !ws.summary.includes("tab")) score += 0.4;
@@ -1122,7 +1122,7 @@ function buildWritebackRefineCases(): Array<EvalCase<unknown>> {
         tool_results_summary: "",
         task_id: null,
         rule_candidates: [
-          { index: 0, candidate_type: "fact_preference", scope: "user", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.95, write_reason: "stable language preference" },
+          { index: 0, candidate_type: "preference", scope: "user", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.95, write_reason: "stable language preference" },
         ],
       },
       schema: memoryWritebackRefineSchema,
@@ -1146,8 +1146,8 @@ function buildWritebackRefineCases(): Array<EvalCase<unknown>> {
         tool_results_summary: "",
         task_id: null,
         rule_candidates: [
-          { index: 0, candidate_type: "fact_preference", scope: "user", summary: "用户偏好：使用中文。", importance: 5, confidence: 0.92, write_reason: "language preference" },
-          { index: 1, candidate_type: "fact_preference", scope: "user", summary: "用户偏好：简短回答。", importance: 4, confidence: 0.88, write_reason: "brevity preference" },
+          { index: 0, candidate_type: "preference", scope: "user", summary: "用户偏好：使用中文。", importance: 5, confidence: 0.92, write_reason: "language preference" },
+          { index: 1, candidate_type: "preference", scope: "user", summary: "用户偏好：简短回答。", importance: 4, confidence: 0.88, write_reason: "brevity preference" },
         ],
       },
       schema: memoryWritebackRefineSchema,
@@ -1204,8 +1204,8 @@ function buildWritebackRefineCases(): Array<EvalCase<unknown>> {
         tool_results_summary: "",
         task_id: null,
         rule_candidates: [
-          { index: 0, candidate_type: "fact_preference", scope: "user", summary: "用户偏好：使用 Vim 键位。", importance: 4, confidence: 0.90, write_reason: "editor preference" },
-          { index: 1, candidate_type: "fact_preference", scope: "user", summary: "用户偏好：4 空格缩进。", importance: 4, confidence: 0.90, write_reason: "formatting preference" },
+          { index: 0, candidate_type: "preference", scope: "user", summary: "用户偏好：使用 Vim 键位。", importance: 4, confidence: 0.90, write_reason: "editor preference" },
+          { index: 1, candidate_type: "preference", scope: "user", summary: "用户偏好：4 空格缩进。", importance: 4, confidence: 0.90, write_reason: "formatting preference" },
         ],
       },
       schema: memoryWritebackRefineSchema,
@@ -1253,7 +1253,7 @@ function buildWritebackRefineCases(): Array<EvalCase<unknown>> {
         tool_results_summary: "",
         task_id: null,
         rule_candidates: [
-          { index: 0, candidate_type: "fact_preference", scope: "workspace", summary: "项目规则：禁止使用 eval。", importance: 2, confidence: 0.75, write_reason: "security rule" },
+          { index: 0, candidate_type: "fact", scope: "workspace", summary: "项目规则：禁止使用 eval。", importance: 2, confidence: 0.75, write_reason: "security rule" },
         ],
       },
       schema: memoryWritebackRefineSchema,
@@ -1306,8 +1306,8 @@ function buildGovernancePlanCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
       payload: {
         seed_records: [
-          record("gp-1", "user", "fact_preference", "用户偏好：默认中文回答。", 5, 0.95),
-          record("gp-2", "user", "fact_preference", "用户偏好：回答请用中文。", 4, 0.88),
+          record("gp-1", "user", "preference", "用户偏好：默认中文回答。", 5, 0.95),
+          record("gp-2", "user", "preference", "用户偏好：回答请用中文。", 4, 0.88),
         ],
         related_records: [],
         open_conflicts: [],
@@ -1336,8 +1336,8 @@ function buildGovernancePlanCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
       payload: {
         seed_records: [
-          record("gp-3", "user", "fact_preference", "用户偏好：使用 Vim 键位。", 4, 0.90),
-          record("gp-4", "workspace", "fact_preference", "项目规则：API 前缀 /api/v2。", 5, 0.95),
+          record("gp-3", "user", "preference", "用户偏好：使用 Vim 键位。", 4, 0.90),
+          record("gp-4", "workspace", "fact", "项目规则：API 前缀 /api/v2。", 5, 0.95),
         ],
         related_records: [],
         open_conflicts: [],
@@ -1358,10 +1358,10 @@ function buildGovernancePlanCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
       payload: {
         seed_records: [
-          record("gp-new", "user", "fact_preference", "用户偏好：默认中文，简短输出，先给结论。", 5, 0.96, { created_at: "2026-04-22T08:00:00.000Z" }),
+          record("gp-new", "user", "preference", "用户偏好：默认中文，简短输出，先给结论。", 5, 0.96, { created_at: "2026-04-22T08:00:00.000Z" }),
         ],
         related_records: [
-          record("gp-old", "user", "fact_preference", "用户偏好：默认中文回答。", 4, 0.82, { created_at: "2026-03-01T08:00:00.000Z", updated_at: "2026-03-01T08:00:00.000Z" }),
+          record("gp-old", "user", "preference", "用户偏好：默认中文回答。", 4, 0.82, { created_at: "2026-03-01T08:00:00.000Z", updated_at: "2026-03-01T08:00:00.000Z" }),
         ],
         open_conflicts: [],
       },
@@ -1442,8 +1442,8 @@ function buildGovernancePlanCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
       payload: {
         seed_records: [
-          record("gp-c1", "user", "fact_preference", "用户偏好：使用 tab 缩进。", 4, 0.78, { created_at: "2026-03-01T08:00:00.000Z" }),
-          record("gp-c2", "user", "fact_preference", "用户偏好：使用 4 空格缩进。", 5, 0.96, { created_at: "2026-04-22T08:00:00.000Z" }),
+          record("gp-c1", "user", "preference", "用户偏好：使用 tab 缩进。", 4, 0.78, { created_at: "2026-03-01T08:00:00.000Z" }),
+          record("gp-c2", "user", "preference", "用户偏好：使用 4 空格缩进。", 5, 0.96, { created_at: "2026-04-22T08:00:00.000Z" }),
         ],
         related_records: [],
         open_conflicts: [
@@ -1472,8 +1472,8 @@ function buildGovernancePlanCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_PLAN_SYSTEM_PROMPT,
       payload: {
         seed_records: [
-          record("gp-a1", "workspace", "fact_preference", "测试框架用 Jest。", 3, 0.70),
-          record("gp-a2", "workspace", "fact_preference", "测试框架用 Vitest。", 3, 0.72),
+          record("gp-a1", "workspace", "fact", "测试框架用 Jest。", 3, 0.70),
+          record("gp-a2", "workspace", "fact", "测试框架用 Vitest。", 3, 0.72),
         ],
         related_records: [],
         open_conflicts: [
@@ -1538,10 +1538,10 @@ function buildQualityCases(): Array<EvalCase<unknown>> {
       payload: {
         writeback_candidates: [
           { id: "cand-low-1", candidate_type: "episodic", scope: "session", summary: "好的，我来处理。", importance: 3, confidence: 0.72, write_reason: "assistant acknowledged" },
-          { id: "cand-good-1", candidate_type: "fact_preference", scope: "user", summary: "用户偏好：写说明时先给结论再补短点。", importance: 5, confidence: 0.94, write_reason: "stable formatting preference" },
+          { id: "cand-good-1", candidate_type: "preference", scope: "user", summary: "用户偏好：写说明时先给结论再补短点。", importance: 5, confidence: 0.94, write_reason: "stable formatting preference" },
         ],
         existing_similar_records: [
-          { id: "rec-good-1", scope: "user", memory_type: "fact_preference", status: "active", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.9 },
+          { id: "rec-good-1", scope: "user", memory_type: "preference", status: "active", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.9 },
         ],
         turn_context: { user_input: "以后这种说明文档先给结论，再补几个短点。", assistant_output: "好的，我来处理。后续按这个格式写。" },
       },
@@ -1565,10 +1565,10 @@ function buildQualityCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT,
       payload: {
         writeback_candidates: [
-          { id: "cand-dup", candidate_type: "fact_preference", scope: "user", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.92, write_reason: "language preference" },
+          { id: "cand-dup", candidate_type: "preference", scope: "user", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.92, write_reason: "language preference" },
         ],
         existing_similar_records: [
-          { id: "rec-existing", scope: "user", memory_type: "fact_preference", status: "active", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.95 },
+          { id: "rec-existing", scope: "user", memory_type: "preference", status: "active", summary: "用户偏好：默认中文回答。", importance: 5, confidence: 0.95 },
         ],
         turn_context: { user_input: "记住用中文。", assistant_output: "已记录。" },
       },
@@ -1592,7 +1592,7 @@ function buildQualityCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT,
       payload: {
         writeback_candidates: [
-          { id: "cand-high", candidate_type: "fact_preference", scope: "workspace", summary: "项目规则：所有 API 必须加 /api/v2 前缀。", importance: 5, confidence: 0.96, write_reason: "API convention" },
+          { id: "cand-high", candidate_type: "fact", scope: "workspace", summary: "项目规则：所有 API 必须加 /api/v2 前缀。", importance: 5, confidence: 0.96, write_reason: "API convention" },
         ],
         existing_similar_records: [],
         turn_context: { user_input: "这个项目的 API 都要加 /api/v2 前缀。", assistant_output: "已记录。" },
@@ -1643,10 +1643,10 @@ function buildQualityCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT,
       payload: {
         writeback_candidates: [
-          { id: "cand-conflict", candidate_type: "fact_preference", scope: "user", summary: "用户偏好：使用 tab 缩进。", importance: 4, confidence: 0.85, write_reason: "indent preference" },
+          { id: "cand-conflict", candidate_type: "preference", scope: "user", summary: "用户偏好：使用 tab 缩进。", importance: 4, confidence: 0.85, write_reason: "indent preference" },
         ],
         existing_similar_records: [
-          { id: "rec-space", scope: "user", memory_type: "fact_preference", status: "active", summary: "用户偏好：使用 4 空格缩进。", importance: 5, confidence: 0.95 },
+          { id: "rec-space", scope: "user", memory_type: "preference", status: "active", summary: "用户偏好：使用 4 空格缩进。", importance: 5, confidence: 0.95 },
         ],
         turn_context: { user_input: "算了还是用 tab 吧。", assistant_output: "好的，切换到 tab 缩进。" },
       },
@@ -1699,7 +1699,7 @@ function buildQualityCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_WRITEBACK_QUALITY_ASSESSOR_SYSTEM_PROMPT,
       payload: {
         writeback_candidates: [
-          { id: "cand-maybe", candidate_type: "fact_preference", scope: "user", summary: "用户可能偏好暗色主题。", importance: 3, confidence: 0.65, write_reason: "inferred preference" },
+          { id: "cand-maybe", candidate_type: "preference", scope: "user", summary: "用户可能偏好暗色主题。", importance: 3, confidence: 0.65, write_reason: "inferred preference" },
         ],
         existing_similar_records: [],
         turn_context: { user_input: "这个暗色看起来还行。", assistant_output: "好的，可以后续继续使用暗色主题。" },
@@ -1788,7 +1788,7 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       expected: "无明确语义关联时不应强行输出关系",
       systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
       payload: {
-        source_record: mkSrc("rel-src-2", "fact_preference", "user", "用户偏好：默认中文回答。", 5, 0.95),
+        source_record: mkSrc("rel-src-2", "preference", "user", "用户偏好：默认中文回答。", 5, 0.95),
         candidate_records: [
           mkSrc("rel-noise-2", "episodic", "workspace", "上周处理过一个 nginx 日志切割问题。", 2, 0.58),
           mkSrc("rel-noise-3", "task_state", "task", "当前任务：补一份前端配色稿。", 3, 0.72),
@@ -1810,9 +1810,9 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       expected: "新记录替代旧记录应识别为 supersedes",
       systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
       payload: {
-        source_record: mkSrc("rel-new-pref", "fact_preference", "user", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.96),
+        source_record: mkSrc("rel-new-pref", "preference", "user", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.96),
         candidate_records: [
-          mkSrc("rel-old-pref", "fact_preference", "user", "用户偏好：使用 tab 缩进。", 4, 0.78),
+          mkSrc("rel-old-pref", "preference", "user", "用户偏好：使用 tab 缩进。", 4, 0.78),
         ],
         context: ctx,
       },
@@ -1832,9 +1832,9 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       expected: "明确矛盾的记录应标记 conflicts_with",
       systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
       payload: {
-        source_record: mkSrc("rel-jest", "fact_preference", "workspace", "测试框架用 Jest。", 4, 0.85),
+        source_record: mkSrc("rel-jest", "fact", "workspace", "测试框架用 Jest。", 4, 0.85),
         candidate_records: [
-          mkSrc("rel-vitest", "fact_preference", "workspace", "测试框架用 Vitest。", 4, 0.85),
+          mkSrc("rel-vitest", "fact", "workspace", "测试框架用 Vitest。", 4, 0.85),
         ],
         context: ctx,
       },
@@ -1928,9 +1928,9 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       expected: "单条高相关候选应输出关系",
       systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
       payload: {
-        source_record: mkSrc("rel-v1", "fact_preference", "workspace", "API 版本当前为 v1。", 4, 0.90),
+        source_record: mkSrc("rel-v1", "fact", "workspace", "API 版本当前为 v1。", 4, 0.90),
         candidate_records: [
-          mkSrc("rel-v2", "fact_preference", "workspace", "API 版本已升级到 v2。", 5, 0.95),
+          mkSrc("rel-v2", "fact", "workspace", "API 版本已升级到 v2。", 5, 0.95),
         ],
         context: ctx,
       },
@@ -1952,7 +1952,7 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       payload: {
         source_record: mkSrc("rel-cache", "task_state", "workspace", "正在实现 Redis 缓存层。", 4, 0.90),
         candidate_records: [
-          mkSrc("rel-redis-config", "fact_preference", "workspace", "Redis 地址配置在 env.REDIS_URL。", 3, 0.85),
+          mkSrc("rel-redis-config", "fact", "workspace", "Redis 地址配置在 env.REDIS_URL。", 3, 0.85),
           mkSrc("rel-css-fix", "episodic", "workspace", "上周修了一个 CSS bug。", 1, 0.40),
           mkSrc("rel-perf", "task_state", "workspace", "API 响应时间需要优化到 200ms 以内。", 4, 0.88),
         ],
@@ -1980,7 +1980,7 @@ function buildRelationCases(): Array<EvalCase<unknown>> {
       expected: "无候选时应返回空关系列表",
       systemPrompt: MEMORY_RELATION_DISCOVERER_SYSTEM_PROMPT,
       payload: {
-        source_record: mkSrc("rel-solo", "fact_preference", "user", "用户偏好：暗色主题。", 3, 0.85),
+        source_record: mkSrc("rel-solo", "preference", "user", "用户偏好：暗色主题。", 3, 0.85),
         candidate_records: [],
         context: ctx,
       },
@@ -2018,7 +2018,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
         },
         available_memories: [
           mkMem("mem-rec-1", "task_state", "task", "当前任务：完善 memory orchestrator 测试样本文档。", 5, 0.95),
-          mkMem("mem-rec-2", "fact_preference", "user", "用户偏好：默认中文，短句输出。", 5, 0.94),
+          mkMem("mem-rec-2", "preference", "user", "用户偏好：默认中文，短句输出。", 5, 0.94),
           mkMem("mem-rec-3", "episodic", "workspace", "三个月前讨论过图标颜色。", 1, 0.40, "archived"),
         ],
       },
@@ -2073,7 +2073,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
           detected_task_type: "coding",
         },
         available_memories: [
-          mkMem("mem-ts-strict", "fact_preference", "workspace", "项目使用 TypeScript strict 模式。", 4, 0.88),
+          mkMem("mem-ts-strict", "fact", "workspace", "项目使用 TypeScript strict 模式。", 4, 0.88),
           mkMem("mem-old-meeting", "episodic", "workspace", "上个月开过一次 sprint 回顾会。", 1, 0.35, "archived"),
         ],
       },
@@ -2103,7 +2103,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
           detected_task_type: "coding",
         },
         available_memories: [
-          mkMem("mem-space-pref", "fact_preference", "user", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.96),
+          mkMem("mem-space-pref", "preference", "user", "用户偏好：使用 4 空格缩进，不用 tab。", 5, 0.96),
         ],
       },
       schema: memoryProactiveRecommendationSchema,
@@ -2157,7 +2157,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
           detected_task_type: "coding",
         },
         available_memories: [
-          mkMem("mem-lang-pref", "fact_preference", "user", "用户偏好：默认中文回答。", 5, 0.94),
+          mkMem("mem-lang-pref", "preference", "user", "用户偏好：默认中文回答。", 5, 0.94),
         ],
       },
       schema: memoryProactiveRecommendationSchema,
@@ -2184,7 +2184,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
           detected_task_type: "implementation",
         },
         available_memories: [
-          mkMem("mem-api-prefix", "fact_preference", "workspace", "项目规则：API 前缀 /api/v2。", 5, 0.95),
+          mkMem("mem-api-prefix", "fact", "workspace", "项目规则：API 前缀 /api/v2。", 5, 0.95),
           mkMem("mem-api-task", "task_state", "task", "当前任务：实现用户列表 API。", 4, 0.92),
           mkMem("mem-unrelated", "episodic", "workspace", "上周部署过一次 CDN。", 1, 0.40),
         ],
@@ -2263,7 +2263,7 @@ function buildRecommendationCases(): Array<EvalCase<unknown>> {
           detected_task_type: "implementation",
         },
         available_memories: [
-          mkMem("mem-freeze", "fact_preference", "workspace", "注意：4/25 后主分支冻结合并，仅允许关键修复。", 5, 0.98),
+          mkMem("mem-freeze", "fact", "workspace", "注意：4/25 后主分支冻结合并，仅允许关键修复。", 5, 0.98),
         ],
       },
       schema: memoryProactiveRecommendationSchema,
@@ -2295,9 +2295,9 @@ function buildEvolutionCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT,
       payload: {
         source_records: [
-          mkEvoRec("evo-1", "fact_preference", "user", "用户偏好：默认中文回答。", 5, 0.96, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
-          mkEvoRec("evo-2", "fact_preference", "user", "用户偏好：说明文档先给结论，再补短点。", 5, 0.94, "2026-04-21T08:00:00.000Z", "2026-04-21T08:00:00.000Z"),
-          mkEvoRec("evo-3", "fact_preference", "user", "用户偏好：不要写太长，自然中文。", 4, 0.92, "2026-04-22T08:00:00.000Z", "2026-04-22T08:00:00.000Z"),
+          mkEvoRec("evo-1", "preference", "user", "用户偏好：默认中文回答。", 5, 0.96, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
+          mkEvoRec("evo-2", "preference", "user", "用户偏好：说明文档先给结论，再补短点。", 5, 0.94, "2026-04-21T08:00:00.000Z", "2026-04-21T08:00:00.000Z"),
+          mkEvoRec("evo-3", "preference", "user", "用户偏好：不要写太长，自然中文。", 4, 0.92, "2026-04-22T08:00:00.000Z", "2026-04-22T08:00:00.000Z"),
         ],
         time_window: { start: "2026-04-20T00:00:00.000Z", end: "2026-04-22T23:59:59.000Z" },
         evolution_type: "knowledge_extraction",
@@ -2376,7 +2376,7 @@ function buildEvolutionCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT,
       payload: {
         source_records: [
-          mkEvoRec("evo-single", "fact_preference", "user", "用户偏好：用中文。", 4, 0.85, "2026-04-22T08:00:00.000Z", "2026-04-22T08:00:00.000Z"),
+          mkEvoRec("evo-single", "preference", "user", "用户偏好：用中文。", 4, 0.85, "2026-04-22T08:00:00.000Z", "2026-04-22T08:00:00.000Z"),
         ],
         time_window: { start: "2026-04-22T00:00:00.000Z", end: "2026-04-22T23:59:59.000Z" },
         evolution_type: "knowledge_extraction",
@@ -2401,9 +2401,9 @@ function buildEvolutionCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT,
       payload: {
         source_records: [
-          mkEvoRec("evo-u1", "fact_preference", "user", "用户偏好：代码写英文注释。", 4, 0.88, "2026-04-15T08:00:00.000Z", "2026-04-15T08:00:00.000Z"),
-          mkEvoRec("evo-u2", "fact_preference", "user", "用户偏好：commit message 用英文。", 4, 0.90, "2026-04-18T08:00:00.000Z", "2026-04-18T08:00:00.000Z"),
-          mkEvoRec("evo-u3", "fact_preference", "user", "用户偏好：文档和回复用中文。", 4, 0.88, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
+          mkEvoRec("evo-u1", "preference", "user", "用户偏好：代码写英文注释。", 4, 0.88, "2026-04-15T08:00:00.000Z", "2026-04-15T08:00:00.000Z"),
+          mkEvoRec("evo-u2", "preference", "user", "用户偏好：commit message 用英文。", 4, 0.90, "2026-04-18T08:00:00.000Z", "2026-04-18T08:00:00.000Z"),
+          mkEvoRec("evo-u3", "preference", "user", "用户偏好：文档和回复用中文。", 4, 0.88, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
         ],
         time_window: { start: "2026-04-15T00:00:00.000Z", end: "2026-04-22T23:59:59.000Z" },
         evolution_type: "knowledge_extraction",
@@ -2455,7 +2455,7 @@ function buildEvolutionCases(): Array<EvalCase<unknown>> {
       payload: {
         source_records: [
           mkEvoRec("evo-x1", "episodic", "workspace", "修了一个 CSS 居中问题。", 2, 0.60, "2026-04-18T08:00:00.000Z", "2026-04-18T08:00:00.000Z"),
-          mkEvoRec("evo-x2", "fact_preference", "user", "用户偏好：用 Vim。", 4, 0.90, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
+          mkEvoRec("evo-x2", "preference", "user", "用户偏好：用 Vim。", 4, 0.90, "2026-04-20T08:00:00.000Z", "2026-04-20T08:00:00.000Z"),
         ],
         time_window: { start: "2026-04-18T00:00:00.000Z", end: "2026-04-22T23:59:59.000Z" },
         evolution_type: "knowledge_extraction",
@@ -2479,10 +2479,10 @@ function buildEvolutionCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_EVOLUTION_PLAN_SYSTEM_PROMPT,
       payload: {
         source_records: [
-          mkEvoRec("evo-h1", "fact_preference", "user", "用户偏好：TypeScript strict。", 5, 0.95, "2026-04-01T08:00:00.000Z", "2026-04-01T08:00:00.000Z"),
-          mkEvoRec("evo-h2", "fact_preference", "user", "用户偏好：no-any 规则。", 5, 0.94, "2026-04-05T08:00:00.000Z", "2026-04-05T08:00:00.000Z"),
-          mkEvoRec("evo-h3", "fact_preference", "user", "用户偏好：开启所有 strict 检查。", 5, 0.93, "2026-04-10T08:00:00.000Z", "2026-04-10T08:00:00.000Z"),
-          mkEvoRec("evo-h4", "fact_preference", "user", "用户偏好：类型检查不用 as any。", 4, 0.91, "2026-04-15T08:00:00.000Z", "2026-04-15T08:00:00.000Z"),
+          mkEvoRec("evo-h1", "preference", "user", "用户偏好：TypeScript strict。", 5, 0.95, "2026-04-01T08:00:00.000Z", "2026-04-01T08:00:00.000Z"),
+          mkEvoRec("evo-h2", "preference", "user", "用户偏好：no-any 规则。", 5, 0.94, "2026-04-05T08:00:00.000Z", "2026-04-05T08:00:00.000Z"),
+          mkEvoRec("evo-h3", "preference", "user", "用户偏好：开启所有 strict 检查。", 5, 0.93, "2026-04-10T08:00:00.000Z", "2026-04-10T08:00:00.000Z"),
+          mkEvoRec("evo-h4", "preference", "user", "用户偏好：类型检查不用 as any。", 4, 0.91, "2026-04-15T08:00:00.000Z", "2026-04-15T08:00:00.000Z"),
         ],
         time_window: { start: "2026-04-01T00:00:00.000Z", end: "2026-04-22T23:59:59.000Z" },
         evolution_type: "knowledge_extraction",
@@ -2536,8 +2536,8 @@ function buildGovernanceVerifyCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT,
       payload: {
         proposal: { proposal_id: "p-2", proposal_type: "archive", targets: { record_ids: ["gv-2"] }, suggested_changes: { status: "archived" }, reason_code: "superseded", reason_text: "该记录已被更新的同类偏好替代。", evidence: { matched_records: 2, replacement_record_ids: ["gv-3"] }, planner: { model: "gpt-5.3", confidence: 0.91 } },
-        seed_records: [record("gv-2", "user", "fact_preference", "用户偏好：回答尽量简短。", 3, 0.84, { created_at: "2026-04-01T09:00:00.000Z", last_used_at: "2026-04-05T09:00:00.000Z" })],
-        related_records: [record("gv-3", "user", "fact_preference", "用户偏好：默认中文，回答自然且尽量简短。", 5, 0.95, { created_at: "2026-04-20T09:00:00.000Z", last_used_at: "2026-04-22T09:00:00.000Z" })],
+        seed_records: [record("gv-2", "user", "preference", "用户偏好：回答尽量简短。", 3, 0.84, { created_at: "2026-04-01T09:00:00.000Z", last_used_at: "2026-04-05T09:00:00.000Z" })],
+        related_records: [record("gv-3", "user", "preference", "用户偏好：默认中文，回答自然且尽量简短。", 5, 0.95, { created_at: "2026-04-20T09:00:00.000Z", last_used_at: "2026-04-22T09:00:00.000Z" })],
         open_conflicts: [],
       },
       schema: memoryGovernanceVerificationSchema,
@@ -2557,8 +2557,8 @@ function buildGovernanceVerifyCases(): Array<EvalCase<unknown>> {
       payload: {
         proposal: { proposal_id: "p-3", proposal_type: "merge", targets: { record_ids: ["gv-user-1", "gv-ws-1"] }, suggested_changes: { merged_summary: "合并后的记录" }, reason_code: "duplicate", reason_text: "两条内容相似。", evidence: { matched_records: 2 }, planner: { model: "gpt-5.3", confidence: 0.72 } },
         seed_records: [
-          record("gv-user-1", "user", "fact_preference", "用户偏好：默认中文。", 5, 0.95),
-          record("gv-ws-1", "workspace", "fact_preference", "项目规则：文档用中文写。", 4, 0.88),
+          record("gv-user-1", "user", "preference", "用户偏好：默认中文。", 5, 0.95),
+          record("gv-ws-1", "workspace", "fact", "项目规则：文档用中文写。", 4, 0.88),
         ],
         related_records: [],
         open_conflicts: [],
@@ -2580,8 +2580,8 @@ function buildGovernanceVerifyCases(): Array<EvalCase<unknown>> {
       payload: {
         proposal: { proposal_id: "p-4", proposal_type: "merge", targets: { record_ids: ["gv-m1", "gv-m2"] }, suggested_changes: { merged_summary: "用户偏好：默认中文回答，简短输出。" }, reason_code: "duplicate", reason_text: "两条描述同一偏好。", evidence: { matched_records: 2 }, planner: { model: "gpt-5.3", confidence: 0.92 } },
         seed_records: [
-          record("gv-m1", "user", "fact_preference", "用户偏好：默认中文回答。", 5, 0.94),
-          record("gv-m2", "user", "fact_preference", "用户偏好：回答简短。", 4, 0.90),
+          record("gv-m1", "user", "preference", "用户偏好：默认中文回答。", 5, 0.94),
+          record("gv-m2", "user", "preference", "用户偏好：回答简短。", 4, 0.90),
         ],
         related_records: [],
         open_conflicts: [],
@@ -2602,7 +2602,7 @@ function buildGovernanceVerifyCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT,
       payload: {
         proposal: { proposal_id: "p-5", proposal_type: "resolve_conflict", targets: { record_ids: ["gv-c1"] }, suggested_changes: { resolution: "auto_merge" }, reason_code: "resolve", reason_text: "自动解决冲突。", evidence: { matched_records: 1 }, planner: { model: "gpt-5.3", confidence: 0.55 } },
-        seed_records: [record("gv-c1", "workspace", "fact_preference", "测试框架用 Jest。", 3, 0.70)],
+        seed_records: [record("gv-c1", "workspace", "fact", "测试框架用 Jest。", 3, 0.70)],
         related_records: [],
         open_conflicts: [{ id: "conflict-gv", record_id: "gv-c1", conflict_with_record_id: "gv-c2", conflict_type: "contradiction", conflict_summary: "测试框架选择矛盾", created_at: "2026-04-22T10:00:00.000Z" }],
       },
@@ -2642,7 +2642,7 @@ function buildGovernanceVerifyCases(): Array<EvalCase<unknown>> {
       systemPrompt: MEMORY_GOVERNANCE_VERIFY_SYSTEM_PROMPT,
       payload: {
         proposal: { proposal_id: "p-7", proposal_type: "archive", targets: { record_ids: ["gv-only"] }, suggested_changes: { status: "archived" }, reason_code: "low_value", reason_text: "价值不高。", evidence: { matched_records: 1 }, planner: { model: "gpt-5.3", confidence: 0.58 } },
-        seed_records: [record("gv-only", "user", "fact_preference", "用户偏好：4 空格缩进。", 5, 0.95)],
+        seed_records: [record("gv-only", "user", "preference", "用户偏好：4 空格缩进。", 5, 0.95)],
         related_records: [],
         open_conflicts: [],
       },

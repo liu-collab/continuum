@@ -1,10 +1,10 @@
-export type FactPreferencePolarity = "positive" | "negative" | "neutral";
+export type PreferencePolarity = "positive" | "negative" | "neutral";
 
-export interface CanonicalFactPreference {
+export interface CanonicalPreference {
   subject: string;
   axis: string;
   value: string;
-  polarity: FactPreferencePolarity;
+  polarity: PreferencePolarity;
   predicate_canonical: string;
 }
 
@@ -90,10 +90,10 @@ const NAMING_STYLES: Array<{ match: string[]; value: string }> = [
   { match: ["kebab-case", "kebab case"], value: "kebab_case" },
 ];
 
-export function canonicalizeFactPreference(input: {
+export function canonicalizePreference(input: {
   summary: string;
   details: Record<string, unknown>;
-}): CanonicalFactPreference {
+}): CanonicalPreference {
   const subject = normalizeText(stringOrFallback(input.details.subject, "user"));
   const predicateSource = stringOrFallback(
     input.details.predicate,
@@ -107,7 +107,7 @@ export function canonicalizeFactPreference(input: {
   const explicitPredicateCanonical = normalizeText(
     stringOrFallback(input.details.predicate_canonical, ""),
   );
-  const inferred = inferFactPreferenceDescriptor(
+  const inferred = inferPreferenceDescriptor(
     explicitPredicateCanonical || predicateSource || input.summary,
   );
 
@@ -124,16 +124,16 @@ export function canonicalizeFactPreference(input: {
   };
 }
 
-export function buildFactPreferenceDedupeKey(
+export function buildPreferenceDedupeKey(
   scope: string,
-  preference: CanonicalFactPreference,
+  preference: CanonicalPreference,
 ): string {
-  return `fact_preference:${scope}:${preference.subject}:${preference.axis}`;
+  return `preference:${scope}:${preference.subject}:${preference.axis}`;
 }
 
-export function isSameFactPreference(
-  left: CanonicalFactPreference,
-  right: CanonicalFactPreference,
+export function isSamePreference(
+  left: CanonicalPreference,
+  right: CanonicalPreference,
 ): boolean {
   return (
     left.axis === right.axis &&
@@ -142,9 +142,9 @@ export function isSameFactPreference(
   );
 }
 
-export function isConflictingFactPreference(
-  left: CanonicalFactPreference,
-  right: CanonicalFactPreference,
+export function isConflictingPreference(
+  left: CanonicalPreference,
+  right: CanonicalPreference,
 ): boolean {
   if (left.axis !== right.axis) {
     return false;
@@ -161,8 +161,8 @@ export function isConflictingFactPreference(
   );
 }
 
-function inferFactPreferenceDescriptor(text: string): Omit<
-  CanonicalFactPreference,
+function inferPreferenceDescriptor(text: string): Omit<
+  CanonicalPreference,
   "subject"
 > {
   const normalized = normalizeText(text);
@@ -206,7 +206,7 @@ function inferFactPreferenceDescriptor(text: string): Omit<
 
 function detectIndentation(
   normalized: string,
-): Omit<CanonicalFactPreference, "subject"> | null {
+): Omit<CanonicalPreference, "subject"> | null {
   if (
     !containsAny(normalized, ["indent", "indentation", "缩进", "tab", "space", "spaces", "空格"])
   ) {
@@ -252,7 +252,7 @@ function detectIndentation(
 function detectLanguagePreference(
   normalized: string,
   scopeKeywords: string[],
-): Omit<CanonicalFactPreference, "subject"> | null {
+): Omit<CanonicalPreference, "subject"> | null {
   const hasScopeKeyword = containsAny(normalized, scopeKeywords);
   const languages = [
     { tokens: ["中文", "chinese"], value: "zh" },
@@ -283,7 +283,7 @@ function detectLanguagePreference(
 
 function detectVerbosity(
   normalized: string,
-): Omit<CanonicalFactPreference, "subject"> | null {
+): Omit<CanonicalPreference, "subject"> | null {
   if (containsAny(normalized, VERBOSITY_CONCISE)) {
     return {
       axis: "response_verbosity",
@@ -307,7 +307,7 @@ function detectVerbosity(
 
 function detectNamingStyle(
   normalized: string,
-): Omit<CanonicalFactPreference, "subject"> | null {
+): Omit<CanonicalPreference, "subject"> | null {
   for (const item of NAMING_STYLES) {
     if (!containsAny(normalized, item.match)) {
       continue;
@@ -332,7 +332,7 @@ function parseNumberToken(token: string): number | null {
   return NUMBER_WORDS[token] ?? null;
 }
 
-function normalizePolarity(value: string): FactPreferencePolarity {
+function normalizePolarity(value: string): PreferencePolarity {
   if (value === "positive" || value === "negative" || value === "neutral") {
     return value;
   }
@@ -340,7 +340,7 @@ function normalizePolarity(value: string): FactPreferencePolarity {
   return "neutral";
 }
 
-function inferPolarity(input: string): FactPreferencePolarity {
+function inferPolarity(input: string): PreferencePolarity {
   if (containsAny(input, NEGATIVE_PATTERNS)) {
     return "negative";
   }

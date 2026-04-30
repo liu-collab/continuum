@@ -21,7 +21,7 @@ export class HttpMemoryRecallSearchPlanner implements RecallSearchPlanner {
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "session", "user"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["fact", "preference", "task_state", "episodic"],
         semantic_score: 0.4,
         semantic_threshold: 0.72,
       },

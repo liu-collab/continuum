@@ -1,7 +1,8 @@
 import type { MemoryType, RuntimePhase, TriggerDecision } from "./types.js";
 
 export const memoryTypeLabels: Record<MemoryType, string> = {
-  fact_preference: "偏好与约束",
+  fact: "事实与约束",
+  preference: "偏好",
   task_state: "任务状态",
   episodic: "历史片段",
 };
@@ -71,8 +72,11 @@ export function injectionHintLabel(decision: TriggerDecision): string {
   if (decision.requested_memory_types.includes("task_state")) {
     return "优先帮助模型延续当前任务。";
   }
-  if (decision.requested_memory_types.includes("fact_preference")) {
-    return "优先提醒稳定偏好与背景约束。";
+  if (decision.requested_memory_types.includes("fact")) {
+    return "优先提醒稳定事实与背景约束。";
+  }
+  if (decision.requested_memory_types.includes("preference")) {
+    return "优先提醒稳定偏好。";
   }
   return "优先补充历史片段作为参考。";
 }

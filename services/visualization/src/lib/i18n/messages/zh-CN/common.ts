@@ -158,6 +158,7 @@ const zhCommon = {
         label: "快速筛选",
         active: "全部活跃",
         pending: "待确认 ({count})",
+        fact: "事实",
         preference: "偏好",
         taskState: "任务状态",
         episodic: "事件记忆"
@@ -399,7 +400,8 @@ const zhCommon = {
         unavailable: "不可用"
       },
       memoryType: {
-        fact_preference: "事实与偏好",
+        fact: "事实",
+        preference: "偏好",
         task_state: "任务状态",
         episodic: "情景记忆"
       },

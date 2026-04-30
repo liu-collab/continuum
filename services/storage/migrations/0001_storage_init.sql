@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS __PRIVATE_SCHEMA_IDENT__.memory_records (
   user_id UUID NULL,
   task_id UUID NULL,
   session_id UUID NULL,
-  memory_type TEXT NOT NULL CHECK (memory_type IN ('fact_preference', 'task_state', 'episodic')),
+  memory_type TEXT NOT NULL CHECK (memory_type IN ('fact', 'preference', 'task_state', 'episodic')),
   scope TEXT NOT NULL CHECK (scope IN ('session', 'task', 'user', 'workspace')),
   status TEXT NOT NULL CHECK (status IN ('active', 'superseded', 'archived', 'pending_confirmation', 'deleted')),
   summary TEXT NOT NULL,

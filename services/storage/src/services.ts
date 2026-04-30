@@ -15,13 +15,9 @@ import type {
   RecordPatchInput,
   ResolveConflictInput,
   RestoreVersionInput,
-  RuntimeCompatibleWriteBackBatchRequest,
-  RuntimeWriteBackBatchRequest,
-  SubmittedWriteBackJob,
   WriteProjectionStatus,
   WriteBackCandidate,
 } from "./contracts.js";
-import { mapRuntimeCandidateType } from "./contracts.js";
 import type { StorageConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import type { StorageDatabase } from "./db/client.js";
@@ -145,34 +141,6 @@ export class StorageService {
       status: "accepted_async",
       received_at: job.received_at,
       candidate_summary: candidates[index]!.summary,
-    }));
-  }
-
-  async submitRuntimeWriteBackBatch(
-    payload: RuntimeWriteBackBatchRequest,
-  ): Promise<SubmittedWriteBackJob[]> {
-    const jobs = await this.submitWriteBackCandidates(payload.candidates);
-
-    return jobs.map((job, index) => ({
-      candidate_summary: payload.candidates[index]!.summary,
-      job_id: job.id,
-      status: "accepted_async",
-    }));
-  }
-
-  async submitRuntimeCompatibleWriteBackBatch(
-    payload: RuntimeCompatibleWriteBackBatchRequest,
-  ): Promise<SubmittedWriteBackJob[]> {
-    const candidates = payload.candidates.map((candidate, index) =>
-      adaptRuntimeCandidateToStorage(payload, candidate, index),
-    );
-
-    const jobs = await this.submitWriteBackCandidates(candidates);
-
-    return jobs.map((job, index) => ({
-      candidate_summary: payload.candidates[index]!.summary,
-      job_id: job.id,
-      status: "accepted_async",
     }));
   }
 
@@ -494,39 +462,4 @@ export function createStorageService(input: {
     input.database,
     input.embeddingsClient,
   );
-}
-
-function adaptRuntimeCandidateToStorage(
-  payload: RuntimeCompatibleWriteBackBatchRequest,
-  candidate: RuntimeCompatibleWriteBackBatchRequest["candidates"][number],
-  index: number,
-): WriteBackCandidate {
-  const candidateType = mapRuntimeCandidateType(candidate.candidate_type);
-
-  return {
-    workspace_id: payload.workspace_id,
-    user_id: payload.user_id,
-    task_id: candidate.scope === "task" ? (candidate.source.task_id ?? payload.task_id ?? null) : null,
-    session_id: candidate.scope === "session" ? payload.session_id : null,
-    candidate_type: candidateType,
-    scope: candidate.scope,
-    summary: candidate.summary,
-    details: {
-      ...candidate.details,
-      runtime_candidate_type: candidate.candidate_type,
-      runtime_source: candidate.source,
-      runtime_dedupe_key: candidate.dedupe_key,
-    },
-    importance: candidate.importance,
-    confidence: candidate.confidence,
-    write_reason: candidate.write_reason,
-    source: {
-      source_type: candidate.source.host,
-      source_ref: candidate.source.turn_id ?? candidate.source.thread_id ?? `${payload.session_id}:${index}`,
-      service_name: payload.source_service,
-      origin_workspace_id: payload.workspace_id,
-      confirmed_by_user: candidate.candidate_type === "fact_preference",
-    },
-    idempotency_key: `${payload.workspace_id}:${payload.user_id}:${candidate.dedupe_key}`,
-  };
 }

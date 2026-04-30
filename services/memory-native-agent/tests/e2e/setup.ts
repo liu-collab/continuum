@@ -38,7 +38,7 @@ export interface E2eCandidateMemory {
   user_id: string;
   session_id: string | null;
   task_id: string | null;
-  memory_type: "fact_preference" | "task_state" | "episodic";
+  memory_type: "fact" | "preference" | "task_state" | "episodic";
   scope: Scope;
   summary: string;
   details: Record<string, unknown> | null;
@@ -230,7 +230,7 @@ class StorageReadModelRepository {
     session_id: string;
     task_id?: string;
     scope_filter: Scope[];
-    memory_type_filter: Array<"fact_preference" | "task_state" | "episodic">;
+    memory_type_filter: Array<"fact" | "preference" | "task_state" | "episodic">;
     status_filter: RecordStatus[];
     importance_threshold: number;
     candidate_limit: number;

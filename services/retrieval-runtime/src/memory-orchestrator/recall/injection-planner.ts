@@ -21,12 +21,12 @@ export class HttpMemoryRecallInjectionPlanner implements RecallInjectionPlanner 
         phase: "before_response",
         memory_mode: "workspace_plus_global",
         requested_scopes: ["workspace", "session", "user"],
-        requested_memory_types: ["fact_preference", "task_state", "episodic"],
+        requested_memory_types: ["fact", "preference", "task_state", "episodic"],
         candidates: [
           {
             id: "mem-1",
             scope: "user",
-            memory_type: "fact_preference",
+            memory_type: "preference",
             summary: "用户偏好：默认用中文回答。",
             importance: 5,
             confidence: 0.95,

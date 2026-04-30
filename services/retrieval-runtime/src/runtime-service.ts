@@ -66,10 +66,12 @@ const INJECTION_EVALUATION_TTL_MS = 30 * 60 * 1000;
 type RecentInjectionRuntimeConfig = Pick<
   AppConfig,
   | "INJECTION_DEDUP_ENABLED"
-  | "INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE"
+  | "INJECTION_HARD_WINDOW_TURNS_FACT"
+  | "INJECTION_HARD_WINDOW_TURNS_PREFERENCE"
   | "INJECTION_HARD_WINDOW_TURNS_TASK_STATE"
   | "INJECTION_HARD_WINDOW_TURNS_EPISODIC"
-  | "INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE"
+  | "INJECTION_HARD_WINDOW_MS_FACT"
+  | "INJECTION_HARD_WINDOW_MS_PREFERENCE"
   | "INJECTION_HARD_WINDOW_MS_TASK_STATE"
   | "INJECTION_HARD_WINDOW_MS_EPISODIC"
   | "INJECTION_SOFT_WINDOW_MS_TASK_STATE"
@@ -80,10 +82,12 @@ type RecentInjectionRuntimeConfig = Pick<
 
 const DEFAULT_RECENT_INJECTION_CONFIG: RecentInjectionRuntimeConfig = {
   INJECTION_DEDUP_ENABLED: true,
-  INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: 5,
+  INJECTION_HARD_WINDOW_TURNS_FACT: 5,
+  INJECTION_HARD_WINDOW_TURNS_PREFERENCE: 5,
   INJECTION_HARD_WINDOW_TURNS_TASK_STATE: 3,
   INJECTION_HARD_WINDOW_TURNS_EPISODIC: 2,
-  INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_FACT: 30 * 60 * 1000,
+  INJECTION_HARD_WINDOW_MS_PREFERENCE: 30 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_TASK_STATE: 10 * 60 * 1000,
   INJECTION_HARD_WINDOW_MS_EPISODIC: 5 * 60 * 1000,
   INJECTION_SOFT_WINDOW_MS_TASK_STATE: 30 * 60 * 1000,
@@ -2040,8 +2044,10 @@ export class RetrievalRuntimeService {
 
   private getHardWindowTurns(memoryType: MemoryType) {
     switch (memoryType) {
-      case "fact_preference":
-        return this.config.INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE;
+      case "fact":
+        return this.config.INJECTION_HARD_WINDOW_TURNS_FACT;
+      case "preference":
+        return this.config.INJECTION_HARD_WINDOW_TURNS_PREFERENCE;
       case "task_state":
         return this.config.INJECTION_HARD_WINDOW_TURNS_TASK_STATE;
       case "episodic":
@@ -2051,8 +2057,10 @@ export class RetrievalRuntimeService {
 
   private getHardWindowMs(memoryType: MemoryType) {
     switch (memoryType) {
-      case "fact_preference":
-        return this.config.INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE;
+      case "fact":
+        return this.config.INJECTION_HARD_WINDOW_MS_FACT;
+      case "preference":
+        return this.config.INJECTION_HARD_WINDOW_MS_PREFERENCE;
       case "task_state":
         return this.config.INJECTION_HARD_WINDOW_MS_TASK_STATE;
       case "episodic":
@@ -2062,7 +2070,8 @@ export class RetrievalRuntimeService {
 
   private getSoftWindowMs(memoryType: MemoryType) {
     switch (memoryType) {
-      case "fact_preference":
+      case "fact":
+      case "preference":
         return 0;
       case "task_state":
         return this.config.INJECTION_SOFT_WINDOW_MS_TASK_STATE;
@@ -2220,10 +2229,12 @@ function isAppConfig(value: AppConfig | TriggerEngine): value is AppConfig {
 function pickRecentInjectionConfig(config: AppConfig): RecentInjectionRuntimeConfig {
   return {
     INJECTION_DEDUP_ENABLED: config.INJECTION_DEDUP_ENABLED,
-    INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE: config.INJECTION_HARD_WINDOW_TURNS_FACT_PREFERENCE,
+    INJECTION_HARD_WINDOW_TURNS_FACT: config.INJECTION_HARD_WINDOW_TURNS_FACT,
+    INJECTION_HARD_WINDOW_TURNS_PREFERENCE: config.INJECTION_HARD_WINDOW_TURNS_PREFERENCE,
     INJECTION_HARD_WINDOW_TURNS_TASK_STATE: config.INJECTION_HARD_WINDOW_TURNS_TASK_STATE,
     INJECTION_HARD_WINDOW_TURNS_EPISODIC: config.INJECTION_HARD_WINDOW_TURNS_EPISODIC,
-    INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE: config.INJECTION_HARD_WINDOW_MS_FACT_PREFERENCE,
+    INJECTION_HARD_WINDOW_MS_FACT: config.INJECTION_HARD_WINDOW_MS_FACT,
+    INJECTION_HARD_WINDOW_MS_PREFERENCE: config.INJECTION_HARD_WINDOW_MS_PREFERENCE,
     INJECTION_HARD_WINDOW_MS_TASK_STATE: config.INJECTION_HARD_WINDOW_MS_TASK_STATE,
     INJECTION_HARD_WINDOW_MS_EPISODIC: config.INJECTION_HARD_WINDOW_MS_EPISODIC,
     INJECTION_SOFT_WINDOW_MS_TASK_STATE: config.INJECTION_SOFT_WINDOW_MS_TASK_STATE,

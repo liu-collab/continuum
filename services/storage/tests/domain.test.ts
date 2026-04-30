@@ -18,12 +18,12 @@ describe("storage domain rules", () => {
       }),
     );
 
-    expect(normalized.dedupe_key).toContain("fact_preference:user:user");
+    expect(normalized.dedupe_key).toContain("preference:user:user");
     expect(normalized.importance).toBe(5);
     expect(normalized.confidence).toBe(0.9);
   });
 
-  it("ignores duplicate fact preference", () => {
+  it("ignores duplicate preference", () => {
     const normalized = normalizeCandidate(buildCandidate());
     const existing = {
       id: "record-1",
@@ -31,7 +31,7 @@ describe("storage domain rules", () => {
       user_id: normalized.user_id ?? null,
       task_id: null,
       session_id: null,
-      memory_type: "fact_preference" as const,
+      memory_type: "preference" as const,
       scope: "user" as const,
       status: "active" as const,
       summary: normalized.summary,
@@ -54,21 +54,21 @@ describe("storage domain rules", () => {
     expect(decision.decision).toBe("ignore_duplicate");
   });
 
-  it("opens conflict for opposite fact preference", () => {
+  it("opens conflict for opposite preference", () => {
     const existing = {
       id: "record-1",
       workspace_id: "11111111-1111-1111-1111-111111111111",
       user_id: "22222222-2222-2222-2222-222222222222",
       task_id: null,
       session_id: null,
-      memory_type: "fact_preference" as const,
+      memory_type: "preference" as const,
       scope: "user" as const,
       status: "active" as const,
       summary: "User likes concise answers",
       details_json: { subject: "user", predicate: "likes concise answers" },
       importance: 5,
       confidence: 0.7,
-      dedupe_key: "fact_preference:user:user:likes concise answers",
+      dedupe_key: "preference:user:user:likes concise answers",
       source_type: "user_input",
       source_ref: "turn-1",
       created_by_service: "retrieval-runtime",
@@ -103,21 +103,21 @@ describe("storage domain rules", () => {
     expect(conflict.should_mark_pending_confirmation).toBe(true);
   });
 
-  it("opens conflict for opposite chinese fact preference", () => {
+  it("opens conflict for opposite chinese preference", () => {
     const existing = {
       id: "record-zh-1",
       workspace_id: "11111111-1111-1111-1111-111111111111",
       user_id: "22222222-2222-2222-2222-222222222222",
       task_id: null,
       session_id: null,
-      memory_type: "fact_preference" as const,
+      memory_type: "preference" as const,
       scope: "user" as const,
       status: "active" as const,
       summary: "用户喜欢简洁回答",
       details_json: { subject: "user", predicate: "喜欢简洁回答" },
       importance: 5,
       confidence: 0.7,
-      dedupe_key: "fact_preference:user:user:简洁回答",
+      dedupe_key: "preference:user:user:简洁回答",
       source_type: "user_input",
       source_ref: "turn-zh-1",
       created_by_service: "retrieval-runtime",
@@ -158,7 +158,7 @@ describe("storage domain rules", () => {
     expect(normalizedB.source.origin_workspace_id).toBe("aaaaaaaa-1111-4111-8111-111111111111");
   });
 
-  it("normalizes semantically equivalent fact preferences to the same dedupe key", () => {
+  it("normalizes semantically equivalent preferences to the same dedupe key", () => {
     const normalizedA = normalizeCandidate(
       buildCandidate({
         summary: "我偏好默认中文回答",
@@ -178,7 +178,7 @@ describe("storage domain rules", () => {
       }),
     );
 
-    expect(normalizedA.dedupe_key).toBe("fact_preference:user:user:response_language");
+    expect(normalizedA.dedupe_key).toBe("preference:user:user:response_language");
     expect(normalizedA.dedupe_key).toBe(normalizedB.dedupe_key);
     expect(normalizedA.details.preference_value).toBe("zh");
     expect(normalizedB.details.preference_value).toBe("zh");
@@ -204,7 +204,7 @@ describe("storage domain rules", () => {
       }),
     );
 
-    expect(normalizedA.dedupe_key).toBe("fact_preference:user:user:indentation");
+    expect(normalizedA.dedupe_key).toBe("preference:user:user:indentation");
     expect(normalizedA.dedupe_key).toBe(normalizedB.dedupe_key);
     expect(normalizedA.details.preference_value).toBe("spaces:4");
     expect(normalizedB.details.preference_value).toBe("spaces:4");
@@ -226,6 +226,61 @@ describe("storage domain rules", () => {
     );
 
     expect(normalized.scope).toBe("workspace");
+  });
+
+  it("uses weighted signals so a preference mentioning repo remains user scoped", () => {
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        summary: "I prefer the repo pattern for dependency injection",
+        details: {
+          subject: "user",
+          predicate: "prefer the repo pattern for dependency injection",
+        },
+        write_reason: "explicit user preference",
+      }),
+    );
+
+    expect(normalized.scope).toBe("user");
+  });
+
+  it("generates separate fact dedupe keys", () => {
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        candidate_type: "fact",
+        scope: "workspace",
+        user_id: null,
+        summary: "This project uses PostgreSQL 16",
+        details: {
+          subject: "project",
+          predicate: "uses PostgreSQL 16",
+        },
+        confidence: undefined,
+        source: {
+          confirmed_by_user: false,
+        },
+      }),
+    );
+
+    expect(normalized.memory_type).toBe("fact");
+    expect(normalized.dedupe_key).toBe("fact:workspace:project:uses postgresql 16");
+    expect(normalized.confidence).toBe(0.75);
+  });
+
+  it("promotes task signals to task scope when task id exists", () => {
+    const normalized = normalizeCandidate(
+      buildCandidate({
+        candidate_type: "task_state",
+        scope: "workspace",
+        task_id: "44444444-4444-4444-8444-444444444444",
+        summary: "Next step is to run storage tests",
+        details: {
+          state_key: "next_step",
+          state_value: "run storage tests",
+        },
+      }),
+    );
+
+    expect(normalized.scope).toBe("task");
   });
 
   it("treats chinese workspace signals as workspace scope during final arbitration", () => {

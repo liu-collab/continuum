@@ -337,7 +337,7 @@ describe("Codex proxy bridge (memory-codex-proxy.mjs)", () => {
           memory_records: [
             {
               id: "mem-1",
-              memory_type: "fact_preference",
+              memory_type: "preference",
               scope: "user",
               summary: "用户偏好：中文输出",
             },
@@ -350,7 +350,7 @@ describe("Codex proxy bridge (memory-codex-proxy.mjs)", () => {
       expect(items[0].role).toBe("developer");
       expect(items[0].content[0].text).toContain("命中原因：记忆注入");
       expect(items[0].content[0].text).toContain(
-        "记忆[fact_preference/user]：用户偏好：中文输出",
+        "记忆[preference/user]：用户偏好：中文输出",
       );
     });
 

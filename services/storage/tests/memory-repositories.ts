@@ -687,7 +687,7 @@ export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBa
     user_id: "22222222-2222-4222-8222-222222222222",
     task_id: null,
     session_id: null,
-    candidate_type: "fact_preference",
+    candidate_type: "preference",
     scope: "user",
     summary: "User prefers concise answers",
     details: {
@@ -703,6 +703,6 @@ export function buildCandidate(overrides?: Partial<WriteBackCandidate>): WriteBa
       ...baseSource,
       ...overrides?.source,
     },
-    idempotency_key: overrides?.idempotency_key ?? "fact-pref-user-prefers-concise-answers",
+    idempotency_key: overrides?.idempotency_key ?? "pref-user-prefers-concise-answers",
   };
 }
