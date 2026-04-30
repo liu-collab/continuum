@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -216,5 +216,73 @@ describe("FileMemoryStore", () => {
 
     await expect(store.load()).resolves.toEqual({ loaded: 0, deleted: 0, skipped: 0 });
     expect(store.listRecords()).toEqual([]);
+  });
+
+  it("incrementally loads appended records without replaying the whole file", async () => {
+    const recordsPath = path.join(tempDir, "records.jsonl");
+    const first = {
+      ...baseRecord,
+      id: "rec-first",
+      updated_at: "2026-04-30T10:00:00.000Z",
+    };
+    const second = {
+      ...baseRecord,
+      id: "rec-second",
+      summary: "用户偏好：先给结论",
+      updated_at: "2026-04-30T10:01:00.000Z",
+    };
+    await writeFile(recordsPath, `${JSON.stringify(first)}\n`, "utf8");
+    const store = new FileMemoryStore({ memoryDir: tempDir });
+
+    await expect(store.load()).resolves.toEqual({ loaded: 1, deleted: 0, skipped: 0 });
+    const firstOffset = store.loadState().loaded_bytes;
+    await expect(store.load()).resolves.toEqual({ loaded: 0, deleted: 0, skipped: 0 });
+    await appendFile(recordsPath, `${JSON.stringify(second)}\n`, "utf8");
+
+    await expect(store.load()).resolves.toEqual({ loaded: 1, deleted: 0, skipped: 0 });
+
+    expect(store.loadState().loaded_bytes).toBeGreaterThan(firstOffset);
+    expect(store.listRecords().map((record) => record.id).sort()).toEqual(["rec-first", "rec-second"]);
+  });
+
+  it("keeps partial appended lines until the next complete load", async () => {
+    const recordsPath = path.join(tempDir, "records.jsonl");
+    await writeFile(recordsPath, `${JSON.stringify(baseRecord)}\n`, "utf8");
+    const store = new FileMemoryStore({ memoryDir: tempDir });
+    await store.load();
+    const partial = {
+      ...baseRecord,
+      id: "rec-partial",
+      summary: "用户偏好：短句回答",
+      updated_at: "2026-04-30T10:01:00.000Z",
+    };
+
+    await appendFile(recordsPath, JSON.stringify(partial).slice(0, -2), "utf8");
+    await expect(store.load()).resolves.toEqual({ loaded: 0, deleted: 0, skipped: 0 });
+    expect(store.get("rec-partial")).toBeUndefined();
+    await appendFile(recordsPath, `${JSON.stringify(partial).slice(-2)}\n`, "utf8");
+
+    await expect(store.load()).resolves.toEqual({ loaded: 1, deleted: 0, skipped: 0 });
+    expect(store.get("rec-partial")?.summary).toBe("用户偏好：短句回答");
+  });
+
+  it("rebuilds indexes when records file is truncated", async () => {
+    const recordsPath = path.join(tempDir, "records.jsonl");
+    await writeFile(
+      recordsPath,
+      [
+        JSON.stringify(baseRecord),
+        JSON.stringify({ ...baseRecord, id: "rec-extra", summary: "用户偏好：简短回答" }),
+      ].join("\n"),
+      "utf8",
+    );
+    const store = new FileMemoryStore({ memoryDir: tempDir });
+    await store.load();
+
+    await truncate(recordsPath, 0);
+    await writeFile(recordsPath, `${JSON.stringify({ ...baseRecord, id: "rec-new" })}\n`, "utf8");
+    await expect(store.load()).resolves.toEqual({ loaded: 1, deleted: 0, skipped: 0 });
+
+    expect(store.listRecords().map((record) => record.id)).toEqual(["rec-new"]);
   });
 });

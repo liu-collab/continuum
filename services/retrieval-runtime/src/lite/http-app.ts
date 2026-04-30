@@ -130,6 +130,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       storage: {
         path: store.path,
         records: store.size(),
+        load_state: store.loadState(),
         write_queue: store.writeQueueStats(),
         writeback_outbox_path: outbox.path,
       },
@@ -176,6 +177,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       storage: {
         path: store.path,
         records: store.size(),
+        load_state: store.loadState(),
       },
     };
   });

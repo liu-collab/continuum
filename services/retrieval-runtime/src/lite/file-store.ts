@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { LiteWriteQueue, type LiteWriteQueueStats } from "./write-queue.js";
@@ -76,6 +76,9 @@ export class FileMemoryStore {
   private readonly idsByScope = new Map<ScopeType, Set<string>>();
   private readonly idsByWorkspace = new Map<string, Set<string>>();
   private readonly writeQueue: LiteWriteQueue;
+  private loadedOnce = false;
+  private loadedByteOffset = 0;
+  private pendingLineFragment = "";
 
   constructor(private readonly options: FileMemoryStoreOptions) {
     this.recordsPath = path.join(
@@ -90,20 +93,51 @@ export class FileMemoryStore {
   }
 
   async load(): Promise<FileMemoryStoreLoadResult> {
-    this.clearIndexes();
+    const fileSize = await this.readFileSize();
+    if (fileSize === null) {
+      this.clearIndexes();
+      this.loadedOnce = true;
+      this.loadedByteOffset = 0;
+      this.pendingLineFragment = "";
+      return { loaded: 0, deleted: 0, skipped: 0 };
+    }
 
-    const content = await readFile(this.recordsPath, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return "";
-      }
-      throw error;
-    });
+    if (!this.loadedOnce || fileSize < this.loadedByteOffset) {
+      this.clearIndexes();
+      this.pendingLineFragment = "";
+      const content = await readFile(this.recordsPath, "utf8");
+      const result = this.applyJsonlContent(content, false);
+      this.loadedOnce = true;
+      this.loadedByteOffset = fileSize;
+      return result;
+    }
 
+    if (fileSize === this.loadedByteOffset) {
+      return { loaded: 0, deleted: 0, skipped: 0 };
+    }
+
+    const content = await this.readAppendedContent(this.loadedByteOffset, fileSize);
+    const result = this.applyJsonlContent(
+      `${this.pendingLineFragment}${content}`,
+      !content.endsWith("\n"),
+    );
+    this.loadedByteOffset = fileSize;
+    this.loadedOnce = true;
+    return result;
+  }
+
+  private applyJsonlContent(content: string, keepLastLineFragment: boolean): FileMemoryStoreLoadResult {
     let loaded = 0;
     let deleted = 0;
     let skipped = 0;
+    const lines = content.split(/\r?\n/);
+    this.pendingLineFragment = "";
 
-    for (const line of content.split(/\r?\n/)) {
+    if (keepLastLineFragment) {
+      this.pendingLineFragment = lines.pop() ?? "";
+    }
+
+    for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
@@ -140,6 +174,7 @@ export class FileMemoryStore {
     await this.writeQueue.enqueue(async () => {
       await this.appendEntry(record);
       this.applyRecord(record);
+      await this.markLoadedToCurrentFileEnd();
     });
   }
 
@@ -151,6 +186,7 @@ export class FileMemoryStore {
         deleted_at: deletedAt,
       });
       this.removeRecord(recordId);
+      await this.markLoadedToCurrentFileEnd();
     });
   }
 
@@ -201,9 +237,66 @@ export class FileMemoryStore {
     return this.writeQueue.stats();
   }
 
+  loadState(): {
+    initialized: boolean;
+    loaded_bytes: number;
+    pending_fragment_bytes: number;
+  } {
+    return {
+      initialized: this.loadedOnce,
+      loaded_bytes: this.loadedByteOffset,
+      pending_fragment_bytes: Buffer.byteLength(this.pendingLineFragment, "utf8"),
+    };
+  }
+
   private async appendEntry(entry: LiteMemoryJsonlEntry): Promise<void> {
     await mkdir(path.dirname(this.recordsPath), { recursive: true });
     await appendFile(this.recordsPath, `${JSON.stringify(entry)}\n`, "utf8");
+  }
+
+  private async readFileSize(): Promise<number | null> {
+    try {
+      return (await stat(this.recordsPath)).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private async readAppendedContent(start: number, end: number): Promise<string> {
+    const length = end - start;
+    if (length <= 0) {
+      return "";
+    }
+
+    const handle = await open(this.recordsPath, "r");
+    try {
+      const buffer = Buffer.allocUnsafe(length);
+      let offset = 0;
+      while (offset < length) {
+        const result = await handle.read(buffer, offset, length - offset, start + offset);
+        if (result.bytesRead === 0) {
+          break;
+        }
+        offset += result.bytesRead;
+      }
+      return buffer.subarray(0, offset).toString("utf8");
+    } finally {
+      await handle.close();
+    }
+  }
+
+  private async markLoadedToCurrentFileEnd() {
+    if (!this.loadedOnce) {
+      return;
+    }
+    const fileSize = await this.readFileSize();
+    if (fileSize !== null) {
+      this.loadedByteOffset = fileSize;
+      this.pendingLineFragment = "";
+    }
   }
 
   private applyRecord(record: LiteMemoryRecord): void {
