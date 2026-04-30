@@ -269,7 +269,7 @@ describe("AgentWorkspace bootstrap states", () => {
       </AgentI18nProvider>
     );
 
-    expect(await screen.findByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
+    expect(await screen.findByTestId("provider-setup-wizard")).toHaveTextContent("1. 填写 base_url");
     expect(screen.getByText("尚未配置主模型。完成这 3 步后，就可以开始对话。")).toBeInTheDocument();
   });
 

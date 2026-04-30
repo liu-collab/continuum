@@ -124,65 +124,94 @@ function resolveStatusTone(status: string | undefined) {
 
 type MemoryModelMode = "same_as_primary" | "custom";
 type SetupWizardStep = 1 | 2 | 3;
-type SetupProviderId = "openai" | "anthropic" | "deepseek" | "custom" | "ollama";
+type SetupProtocolId = EditableProviderKind;
 type ProviderApiKeyEnv = "OPENAI_API_KEY" | "ANTHROPIC_API_KEY" | "DEEPSEEK_API_KEY";
 
-type SetupProviderPreset = {
-  id: SetupProviderId;
+type SetupProtocolPreset = {
+  id: SetupProtocolId;
   label: string;
   kind: EditableProviderKind;
   baseUrl: string;
+  endpoint: string;
   apiKeyRequired: boolean;
   apiKeyEnv?: ProviderApiKeyEnv;
 };
 
-const SETUP_PROVIDER_PRESETS: SetupProviderPreset[] = [
+type SetupEnvPreset = {
+  preset: SetupProtocolPreset;
+  apiKeyEnv: ProviderApiKeyEnv;
+  baseUrl: string;
+};
+
+const SETUP_PROTOCOL_PRESETS: SetupProtocolPreset[] = [
   {
-    id: "openai",
-    label: "OpenAI",
+    id: "openai-compatible",
+    label: "OpenAI-compatible (/v1/chat/completions)",
+    kind: "openai-compatible",
+    baseUrl: "",
+    endpoint: "/v1/chat/completions",
+    apiKeyRequired: true,
+  },
+  {
+    id: "openai-responses",
+    label: "OpenAI Responses (/v1/responses)",
     kind: "openai-responses",
     baseUrl: "https://api.openai.com/v1",
+    endpoint: "/v1/responses",
     apiKeyRequired: true,
     apiKeyEnv: "OPENAI_API_KEY",
   },
   {
     id: "anthropic",
-    label: "Anthropic",
+    label: "Anthropic Messages (/v1/messages)",
     kind: "anthropic",
     baseUrl: "https://api.anthropic.com",
+    endpoint: "/v1/messages",
     apiKeyRequired: true,
     apiKeyEnv: "ANTHROPIC_API_KEY",
   },
   {
-    id: "deepseek",
-    label: "DeepSeek",
-    kind: "openai-compatible",
-    baseUrl: "https://api.deepseek.com",
-    apiKeyRequired: true,
-    apiKeyEnv: "DEEPSEEK_API_KEY",
-  },
-  {
-    id: "custom",
-    label: "OpenAI-compatible API",
-    kind: "openai-compatible",
-    baseUrl: "https://api.example.com/v1",
-    apiKeyRequired: true,
-  },
-  {
     id: "ollama",
-    label: "Ollama",
+    label: "Ollama (/api/chat)",
     kind: "ollama",
     baseUrl: "http://127.0.0.1:11434",
+    endpoint: "/api/chat",
     apiKeyRequired: false,
   },
 ];
 
-function resolveSetupPreset(providerId: SetupProviderId) {
-  return SETUP_PROVIDER_PRESETS.find((preset) => preset.id === providerId) ?? SETUP_PROVIDER_PRESETS[0];
+function resolveSetupPreset(protocolId: SetupProtocolId) {
+  return SETUP_PROTOCOL_PRESETS.find((preset) => preset.id === protocolId) ?? SETUP_PROTOCOL_PRESETS[0];
 }
 
-function resolveSetupPresetFromEnvHint(envName: string | null | undefined) {
-  return SETUP_PROVIDER_PRESETS.find((preset) => preset.apiKeyEnv === envName) ?? null;
+function resolveSetupPresetFromEnvHint(envName: string | null | undefined): SetupEnvPreset | null {
+  if (envName === "OPENAI_API_KEY") {
+    const preset = resolveSetupPreset("openai-responses");
+    return {
+      preset,
+      apiKeyEnv: envName,
+      baseUrl: preset.baseUrl,
+    };
+  }
+
+  if (envName === "ANTHROPIC_API_KEY") {
+    const preset = resolveSetupPreset("anthropic");
+    return {
+      preset,
+      apiKeyEnv: envName,
+      baseUrl: preset.baseUrl,
+    };
+  }
+
+  if (envName === "DEEPSEEK_API_KEY") {
+    return {
+      preset: resolveSetupPreset("openai-compatible"),
+      apiKeyEnv: envName,
+      baseUrl: "https://api.deepseek.com",
+    };
+  }
+
+  return null;
 }
 
 function resolveProviderApiKeyEnv(value: string | null | undefined): ProviderApiKeyEnv | "" {
@@ -323,11 +352,11 @@ export function SettingsModal({
   const [checkingMemoryLlm, setCheckingMemoryLlm] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [setupStep, setSetupStep] = useState<SetupWizardStep>(1);
-  const [setupProviderId, setSetupProviderId] = useState<SetupProviderId>("openai");
+  const [setupProtocolId, setSetupProtocolId] = useState<SetupProtocolId>("openai-compatible");
   const [setupApiKey, setSetupApiKey] = useState("");
   const [setupApiKeyEnv, setSetupApiKeyEnv] = useState<ProviderApiKeyEnv | "">("");
   const [setupModel, setSetupModel] = useState("");
-  const [setupBaseUrl, setSetupBaseUrl] = useState("https://api.openai.com/v1");
+  const [setupBaseUrl, setSetupBaseUrl] = useState("");
   const [setupModelOptions, setSetupModelOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [setupModelListStatus, setSetupModelListStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [setupModelListError, setSetupModelListError] = useState<string | null>(null);
@@ -337,7 +366,7 @@ export function SettingsModal({
     [providerKind, providerKindToSave],
   );
 
-  const setupProvider = useMemo(() => resolveSetupPreset(setupProviderId), [setupProviderId]);
+  const setupProtocol = useMemo(() => resolveSetupPreset(setupProtocolId), [setupProtocolId]);
 
   const primaryMemoryProtocol = useMemo(
     () => resolveMemoryProtocolFromProviderKind(currentProviderKind),
@@ -411,12 +440,12 @@ export function SettingsModal({
       return;
     }
 
-    setProviderKind(preset.kind);
-    setProviderKindToSave(preset.kind);
+    setProviderKind(preset.preset.kind);
+    setProviderKindToSave(preset.preset.kind);
     setProviderModel("");
     setProviderBaseUrl(preset.baseUrl);
     setProviderApiKey("");
-    setProviderApiKeyEnv(preset.apiKeyEnv ?? "");
+    setProviderApiKeyEnv(preset.apiKeyEnv);
   }, [config]);
 
   useEffect(() => {
@@ -452,15 +481,15 @@ export function SettingsModal({
       return;
     }
 
-    const preset = SETUP_PROVIDER_PRESETS[0];
+    const preset = SETUP_PROTOCOL_PRESETS[0];
     setSetupStep(1);
     const envPreset = resolveSetupPresetFromEnvHint(config?.env_hints?.provider_api_key_env);
-    const nextPreset = envPreset ?? preset;
-    setSetupProviderId(nextPreset.id);
+    const nextPreset = envPreset?.preset ?? preset;
+    setSetupProtocolId(nextPreset.id);
     setSetupApiKey("");
     setSetupApiKeyEnv(envPreset?.apiKeyEnv ?? "");
     setSetupModel("");
-    setSetupBaseUrl(nextPreset.baseUrl);
+    setSetupBaseUrl(envPreset?.baseUrl ?? nextPreset.baseUrl);
     setSetupModelOptions([]);
     setSetupModelListStatus("idle");
     setSetupModelListError(null);
@@ -651,14 +680,25 @@ export function SettingsModal({
     }
   }
 
-  function selectSetupProvider(providerId: SetupProviderId) {
-    const preset = resolveSetupPreset(providerId);
+  function selectSetupProtocol(protocolId: SetupProtocolId) {
+    const preset = resolveSetupPreset(protocolId);
     const detectedEnvName = config?.env_hints?.provider_api_key_env;
-    setSetupProviderId(providerId);
+    let detectedApiKeyEnv: ProviderApiKeyEnv | "" = "";
+    if (detectedEnvName === "DEEPSEEK_API_KEY" && protocolId === "openai-compatible") {
+      detectedApiKeyEnv = "DEEPSEEK_API_KEY";
+    } else if (preset.apiKeyEnv && preset.apiKeyEnv === detectedEnvName) {
+      detectedApiKeyEnv = preset.apiKeyEnv;
+    }
+    const detectedBaseUrl = detectedApiKeyEnv === "DEEPSEEK_API_KEY" ? "https://api.deepseek.com" : "";
+    const nextBaseUrl = detectedBaseUrl || preset.baseUrl;
+    const currentBaseUrl = setupBaseUrl.trim();
+    const previousDefaultBaseUrls = [setupProtocol.baseUrl, "https://api.deepseek.com"].filter(Boolean);
+    const shouldUseDefaultBaseUrl = !currentBaseUrl || previousDefaultBaseUrls.includes(currentBaseUrl);
+    setSetupProtocolId(protocolId);
     setSetupApiKey("");
-    setSetupApiKeyEnv(resolveProviderApiKeyEnv(preset.apiKeyEnv === detectedEnvName ? preset.apiKeyEnv : ""));
+    setSetupApiKeyEnv(resolveProviderApiKeyEnv(detectedApiKeyEnv));
     setSetupModel("");
-    setSetupBaseUrl(preset.baseUrl);
+    setSetupBaseUrl(shouldUseDefaultBaseUrl ? nextBaseUrl : setupBaseUrl);
     setSetupModelOptions([]);
     setSetupModelListStatus("idle");
     setSetupModelListError(null);
@@ -666,18 +706,18 @@ export function SettingsModal({
   }
 
   async function handleSetupNext() {
-    if (setupStep === 2 && setupProvider.apiKeyRequired && !setupApiKey.trim() && !setupApiKeyEnv) {
-      setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
-      return;
-    }
-
-    if (setupStep === 2 && !setupBaseUrl.trim()) {
+    if (setupStep === 1 && !setupBaseUrl.trim()) {
       setErrorMessage(t("runtimeConfig.errors.providerBaseUrlRequired"));
       return;
     }
 
-    if (setupStep === 2 && setupProvider.kind === "ollama" && looksLikeOpenAiCompatibleBaseUrl(setupBaseUrl.trim())) {
+    if (setupStep === 1 && setupProtocol.kind === "ollama" && looksLikeOpenAiCompatibleBaseUrl(setupBaseUrl.trim())) {
       setErrorMessage(t("runtimeConfig.errors.providerKindMismatch"));
+      return;
+    }
+
+    if (setupStep === 2 && setupProtocol.apiKeyRequired && !setupApiKey.trim() && !setupApiKeyEnv) {
+      setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
 
@@ -694,7 +734,7 @@ export function SettingsModal({
 
         try {
           const result = await onListProviderModels({
-            kind: setupProvider.kind,
+            kind: setupProtocol.kind,
             base_url: setupBaseUrl.trim(),
             ...(setupApiKey.trim() ? { api_key: setupApiKey.trim() } : {}),
             ...(!setupApiKey.trim() && setupApiKeyEnv ? { api_key_env: setupApiKeyEnv } : {}),
@@ -729,7 +769,7 @@ export function SettingsModal({
       return;
     }
 
-    if (setupProvider.apiKeyRequired && !trimmedApiKey && !setupApiKeyEnv) {
+    if (setupProtocol.apiKeyRequired && !trimmedApiKey && !setupApiKeyEnv) {
       setErrorMessage(t("runtimeConfig.errors.providerApiKeyRequired"));
       return;
     }
@@ -740,7 +780,7 @@ export function SettingsModal({
     try {
       await onSaveRuntime({
         provider: {
-          kind: setupProvider.kind,
+          kind: setupProtocol.kind,
           model: trimmedModel,
           base_url: trimmedBaseUrl,
           ...(trimmedApiKey ? { api_key: trimmedApiKey } : {}),
@@ -910,29 +950,47 @@ export function SettingsModal({
           {setupStep === 1 ? (
             <div className="space-y-3">
               <div className="text-sm font-semibold text-foreground">
-                {t("runtimeConfig.setupWizard.providerStepTitle")}
+                {t("runtimeConfig.setupWizard.protocolStepTitle")}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {SETUP_PROVIDER_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => selectSetupProvider(preset.id)}
-                    aria-pressed={setupProviderId === preset.id}
-                    data-testid={`setup-provider-${preset.id}`}
-                    className={`rounded-md border bg-surface p-4 text-left transition ${
-                      setupProviderId === preset.id
-                        ? "border-accent ring-2 ring-accent/30"
-                        : "hover:border-accent/60"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold text-foreground">{preset.label}</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {t(`runtimeConfig.setupWizard.providers.${preset.id}`)}
-                    </div>
-                    <div className="mt-3 text-xs text-muted-foreground">{preset.baseUrl}</div>
-                  </button>
-                ))}
+              <label className="block">
+                <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.baseUrlLabel")}</span>
+                <input
+                  aria-label={t("runtimeConfig.setupWizard.baseUrlLabel")}
+                  value={setupBaseUrl}
+                  onChange={(event) => {
+                    setSetupBaseUrl(event.target.value);
+                    setSetupModel("");
+                    setSetupModelOptions([]);
+                    setSetupModelListStatus("idle");
+                    setSetupModelListError(null);
+                  }}
+                  placeholder={t("runtimeConfig.setupWizard.baseUrlLabel")}
+                  className="field mt-1"
+                  data-testid="setup-provider-base-url"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-muted-foreground">{t("runtimeConfig.setupWizard.protocolLabel")}</span>
+                <SelectField
+                  value={setupProtocolId}
+                  onChange={(value) => selectSetupProtocol(value as SetupProtocolId)}
+                  options={SETUP_PROTOCOL_PRESETS.map((preset) => ({
+                    value: preset.id,
+                    label: preset.label,
+                  }))}
+                  ariaLabel={t("runtimeConfig.setupWizard.protocolLabel")}
+                  testId="setup-protocol-select"
+                />
+              </label>
+              <div
+                className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground"
+                data-testid="setup-protocol-summary"
+              >
+                <div className="font-medium text-foreground">{setupProtocol.label}</div>
+                <div className="mt-1 leading-5">
+                  {t(`runtimeConfig.setupWizard.protocols.${setupProtocol.id}`)}
+                </div>
+                <div className="mt-2 text-xs">{setupProtocol.endpoint}</div>
               </div>
             </div>
           ) : null}
@@ -942,7 +1000,7 @@ export function SettingsModal({
               <div className="text-sm font-semibold text-foreground">
                 {t("runtimeConfig.setupWizard.apiKeyStepTitle")}
               </div>
-              {setupProvider.apiKeyRequired ? (
+              {setupProtocol.apiKeyRequired ? (
                 <div className="space-y-3">
                   {setupApiKeyEnv ? (
                     <div
@@ -981,23 +1039,6 @@ export function SettingsModal({
                   {t("runtimeConfig.setupWizard.ollamaNoApiKey")}
                 </div>
               )}
-              <label className="block">
-                <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
-                <input
-                  aria-label={t("runtimeConfig.providerBaseUrl")}
-                  value={setupBaseUrl}
-                  onChange={(event) => {
-                    setSetupBaseUrl(event.target.value);
-                    setSetupModel("");
-                    setSetupModelOptions([]);
-                    setSetupModelListStatus("idle");
-                    setSetupModelListError(null);
-                  }}
-                  placeholder={t("runtimeConfig.providerBaseUrl")}
-                  className="field mt-1"
-                  data-testid="setup-provider-base-url"
-                />
-              </label>
               {setupModelListStatus === "loading" ? (
                 <div className="rounded-md border bg-surface-muted/30 px-3 py-3 text-sm text-muted-foreground">
                   {t("runtimeConfig.setupWizard.loadingModels")}

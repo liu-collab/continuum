@@ -104,7 +104,9 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    expect(screen.getByTestId("setup-provider-openai")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("setup-protocol-select")).toHaveTextContent("OpenAI Responses");
+    expect(screen.getByTestId("setup-protocol-summary")).toHaveTextContent("/v1/responses");
+    expect(screen.getByLabelText("base_url")).toHaveValue("https://api.openai.com/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
     expect(screen.getByTestId("setup-api-key-env-detected")).toHaveTextContent(
       "已检测到环境变量 OPENAI_API_KEY，可直接使用。",
@@ -131,7 +133,7 @@ describe("SettingsModal", () => {
     });
   });
 
-  it("saves a real provider from the setup wizard", async () => {
+  it("saves an OpenAI-compatible provider from the setup wizard", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onSaveRuntime = vi.fn(async () => undefined);
@@ -176,8 +178,9 @@ describe("SettingsModal", () => {
     );
 
     expect(screen.getByText("配置主模型")).toBeInTheDocument();
-    expect(screen.getByTestId("provider-setup-wizard")).toHaveTextContent("1. 选择提供商");
-    await user.click(screen.getByTestId("setup-provider-deepseek"));
+    expect(screen.getByTestId("provider-setup-wizard")).toHaveTextContent("1. 填写 base_url");
+    expect(screen.getByTestId("setup-protocol-select")).toHaveTextContent("OpenAI-compatible");
+    await user.type(screen.getByLabelText("base_url"), "https://api.deepseek.com");
     await user.click(screen.getByTestId("setup-wizard-next"));
     await user.type(screen.getByLabelText("API Key"), "sk-test");
     await user.click(screen.getByTestId("setup-wizard-next"));
@@ -246,15 +249,12 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByTestId("setup-provider-custom"));
-    await user.click(screen.getByTestId("setup-wizard-next"));
-    await user.type(screen.getByLabelText("API Key"), "sk-custom");
-    expect(screen.getByLabelText("provider base_url")).toHaveValue("https://api.example.com/v1");
-    await user.clear(screen.getByLabelText("provider base_url"));
     await user.type(
-      screen.getByLabelText("provider base_url"),
+      screen.getByLabelText("base_url"),
       "https://dashscope.aliyuncs.com/compatible-mode/v1",
     );
+    await user.click(screen.getByTestId("setup-wizard-next"));
+    await user.type(screen.getByLabelText("API Key"), "sk-custom");
     await user.click(screen.getByTestId("setup-wizard-next"));
     expect(onListProviderModels).toHaveBeenCalledWith({
       kind: "openai-compatible",
@@ -276,7 +276,7 @@ describe("SettingsModal", () => {
     });
   });
 
-  it("allows editing the preset provider base_url in the setup wizard", async () => {
+  it("preserves a custom base_url when changing protocol in the setup wizard", async () => {
     const user = userEvent.setup();
     const onSaveRuntime = vi.fn(async () => undefined);
     const onListProviderModels = vi.fn(async () => ({
@@ -318,11 +318,12 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByTestId("setup-provider-openai"));
+    await user.type(screen.getByLabelText("base_url"), "https://openrouter.ai/api/v1");
+    await user.click(screen.getByTestId("setup-protocol-select"));
+    await user.click(screen.getByRole("option", { name: "OpenAI Responses (/v1/responses)" }));
+    expect(screen.getByLabelText("base_url")).toHaveValue("https://openrouter.ai/api/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
     await user.type(screen.getByLabelText("API Key"), "sk-router");
-    await user.clear(screen.getByLabelText("provider base_url"));
-    await user.type(screen.getByLabelText("provider base_url"), "https://openrouter.ai/api/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
     expect(onListProviderModels).toHaveBeenCalledWith({
       kind: "openai-responses",
@@ -383,10 +384,10 @@ describe("SettingsModal", () => {
       </AgentI18nProvider>,
     );
 
-    await user.click(screen.getByTestId("setup-provider-ollama"));
-    await user.click(screen.getByTestId("setup-wizard-next"));
-    await user.clear(screen.getByLabelText("provider base_url"));
-    await user.type(screen.getByLabelText("provider base_url"), "http://localhost:8090/v1");
+    await user.click(screen.getByTestId("setup-protocol-select"));
+    await user.click(screen.getByRole("option", { name: "Ollama (/api/chat)" }));
+    await user.clear(screen.getByLabelText("base_url"));
+    await user.type(screen.getByLabelText("base_url"), "http://localhost:8090/v1");
     await user.click(screen.getByTestId("setup-wizard-next"));
 
     expect(onListProviderModels).not.toHaveBeenCalled();

@@ -193,12 +193,14 @@
       "title": "Configure primary model",
       "description": "The primary model is not configured yet. Complete these 3 steps to start chatting.",
       "steps": {
-        "1": "1. Choose provider",
-        "2": "2. Enter connection",
+        "1": "1. Enter base_url",
+        "2": "2. Enter API Key",
         "3": "3. Confirm model"
       },
-      "providerStepTitle": "Choose provider",
-      "apiKeyStepTitle": "Enter API Key and base_url",
+      "protocolStepTitle": "Enter base_url and choose protocol",
+      "baseUrlLabel": "base_url",
+      "protocolLabel": "Interface protocol",
+      "apiKeyStepTitle": "Enter API Key",
       "modelStepTitle": "Confirm model name",
       "apiKeyLabel": "API Key",
       "apiKeyPlaceholder": "sk-...",
@@ -213,19 +215,18 @@
       "next": "Next",
       "back": "Back",
       "ollamaNoApiKey": "Local Ollama does not need an API Key.",
-      "providers": {
-        "openai": "Use the official OpenAI Responses API.",
-        "anthropic": "Use the Anthropic Claude API.",
-        "deepseek": "Use the DeepSeek OpenAI-compatible API.",
-        "custom": "Use a third-party OpenAI-compatible API.",
-        "ollama": "Use the local Ollama service."
+      "protocols": {
+        "openai-compatible": "Compatible with /v1/chat/completions for third-party OpenAI-compatible APIs.",
+        "openai-responses": "Official OpenAI /v1/responses protocol.",
+        "anthropic": "Anthropic /v1/messages protocol.",
+        "ollama": "Local Ollama /api/chat protocol."
       }
     },
     "errors": {
       "providerModelRequired": "provider model is required.",
-      "providerBaseUrlRequired": "base_url is required for the selected provider.",
-      "providerApiKeyRequired": "api_key is required for the selected provider.",
-      "providerKindMismatch": "This base_url is an OpenAI-compatible /v1 endpoint. Choose OpenAI-compatible API instead of Ollama.",
+      "providerBaseUrlRequired": "base_url is required for the selected interface protocol.",
+      "providerApiKeyRequired": "api_key is required for the selected interface protocol.",
+      "providerKindMismatch": "This base_url is an OpenAI-compatible /v1 endpoint. Choose the OpenAI-compatible protocol instead of Ollama.",
       "providerMaxTokensInvalid": "provider max output tokens must be a positive integer.",
       "embeddingModelRequired": "EMBEDDING_MODEL is required when EMBEDDING_BASE_URL is set.",
       "memoryLlmModelRequired": "MEMORY_LLM_MODEL is required when MEMORY_LLM_BASE_URL is set.",
