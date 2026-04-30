@@ -74,6 +74,51 @@ export function normalizeHttpConfigUrl(value: unknown): string | undefined {
   }
 }
 
+type RuntimeLocalhostMappingSource = {
+  AXIS_RUNTIME_CONTAINER?: unknown;
+  AXIS_RUNTIME_LOCALHOST_HOST?: unknown;
+};
+
+export function rewriteLoopbackHttpConfigUrl(
+  value: unknown,
+  replacementHost: unknown,
+): string | undefined {
+  const normalized = normalizeHttpConfigUrl(value);
+  const host = readOptionalConfigString(replacementHost);
+  if (!normalized || !host) {
+    return normalized;
+  }
+
+  const parsed = new URL(normalized);
+  const hostname = parsed.hostname.toLowerCase();
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname)) {
+    return normalized;
+  }
+
+  parsed.hostname = host;
+  return parsed.toString().replace(/\/+$/, "");
+}
+
+export function mapLoopbackHttpConfigUrlForRuntime(
+  value: unknown,
+  source: RuntimeLocalhostMappingSource,
+): string | undefined {
+  const normalized = normalizeHttpConfigUrl(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const runtimeContainer = readOptionalConfigBoolean(source.AXIS_RUNTIME_CONTAINER) ?? false;
+  if (!runtimeContainer) {
+    return normalized;
+  }
+
+  return rewriteLoopbackHttpConfigUrl(
+    normalized,
+    source.AXIS_RUNTIME_LOCALHOST_HOST ?? "host.docker.internal",
+  );
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }

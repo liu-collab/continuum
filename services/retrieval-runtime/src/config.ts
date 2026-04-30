@@ -40,6 +40,8 @@ const envSchema = z.object({
   AXIS_RUNTIME_CONFIG_PATH: z.string().optional(),
   AXIS_MANAGED_CONFIG_PATH: z.string().optional(),
   AXIS_MANAGED_SECRETS_PATH: z.string().optional(),
+  AXIS_RUNTIME_CONTAINER: booleanCoerceSchema.default(false),
+  AXIS_RUNTIME_LOCALHOST_HOST: z.string().min(1).default("host.docker.internal"),
   MEMORY_LLM_BASE_URL: z.string().url("MEMORY_LLM_BASE_URL must be a valid URL").optional(),
   MEMORY_LLM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   MEMORY_LLM_API_KEY: z.string().optional(),

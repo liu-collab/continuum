@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   mapConfigSourceFields,
+  mapLoopbackHttpConfigUrlForRuntime,
   normalizeHttpConfigUrl,
   readConfigFields,
   readJsonConfigFields,
@@ -152,6 +153,20 @@ describe("config file helper", () => {
     expect(normalizeHttpConfigUrl("file:///tmp/config")).toBeUndefined();
     expect(normalizeHttpConfigUrl("not a url")).toBeUndefined();
     expect(normalizeHttpConfigUrl(undefined)).toBeUndefined();
+  });
+
+  it("maps loopback HTTP URLs only for runtime container config", () => {
+    expect(mapLoopbackHttpConfigUrlForRuntime("http://localhost:8090/v1", {})).toBe("http://localhost:8090/v1");
+    expect(mapLoopbackHttpConfigUrlForRuntime("http://127.0.0.1:8090/v1", {
+      AXIS_RUNTIME_CONTAINER: "1",
+    })).toBe("http://host.docker.internal:8090/v1");
+    expect(mapLoopbackHttpConfigUrlForRuntime("http://[::1]:8090/v1", {
+      AXIS_RUNTIME_CONTAINER: true,
+      AXIS_RUNTIME_LOCALHOST_HOST: "host.containers.internal",
+    })).toBe("http://host.containers.internal:8090/v1");
+    expect(mapLoopbackHttpConfigUrlForRuntime("https://api.example.test/v1", {
+      AXIS_RUNTIME_CONTAINER: true,
+    })).toBe("https://api.example.test/v1");
   });
 
   it("reads selected config fields and drops invalid values", () => {

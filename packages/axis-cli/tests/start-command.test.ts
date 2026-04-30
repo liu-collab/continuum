@@ -620,6 +620,7 @@ describe("runStartCommand", () => {
     expect(dockerRun).toBeDefined();
     expect(dockerRun?.args).toContain("AXIS_MANAGED_CONFIG_PATH=/opt/axis/managed/config.json");
     expect(dockerRun?.args).toContain("AXIS_MANAGED_SECRETS_PATH=/opt/axis/managed/secrets.json");
+    expect(dockerRun?.args).toContain("AXIS_RUNTIME_CONTAINER=1");
   });
 
   it("merges memory llm CLI options over environment and persisted config", async () => {

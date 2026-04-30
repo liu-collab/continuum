@@ -494,6 +494,8 @@ async function startStackContainer(
     `AXIS_MANAGED_CONFIG_PATH=${managedConfigPath}`,
     "-e",
     `AXIS_MANAGED_SECRETS_PATH=${managedSecretsPath}`,
+    "-e",
+    "AXIS_RUNTIME_CONTAINER=1",
     ...buildDockerHostGatewayArgs(),
   ];
 

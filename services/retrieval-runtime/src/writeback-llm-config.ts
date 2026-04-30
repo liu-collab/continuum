@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   type ConfigFieldReaders,
   type ConfigSourceFieldMap,
+  mapLoopbackHttpConfigUrlForRuntime,
   mapConfigSourceFields,
   normalizeHttpConfigUrl,
   readJsonConfigFile,
@@ -23,6 +24,8 @@ type WritebackLlmConfigSource = {
   AXIS_MEMORY_LLM_CONFIG_PATH?: string;
   AXIS_MANAGED_CONFIG_PATH?: string;
   AXIS_MANAGED_SECRETS_PATH?: string;
+  AXIS_RUNTIME_CONTAINER?: string | boolean;
+  AXIS_RUNTIME_LOCALHOST_HOST?: string;
 };
 
 export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
@@ -130,14 +133,33 @@ function readUnifiedMemoryLlmConfig(source: WritebackLlmConfigSource) {
   };
 }
 
+function mapRuntimeLoopbackUrls(
+  config: Partial<RuntimeWritebackLlmConfig> | undefined,
+  source: WritebackLlmConfigSource,
+): Partial<RuntimeWritebackLlmConfig> {
+  if (!config) {
+    return {};
+  }
+
+  return {
+    ...config,
+    ...(config.baseUrl
+      ? { baseUrl: mapLoopbackHttpConfigUrlForRuntime(config.baseUrl, source) }
+      : {}),
+  };
+}
+
 export function resolveRuntimeWritebackLlmConfig(
   source: WritebackLlmConfigSource,
 ): RuntimeWritebackLlmConfig {
   return readLayeredConfigFields<RuntimeWritebackLlmConfig>(
     [
-      mapConfigSourceFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(source, writebackLlmConfigFieldMap),
-      readJsonConfigFile(source.AXIS_MEMORY_LLM_CONFIG_PATH),
-      readUnifiedMemoryLlmConfig(source),
+      mapRuntimeLoopbackUrls(
+        mapConfigSourceFields<RuntimeWritebackLlmConfig, WritebackLlmConfigSource>(source, writebackLlmConfigFieldMap),
+        source,
+      ),
+      mapRuntimeLoopbackUrls(readJsonConfigFile(source.AXIS_MEMORY_LLM_CONFIG_PATH), source),
+      mapRuntimeLoopbackUrls(readUnifiedMemoryLlmConfig(source), source),
     ],
     writebackLlmConfigReaders,
   );

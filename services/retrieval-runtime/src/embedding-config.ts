@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   type ConfigFieldReaders,
   type ConfigSourceFieldMap,
+  mapLoopbackHttpConfigUrlForRuntime,
   mapConfigSourceFields,
   normalizeHttpConfigUrl,
   readJsonConfigFile,
@@ -18,6 +19,8 @@ type EmbeddingConfigSource = {
   AXIS_EMBEDDING_CONFIG_PATH?: string;
   AXIS_MANAGED_CONFIG_PATH?: string;
   AXIS_MANAGED_SECRETS_PATH?: string;
+  AXIS_RUNTIME_CONTAINER?: string | boolean;
+  AXIS_RUNTIME_LOCALHOST_HOST?: string;
 };
 
 export type RuntimeEmbeddingConfig = {
@@ -65,12 +68,31 @@ function readUnifiedEmbeddingConfig(source: EmbeddingConfigSource) {
   };
 }
 
+function mapRuntimeLoopbackUrls(
+  config: Partial<RuntimeEmbeddingConfig> | undefined,
+  source: EmbeddingConfigSource,
+): Partial<RuntimeEmbeddingConfig> {
+  if (!config) {
+    return {};
+  }
+
+  return {
+    ...config,
+    ...(config.baseUrl
+      ? { baseUrl: mapLoopbackHttpConfigUrlForRuntime(config.baseUrl, source) }
+      : {}),
+  };
+}
+
 export function resolveRuntimeEmbeddingConfig(source: EmbeddingConfigSource): RuntimeEmbeddingConfig {
   return readLayeredConfigFields<RuntimeEmbeddingConfig>(
     [
-      mapConfigSourceFields<RuntimeEmbeddingConfig, EmbeddingConfigSource>(source, embeddingConfigFieldMap),
-      readJsonConfigFile(source.AXIS_EMBEDDING_CONFIG_PATH),
-      readUnifiedEmbeddingConfig(source),
+      mapRuntimeLoopbackUrls(
+        mapConfigSourceFields<RuntimeEmbeddingConfig, EmbeddingConfigSource>(source, embeddingConfigFieldMap),
+        source,
+      ),
+      mapRuntimeLoopbackUrls(readJsonConfigFile(source.AXIS_EMBEDDING_CONFIG_PATH), source),
+      mapRuntimeLoopbackUrls(readUnifiedEmbeddingConfig(source), source),
     ],
     embeddingConfigReaders,
   );

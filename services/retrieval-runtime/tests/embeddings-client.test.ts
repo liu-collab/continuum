@@ -17,6 +17,17 @@ const cacheConfig = {
   EMBEDDING_CACHE_MAX_ENTRIES: 1000,
 };
 
+const tempDirs: string[] = [];
+
+function missingManagedConfigPaths() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-no-managed-config-"));
+  tempDirs.push(tempDir);
+  return {
+    AXIS_MANAGED_CONFIG_PATH: path.join(tempDir, "config.json"),
+    AXIS_MANAGED_SECRETS_PATH: path.join(tempDir, "secrets.json"),
+  };
+}
+
 class SpyEmbeddingsClient implements EmbeddingsClient {
   public callCount = 0;
   private readonly pending: Array<() => void> = [];
@@ -53,6 +64,9 @@ describe("retrieval-runtime embeddings client", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    for (const tempDir of tempDirs.splice(0)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("keeps third-party base path when building embeddings request url", async () => {
@@ -82,6 +96,7 @@ describe("retrieval-runtime embeddings client", () => {
       EMBEDDING_BASE_URL: "https://api.openai.com/v1",
       EMBEDDING_MODEL: "text-embedding-3-small",
       EMBEDDING_API_KEY: "test-key",
+      ...missingManagedConfigPaths(),
       EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
       EMBEDDING_CACHE_MAX_ENTRIES: 1000,
       MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
@@ -166,6 +181,7 @@ describe("retrieval-runtime embeddings client", () => {
       READ_MODEL_TABLE: "memory_read_model_v1",
       RUNTIME_SCHEMA: "runtime_private",
       STORAGE_WRITEBACK_URL: "http://localhost:3001",
+      ...missingManagedConfigPaths(),
     });
 
     expect(config.EMBEDDING_BASE_URL).toBeUndefined();
@@ -186,6 +202,7 @@ describe("retrieval-runtime embeddings client", () => {
       RUNTIME_SCHEMA: "runtime_private",
       STORAGE_WRITEBACK_URL: "http://localhost:3001",
       EMBEDDING_MODEL: "text-embedding-3-small",
+      ...missingManagedConfigPaths(),
       EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
       EMBEDDING_CACHE_MAX_ENTRIES: 1000,
       MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
@@ -298,6 +315,7 @@ describe("retrieval-runtime embeddings client", () => {
         EMBEDDING_CACHE_TTL_MS: 5 * 60 * 1000,
         EMBEDDING_CACHE_MAX_ENTRIES: 1000,
         AXIS_EMBEDDING_CONFIG_PATH: configPath,
+        ...missingManagedConfigPaths(),
         MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
         MEMORY_LLM_PROTOCOL: "openai-compatible",
         MEMORY_LLM_TIMEOUT_MS: 15000,
@@ -391,6 +409,7 @@ describe("retrieval-runtime embeddings client", () => {
       const resolved = resolveRuntimeWritebackLlmConfig({
         MEMORY_LLM_MODEL: "claude-haiku-4-5-20251001",
         AXIS_MEMORY_LLM_CONFIG_PATH: configPath,
+        ...missingManagedConfigPaths(),
       });
 
       expect(resolved).toEqual({
@@ -403,6 +422,7 @@ describe("retrieval-runtime embeddings client", () => {
       expect(
         hasCompleteRuntimeWritebackLlmConfig({
           AXIS_MEMORY_LLM_CONFIG_PATH: configPath,
+          ...missingManagedConfigPaths(),
         }),
       ).toBe(true);
     } finally {
@@ -480,11 +500,76 @@ describe("retrieval-runtime embeddings client", () => {
     }
   });
 
+  it("maps managed loopback endpoints for Docker runtime only", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retrieval-managed-loopback-"));
+    const configPath = path.join(tempDir, "config.json");
+    const secretsPath = path.join(tempDir, "secrets.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 2,
+        embedding: {
+          baseUrl: "http://localhost:8091/v1",
+          model: "text-embedding-3-small",
+        },
+        memory_llm: {
+          baseUrl: "http://localhost:8090/v1",
+          model: "gpt-5.4",
+          protocol: "openai-responses",
+        },
+      }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      secretsPath,
+      JSON.stringify({
+        version: 2,
+        embedding_api_key: "embedding-key",
+        memory_llm_api_key: "memory-key",
+      }),
+      "utf8",
+    );
+
+    try {
+      expect(
+        resolveRuntimeWritebackLlmConfig({
+          AXIS_MANAGED_CONFIG_PATH: configPath,
+          AXIS_MANAGED_SECRETS_PATH: secretsPath,
+        }).baseUrl,
+      ).toBe("http://localhost:8090/v1");
+      expect(
+        resolveRuntimeWritebackLlmConfig({
+          AXIS_MANAGED_CONFIG_PATH: configPath,
+          AXIS_MANAGED_SECRETS_PATH: secretsPath,
+          AXIS_RUNTIME_CONTAINER: "1",
+        }).baseUrl,
+      ).toBe("http://host.docker.internal:8090/v1");
+      expect(
+        resolveRuntimeWritebackLlmConfig({
+          AXIS_MANAGED_CONFIG_PATH: configPath,
+          AXIS_MANAGED_SECRETS_PATH: secretsPath,
+          AXIS_RUNTIME_CONTAINER: "1",
+          AXIS_RUNTIME_LOCALHOST_HOST: "host.containers.internal",
+        }).baseUrl,
+      ).toBe("http://host.containers.internal:8090/v1");
+      expect(
+        hasCompleteRuntimeEmbeddingConfig({
+          AXIS_MANAGED_CONFIG_PATH: configPath,
+          AXIS_MANAGED_SECRETS_PATH: secretsPath,
+          AXIS_RUNTIME_CONTAINER: "1",
+        }),
+      ).toBe(true);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("requires an embedding api key for complete runtime embedding config", () => {
     expect(
       hasCompleteRuntimeEmbeddingConfig({
         EMBEDDING_BASE_URL: "https://api.openai.com/v1",
         EMBEDDING_MODEL: "text-embedding-3-small",
+        ...missingManagedConfigPaths(),
       }),
     ).toBe(false);
 
@@ -493,6 +578,7 @@ describe("retrieval-runtime embeddings client", () => {
         EMBEDDING_BASE_URL: "https://api.openai.com/v1",
         EMBEDDING_MODEL: "text-embedding-3-small",
         EMBEDDING_API_KEY: "test-key",
+        ...missingManagedConfigPaths(),
       }),
     ).toBe(true);
   });
