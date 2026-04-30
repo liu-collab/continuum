@@ -9,7 +9,7 @@ type FilterModalButtonProps = {
   activeCount?: number;
   title?: string;
   description?: string;
-  children: ReactNode;
+  children: ReactNode | ((close: () => void) => ReactNode);
 };
 
 export function FilterModalButton({
@@ -46,7 +46,7 @@ export function FilterModalButton({
         ) : null}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={titleText} description={description} size="lg">
-        {children}
+        {typeof children === "function" ? children(() => setOpen(false)) : children}
       </Modal>
     </>
   );

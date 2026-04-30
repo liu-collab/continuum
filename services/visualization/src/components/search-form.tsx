@@ -12,9 +12,10 @@ type SearchFormProps = {
   initialValues?: Record<string, string | undefined>;
   children: ReactNode;
   onSubmitted?(): void;
+  onNavigate?(href: Route): void | Promise<void>;
 };
 
-export function SearchForm({ action, children, onSubmitted }: SearchFormProps) {
+export function SearchForm({ action, children, onSubmitted, onNavigate }: SearchFormProps) {
   const router = useRouter();
   const { t } = useAppI18n();
   const [navigationStarted, setNavigationStarted] = useState(false);
@@ -23,6 +24,17 @@ export function SearchForm({ action, children, onSubmitted }: SearchFormProps) {
 
   function navigateTo(href: Route) {
     setNavigationStarted(true);
+    if (onNavigate) {
+      void Promise.resolve(onNavigate(href))
+        .then(() => {
+          onSubmitted?.();
+        })
+        .finally(() => {
+          setNavigationStarted(false);
+        });
+      return;
+    }
+
     startTransition(() => {
       router.push(href);
       onSubmitted?.();

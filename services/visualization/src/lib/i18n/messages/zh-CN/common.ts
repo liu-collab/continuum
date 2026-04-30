@@ -308,6 +308,7 @@ const zhCommon = {
       emptyTitle: "没有治理记录",
       emptyDescription: "当前筛选条件下没有治理记录",
       detailKicker: "详情",
+      loadingDetail: "正在加载治理详情...",
       planningKicker: "规划与复核",
       executionKicker: "执行",
       targetKicker: "目标",
@@ -513,6 +514,7 @@ const zhCommon = {
       apiErrors: {
         dashboardFailed: "看板加载失败",
         memoryCatalogFailed: "记忆目录加载失败",
+        governanceExecutionFailed: "治理详情加载失败",
         runTraceFailed: "运行轨迹加载失败",
         sourceHealthFailed: "数据源健康状态加载失败",
         memoryEditFailed: "记忆编辑失败",

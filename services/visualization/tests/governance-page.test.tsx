@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const {
   getGovernanceExecutionDetailMock,
@@ -115,6 +115,11 @@ function renderZh(element: React.ReactNode) {
 }
 
 describe("governance page", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState(null, "", "/");
+  });
+
   it("opens automatic governance config in-place instead of linking to agent", async () => {
     const user = userEvent.setup();
     getGovernanceHistoryMock.mockResolvedValue({
@@ -218,7 +223,8 @@ describe("governance page", () => {
     fetchSpy.mockRestore();
   });
 
-  it("uses client navigation links for execution cards", async () => {
+  it("switches execution details in place", async () => {
+    const user = userEvent.setup();
     getGovernanceHistoryMock.mockResolvedValue({
       items: [
         {
@@ -231,15 +237,38 @@ describe("governance page", () => {
           verificationBlocked: false,
           verificationBlockedReason: null,
           startedAt: "2026-04-22T00:00:00Z"
+        },
+        {
+          executionId: "execution-2",
+          proposalType: "delete",
+          proposalTypeLabel: "删除",
+          reasonText: "删除过期记忆",
+          executionStatus: "executed",
+          executionStatusLabel: "已执行",
+          verificationBlocked: false,
+          verificationBlockedReason: null,
+          startedAt: "2026-04-22T00:02:00Z"
         }
       ],
       total: 1,
       sourceStatus
     });
     getGovernanceExecutionDetailMock.mockResolvedValue({
-      detail: null,
+      detail: createGovernanceDetail(),
       status: sourceStatus
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        detail: createGovernanceDetail({
+          executionId: "execution-2",
+          proposalType: "delete",
+          proposalTypeLabel: "删除",
+          reasonText: "删除过期记忆"
+        }),
+        status: sourceStatus
+      })
+    } as Response);
     fetchRuntimeGovernanceConfigMock.mockResolvedValue({
       governance: null,
       status: sourceStatus
@@ -255,13 +284,25 @@ describe("governance page", () => {
     });
     renderZh(element);
 
-    const link = screen.getByText("清理旧记忆").closest("a");
+    const link = screen.getByTestId("governance-execution-link-execution-1");
 
     expect(link).toHaveAttribute(
       "href",
       "/governance?workspace_id=workspace-1&proposal_type=archive&execution_status=executed&limit=25&execution_id=execution-1"
     );
-    expect(link).toHaveAttribute("data-scroll", "false");
+
+    await user.click(screen.getByText("删除过期记忆").closest("a")!);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("governance-detail-boundary")).toHaveTextContent("删除过期记忆");
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/governance/executions/execution-2", {
+      headers: {
+        accept: "application/json",
+      },
+    });
+    expect(window.location.pathname).toBe("/governance");
+    expect(window.location.search).toBe("?workspace_id=workspace-1&proposal_type=archive&execution_status=executed&limit=25&execution_id=execution-2");
   });
 
   it("links target records to memory detail pages", async () => {

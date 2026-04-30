@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { getDashboardMock, getSourceHealthMock } = vi.hoisted(() => ({
   getDashboardMock: vi.fn<() => Promise<any>>(),
@@ -66,6 +66,11 @@ function renderZh(element: React.ReactNode) {
 }
 
 describe("dashboard page", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState(null, "", "/");
+  });
+
   it("renders explicit empty states for missing dashboard sections", async () => {
     getDashboardMock.mockResolvedValue({
       retrievalMetrics: [],
@@ -165,6 +170,22 @@ describe("dashboard page", () => {
       },
       dependencies: []
     });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        retrievalMetrics: [],
+        storageMetrics: [],
+        trendWindow: "15m",
+        diagnosis: {
+          title: "15 分钟窗口",
+          summary: "已切换到 15 分钟。",
+          severity: "info"
+        },
+        diagnosisCards: [],
+        trends: [],
+        sourceStatus: [healthyStatus]
+      })
+    } as Response);
 
     const element = await DashboardPage({
       searchParams: Promise.resolve({ window: "30m" })
@@ -181,6 +202,9 @@ describe("dashboard page", () => {
     fireEvent.click(screen.getByTestId("dashboard-window-15m"));
 
     expect(screen.getByTestId("dashboard-window-pending")).toHaveTextContent("正在切换时间窗口");
+    await waitFor(() => {
+      expect(screen.getByText("15 分钟窗口")).toBeInTheDocument();
+    });
   });
 
   it("renders degraded and partial source banners", async () => {

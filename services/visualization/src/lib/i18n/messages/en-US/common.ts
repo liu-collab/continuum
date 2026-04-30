@@ -308,6 +308,7 @@ const enCommon = {
       emptyTitle: "No governance records",
       emptyDescription: "No governance records match the current filters.",
       detailKicker: "Details",
+      loadingDetail: "Loading governance detail...",
       planningKicker: "Planning and verification",
       executionKicker: "Execution",
       targetKicker: "Targets",
@@ -513,6 +514,7 @@ const enCommon = {
       apiErrors: {
         dashboardFailed: "Failed to load dashboard.",
         memoryCatalogFailed: "Failed to load memory catalog.",
+        governanceExecutionFailed: "Failed to load governance detail.",
         runTraceFailed: "Failed to load run trace.",
         sourceHealthFailed: "Failed to load source health.",
         memoryEditFailed: "Failed to edit memory.",
