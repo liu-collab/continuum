@@ -85,6 +85,8 @@ export { resolveManagedPostgresPort } from "./port-utils.js";
 
 const UI_DEV_SERVICE_NAME = "visualization-dev";
 const UI_DEV_STACK_IMAGE = "axis-local-ui-dev:latest";
+const WARNING_COLOR = "\u001b[33m";
+const RESET_COLOR = "\u001b[0m";
 
 function isManagedVisualizationDevRecord(service: ManagedServiceRecord) {
   return (
@@ -214,10 +216,16 @@ async function isPrimaryProviderConfigured(options: Record<string, string | bool
 }
 
 function writeMissingPrimaryProviderWarning() {
-  process.stdout.write(`${bilingualMessage(
-    "⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。",
-    "⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.",
-  )}\n`);
+  writeWarning("⚠ 尚未配置主模型。请在 Agent 页面的设置面板中配置 provider，或通过 axis start --provider-kind <kind> --provider-model <model> 指定。");
+  writeWarning("⚠ Primary model is not configured. Configure a provider in the Agent settings panel, or specify one with axis start --provider-kind <kind> --provider-model <model>.");
+}
+
+function writeMissingThirdPartyEmbeddingsWarning() {
+  writeWarning("⚠ third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。");
+}
+
+function writeWarning(message: string) {
+  process.stdout.write(`${WARNING_COLOR}${message}${RESET_COLOR}\n`);
 }
 
 function writeDaemonNotice(enabled: boolean) {
@@ -730,7 +738,7 @@ export async function runStartCommand(
         `third-party embeddings: ${buildEmbeddingsEndpoint(mergedEmbeddingConfig.baseUrl)} (${mergedEmbeddingConfig.model})\n`,
       );
     } else {
-      process.stdout.write("third-party embeddings: 未配置，可在页面中补充 EMBEDDING_BASE_URL 和 EMBEDDING_MODEL。\n");
+      writeMissingThirdPartyEmbeddingsWarning();
     }
 
     if (open) {
