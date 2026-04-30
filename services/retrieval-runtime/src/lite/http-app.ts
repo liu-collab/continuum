@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { z } from "zod";
 
+import { flattenZodError, liteErrorPayload, sendLiteError } from "./errors.js";
 import { FileMemoryStore } from "./file-store.js";
 import { MemoryOrchestrator } from "./memory-orchestrator.js";
 import { resolveLiteMemoryModel, type LiteMemoryModelConfigSource, type LiteMemoryModelResolution } from "./memory-model-config.js";
@@ -115,12 +116,7 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
       typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
         ? error.statusCode
         : 500;
-    reply.status(statusCode).send({
-      error: {
-        code: "lite_runtime_error",
-        message: error instanceof Error ? error.message : "Lite runtime error",
-      },
-    });
+    reply.status(statusCode).send(liteErrorPayload("lite_runtime_error", { cause: error }));
   });
 
   app.get("/v1/lite/healthz", async () => {
@@ -147,14 +143,9 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   app.get("/v1/lite/memories", async (request, reply) => {
     const parsed = listMemoryQuerySchema.safeParse(request.query);
     if (!parsed.success) {
-      reply.status(400);
-      return {
-        error: {
-          code: "invalid_lite_memory_query",
-          message: "Invalid lite memory list query",
-          details: parsed.error.flatten(),
-        },
-      };
+      return sendLiteError(reply, 400, "invalid_lite_memory_query", {
+        details: flattenZodError(parsed.error),
+      });
     }
 
     await store.load();
@@ -190,25 +181,13 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   app.get("/v1/lite/memories/:record_id", async (request, reply) => {
     const params = z.object({ record_id: z.string().min(1) }).safeParse(request.params);
     if (!params.success) {
-      reply.status(400);
-      return {
-        error: {
-          code: "invalid_lite_record_id",
-          message: "Invalid lite record id",
-        },
-      };
+      return sendLiteError(reply, 400, "invalid_lite_record_id");
     }
 
     await store.load();
     const record = store.get(params.data.record_id);
     if (!record) {
-      reply.status(404);
-      return {
-        error: {
-          code: "lite_record_not_found",
-          message: "Lite record not found",
-        },
-      };
+      return sendLiteError(reply, 404, "lite_record_not_found");
     }
     return record;
   });
@@ -216,14 +195,9 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   app.post("/v1/lite/prepare-context", async (request, reply) => {
     const parsed = prepareContextSchema.safeParse(request.body);
     if (!parsed.success) {
-      reply.status(400);
-      return {
-        error: {
-          code: "invalid_prepare_context",
-          message: "Invalid lite prepare-context payload",
-          details: parsed.error.flatten(),
-        },
-      };
+      return sendLiteError(reply, 400, "invalid_prepare_context", {
+        details: flattenZodError(parsed.error),
+      });
     }
 
     const result = await orchestrator.prepareContext(parsed.data);
@@ -234,14 +208,9 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   app.post("/v1/lite/after-response", async (request, reply) => {
     const parsed = afterResponseSchema.safeParse(request.body);
     if (!parsed.success) {
-      reply.status(400);
-      return {
-        error: {
-          code: "invalid_after_response",
-          message: "Invalid lite after-response payload",
-          details: parsed.error.flatten(),
-        },
-      };
+      return sendLiteError(reply, 400, "invalid_after_response", {
+        details: flattenZodError(parsed.error),
+      });
     }
 
     const result = await writebackEngine.process(parsed.data);
@@ -273,24 +242,12 @@ export function createLiteRuntimeApp(options: LiteRuntimeHttpOptions) {
   app.get("/v1/lite/traces/:trace_id", async (request, reply) => {
     const params = z.object({ trace_id: z.string().min(1) }).safeParse(request.params);
     if (!params.success) {
-      reply.status(400);
-      return {
-        error: {
-          code: "invalid_trace_id",
-          message: "Invalid trace id",
-        },
-      };
+      return sendLiteError(reply, 400, "invalid_trace_id");
     }
 
     const trace = traces.get(params.data.trace_id);
     if (!trace) {
-      reply.status(404);
-      return {
-        error: {
-          code: "trace_not_found",
-          message: "Trace not found",
-        },
-      };
+      return sendLiteError(reply, 404, "trace_not_found");
     }
     return trace;
   });

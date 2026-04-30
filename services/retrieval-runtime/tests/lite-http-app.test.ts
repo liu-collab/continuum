@@ -196,5 +196,22 @@ describe("lite runtime HTTP app", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("invalid_prepare_context");
+    expect(response.json().error.message_zh).toBe("prepare-context 请求参数无效。");
+    expect(response.json().error.message_en).toBe("Invalid lite prepare-context payload.");
+  });
+
+  it("returns localized not-found errors for lite records", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/lite/memories/missing-record",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toMatchObject({
+      code: "lite_record_not_found",
+      message: "未找到这条 lite 记忆记录。 | Lite record not found.",
+      message_zh: "未找到这条 lite 记忆记录。",
+      message_en: "Lite record not found.",
+    });
   });
 });
