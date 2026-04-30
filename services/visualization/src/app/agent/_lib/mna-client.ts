@@ -289,7 +289,7 @@ export class MnaClient {
       base_url?: string;
       model?: string;
       api_key?: string;
-      protocol?: "anthropic" | "openai-compatible";
+      protocol?: "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
       timeout_ms?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number | null;

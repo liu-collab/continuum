@@ -331,7 +331,7 @@ export type MnaAgentConfigResponse = {
     base_url: string | null;
     model: string | null;
     api_key: string | null;
-    protocol: "anthropic" | "openai-compatible";
+    protocol: "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
     timeout_ms: number | null;
     effort: "low" | "medium" | "high" | "xhigh" | "max" | null;
     max_tokens: number | null;

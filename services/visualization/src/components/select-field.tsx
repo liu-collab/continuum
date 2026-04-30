@@ -16,6 +16,7 @@ type SelectFieldProps = {
   name?: string;
   testId?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 };
 
 type PopoverLayout = {
@@ -25,7 +26,7 @@ type PopoverLayout = {
   maxHeight: number;
 };
 
-export function SelectField({ value, options, onChange, name, testId, ariaLabel }: SelectFieldProps) {
+export function SelectField({ value, options, onChange, name, testId, ariaLabel, disabled = false }: SelectFieldProps) {
   const [open, setOpen] = useState(false);
   const [popoverLayout, setPopoverLayout] = useState<PopoverLayout | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -147,12 +148,18 @@ export function SelectField({ value, options, onChange, name, testId, ariaLabel 
       <button
         ref={buttonRef}
         type="button"
-        className="field-button"
+        className="field-button disabled:cursor-not-allowed disabled:opacity-60"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
         data-testid={testId}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (disabled) {
+            return;
+          }
+          setOpen((current) => !current);
+        }}
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-muted-foreground" />

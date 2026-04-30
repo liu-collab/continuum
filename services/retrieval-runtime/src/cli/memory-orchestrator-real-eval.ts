@@ -40,7 +40,7 @@ export function getPassThreshold(metric: string): number {
 
 export const PASS_THRESHOLD = 0.6; // 保留默认值做向后兼容
 
-export type Protocol = "anthropic" | "openai-compatible";
+export type Protocol = "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
 
 type CliArgs = {
   baseUrl?: string;
@@ -149,7 +149,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     args.model = model;
   }
   if (protocol !== undefined) {
-    args.protocol = protocol === "anthropic" ? "anthropic" : "openai-compatible";
+    args.protocol = normalizeProtocol(protocol);
   }
   if (timeoutMs !== undefined) {
     args.timeoutMs = timeoutMs;
@@ -168,6 +168,14 @@ export function parseCliArgs(argv: string[]): CliArgs {
   }
 
   return args;
+}
+
+function normalizeProtocol(value: string): Protocol {
+  if (value === "anthropic" || value === "openai-responses" || value === "ollama") {
+    return value;
+  }
+
+  return "openai-compatible";
 }
 
 async function loadManagedConfig(configPath: string): Promise<ManagedConfig> {

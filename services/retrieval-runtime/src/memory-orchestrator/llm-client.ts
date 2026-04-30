@@ -13,7 +13,40 @@ type OpenAiChatPayload = {
   }>;
 };
 
-function isOpenAiChatPayload(payload: AnthropicMessagesPayload | OpenAiChatPayload): payload is OpenAiChatPayload {
+type OpenAiResponsesPayload = {
+  output?: Array<{
+    type?: string;
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
+  }>;
+  output_text?: string;
+};
+
+type OllamaChatPayload = {
+  message?: {
+    content?: string;
+  };
+  response?: string;
+};
+
+function buildBaseUrl(baseUrl: string, pathname: string): URL {
+  const endpointParts = pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+  const url = new URL(baseUrl);
+  const basePathParts = url.pathname.split("/").filter(Boolean);
+  const pathToAppend =
+    endpointParts.length > 1 && basePathParts.at(-1) === endpointParts[0]
+      ? endpointParts.slice(1)
+      : endpointParts;
+
+  url.pathname = `/${[...basePathParts, ...pathToAppend].join("/")}`;
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+function isOpenAiChatPayload(payload: AnthropicMessagesPayload | OpenAiChatPayload | OpenAiResponsesPayload | OllamaChatPayload): payload is OpenAiChatPayload {
   return "choices" in payload;
 }
 
@@ -43,41 +76,9 @@ export async function callMemoryLlm(
   }
 
   const protocol = config.MEMORY_LLM_PROTOCOL;
-  const requestUrl =
-    protocol === "anthropic"
-      ? new URL("/v1/messages", config.MEMORY_LLM_BASE_URL)
-      : new URL("/v1/chat/completions", config.MEMORY_LLM_BASE_URL);
-  const headers =
-    protocol === "anthropic"
-      ? {
-          "content-type": "application/json",
-          "anthropic-version": "2023-06-01",
-          ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
-        }
-      : {
-          "content-type": "application/json",
-          ...(config.MEMORY_LLM_API_KEY
-            ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
-            : {}),
-        };
-
-  const requestBodies =
-    protocol === "anthropic"
-      ? [buildAnthropicBody(config, systemPrompt, userPayload, maxTokens)]
-      : [
-          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-            includeResponseFormat: true,
-            includeReasoningEffort: true,
-          }),
-          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-            includeResponseFormat: false,
-            includeReasoningEffort: true,
-          }),
-          buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
-            includeResponseFormat: false,
-            includeReasoningEffort: false,
-          }),
-        ];
+  const requestUrl = resolveRequestUrl(config.MEMORY_LLM_BASE_URL, protocol);
+  const headers = resolveRequestHeaders(config);
+  const requestBodies = buildRequestBodies(config, systemPrompt, userPayload, maxTokens);
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < TRANSIENT_ATTEMPTS; attempt += 1) {
@@ -104,7 +105,7 @@ export async function callMemoryLlm(
           break;
         }
 
-        if (protocol !== "openai-compatible") {
+        if (!shouldTryNextRequestBody(protocol)) {
           break;
         }
       }
@@ -117,7 +118,7 @@ export async function callMemoryLlm(
         throw new Error(`memory llm request failed with ${status ?? "unknown"}`);
       }
 
-      const payload = (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload;
+      const payload = (await response.json()) as AnthropicMessagesPayload | OpenAiChatPayload | OpenAiResponsesPayload | OllamaChatPayload;
       return extractResponseText(payload);
     } catch (error) {
       if (isTransientMemoryLlmError(error) && attempt + 1 < TRANSIENT_ATTEMPTS) {
@@ -132,6 +133,87 @@ export async function callMemoryLlm(
   }
 
   throw lastError ?? new Error("memory llm request failed");
+}
+
+function resolveRequestUrl(baseUrl: string, protocol: MemoryLlmConfig["MEMORY_LLM_PROTOCOL"]) {
+  if (protocol === "anthropic") {
+    return buildBaseUrl(baseUrl, "/v1/messages");
+  }
+  if (protocol === "openai-responses") {
+    return buildBaseUrl(baseUrl, "/v1/responses");
+  }
+  if (protocol === "ollama") {
+    return buildBaseUrl(baseUrl, "/api/chat");
+  }
+  return buildBaseUrl(baseUrl, "/v1/chat/completions");
+}
+
+function resolveRequestHeaders(config: MemoryLlmConfig) {
+  if (config.MEMORY_LLM_PROTOCOL === "anthropic") {
+    return {
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      ...(config.MEMORY_LLM_API_KEY ? { "x-api-key": config.MEMORY_LLM_API_KEY } : {}),
+    };
+  }
+
+  return {
+    "content-type": "application/json",
+    ...(config.MEMORY_LLM_API_KEY
+      ? { authorization: `Bearer ${config.MEMORY_LLM_API_KEY}` }
+      : {}),
+  };
+}
+
+function buildRequestBodies(
+  config: MemoryLlmConfig,
+  systemPrompt: string,
+  userPayload: unknown,
+  maxTokens: number,
+) {
+  if (config.MEMORY_LLM_PROTOCOL === "anthropic") {
+    return [buildAnthropicBody(config, systemPrompt, userPayload, maxTokens)];
+  }
+
+  if (config.MEMORY_LLM_PROTOCOL === "openai-responses") {
+    return [
+      buildOpenAiResponsesBody(config, systemPrompt, userPayload, maxTokens, {
+        includeTextFormat: true,
+        includeReasoningEffort: true,
+      }),
+      buildOpenAiResponsesBody(config, systemPrompt, userPayload, maxTokens, {
+        includeTextFormat: true,
+        includeReasoningEffort: false,
+      }),
+      buildOpenAiResponsesBody(config, systemPrompt, userPayload, maxTokens, {
+        includeTextFormat: false,
+        includeReasoningEffort: false,
+      }),
+    ];
+  }
+
+  if (config.MEMORY_LLM_PROTOCOL === "ollama") {
+    return [buildOllamaBody(config, systemPrompt, userPayload)];
+  }
+
+  return [
+    buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+      includeResponseFormat: true,
+      includeReasoningEffort: true,
+    }),
+    buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+      includeResponseFormat: false,
+      includeReasoningEffort: true,
+    }),
+    buildOpenAiBody(config, systemPrompt, userPayload, maxTokens, {
+      includeResponseFormat: false,
+      includeReasoningEffort: false,
+    }),
+  ];
+}
+
+function shouldTryNextRequestBody(protocol: MemoryLlmConfig["MEMORY_LLM_PROTOCOL"]) {
+  return protocol === "openai-compatible" || protocol === "openai-responses";
 }
 
 export function parseMemoryLlmJsonPayload(text: string): unknown {
@@ -248,9 +330,77 @@ function buildOpenAiBody(
   };
 }
 
-function extractResponseText(payload: AnthropicMessagesPayload | OpenAiChatPayload): string {
+function buildOpenAiResponsesBody(
+  config: MemoryLlmConfig,
+  systemPrompt: string,
+  userPayload: unknown,
+  maxTokens: number,
+  options: {
+    includeTextFormat: boolean;
+    includeReasoningEffort: boolean;
+  },
+) {
+  const reasoningEffort = mapOpenAiReasoningEffort(config.MEMORY_LLM_EFFORT);
+
+  return {
+    model: config.MEMORY_LLM_MODEL,
+    instructions: `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`,
+    input: JSON.stringify(userPayload),
+    max_output_tokens: maxTokens,
+    store: false,
+    ...(options.includeTextFormat
+      ? {
+          text: {
+            format: {
+              type: "json_object",
+            },
+          },
+        }
+      : {}),
+    ...(options.includeReasoningEffort && reasoningEffort
+      ? {
+          reasoning: {
+            effort: reasoningEffort,
+          },
+        }
+      : {}),
+  };
+}
+
+function buildOllamaBody(
+  config: MemoryLlmConfig,
+  systemPrompt: string,
+  userPayload: unknown,
+) {
+  return {
+    model: config.MEMORY_LLM_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `${JSON_OBJECT_SYSTEM_PREFIX}\n${systemPrompt}`,
+      },
+      {
+        role: "user",
+        content: JSON.stringify(userPayload),
+      },
+    ],
+    stream: false,
+  };
+}
+
+function extractResponseText(payload: AnthropicMessagesPayload | OpenAiChatPayload | OpenAiResponsesPayload | OllamaChatPayload): string {
   if ("output_text" in payload && typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text;
+  }
+
+  if ("output" in payload && Array.isArray(payload.output)) {
+    const textParts = payload.output
+      .flatMap((item) => item.content ?? [])
+      .filter((part) => (part?.type === "output_text" || part?.type === "text") && typeof part.text === "string")
+      .map((part) => part.text ?? "");
+    if (textParts.length > 0) {
+      return textParts.join("\n");
+    }
   }
 
   if ("content" in payload) {
@@ -277,6 +427,14 @@ function extractResponseText(payload: AnthropicMessagesPayload | OpenAiChatPaylo
         return textParts.join("\n");
       }
     }
+  }
+
+  if ("message" in payload && typeof payload.message?.content === "string" && payload.message.content.trim()) {
+    return payload.message.content;
+  }
+
+  if ("response" in payload && typeof payload.response === "string" && payload.response.trim()) {
+    return payload.response;
   }
 
   throw new Error("memory llm response did not include text content");

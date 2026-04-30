@@ -11,6 +11,7 @@ import { updateMcpServers, updatePlanMode, updateProviderSelection, updateToolAp
 import { clearManagedDependencyProbe, writeManagedDependencyProbe } from "./dependency-status-cache.js";
 
 const providerKindSchema = z.enum(["openai-compatible", "openai-responses", "anthropic", "ollama", "record-replay"]);
+const memoryLlmProtocolSchema = z.enum(["openai-compatible", "openai-responses", "anthropic", "ollama"]);
 const mcpServerPayloadSchema = z.object({
   name: z.string().trim().min(1),
   transport: z.enum(["stdio", "http"]),
@@ -84,7 +85,7 @@ const memoryLlmPayloadSchema = z.object({
   base_url: z.string().trim().url().optional(),
   model: z.string().trim().min(1).optional(),
   api_key: z.string().trim().optional(),
-  protocol: z.enum(["anthropic", "openai-compatible"]).optional(),
+  protocol: memoryLlmProtocolSchema.optional(),
   timeout_ms: z.number().int().min(100).max(120_000).optional(),
   effort: z.enum(["low", "medium", "high", "xhigh", "max"]).nullable().optional(),
   max_tokens: z.number().int().min(1).nullable().optional(),
@@ -150,7 +151,7 @@ type ManagedProviderConfig = {
 type ManagedMemoryLlmConfig = {
   baseUrl?: string;
   model?: string;
-  protocol?: "anthropic" | "openai-compatible";
+  protocol?: z.infer<typeof memoryLlmProtocolSchema>;
   timeoutMs?: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
   maxTokens?: number | null;
@@ -352,7 +353,7 @@ async function migrateManagedConfigFiles(app: RuntimeFastifyInstance) {
     unified.memory_llm = {
       ...(typeof memoryPayload.baseUrl === "string" ? { baseUrl: memoryPayload.baseUrl } : {}),
       ...(typeof memoryPayload.model === "string" ? { model: memoryPayload.model } : {}),
-      ...(typeof memoryPayload.protocol === "string" ? { protocol: memoryPayload.protocol as "anthropic" | "openai-compatible" } : {}),
+      ...(typeof memoryPayload.protocol === "string" ? { protocol: memoryPayload.protocol as z.infer<typeof memoryLlmProtocolSchema> } : {}),
       ...(typeof memoryPayload.timeoutMs === "number" ? { timeoutMs: memoryPayload.timeoutMs } : {}),
       ...(memoryPayload.effort !== undefined ? { effort: memoryPayload.effort as ManagedMemoryLlmConfig["effort"] } : {}),
       ...(memoryPayload.maxTokens !== undefined ? { maxTokens: memoryPayload.maxTokens as number | null } : {}),
@@ -606,7 +607,7 @@ async function probeMemoryLlm(env: NodeJS.ProcessEnv, config: {
   baseUrl?: string;
   model?: string;
   apiKey?: string;
-  protocol?: "anthropic" | "openai-compatible";
+  protocol?: z.infer<typeof memoryLlmProtocolSchema>;
   timeoutMs?: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
 }) {
@@ -625,7 +626,7 @@ async function probeMemoryLlm(env: NodeJS.ProcessEnv, config: {
   }
 
   const providerConfig: ProviderConfig = {
-    kind: protocol === "anthropic" ? "anthropic" : "openai-compatible",
+    kind: protocol,
     model,
     baseUrl,
     apiKey: config.apiKey,
@@ -702,7 +703,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       baseUrl?: string;
       model?: string;
       apiKey?: string;
-      protocol?: "anthropic" | "openai-compatible";
+      protocol?: z.infer<typeof memoryLlmProtocolSchema>;
       timeoutMs?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       maxTokens?: number | null;
@@ -744,7 +745,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
         protocol:
           managedMemoryLlm?.protocol
           ?? memoryLlm?.protocol
-          ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined)
+          ?? ((process.env.MEMORY_LLM_PROTOCOL as z.infer<typeof memoryLlmProtocolSchema> | undefined)
             ?? "openai-compatible"),
         timeout_ms: managedMemoryLlm?.timeoutMs ?? memoryLlm?.timeoutMs ?? (
           process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
@@ -1000,7 +1001,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       baseUrl?: string;
       model?: string;
       apiKey?: string;
-      protocol?: "anthropic" | "openai-compatible";
+      protocol?: z.infer<typeof memoryLlmProtocolSchema>;
       timeoutMs?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
     }>(resolveManagedMemoryLlmConfigPath(app));
@@ -1012,7 +1013,7 @@ export function registerConfigRoutes(app: RuntimeFastifyInstance) {
       protocol:
         unifiedConfig.memory_llm?.protocol
         ?? managedConfig?.protocol
-        ?? ((process.env.MEMORY_LLM_PROTOCOL as "anthropic" | "openai-compatible" | undefined) ?? "openai-compatible"),
+        ?? ((process.env.MEMORY_LLM_PROTOCOL as z.infer<typeof memoryLlmProtocolSchema> | undefined) ?? "openai-compatible"),
       timeoutMs: unifiedConfig.memory_llm?.timeoutMs ?? managedConfig?.timeoutMs ?? (
         process.env.MEMORY_LLM_TIMEOUT_MS?.trim()
           ? Number(process.env.MEMORY_LLM_TIMEOUT_MS)

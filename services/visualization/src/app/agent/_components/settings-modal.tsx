@@ -72,7 +72,7 @@ type SettingsModalProps = {
       base_url?: string;
       model?: string;
       api_key?: string;
-      protocol?: "anthropic" | "openai-compatible";
+      protocol?: EditableProviderKind;
       timeout_ms?: number;
       effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       max_tokens?: number;
@@ -215,16 +215,8 @@ function resolveProviderApiKeyEnv(value: string | null | undefined): ProviderApi
     : "";
 }
 
-function resolveMemoryProtocolFromProviderKind(
-  kind: ProviderKind,
-): "anthropic" | "openai-compatible" | null {
-  if (kind === "anthropic") {
-    return "anthropic";
-  }
-  if (kind === "openai-compatible") {
-    return "openai-compatible";
-  }
-  return null;
+function resolveMemoryProtocolFromProviderKind(kind: ProviderKind): EditableProviderKind | null {
+  return isEditableProviderKind(kind) ? kind : null;
 }
 
 function normalizeText(value: string | null | undefined) {
@@ -329,7 +321,7 @@ export function SettingsModal({
   const [memoryLlmBaseUrl, setMemoryLlmBaseUrl] = useState("");
   const [memoryLlmModel, setMemoryLlmModel] = useState("");
   const [memoryLlmApiKey, setMemoryLlmApiKey] = useState("");
-  const [memoryLlmProtocol, setMemoryLlmProtocol] = useState<"anthropic" | "openai-compatible">("openai-compatible");
+  const [memoryLlmProtocol, setMemoryLlmProtocol] = useState<EditableProviderKind>("openai-compatible");
   const [memoryLlmTimeoutMs, setMemoryLlmTimeoutMs] = useState("");
   const [memoryLlmEffort, setMemoryLlmEffort] = useState<"low" | "medium" | "high" | "xhigh" | "max" | "">("");
   const [memoryLlmMaxTokens, setMemoryLlmMaxTokens] = useState("");
@@ -1415,11 +1407,8 @@ export function SettingsModal({
                       <SelectField
                         value={memoryLlmProtocol}
                         ariaLabel={t("runtimeConfig.providerKind")}
-                        onChange={(value) => setMemoryLlmProtocol(value as "anthropic" | "openai-compatible")}
-                        options={[
-                          { value: "openai-compatible", label: t("runtimeConfig.memoryLlmProtocolOptions.openai-compatible") },
-                          { value: "anthropic", label: t("runtimeConfig.memoryLlmProtocolOptions.anthropic") }
-                        ]}
+                        onChange={(value) => setMemoryLlmProtocol(value as EditableProviderKind)}
+                        options={EDITABLE_PROVIDER_KIND_OPTIONS}
                       />
                     </label>
                     <label className="block">
@@ -1463,6 +1452,48 @@ export function SettingsModal({
                           : t("runtimeConfig.memoryLlmAdvancedSettings")}
                       </button>
                     </div>
+                  </>
+                ) : null}
+                {memoryModelMode === "same_as_primary" ? (
+                  <>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerKind")}</span>
+                      <SelectField
+                        value={currentProviderKind}
+                        ariaLabel={t("runtimeConfig.providerKind")}
+                        onChange={() => undefined}
+                        options={providerKindOptions}
+                        disabled
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerModel")}</span>
+                      <input
+                        value={providerModel}
+                        readOnly
+                        placeholder={t("runtimeConfig.providerModel")}
+                        className="field mt-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerBaseUrl")}</span>
+                      <input
+                        value={providerBaseUrl}
+                        readOnly
+                        placeholder={t("runtimeConfig.providerBaseUrl")}
+                        className="field mt-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-muted-foreground">{t("runtimeConfig.providerApiKey")}</span>
+                      <input
+                        type="password"
+                        value={providerApiKey}
+                        readOnly
+                        placeholder={t("runtimeConfig.providerApiKey")}
+                        className="field mt-1"
+                      />
+                    </label>
                   </>
                 ) : null}
                 {memoryModelMode === "custom" && memoryLlmAdvancedOpen ? (

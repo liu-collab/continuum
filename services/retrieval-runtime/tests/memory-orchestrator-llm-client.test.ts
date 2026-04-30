@@ -90,6 +90,94 @@ describe("memory orchestrator llm client", () => {
     expect(result).toBe("{\"ok\":true,\"source\":\"openai\"}");
   });
 
+  it("targets the OpenAI Responses endpoint and extracts output text", async () => {
+    let calledUrl = "";
+    let parsedBody: Record<string, unknown> = {};
+
+    globalThis.fetch = (async (input, init) => {
+      calledUrl = String(input);
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer openai-key");
+      parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return {
+        ok: true,
+        json: async () => ({
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: "{\"ok\":true,\"source\":\"responses\"}",
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await callMemoryLlm(
+      {
+        MEMORY_LLM_BASE_URL: "https://api.openai.com/v1",
+        MEMORY_LLM_MODEL: "gpt-4.1-mini",
+        MEMORY_LLM_API_KEY: "openai-key",
+        MEMORY_LLM_PROTOCOL: "openai-responses",
+        MEMORY_LLM_TIMEOUT_MS: 500,
+        MEMORY_LLM_EFFORT: "medium",
+      },
+      "system",
+      { ping: true },
+      64,
+    );
+
+    expect(calledUrl).toBe("https://api.openai.com/v1/responses");
+    expect(parsedBody).toMatchObject({
+      model: "gpt-4.1-mini",
+      store: false,
+      max_output_tokens: 64,
+    });
+    expect(result).toBe("{\"ok\":true,\"source\":\"responses\"}");
+  });
+
+  it("targets the Ollama chat endpoint and extracts message content", async () => {
+    let calledUrl = "";
+    let parsedBody: Record<string, unknown> = {};
+
+    globalThis.fetch = (async (input, init) => {
+      calledUrl = String(input);
+      expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      parsedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return {
+        ok: true,
+        json: async () => ({
+          message: {
+            content: "{\"ok\":true,\"source\":\"ollama\"}",
+          },
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await callMemoryLlm(
+      {
+        MEMORY_LLM_BASE_URL: "http://127.0.0.1:11434",
+        MEMORY_LLM_MODEL: "qwen2.5-coder",
+        MEMORY_LLM_PROTOCOL: "ollama",
+        MEMORY_LLM_TIMEOUT_MS: 500,
+        MEMORY_LLM_EFFORT: "medium",
+      },
+      "system",
+      { ping: true },
+      64,
+    );
+
+    expect(calledUrl).toBe("http://127.0.0.1:11434/api/chat");
+    expect(parsedBody).toMatchObject({
+      model: "qwen2.5-coder",
+      stream: false,
+    });
+    expect(result).toBe("{\"ok\":true,\"source\":\"ollama\"}");
+  });
+
   it("retries openai-compatible requests without response_format for compatibility endpoints", async () => {
     let callCount = 0;
 

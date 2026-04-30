@@ -510,7 +510,12 @@ describe("SettingsModal", () => {
     await waitFor(() => {
       expect(screen.getByPlaceholderText("EMBEDDING_MODEL")).toHaveValue("text-embedding-3-small");
     });
+    const memoryConfig = screen.getByTestId("memory-model-config");
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
+    expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("OpenAI-compatible");
+    expect(within(memoryConfig).getByPlaceholderText("provider model")).toHaveValue("gpt-4.1-mini");
+    expect(within(memoryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.openai.com/v1");
+    expect(within(memoryConfig).getByPlaceholderText("provider api_key")).toHaveValue("openai-key");
     await user.click(screen.getByTestId("runtime-config-save"));
 
     expect(onSaveRuntime).toHaveBeenCalledWith(
@@ -850,7 +855,14 @@ describe("SettingsModal", () => {
 
     await openAdvancedSettings(user);
     const memoryConfig = screen.getByTestId("memory-model-config");
-    expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("Anthropic");
+    expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("anthropic");
+    await user.click(within(memoryConfig).getByRole("button", { name: "类型" }));
+    expect(screen.getByRole("option", { name: "OpenAI-compatible" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "OpenAI Responses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "anthropic" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ollama" })).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "OpenAI Responses" }));
+    expect(within(memoryConfig).getByRole("button", { name: "类型" })).toHaveTextContent("OpenAI Responses");
     expect(within(memoryConfig).getByPlaceholderText("provider model")).toHaveValue("claude-haiku-4-5-20251001");
     expect(within(memoryConfig).getByPlaceholderText("provider base_url")).toHaveValue("https://api.anthropic.com");
     expect(within(memoryConfig).getByPlaceholderText("provider api_key")).toHaveValue("writeback-key");
@@ -896,7 +908,9 @@ describe("SettingsModal", () => {
 
     await openAdvancedSettings(user);
     expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
-    expect(within(screen.getByTestId("memory-model-config")).queryByPlaceholderText("provider model")).not.toBeInTheDocument();
+    const memoryConfig = screen.getByTestId("memory-model-config");
+    expect(within(memoryConfig).getByPlaceholderText("provider model")).toHaveValue(baseConfig.provider.model);
+    expect(within(memoryConfig).getByPlaceholderText("provider base_url")).toHaveValue(baseConfig.provider.base_url);
   });
 
   it("shows and submits provider and memory llm thinking config", async () => {
@@ -998,6 +1012,65 @@ describe("SettingsModal", () => {
           protocol: "openai-compatible",
           effort: baseConfig.provider.effort,
           max_tokens: baseConfig.provider.max_tokens,
+        }),
+      }),
+    );
+  });
+
+  it("can mirror OpenAI Responses as the memory model protocol", async () => {
+    const user = userEvent.setup();
+    const onSaveRuntime = vi.fn(async () => undefined);
+
+    render(
+      <AgentI18nProvider defaultLocale="zh-CN">
+        <SettingsModal
+          open
+          onClose={vi.fn()}
+          config={{
+            ...baseConfig,
+            provider: {
+              ...baseConfig.provider,
+              kind: "openai-responses",
+              model: "gpt-4.1-mini",
+              base_url: "https://api.openai.com/v1",
+            },
+            memory_llm: {
+              base_url: "https://api.openai.com/v1",
+              model: "gpt-4.1-mini",
+              api_key: baseConfig.provider.api_key,
+              protocol: "openai-responses",
+              timeout_ms: 15000,
+              effort: baseConfig.provider.effort,
+              max_tokens: baseConfig.provider.max_tokens,
+            },
+          }}
+          dependencyStatus={null}
+          memoryMode="workspace_plus_global"
+          onMemoryModeChange={vi.fn()}
+          onSaveRuntime={onSaveRuntime}
+          onCheckEmbeddings={vi.fn(async () => ({
+            status: "healthy",
+            detail: "embedding request completed",
+          }))}
+          onCheckMemoryLlm={vi.fn(async () => ({
+            status: "healthy",
+            detail: "memory llm request completed",
+          }))}
+        />
+      </AgentI18nProvider>,
+    );
+
+    await openAdvancedSettings(user);
+    expect(screen.getByTestId("memory-model-mode-select")).toHaveTextContent("与主模型一致");
+    expect(within(screen.getByTestId("memory-model-config")).getByRole("button", { name: "类型" })).toHaveTextContent("OpenAI Responses");
+    await user.click(screen.getByTestId("runtime-config-save"));
+
+    expect(onSaveRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memory_llm: expect.objectContaining({
+          base_url: "https://api.openai.com/v1",
+          model: "gpt-4.1-mini",
+          protocol: "openai-responses",
         }),
       }),
     );

@@ -398,6 +398,137 @@ describe("health routes", () => {
     }
   });
 
+  it("checks memory llm through the OpenAI Responses protocol", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    const memoryServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+
+    await memoryServer.post("/v1/responses", async (_request, reply) => {
+      reply.header("content-type", "text/event-stream");
+      return reply.send([
+        "data: {\"type\":\"response.output_text.delta\",\"delta\":\"pong\"}",
+        "",
+        "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":1,\"output_tokens\":1},\"output\":[]}}",
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    });
+
+    try {
+      await memoryServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = memoryServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const configResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          memory_llm: {
+            base_url: `http://127.0.0.1:${port}/v1`,
+            model: "gpt-4.1-mini",
+            api_key: "memory-key",
+            protocol: "openai-responses",
+            timeout_ms: 3000
+          }
+        }
+      });
+
+      expect(configResponse.statusCode).toBe(200);
+
+      const checkResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/memory-llm/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(checkResponse.statusCode).toBe(200);
+      expect(checkResponse.json()).toMatchObject({
+        name: "memory_llm",
+        status: "healthy",
+      });
+    } finally {
+      await memoryServer.close();
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("checks memory llm through the Ollama protocol", async () => {
+    const home = createTempHome();
+    const workspaceRoot = path.join(home, "workspace");
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+
+    const app = createServer(createConfig(workspaceRoot), { homeDirectory: home });
+    const memoryServer = await import("fastify").then(({ default: Fastify }) => Fastify({ logger: false }));
+
+    await memoryServer.post("/api/chat", async (_request, reply) => {
+      reply.header("content-type", "application/x-ndjson");
+      return reply.send([
+        JSON.stringify({
+          message: {
+            content: "pong",
+          },
+          done: false,
+        }),
+        JSON.stringify({
+          done: true,
+          done_reason: "stop",
+        }),
+      ].join("\n"));
+    });
+
+    try {
+      await memoryServer.listen({ host: "127.0.0.1", port: 0 });
+      const address = memoryServer.server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+
+      const configResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/config",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        },
+        payload: {
+          memory_llm: {
+            base_url: `http://127.0.0.1:${port}`,
+            model: "qwen2.5-coder",
+            protocol: "ollama",
+            timeout_ms: 3000
+          }
+        }
+      });
+
+      expect(configResponse.statusCode).toBe(200);
+
+      const checkResponse = await app.inject({
+        method: "POST",
+        url: "/v1/agent/dependency-status/memory-llm/check",
+        headers: {
+          authorization: `Bearer ${app.mnaToken}`
+        }
+      });
+
+      expect(checkResponse.statusCode).toBe(200);
+      expect(checkResponse.json()).toMatchObject({
+        name: "memory_llm",
+        status: "healthy",
+      });
+    } finally {
+      await memoryServer.close();
+      await app.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("reads runtime config and persists updated provider plus embedding config", async () => {
     const home = createTempHome();
     const workspaceRoot = path.join(home, "workspace");

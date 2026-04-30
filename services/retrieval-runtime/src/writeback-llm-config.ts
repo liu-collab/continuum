@@ -25,7 +25,7 @@ type WritebackLlmConfigSource = {
   AXIS_MANAGED_SECRETS_PATH?: string;
 };
 
-export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible";
+export type RuntimeWritebackLlmProtocol = "anthropic" | "openai-compatible" | "openai-responses" | "ollama";
 
 export type RuntimeWritebackLlmConfig = {
   baseUrl?: string;
@@ -44,7 +44,12 @@ function normalizeProtocol(value: unknown): RuntimeWritebackLlmProtocol | undefi
   }
 
   const normalized = configValue.toLowerCase();
-  if (normalized === "anthropic" || normalized === "openai-compatible") {
+  if (
+    normalized === "anthropic"
+    || normalized === "openai-compatible"
+    || normalized === "openai-responses"
+    || normalized === "ollama"
+  ) {
     return normalized;
   }
 
