@@ -36,6 +36,10 @@ export const DEFAULT_MANAGED_DATABASE_USER = "axis_user";
 const PROCESS_MANAGED_DATABASE_PASSWORD = randomBytes(12).toString("hex");
 
 export function axisHomeDir() {
+  if (process.env.AXIS_HOME && process.env.AXIS_HOME.trim()) {
+    return process.env.AXIS_HOME.trim();
+  }
+
   return path.join(os.homedir(), ".axis");
 }
 
@@ -77,4 +81,15 @@ export async function writeManagedState(state: AxisManagedState) {
   await mkdir(path.dirname(statePath), { recursive: true });
   await writeFile(tempPath, JSON.stringify(state, null, 2), "utf8");
   await rename(tempPath, statePath);
+}
+
+export async function readManagedServiceUrl(...serviceNames: string[]) {
+  const state = await readManagedState();
+  for (const name of serviceNames) {
+    const url = state.services.find((service) => service.name === name)?.url;
+    if (url) {
+      return url;
+    }
+  }
+  return undefined;
 }

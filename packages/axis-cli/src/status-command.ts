@@ -9,6 +9,7 @@ import {
 } from "./utils.js";
 import {
   buildManagedDatabaseUrl,
+  readManagedServiceUrl,
   readManagedState,
   resolveDatabasePasswordFromState,
 } from "./managed-state.js";
@@ -29,6 +30,18 @@ function formatLine(result: StatusCheckResult) {
 async function checkRuntime(runtimeUrl: string, timeoutMs: number): Promise<StatusCheckResult> {
   const response = await fetchJson(`${runtimeUrl}/healthz`, timeoutMs);
   if (!response.ok) {
+    const liteResponse = await fetchJson(`${runtimeUrl}/v1/lite/healthz`, timeoutMs);
+    if (liteResponse.ok) {
+      const body = liteResponse.body as {
+        mode?: string;
+        storage?: { records?: number };
+      };
+      return {
+        name: "retrieval-runtime",
+        status: "healthy",
+        detail: `mode=${body?.mode ?? "lite"} records=${body?.storage?.records ?? "unknown"}`,
+      };
+    }
     return {
       name: "retrieval-runtime",
       status: "unavailable",
@@ -143,8 +156,9 @@ async function checkDatabase(
 }
 
 export async function runStatusCommand(options: Record<string, string | boolean>) {
+  const managedRuntimeUrl = await readManagedServiceUrl("retrieval-runtime", "lite-runtime");
   const runtimeUrl =
-    typeof options["runtime-url"] === "string" ? options["runtime-url"] : DEFAULT_RUNTIME_URL;
+    typeof options["runtime-url"] === "string" ? options["runtime-url"] : managedRuntimeUrl ?? DEFAULT_RUNTIME_URL;
   const storageUrl =
     typeof options["storage-url"] === "string" ? options["storage-url"] : DEFAULT_STORAGE_URL;
   const uiUrl = typeof options["ui-url"] === "string" ? options["ui-url"] : DEFAULT_UI_URL;

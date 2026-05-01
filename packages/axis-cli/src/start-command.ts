@@ -77,6 +77,7 @@ import {
   normalizeBindHost,
   parsePort,
   parsePortEnv,
+  resolveLiteRuntimePort,
   resolveAccessibleHost,
   resolveManagedPostgresPort,
   resolveUiDevPort,
@@ -193,6 +194,10 @@ function resolveStoragePort() {
 
 function resolveRuntimePort() {
   return parsePortEnv(process.env.RUNTIME_PORT, "RUNTIME_PORT", DEFAULT_RUNTIME_PORT);
+}
+
+function hasExplicitRuntimePort() {
+  return process.env.RUNTIME_PORT !== undefined && process.env.RUNTIME_PORT.trim() !== "";
 }
 
 function resolveVisualizationPort() {
@@ -393,13 +398,22 @@ async function startLiteRuntime(options: {
   }
 
   const latestManagedState = await readManagedState();
+  const existingServices = latestManagedState.services.filter((service) =>
+    service.name !== "lite-runtime" && service.name !== "retrieval-runtime"
+  );
   await writeManagedState({
     ...latestManagedState,
     version: 1,
     services: [
-      ...latestManagedState.services.filter((service) => service.name !== "lite-runtime"),
+      ...existingServices,
       {
         name: "lite-runtime",
+        pid: pid ?? 0,
+        logPath,
+        url: options.runtimeUrl,
+      },
+      {
+        name: "retrieval-runtime",
         pid: pid ?? 0,
         logPath,
         url: options.runtimeUrl,
@@ -676,10 +690,18 @@ export async function runStartCommand(
   const bindHost = normalizeBindHost(options["bind-host"]);
   const accessibleHost = resolveAccessibleHost(bindHost);
   const storagePort = resolveStoragePort();
-  const runtimePort = resolveRuntimePort();
+  const requestedRuntimePort = resolveRuntimePort();
   const visualizationPort = resolveVisualizationPort();
   const uiDev = options["ui-dev"] === true;
   const full = options.full === true || uiDev;
+  const requestedRuntimeUrl = buildServiceUrl(accessibleHost, requestedRuntimePort);
+  const requestedLiteRuntimeHealthy = !full
+    ? await isHealthy(`${requestedRuntimeUrl}/v1/lite/healthz`, 1_000)
+    : false;
+  const runtimePort = !full && !hasExplicitRuntimePort()
+    && !requestedLiteRuntimeHealthy
+    ? await resolveLiteRuntimePort(bindHost, requestedRuntimePort)
+    : requestedRuntimePort;
   const open = options.open === true;
   const daemon = options.daemon === true;
   const platformUserId = await resolvePlatformUserId();
@@ -962,7 +984,31 @@ export async function runStartCommand(
         database: DEFAULT_MANAGED_DATABASE_NAME,
         username: DEFAULT_MANAGED_DATABASE_USER,
       },
-      services: latestManagedState.services,
+      services: [
+        ...latestManagedState.services.filter((service) =>
+          service.name !== "storage"
+          && service.name !== "retrieval-runtime"
+          && service.name !== "visualization"
+        ),
+        {
+          name: "storage",
+          pid: 0,
+          logPath: "",
+          url: storageUrl,
+        },
+        {
+          name: "retrieval-runtime",
+          pid: 0,
+          logPath: "",
+          url: runtimeUrl,
+        },
+        {
+          name: "visualization",
+          pid: 0,
+          logPath: "",
+          url: startedVisualizationUrl,
+        },
+      ],
     });
 
     writeStartSummary({

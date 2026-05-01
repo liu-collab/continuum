@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -110,6 +110,25 @@ async function runNodeScript(scriptPath: string, args: string[], input: unknown,
     child.once("exit", resolve);
   });
   return { code, stdout, stderr };
+}
+
+async function writeManagedState(axisHome: string, runtimeUrl: string) {
+  await mkdir(axisHome, { recursive: true });
+  await writeFile(
+    path.join(axisHome, "state.json"),
+    `${JSON.stringify({
+      version: 1,
+      services: [
+        {
+          name: "lite-runtime",
+          pid: 0,
+          logPath: "",
+          url: runtimeUrl,
+        },
+      ],
+    }, null, 2)}\n`,
+    "utf8",
+  );
 }
 
 async function waitForHttpOk(url: string) {
@@ -294,6 +313,34 @@ describe("lite host adapter E2E", () => {
     expect(mcpConfig).toEqual({ mcpServers: {} });
   });
 
+  it("Claude bridge reads the managed lite runtime URL when no runtime URL is configured", async () => {
+    const axisHome = path.join(tempDir, "axis-home");
+    await writeManagedState(axisHome, liteBaseUrl);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      AXIS_HOME: axisHome,
+      MEMORY_RUNTIME_API_MODE: "lite",
+    };
+    delete env.MEMORY_RUNTIME_BASE_URL;
+
+    const result = await runNodeScript(
+      claudeBridgeScript,
+      ["prepare-context"],
+      {
+        workspace_id: ids.workspace,
+        user_id: ids.user,
+        session_id: ids.session,
+        turn_id: "turn-lite-managed-state",
+        user_prompt: "上次中文回复的约定是什么",
+      },
+      env,
+    );
+
+    expect(result.code).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain("用户偏好中文回复");
+  });
+
   it("Claude and Codex bootstraps start lite runtime command when health check misses", async () => {
     await runBootstrap(claudeBootstrapScript, tempDir);
     await runBootstrap(codexBootstrapScript, tempDir);
@@ -333,6 +380,7 @@ describe("lite host adapter E2E", () => {
   it("Codex proxy injects lite prepared context into the upstream thread without MCP calls", async () => {
     const upstreamPort = await getFreePort();
     const proxyPort = await getFreePort();
+    await writeManagedState(tempDir, liteBaseUrl);
     const upstreamMessages: Array<Record<string, unknown>> = [];
     const upstreamHttp = http.createServer();
     const upstream = new WebSocketServer({ server: upstreamHttp });
@@ -343,17 +391,19 @@ describe("lite host adapter E2E", () => {
     });
     await new Promise<void>((resolve) => upstreamHttp.listen(upstreamPort, "127.0.0.1", () => resolve()));
 
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      MEMORY_RUNTIME_API_MODE: "lite",
+      MEMORY_WORKSPACE_ID: ids.workspace,
+      MEMORY_USER_ID: ids.user,
+      AXIS_HOME: tempDir,
+      CODEX_APP_SERVER_URL: `ws://127.0.0.1:${upstreamPort}`,
+      MEMORY_CODEX_PROXY_LISTEN_URL: `ws://127.0.0.1:${proxyPort}`,
+    };
+    delete env.MEMORY_RUNTIME_BASE_URL;
     const proxy = spawn(process.execPath, [codexProxyScript], {
       stdio: "ignore",
-      env: {
-        ...process.env,
-        MEMORY_RUNTIME_BASE_URL: liteBaseUrl,
-        MEMORY_RUNTIME_API_MODE: "lite",
-        MEMORY_WORKSPACE_ID: ids.workspace,
-        MEMORY_USER_ID: ids.user,
-        CODEX_APP_SERVER_URL: `ws://127.0.0.1:${upstreamPort}`,
-        MEMORY_CODEX_PROXY_LISTEN_URL: `ws://127.0.0.1:${proxyPort}`,
-      },
+      env,
     });
     children.push(proxy);
     await waitForHttpOk(`http://127.0.0.1:${proxyPort}/readyz`);

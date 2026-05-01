@@ -11,6 +11,7 @@ export const DEFAULT_RUNTIME_PORT = 3002;
 export const DEFAULT_VISUALIZATION_PORT = 3003;
 export const DEFAULT_UI_DEV_PORT = 3003;
 export const UI_DEV_PORT_SCAN_LIMIT = 20;
+export const LITE_RUNTIME_PORT_SCAN_LIMIT = 20;
 
 export function parsePort(rawValue: string | boolean | undefined, optionName: string) {
   if (typeof rawValue !== "string") {
@@ -121,6 +122,19 @@ export async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_
       `No available visualization dev port was found. Tried ${host}:${preferredPort}-${preferredPort + UI_DEV_PORT_SCAN_LIMIT}.`,
     ),
   );
+}
+
+export async function resolveLiteRuntimePort(
+  host: string,
+  preferredPort = DEFAULT_RUNTIME_PORT,
+  probePort: (host: string, port: number) => Promise<boolean> = isTcpPortAvailable,
+) {
+  return resolveAvailableTcpPort({
+    host,
+    preferredPort,
+    scanLimit: LITE_RUNTIME_PORT_SCAN_LIMIT,
+    label: "lite runtime",
+  }, probePort);
 }
 
 export async function resolveAvailableTcpPort(

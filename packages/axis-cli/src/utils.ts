@@ -348,7 +348,7 @@ export async function rewriteClaudePluginCommands(
   pluginDir: string,
   packageSpecifier: string,
 ) {
-  const runtimeCommand = `npx -y -p ${packageSpecifier} axis runtime --background`;
+  const runtimeCommand = `npx -y -p ${packageSpecifier} axis start --daemon`;
   const mcpCommand = "off";
   const bootstrapPath = path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs");
   const bootstrapContent = await readFile(bootstrapPath, "utf8");

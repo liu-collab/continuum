@@ -46,6 +46,7 @@ describe("axis codex commands", () => {
     spawnMock.mockReset();
     writeMemoryModelConfigurationHintMock.mockReset();
     resolveAvailableTcpPortMock.mockReset();
+    delete process.env.MEMORY_RUNTIME_BASE_URL;
   });
 
   it("removes the installed Codex MCP server", async () => {
@@ -122,10 +123,23 @@ describe("axis codex commands", () => {
       [expect.stringContaining("memory-codex.mjs")],
       expect.objectContaining({
         env: expect.objectContaining({
-          MEMORY_RUNTIME_START_COMMAND: expect.stringContaining("runtime --background"),
+          MEMORY_RUNTIME_START_COMMAND: expect.stringContaining("start --daemon"),
         }),
       }),
     );
+  });
+
+  it("lets the adapter read managed runtime URL when no runtime URL is provided", async () => {
+    spawnMock.mockReturnValue(createChildProcess());
+    resolveAvailableTcpPortMock
+      .mockResolvedValueOnce(48_788)
+      .mockResolvedValueOnce(48_777);
+
+    await runCodexUseCommand({}, import.meta.url);
+
+    const env = spawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv;
+    expect(env.MEMORY_RUNTIME_BASE_URL).toBeUndefined();
+    expect(env.MEMORY_RUNTIME_START_COMMAND).toContain("start --daemon");
   });
 
   it("uses non-reserved default websocket ports for Codex proxy mode", async () => {

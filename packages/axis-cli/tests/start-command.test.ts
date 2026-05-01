@@ -276,20 +276,81 @@ describe("runStartCommand", () => {
     expect(stdoutSpy.mock.calls.map((call) => String(call[0])).join("")).toContain("mode: lite");
     expect(writeManagedStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        services: [
+        services: expect.arrayContaining([
           expect.objectContaining({
             name: "lite-runtime",
             pid: 12345,
             url: "http://127.0.0.1:3002",
           }),
-        ],
+          expect.objectContaining({
+            name: "retrieval-runtime",
+            pid: 12345,
+            url: "http://127.0.0.1:3002",
+          }),
+        ]),
       }),
+    );
+  });
+
+  it("switches lite runtime port automatically and writes the actual URL to managed state", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    fetchJsonMock.mockResolvedValue({ ok: false, body: {} });
+    waitForHealthyMock.mockResolvedValue(undefined);
+    readManagedMemoryLlmConfigMock.mockResolvedValue(null);
+    writeManagedMemoryLlmConfigMock.mockResolvedValue(undefined);
+    readManagedStateMock.mockResolvedValue({
+      version: 1,
+      services: [],
+    });
+    writeManagedStateMock.mockResolvedValue(undefined);
+    mkdirMock.mockResolvedValue(undefined);
+    openMock.mockResolvedValue({
+      fd: 1,
+      close: vi.fn(async () => undefined),
+    });
+    tcpPortAvailableMock.mockImplementation((_host: string, port: number) => port !== 3002);
+    spawnMock.mockReturnValue({
+      pid: 12346,
+      unref: vi.fn(),
+      on: vi.fn(),
+    });
+
+    await runStartCommand({}, import.meta.url);
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("runtime"), "--lite"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          PORT: "3003",
+        }),
+      }),
+    );
+    expect(writeManagedStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        services: expect.arrayContaining([
+          expect.objectContaining({
+            name: "lite-runtime",
+            pid: 12346,
+            url: "http://127.0.0.1:3003",
+          }),
+          expect.objectContaining({
+            name: "retrieval-runtime",
+            pid: 12346,
+            url: "http://127.0.0.1:3003",
+          }),
+        ]),
+      }),
+    );
+    expect(stdoutSpy.mock.calls.map((call) => String(call[0])).join("")).toContain(
+      "默认 lite runtime 端口 3002 不可用，自动切换到 3003",
     );
   });
 
   it("prints full-mode suggestion when lite memory volume is high", async () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     fetchJsonMock
+      .mockResolvedValueOnce({ ok: true, body: {} })
       .mockResolvedValueOnce({ ok: true, body: {} })
       .mockResolvedValueOnce({
         ok: true,

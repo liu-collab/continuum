@@ -100,9 +100,9 @@ export async function runCodexUseCommand(
   const runtimeUrl =
     typeof options["runtime-url"] === "string"
       ? options["runtime-url"]
-      : process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
+      : process.env.MEMORY_RUNTIME_BASE_URL;
   const ensureRuntime = options["ensure-runtime"] !== false;
-  const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime --background`;
+  const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" start --daemon`;
   const codexHome = resolveCodexHome(options);
   const codexPorts = await resolveDefaultCodexPorts(options);
   await writeMemoryModelConfigurationHint();
@@ -112,7 +112,7 @@ export async function runCodexUseCommand(
     env: {
       ...process.env,
       ...(codexHome ? { CODEX_HOME: codexHome } : {}),
-      MEMORY_RUNTIME_BASE_URL: runtimeUrl,
+      ...(runtimeUrl ? { MEMORY_RUNTIME_BASE_URL: runtimeUrl } : {}),
       MEMORY_RUNTIME_START_COMMAND: ensureRuntime ? runtimeCommand : "off",
       MEMORY_RUNTIME_API_MODE: "lite",
       MEMORY_RUNTIME_HEALTH_PATH: "/v1/lite/healthz",
