@@ -11,6 +11,8 @@ const BOOLEAN_FLAGS = new Set([
   "ui-dev",
   "daemon",
   "ensure-runtime",
+  "background",
+  "hidden",
   "skip-git-repo-check",
   "rotate",
 ]);

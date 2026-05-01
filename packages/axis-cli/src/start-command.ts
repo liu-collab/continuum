@@ -373,6 +373,7 @@ async function startLiteRuntime(options: {
     const entryPath = vendorPath(options.packageRoot, "runtime", "dist", "src", "index.js");
     const child = spawn(process.execPath, [entryPath, "--lite"], {
       detached: true,
+      windowsHide: true,
       stdio: ["ignore", stdoutHandle.fd, stderrHandle.fd],
       env: {
         ...process.env,

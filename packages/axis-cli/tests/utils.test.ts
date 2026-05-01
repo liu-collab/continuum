@@ -169,7 +169,7 @@ describe("axis utils", () => {
       await rewriteClaudePluginCommands(pluginDir, "axis-agent@0.1.0");
 
       await expect(readFile(path.join(pluginDir, "bin", "memory-runtime-bootstrap.mjs"), "utf8"))
-        .resolves.toContain("npx -y -p axis-agent@0.1.0 axis runtime");
+        .resolves.toContain("npx -y -p axis-agent@0.1.0 axis runtime --background");
       await expect(readFile(path.join(pluginDir, ".mcp.json"), "utf8"))
         .resolves.toContain("\"mcpServers\": {}");
     } finally {

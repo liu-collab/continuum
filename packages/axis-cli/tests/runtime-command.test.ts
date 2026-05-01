@@ -30,6 +30,25 @@ describe("axis runtime command", () => {
     );
   });
 
+  it("starts lite runtime hidden in background when requested", async () => {
+    const child = createChildProcess() as EventEmitter & { unref: () => void };
+    child.unref = vi.fn();
+    spawnMock.mockReturnValue(child);
+
+    await runRuntimeCommand(import.meta.url, { background: true });
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("runtime"), "--lite"],
+      expect.objectContaining({
+        stdio: "ignore",
+        detached: true,
+        windowsHide: true,
+      }),
+    );
+    expect(child.unref).toHaveBeenCalled();
+  });
+
   it("starts full runtime when requested", async () => {
     spawnMock.mockReturnValue(createChildProcess());
 

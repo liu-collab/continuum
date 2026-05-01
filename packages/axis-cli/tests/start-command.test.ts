@@ -264,6 +264,7 @@ describe("runStartCommand", () => {
       [expect.stringContaining("runtime"), "--lite"],
       expect.objectContaining({
         detached: true,
+        windowsHide: true,
         env: expect.objectContaining({
           HOST: "127.0.0.1",
           PORT: "3002",

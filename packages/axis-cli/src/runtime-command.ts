@@ -12,11 +12,19 @@ export async function runRuntimeCommand(
   const packageRoot = packageRootFromImportMeta(importMetaUrl);
   const entryPath = vendorPath(packageRoot, "runtime", "dist", "src", "index.js");
   const args = [entryPath, ...(options.full === true ? [] : ["--lite"])];
+  const background = options.background === true || options.hidden === true;
 
   const child = spawn(process.execPath, args, {
-    stdio: "inherit",
+    stdio: background ? "ignore" : "inherit",
+    detached: background,
+    windowsHide: background,
     env: process.env,
   });
+
+  if (background) {
+    child.unref();
+    return;
+  }
 
   child.on("exit", (code) => {
     process.exit(code ?? 0);

@@ -104,6 +104,30 @@ describe("axis codex commands", () => {
     expect(writeMemoryModelConfigurationHintMock).toHaveBeenCalled();
   });
 
+  it("starts the lite runtime through the hidden background command by default", async () => {
+    spawnMock.mockReturnValue(createChildProcess());
+    resolveAvailableTcpPortMock
+      .mockResolvedValueOnce(48_788)
+      .mockResolvedValueOnce(48_777);
+
+    await runCodexUseCommand(
+      {
+        "runtime-url": "http://127.0.0.1:3002",
+      },
+      import.meta.url,
+    );
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("memory-codex.mjs")],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          MEMORY_RUNTIME_START_COMMAND: expect.stringContaining("runtime --background"),
+        }),
+      }),
+    );
+  });
+
   it("uses non-reserved default websocket ports for Codex proxy mode", async () => {
     spawnMock.mockReturnValue(createChildProcess());
     resolveAvailableTcpPortMock

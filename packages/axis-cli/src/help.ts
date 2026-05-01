@@ -13,8 +13,8 @@ Commands:
   axis status [--json] [--strict] [--runtime-url URL] [--storage-url URL] [--ui-url URL] [--database-url URL] [--timeout MS]
   axis ui [--host HOST] [--port PORT] [--open] [--url URL] [--runtime-url URL] [--storage-url URL] [--database-url URL] [--mna-url URL] [--mna-token-path PATH]
   axis mna <install|start|stop|logs|token> [--mna-url URL] [--mna-host HOST] [--mna-port PORT] [--mna-home PATH] [--provider-kind KIND] [--provider-model MODEL] [--provider-base-url URL] [--provider-api-key-env ENV] [--rotate]
-  axis runtime             直接启动打包后的 retrieval-runtime
-  axis runtime --full      直接启动完整 retrieval-runtime
+  axis runtime [--background]  直接启动打包后的 lite retrieval-runtime
+  axis runtime --full          直接启动完整 retrieval-runtime
   axis memory-model configure --base-url URL --model MODEL [--api-key KEY] [--protocol PROTOCOL] [--timeout-ms MS]
   axis memory-model status
   axis migrate --to full [--no-start] [--storage-url URL]

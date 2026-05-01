@@ -102,7 +102,7 @@ export async function runCodexUseCommand(
       ? options["runtime-url"]
       : process.env.MEMORY_RUNTIME_BASE_URL ?? "http://127.0.0.1:3002";
   const ensureRuntime = options["ensure-runtime"] !== false;
-  const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime`;
+  const runtimeCommand = `"${process.execPath}" "${cliEntryPath}" runtime --background`;
   const codexHome = resolveCodexHome(options);
   const codexPorts = await resolveDefaultCodexPorts(options);
   await writeMemoryModelConfigurationHint();
