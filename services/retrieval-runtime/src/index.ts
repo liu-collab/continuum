@@ -1,7 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 
-import { loadConfig } from "./config.js";
+import { loadConfig, loadLiteConfig } from "./config.js";
 import { DependencyGuard } from "./dependency/dependency-guard.js";
 import { InjectionEngine } from "./injection/injection-engine.js";
 import { createLogger } from "./logger.js";
@@ -282,7 +282,7 @@ async function main() {
 }
 
 async function startLiteRuntime() {
-  const config = loadConfig();
+  const config = loadLiteConfig();
   const logger = createLogger(config);
   const memoryDir = process.env.AXIS_LITE_MEMORY_DIR
     ?? path.join(process.env.AXIS_HOME ?? path.join(os.homedir(), ".axis"), "memory");

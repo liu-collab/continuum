@@ -117,7 +117,28 @@ const envSchema = z.object({
   IMPORTANCE_THRESHOLD_SEMANTIC: z.coerce.number().int().min(1).max(5).default(4),
 });
 
+const liteEnvSchema = z.object({
+  NODE_ENV: envSchema.shape.NODE_ENV,
+  HOST: envSchema.shape.HOST,
+  PORT: envSchema.shape.PORT,
+  LOG_LEVEL: envSchema.shape.LOG_LEVEL,
+  LOG_SAMPLE_RATE: envSchema.shape.LOG_SAMPLE_RATE,
+  AXIS_MEMORY_LLM_CONFIG_PATH: envSchema.shape.AXIS_MEMORY_LLM_CONFIG_PATH,
+  AXIS_MANAGED_CONFIG_PATH: envSchema.shape.AXIS_MANAGED_CONFIG_PATH,
+  AXIS_MANAGED_SECRETS_PATH: envSchema.shape.AXIS_MANAGED_SECRETS_PATH,
+  AXIS_RUNTIME_CONTAINER: envSchema.shape.AXIS_RUNTIME_CONTAINER,
+  AXIS_RUNTIME_LOCALHOST_HOST: envSchema.shape.AXIS_RUNTIME_LOCALHOST_HOST,
+  MEMORY_LLM_BASE_URL: envSchema.shape.MEMORY_LLM_BASE_URL,
+  MEMORY_LLM_MODEL: envSchema.shape.MEMORY_LLM_MODEL,
+  MEMORY_LLM_API_KEY: envSchema.shape.MEMORY_LLM_API_KEY,
+  MEMORY_LLM_PROTOCOL: envSchema.shape.MEMORY_LLM_PROTOCOL,
+  MEMORY_LLM_TIMEOUT_MS: envSchema.shape.MEMORY_LLM_TIMEOUT_MS,
+  MEMORY_LLM_EFFORT: envSchema.shape.MEMORY_LLM_EFFORT,
+  MEMORY_LLM_MAX_TOKENS: envSchema.shape.MEMORY_LLM_MAX_TOKENS,
+});
+
 export type AppConfig = z.infer<typeof envSchema>;
+export type LiteAppConfig = z.infer<typeof liteEnvSchema>;
 
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = envSchema.safeParse(source);
@@ -138,4 +159,14 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   return reparsed.data;
+}
+
+export function loadLiteConfig(source: NodeJS.ProcessEnv = process.env): LiteAppConfig {
+  const parsed = liteEnvSchema.safeParse(source);
+
+  if (!parsed.success) {
+    throw new ConfigurationError("Invalid lite retrieval-runtime configuration", parsed.error.flatten());
+  }
+
+  return parsed.data;
 }
