@@ -23,8 +23,8 @@ Commands:
   axis claude install [--plugin-dir PATH] [--package PKG] [--force]
   axis claude uninstall [--plugin-dir PATH]
   axis codex uninstall [--codex-home PATH] [--server-name NAME]  # cleanup legacy MCP registration
-  axis codex use [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
-  axis codex [--runtime-url URL] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
+  axis codex use [--runtime-url URL] [--proxy-port PORT] [--app-server-port PORT] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
+  axis codex [--runtime-url URL] [--proxy-port PORT] [--app-server-port PORT] [--client-command CMD] [--app-server-command CMD] [--ensure-runtime true|false] [--codex-home PATH]
 
 Options:
   --bind-host HOST    绑定地址（默认: 127.0.0.1，仅本机访问。使用 0.0.0.0 可允许局域网访问）

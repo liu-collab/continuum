@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 const uninstallCodexMcpServerMock = vi.hoisted(() => vi.fn());
 const spawnMock = vi.hoisted(() => vi.fn());
 const writeMemoryModelConfigurationHintMock = vi.hoisted(() => vi.fn());
+const resolveAvailableTcpPortMock = vi.hoisted(() => vi.fn());
 
 vi.mock("node:child_process", () => ({
   spawn: spawnMock,
@@ -21,6 +22,14 @@ vi.mock("../src/memory-model-command.js", () => ({
   writeMemoryModelConfigurationHint: writeMemoryModelConfigurationHintMock,
 }));
 
+vi.mock("../src/port-utils.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/port-utils.js")>();
+  return {
+    ...actual,
+    resolveAvailableTcpPort: resolveAvailableTcpPortMock,
+  };
+});
+
 import {
   runCodexUninstallCommand,
   runCodexUseCommand,
@@ -36,6 +45,7 @@ describe("axis codex commands", () => {
     uninstallCodexMcpServerMock.mockReset();
     spawnMock.mockReset();
     writeMemoryModelConfigurationHintMock.mockReset();
+    resolveAvailableTcpPortMock.mockReset();
   });
 
   it("removes the installed Codex MCP server", async () => {
@@ -92,5 +102,42 @@ describe("axis codex commands", () => {
       }),
     );
     expect(writeMemoryModelConfigurationHintMock).toHaveBeenCalled();
+  });
+
+  it("uses non-reserved default websocket ports for Codex proxy mode", async () => {
+    spawnMock.mockReturnValue(createChildProcess());
+    resolveAvailableTcpPortMock
+      .mockResolvedValueOnce(48_788)
+      .mockResolvedValueOnce(48_777);
+
+    await runCodexUseCommand(
+      {
+        "runtime-url": "http://127.0.0.1:3002",
+        "ensure-runtime": false,
+      },
+      import.meta.url,
+    );
+
+    expect(resolveAvailableTcpPortMock).toHaveBeenCalledWith(expect.objectContaining({
+      preferredPort: 48_788,
+      label: "codex proxy",
+    }));
+    expect(resolveAvailableTcpPortMock).toHaveBeenCalledWith(expect.objectContaining({
+      preferredPort: 48_777,
+      label: "codex app-server",
+      excludedPorts: [48_788],
+    }));
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringContaining("memory-codex.mjs")],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          MEMORY_CODEX_PROXY_LISTEN_URL: "ws://127.0.0.1:48788",
+          CODEX_APP_SERVER_URL: "ws://127.0.0.1:48777",
+          MEMORY_CODEX_CLIENT_COMMAND: "codex --remote ws://127.0.0.1:48788",
+          CODEX_APP_SERVER_COMMAND: "codex app-server --listen ws://127.0.0.1:48777",
+        }),
+      }),
+    );
   });
 });

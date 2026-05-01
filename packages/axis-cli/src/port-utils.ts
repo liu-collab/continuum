@@ -123,6 +123,48 @@ export async function resolveUiDevPort(host: string, preferredPort = DEFAULT_UI_
   );
 }
 
+export async function resolveAvailableTcpPort(
+  input: {
+    host: string;
+    preferredPort: number;
+    scanLimit: number;
+    label: string;
+    excludedPorts?: number[];
+  },
+  probePort: (host: string, port: number) => Promise<boolean> = isTcpPortAvailable,
+) {
+  const excludedPorts = new Set(input.excludedPorts ?? []);
+
+  for (let offset = 0; offset <= input.scanLimit; offset += 1) {
+    const candidate = input.preferredPort + offset;
+    if (excludedPorts.has(candidate)) {
+      continue;
+    }
+
+    if (!(await probePort(input.host, candidate))) {
+      continue;
+    }
+
+    if (candidate !== input.preferredPort) {
+      process.stdout.write(
+        `- ${bilingualMessage(
+          `默认 ${input.label} 端口 ${input.preferredPort} 不可用，自动切换到 ${candidate}。`,
+          `Default ${input.label} port ${input.preferredPort} is unavailable, switched to ${candidate}.`,
+        )}\n`,
+      );
+    }
+
+    return candidate;
+  }
+
+  throw new Error(
+    bilingualMessage(
+      `未找到可用的 ${input.label} 端口。已尝试 ${input.host}:${input.preferredPort}-${input.preferredPort + input.scanLimit}。`,
+      `No available ${input.label} port was found. Tried ${input.host}:${input.preferredPort}-${input.preferredPort + input.scanLimit}.`,
+    ),
+  );
+}
+
 export async function assertFixedServicePortsAvailable(
   host: string,
   ports: Array<{ port: number; envName: string }>,
