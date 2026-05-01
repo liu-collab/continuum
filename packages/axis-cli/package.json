@@ -1,6 +1,6 @@
 {
   "name": "axis-agent",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Axis delivery CLI for status, UI, Claude plugin install, and Codex launch.",
   "license": "Apache-2.0",
   "type": "module",

@@ -14,8 +14,8 @@ const runtimeApiMode = process.env.MEMORY_RUNTIME_API_MODE ?? "lite";
 const runtimeStartCommand = process.env.MEMORY_RUNTIME_START_COMMAND ?? "axis-runtime";
 const runtimeHealthPath = process.env.MEMORY_RUNTIME_HEALTH_PATH ?? "/v1/lite/healthz";
 const runtimeRecoveryTimeoutMs = Number.parseInt(process.env.MEMORY_RUNTIME_RECOVERY_TIMEOUT_MS ?? "5000", 10);
-const appServerUrl = process.env.CODEX_APP_SERVER_URL ?? "ws://127.0.0.1:3777";
-const proxyListenUrl = process.env.MEMORY_CODEX_PROXY_LISTEN_URL ?? "ws://127.0.0.1:3788";
+const appServerUrl = process.env.CODEX_APP_SERVER_URL ?? "ws://127.0.0.1:48777";
+const proxyListenUrl = process.env.MEMORY_CODEX_PROXY_LISTEN_URL ?? "ws://127.0.0.1:48788";
 const workspaceNamespaceUuid =
   process.env.MEMORY_WORKSPACE_NAMESPACE_UUID ?? "8b7ee9a4-2fa7-54c3-a941-8e1b8db4f4d9";
 const defaultUserId =
@@ -134,6 +134,7 @@ function startDetached(command) {
     shell: true,
     stdio: "ignore",
     detached: true,
+    windowsHide: true,
   });
   child.unref();
 }

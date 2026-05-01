@@ -26,7 +26,8 @@ function startDetached(command) {
   const child = spawn(command, {
     shell: true,
     stdio: "ignore",
-    detached: true
+    detached: true,
+    windowsHide: true,
   });
   child.unref();
 }

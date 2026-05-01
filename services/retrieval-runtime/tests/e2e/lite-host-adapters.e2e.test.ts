@@ -44,6 +44,12 @@ const codexProxyScript = path.join(
   "bin",
   "memory-codex-proxy.mjs",
 );
+const codexLauncherScript = path.join(
+  adapterRoot,
+  "memory-codex-adapter",
+  "bin",
+  "memory-codex.mjs",
+);
 
 function record(overrides: Partial<LiteMemoryRecord> = {}): LiteMemoryRecord {
   return {
@@ -382,5 +388,83 @@ describe("lite host adapter E2E", () => {
     client.close();
     upstream.close();
     await new Promise<void>((resolve) => upstreamHttp.close(() => resolve()));
+  });
+
+  it("Codex launcher runs internal services in the background and keeps the client foreground", async () => {
+    const proxyPort = await getFreePort();
+    const appServerPort = await getFreePort();
+    const markerPath = path.join(tempDir, "codex-client-foreground.json");
+    const clientScript = path.join(tempDir, "codex-client-foreground.mjs");
+    await writeFile(
+      clientScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        "writeFileSync(process.env.MARKER_PATH, JSON.stringify({",
+        "  clientCommandRan: true,",
+        "  proxyUrl: process.env.MEMORY_CODEX_PROXY_LISTEN_URL,",
+        "  appServerUrl: process.env.CODEX_APP_SERVER_URL,",
+        "}));",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const appServer = new WebSocketServer({ port: appServerPort, host: "127.0.0.1" });
+    children.push({
+      kill: () => {
+        appServer.close();
+        return true;
+      },
+    } as ChildProcess);
+    await new Promise<void>((resolve, reject) => {
+      appServer.once("listening", resolve);
+      appServer.once("error", reject);
+    });
+
+    const launcher = spawn(process.execPath, [codexLauncherScript], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        MEMORY_RUNTIME_BASE_URL: liteBaseUrl,
+        MEMORY_RUNTIME_API_MODE: "lite",
+        MEMORY_RUNTIME_START_COMMAND: "off",
+        MEMORY_CODEX_PROXY_LISTEN_URL: `ws://127.0.0.1:${proxyPort}`,
+        CODEX_APP_SERVER_URL: `ws://127.0.0.1:${appServerPort}`,
+        CODEX_APP_SERVER_COMMAND: "off",
+        MEMORY_CODEX_BOOTSTRAP_COMMAND: "off",
+        MEMORY_CODEX_CLIENT_COMMAND: `"${process.execPath}" "${clientScript}"`,
+        MARKER_PATH: markerPath,
+      },
+    });
+    children.push(launcher);
+    let stdout = "";
+    let stderr = "";
+    launcher.stdout?.setEncoding("utf8");
+    launcher.stderr?.setEncoding("utf8");
+    launcher.stdout?.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    launcher.stderr?.on("data", (chunk) => {
+      stderr += chunk;
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      launcher.once("error", reject);
+      launcher.once("exit", (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(`launcher exited with ${code}; stdout=${stdout}; stderr=${stderr}`));
+      });
+    });
+
+    const marker = JSON.parse(await readFile(markerPath, "utf8"));
+    expect(marker).toEqual({
+      clientCommandRan: true,
+      proxyUrl: `ws://127.0.0.1:${proxyPort}`,
+      appServerUrl: `ws://127.0.0.1:${appServerPort}`,
+    });
+
+    await expect(fetch(`http://127.0.0.1:${proxyPort}/readyz`)).rejects.toThrow();
   });
 });

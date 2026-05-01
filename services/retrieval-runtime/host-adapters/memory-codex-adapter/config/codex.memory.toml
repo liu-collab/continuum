@@ -2,8 +2,8 @@
 base_url = "http://127.0.0.1:3002"
 
 [proxy]
-listen = "ws://127.0.0.1:3788"
-upstream = "ws://127.0.0.1:3777"
+listen = "ws://127.0.0.1:48788"
+upstream = "ws://127.0.0.1:48777"
 
 [memory]
 delivery = "platform_prepare_context_thread_inject_items"

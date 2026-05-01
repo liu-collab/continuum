@@ -63,6 +63,7 @@ function startDetached(command) {
     shell: true,
     stdio: "ignore",
     detached: true,
+    windowsHide: true,
   });
   child.unref();
 }
