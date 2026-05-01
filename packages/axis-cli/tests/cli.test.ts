@@ -83,6 +83,7 @@ import {
   resolveThirdPartyEmbeddingConfig,
 } from "../src/embedding-config.js";
 import { renderHelp } from "../src/help.js";
+import { readCliVersion } from "../src/version.js";
 import {
   hasManagedMnaProviderOptionOverrides,
   resolveManagedMnaProviderConfig,
@@ -231,30 +232,33 @@ describe("axis cli", () => {
 
   it("prints the package version for --version", async () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const expectedVersion = await readCliVersion();
 
     const exitCode = await runCli(["--version"], import.meta.url);
 
     expect(exitCode).toBe(0);
-    expect(stdoutSpy).toHaveBeenCalledWith("0.1.0\n");
+    expect(stdoutSpy).toHaveBeenCalledWith(`${expectedVersion}\n`);
     expect(renderHelp()).toContain("axis --version");
   });
 
   it("prints the package version for the version command alias", async () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const expectedVersion = await readCliVersion();
 
     const exitCode = await runCli(["version"], import.meta.url);
 
     expect(exitCode).toBe(0);
-    expect(stdoutSpy).toHaveBeenCalledWith("0.1.0\n");
+    expect(stdoutSpy).toHaveBeenCalledWith(`${expectedVersion}\n`);
   });
 
   it("prints the package version for the short -v alias", async () => {
     const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const expectedVersion = await readCliVersion();
 
     const exitCode = await runCli(["-v"], import.meta.url);
 
     expect(exitCode).toBe(0);
-    expect(stdoutSpy).toHaveBeenCalledWith("0.1.0\n");
+    expect(stdoutSpy).toHaveBeenCalledWith(`${expectedVersion}\n`);
   });
 
   it("exposes Claude uninstall in help", () => {
